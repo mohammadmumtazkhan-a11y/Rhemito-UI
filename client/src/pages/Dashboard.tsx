@@ -1,6 +1,8 @@
-import { Link } from "wouter";
+import { useState } from "react";
+import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Send, Phone, Receipt, ArrowRight } from "lucide-react";
+import { RequestPaymentModal } from "@/components/RequestPaymentModal";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,8 +78,31 @@ const itemVariants = {
 };
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  const handlePaymentOptionSelect = (option: "request" | "invoice" | "qrcode") => {
+    setShowPaymentModal(false);
+    switch (option) {
+      case "request":
+        setLocation("/request-payment");
+        break;
+      case "invoice":
+        setLocation("/send-invoice");
+        break;
+      case "qrcode":
+        setLocation("/show-qr-code");
+        break;
+    }
+  };
+
   return (
     <DashboardLayout>
+      <RequestPaymentModal 
+        open={showPaymentModal} 
+        onOpenChange={setShowPaymentModal}
+        onSelect={handlePaymentOptionSelect}
+      />
       <motion.div
         variants={containerVariants}
         initial="hidden"
@@ -112,15 +137,14 @@ export default function Dashboard() {
                   <Phone className="w-4 h-4" />
                   Airtime Topup
                 </Button>
-                <Link href="/request-payment">
-                  <Button 
-                    className="w-full justify-start gap-3 bg-teal hover:bg-teal/90 text-white h-12"
-                    data-testid="button-request-payment"
-                  >
-                    <Receipt className="w-4 h-4" />
-                    Request Payment
-                  </Button>
-                </Link>
+                <Button 
+                  className="w-full justify-start gap-3 bg-teal hover:bg-teal/90 text-white h-12"
+                  onClick={() => setShowPaymentModal(true)}
+                  data-testid="button-request-payment"
+                >
+                  <Receipt className="w-4 h-4" />
+                  Request Payment
+                </Button>
               </CardContent>
             </Card>
           </motion.div>
