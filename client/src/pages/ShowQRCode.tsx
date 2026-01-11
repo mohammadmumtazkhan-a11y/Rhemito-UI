@@ -27,7 +27,9 @@ const COUNTRY_CODES = [
 interface FormData {
   amount: string;
   currency: string;
-  senderName: string;
+  senderFirstName: string;
+  senderMiddleName: string;
+  senderLastName: string;
   senderEmail: string;
   countryCode: string;
   senderPhone: string;
@@ -37,7 +39,9 @@ interface FormData {
 const initialFormData: FormData = {
   amount: "",
   currency: "GBP",
-  senderName: "",
+  senderFirstName: "",
+  senderMiddleName: "",
+  senderLastName: "",
   senderEmail: "",
   countryCode: "+44",
   senderPhone: "",
@@ -66,7 +70,7 @@ export default function ShowQRCode() {
     setIsSuccess(true);
   };
 
-  const canSubmit = formData.senderName && formData.senderEmail;
+  const canSubmit = formData.senderFirstName && formData.senderEmail;
 
   if (isSuccess) {
     return (
@@ -90,7 +94,7 @@ export default function ShowQRCode() {
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold font-display">QR Code Sent!</h2>
                 <p className="text-muted-foreground">
-                  Successfully sent to <span className="font-medium text-foreground">{formData.senderName}</span>
+                  Successfully sent to <span className="font-medium text-foreground">{[formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}</span>
                 </p>
                 {formData.amount && (
                   <p className="text-lg font-semibold text-purple">
@@ -216,15 +220,37 @@ export default function ShowQRCode() {
             </div>
 
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="senderName">Sender Name *</Label>
-                <Input
-                  id="senderName"
-                  placeholder="Who will be paying?"
-                  value={formData.senderName}
-                  onChange={(e) => handleInputChange("senderName", e.target.value)}
-                  data-testid="input-sender-name"
-                />
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="senderFirstName">First Name *</Label>
+                  <Input
+                    id="senderFirstName"
+                    placeholder="First name"
+                    value={formData.senderFirstName}
+                    onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
+                    data-testid="input-sender-first-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="senderMiddleName">Middle Name</Label>
+                  <Input
+                    id="senderMiddleName"
+                    placeholder="Middle name"
+                    value={formData.senderMiddleName}
+                    onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
+                    data-testid="input-sender-middle-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="senderLastName">Last Name</Label>
+                  <Input
+                    id="senderLastName"
+                    placeholder="Last name"
+                    value={formData.senderLastName}
+                    onChange={(e) => handleInputChange("senderLastName", e.target.value)}
+                    data-testid="input-sender-last-name"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">

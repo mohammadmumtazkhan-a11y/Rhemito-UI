@@ -21,7 +21,9 @@ interface FormData {
   invoiceFile: File | null;
   invoiceAmount: string;
   currency: string;
-  recipientName: string;
+  recipientFirstName: string;
+  recipientMiddleName: string;
+  recipientLastName: string;
   recipientEmail: string;
   countryCode: string;
   recipientPhone: string;
@@ -33,7 +35,9 @@ const initialFormData: FormData = {
   invoiceFile: null,
   invoiceAmount: "",
   currency: "GBP",
-  recipientName: "",
+  recipientFirstName: "",
+  recipientMiddleName: "",
+  recipientLastName: "",
   recipientEmail: "",
   countryCode: "+44",
   recipientPhone: "",
@@ -88,7 +92,7 @@ export default function SendInvoice() {
     setIsSuccess(true);
   };
 
-  const canSubmit = formData.invoiceFile && formData.invoiceAmount && formData.recipientName && formData.recipientEmail;
+  const canSubmit = formData.invoiceFile && formData.invoiceAmount && formData.recipientFirstName && formData.recipientEmail;
 
   if (isSuccess) {
     return (
@@ -112,7 +116,7 @@ export default function SendInvoice() {
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold font-display">Invoice Sent!</h2>
                 <p className="text-muted-foreground">
-                  Successfully sent to <span className="font-medium text-foreground">{formData.recipientName}</span>
+                  Successfully sent to <span className="font-medium text-foreground">{[formData.recipientFirstName, formData.recipientMiddleName, formData.recipientLastName].filter(Boolean).join(" ")}</span>
                 </p>
               </div>
 
@@ -274,15 +278,37 @@ export default function SendInvoice() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="recipientName">Recipient Name *</Label>
-              <Input
-                id="recipientName"
-                placeholder="Who should pay this invoice?"
-                value={formData.recipientName}
-                onChange={(e) => handleInputChange("recipientName", e.target.value)}
-                data-testid="input-recipient-name"
-              />
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="recipientFirstName">First Name *</Label>
+                <Input
+                  id="recipientFirstName"
+                  placeholder="First name"
+                  value={formData.recipientFirstName}
+                  onChange={(e) => handleInputChange("recipientFirstName", e.target.value)}
+                  data-testid="input-recipient-first-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="recipientMiddleName">Middle Name</Label>
+                <Input
+                  id="recipientMiddleName"
+                  placeholder="Middle name"
+                  value={formData.recipientMiddleName}
+                  onChange={(e) => handleInputChange("recipientMiddleName", e.target.value)}
+                  data-testid="input-recipient-middle-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="recipientLastName">Last Name</Label>
+                <Input
+                  id="recipientLastName"
+                  placeholder="Last name"
+                  value={formData.recipientLastName}
+                  onChange={(e) => handleInputChange("recipientLastName", e.target.value)}
+                  data-testid="input-recipient-last-name"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

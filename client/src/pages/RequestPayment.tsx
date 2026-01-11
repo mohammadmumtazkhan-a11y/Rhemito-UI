@@ -27,7 +27,9 @@ interface FormData {
   receiveCurrency: string;
   senderCurrency: string;
   paymentMethod: string;
-  senderName: string;
+  senderFirstName: string;
+  senderMiddleName: string;
+  senderLastName: string;
   senderEmail: string;
   senderCountryCode: string;
   senderPhone: string;
@@ -55,7 +57,9 @@ const initialFormData: FormData = {
   receiveCurrency: "GBP",
   senderCurrency: "NGN",
   paymentMethod: "sender_choice",
-  senderName: "",
+  senderFirstName: "",
+  senderMiddleName: "",
+  senderLastName: "",
   senderEmail: "",
   senderCountryCode: "+44",
   senderPhone: "",
@@ -122,7 +126,7 @@ export default function RequestPayment() {
       case 1:
         return formData.receiveAmount;
       case 2:
-        return formData.senderName && formData.senderEmail;
+        return formData.senderFirstName && formData.senderEmail;
       case 3:
         return true;
       default:
@@ -152,7 +156,7 @@ export default function RequestPayment() {
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold font-display">Payment Request Sent!</h2>
                 <p className="text-muted-foreground">
-                  Successfully sent to <span className="font-medium text-foreground">{formData.senderName}</span>
+                  Successfully sent to <span className="font-medium text-foreground">{[formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}</span>
                 </p>
               </div>
 
@@ -358,15 +362,37 @@ export default function RequestPayment() {
                 {currentStep === 2 && (
                   <>
                     <div className="grid gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="senderName">Sender Name *</Label>
-                        <Input
-                          id="senderName"
-                          placeholder="Full name of the person paying"
-                          value={formData.senderName}
-                          onChange={(e) => handleInputChange("senderName", e.target.value)}
-                          data-testid="input-sender-name"
-                        />
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="senderFirstName">First Name *</Label>
+                          <Input
+                            id="senderFirstName"
+                            placeholder="First name"
+                            value={formData.senderFirstName}
+                            onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
+                            data-testid="input-sender-first-name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="senderMiddleName">Middle Name</Label>
+                          <Input
+                            id="senderMiddleName"
+                            placeholder="Middle name"
+                            value={formData.senderMiddleName}
+                            onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
+                            data-testid="input-sender-middle-name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="senderLastName">Last Name</Label>
+                          <Input
+                            id="senderLastName"
+                            placeholder="Last name"
+                            value={formData.senderLastName}
+                            onChange={(e) => handleInputChange("senderLastName", e.target.value)}
+                            data-testid="input-sender-last-name"
+                          />
+                        </div>
                       </div>
 
                       <div className="space-y-2">
@@ -466,7 +492,7 @@ export default function RequestPayment() {
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Sender Name</span>
-                          <span className="font-medium">{formData.senderName}</span>
+                          <span className="font-medium">{[formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Sender Email</span>
