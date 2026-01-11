@@ -35,6 +35,9 @@ interface FormData {
   senderPhone: string;
   senderDob: string;
   reason: string;
+  bankAccountName: string;
+  bankSortCode: string;
+  bankAccountNumber: string;
 }
 
 const COUNTRY_CODES = [
@@ -65,6 +68,9 @@ const initialFormData: FormData = {
   senderPhone: "",
   senderDob: "",
   reason: "",
+  bankAccountName: "",
+  bankSortCode: "",
+  bankAccountNumber: "",
 };
 
 const steps = [
@@ -526,6 +532,44 @@ export default function RequestPayment() {
                           </SelectContent>
                         </Select>
                       </div>
+
+                      {formData.paymentMethod === "bank_transfer" && (
+                        <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-border">
+                          <p className="text-sm font-medium text-muted-foreground">Payer's Bank Details (Optional)</p>
+                          <div className="space-y-2">
+                            <Label htmlFor="bankAccountName">Account Name</Label>
+                            <Input
+                              id="bankAccountName"
+                              placeholder="Name on account"
+                              value={formData.bankAccountName}
+                              onChange={(e) => handleInputChange("bankAccountName", e.target.value)}
+                              data-testid="input-bank-account-name"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                              <Label htmlFor="bankSortCode">Sort Code</Label>
+                              <Input
+                                id="bankSortCode"
+                                placeholder="00-00-00"
+                                value={formData.bankSortCode}
+                                onChange={(e) => handleInputChange("bankSortCode", e.target.value)}
+                                data-testid="input-bank-sort-code"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="bankAccountNumber">Account Number</Label>
+                              <Input
+                                id="bankAccountNumber"
+                                placeholder="12345678"
+                                value={formData.bankAccountNumber}
+                                onChange={(e) => handleInputChange("bankAccountNumber", e.target.value)}
+                                data-testid="input-bank-account-number"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-6">

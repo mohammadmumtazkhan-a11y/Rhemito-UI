@@ -7,13 +7,15 @@ import {
   HelpCircle, 
   Settings, 
   LogOut,
-  ChevronLeft
+  ChevronLeft,
+  Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true },
+  { icon: Wallet, label: "Payments", href: "/payments", enabled: true },
   { icon: ArrowLeftRight, label: "Transactions", href: "/transactions", enabled: false },
   { icon: Users, label: "Recipients", href: "/recipients", enabled: false },
   { icon: Shield, label: "Compliance", href: "/compliance", enabled: false },
