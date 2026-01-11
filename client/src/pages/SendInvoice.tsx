@@ -286,6 +286,112 @@ export default function SendInvoice() {
                     </Select>
                   </div>
                 </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="recipientFirstName">First Name *</Label>
+                    <Input
+                      id="recipientFirstName"
+                      placeholder="First name"
+                      value={formData.recipientFirstName}
+                      onChange={(e) => handleInputChange("recipientFirstName", e.target.value)}
+                      data-testid="input-recipient-first-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="recipientMiddleName">Middle Name</Label>
+                    <Input
+                      id="recipientMiddleName"
+                      placeholder="Middle name"
+                      value={formData.recipientMiddleName}
+                      onChange={(e) => handleInputChange("recipientMiddleName", e.target.value)}
+                      data-testid="input-recipient-middle-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="recipientLastName">Last Name</Label>
+                    <Input
+                      id="recipientLastName"
+                      placeholder="Last name"
+                      value={formData.recipientLastName}
+                      onChange={(e) => handleInputChange("recipientLastName", e.target.value)}
+                      data-testid="input-recipient-last-name"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="recipientEmail">Recipient Email *</Label>
+                  <Input
+                    id="recipientEmail"
+                    type="email"
+                    placeholder="Where to send the invoice"
+                    value={formData.recipientEmail}
+                    onChange={(e) => handleInputChange("recipientEmail", e.target.value)}
+                    data-testid="input-recipient-email"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="recipientPhone">Recipient Phone (Optional)</Label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={formData.countryCode}
+                      onValueChange={(value) => handleInputChange("countryCode", value)}
+                    >
+                      <SelectTrigger className="w-32" data-testid="select-country-code">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTRY_CODES.map((country, index) => (
+                          <SelectItem key={`${country.code}-${index}`} value={country.code}>
+                            {country.flag} {country.code}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      id="recipientPhone"
+                      type="tel"
+                      placeholder="Mobile number"
+                      value={formData.recipientPhone}
+                      onChange={(e) => handleInputChange("recipientPhone", e.target.value)}
+                      className="flex-1"
+                      data-testid="input-recipient-phone"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dueDate">Due Date (Optional)</Label>
+                  <Input
+                    id="dueDate"
+                    type="date"
+                    value={formData.dueDate}
+                    onChange={(e) => handleInputChange("dueDate", e.target.value)}
+                    data-testid="input-due-date"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setLocation("/")}
+                    className="flex-1"
+                    data-testid="button-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleSubmit}
+                    disabled={!canSubmit}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    data-testid="button-send-invoice"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Send Invoice
+                  </Button>
+                </div>
               </div>
 
               <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-6">
@@ -333,112 +439,6 @@ export default function SendInvoice() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="recipientFirstName">First Name *</Label>
-                <Input
-                  id="recipientFirstName"
-                  placeholder="First name"
-                  value={formData.recipientFirstName}
-                  onChange={(e) => handleInputChange("recipientFirstName", e.target.value)}
-                  data-testid="input-recipient-first-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="recipientMiddleName">Middle Name</Label>
-                <Input
-                  id="recipientMiddleName"
-                  placeholder="Middle name"
-                  value={formData.recipientMiddleName}
-                  onChange={(e) => handleInputChange("recipientMiddleName", e.target.value)}
-                  data-testid="input-recipient-middle-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="recipientLastName">Last Name</Label>
-                <Input
-                  id="recipientLastName"
-                  placeholder="Last name"
-                  value={formData.recipientLastName}
-                  onChange={(e) => handleInputChange("recipientLastName", e.target.value)}
-                  data-testid="input-recipient-last-name"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="recipientEmail">Recipient Email *</Label>
-              <Input
-                id="recipientEmail"
-                type="email"
-                placeholder="Where to send the invoice"
-                value={formData.recipientEmail}
-                onChange={(e) => handleInputChange("recipientEmail", e.target.value)}
-                data-testid="input-recipient-email"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="recipientPhone">Recipient Phone (Optional)</Label>
-              <div className="flex gap-2">
-                <Select
-                  value={formData.countryCode}
-                  onValueChange={(value) => handleInputChange("countryCode", value)}
-                >
-                  <SelectTrigger className="w-32" data-testid="select-country-code">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COUNTRY_CODES.map((country, index) => (
-                      <SelectItem key={`${country.code}-${index}`} value={country.code}>
-                        {country.flag} {country.code}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  id="recipientPhone"
-                  type="tel"
-                  placeholder="Mobile number"
-                  value={formData.recipientPhone}
-                  onChange={(e) => handleInputChange("recipientPhone", e.target.value)}
-                  className="flex-1"
-                  data-testid="input-recipient-phone"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dueDate">Due Date (Optional)</Label>
-              <Input
-                id="dueDate"
-                type="date"
-                value={formData.dueDate}
-                onChange={(e) => handleInputChange("dueDate", e.target.value)}
-                data-testid="input-due-date"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => setLocation("/")}
-                className="flex-1"
-                data-testid="button-cancel"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleSubmit}
-                disabled={!canSubmit}
-                className="flex-1 bg-primary hover:bg-primary/90"
-                data-testid="button-send-invoice"
-              >
-                <Send className="w-4 h-4 mr-2" />
-                Send Invoice
-              </Button>
             </div>
           </CardContent>
         </Card>
