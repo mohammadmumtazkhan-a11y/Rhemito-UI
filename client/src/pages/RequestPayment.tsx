@@ -415,8 +415,8 @@ export default function RequestPayment() {
                 )}
 
                 {currentStep === 2 && (
-                  <>
-                    <div className="grid gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    <div className="lg:col-span-3 space-y-4">
                       <div className="grid grid-cols-3 gap-3">
                         <div className="space-y-2">
                           <Label htmlFor="senderFirstName">First Name *</Label>
@@ -527,7 +527,60 @@ export default function RequestPayment() {
                         </Select>
                       </div>
                     </div>
-                  </>
+
+                    <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-6">
+                      <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown-step2">
+                        <h3 className="font-semibold text-lg">Amount</h3>
+                        
+                        <div className="space-y-3">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">You Request</span>
+                            <span className="font-medium">
+                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                                ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
+                                : `0.00 ${formData.receiveCurrency}`}
+                            </span>
+                          </div>
+                          
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Fee (3%)</span>
+                            <span className="font-medium">
+                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                                ? `${senderSymbol}${(parseFloat(formData.receiveAmount) * getExchangeRate() * 0.03).toFixed(2)} ${formData.senderCurrency}`
+                                : `0.00 ${formData.senderCurrency}`}
+                            </span>
+                          </div>
+
+                          {formData.senderCurrency !== formData.receiveCurrency && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Exchange Rate</span>
+                              <span className="font-medium">1 {formData.senderCurrency} = {(1 / getExchangeRate()).toFixed(4)} {formData.receiveCurrency}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="h-px bg-border" />
+                        
+                        <div className="flex justify-between pt-1">
+                          <span className="font-medium">Sender Pays</span>
+                          <span className="font-bold text-lg text-teal">
+                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                              ? `${senderSymbol}${senderPays} ${formData.senderCurrency}`
+                              : `0.00 ${formData.senderCurrency}`}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
+                          <span className="font-medium">You Receive</span>
+                          <span className="font-bold text-lg text-primary">
+                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                              ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
+                              : `0.00 ${formData.receiveCurrency}`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 {currentStep === 3 && (
