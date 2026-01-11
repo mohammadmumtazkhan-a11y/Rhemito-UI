@@ -39,7 +39,7 @@ const initialFormData: FormData = {
   receiveAmount: "",
   receiveCurrency: "GBP",
   senderCurrency: "NGN",
-  paymentMethod: "",
+  paymentMethod: "sender_choice",
   senderName: "",
   senderEmail: "",
   senderPhone: "",
@@ -104,7 +104,7 @@ export default function RequestPayment() {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return formData.receiveAmount && formData.paymentMethod;
+        return formData.receiveAmount;
       case 2:
         return formData.senderName && formData.senderEmail;
       case 3:
@@ -320,7 +320,7 @@ export default function RequestPayment() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="paymentMethod">Payment Method</Label>
+                      <Label htmlFor="paymentMethod">Payment Method (Optional)</Label>
                       <Select
                         value={formData.paymentMethod}
                         onValueChange={(value) => handleInputChange("paymentMethod", value)}
@@ -329,6 +329,7 @@ export default function RequestPayment() {
                           <SelectValue placeholder="How will the sender pay?" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="sender_choice">Let the Sender Choose</SelectItem>
                           <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                           <SelectItem value="card">Card Payment</SelectItem>
                           <SelectItem value="mobile_money">Mobile Money</SelectItem>
