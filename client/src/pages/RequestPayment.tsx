@@ -30,10 +30,26 @@ interface FormData {
   paymentMethod: string;
   senderName: string;
   senderEmail: string;
+  senderCountryCode: string;
   senderPhone: string;
   senderDob: string;
   reason: string;
 }
+
+const COUNTRY_CODES = [
+  { code: "+234", country: "Nigeria", flag: "🇳🇬" },
+  { code: "+44", country: "UK", flag: "🇬🇧" },
+  { code: "+1", country: "USA", flag: "🇺🇸" },
+  { code: "+1", country: "Canada", flag: "🇨🇦" },
+  { code: "+233", country: "Ghana", flag: "🇬🇭" },
+  { code: "+254", country: "Kenya", flag: "🇰🇪" },
+  { code: "+27", country: "South Africa", flag: "🇿🇦" },
+  { code: "+49", country: "Germany", flag: "🇩🇪" },
+  { code: "+33", country: "France", flag: "🇫🇷" },
+  { code: "+91", country: "India", flag: "🇮🇳" },
+  { code: "+86", country: "China", flag: "🇨🇳" },
+  { code: "+971", country: "UAE", flag: "🇦🇪" },
+];
 
 const initialFormData: FormData = {
   receiveAmount: "",
@@ -42,6 +58,7 @@ const initialFormData: FormData = {
   paymentMethod: "sender_choice",
   senderName: "",
   senderEmail: "",
+  senderCountryCode: "+44",
   senderPhone: "",
   senderDob: "",
   reason: "",
@@ -367,14 +384,32 @@ export default function RequestPayment() {
 
                       <div className="space-y-2">
                         <Label htmlFor="senderPhone">Sender Mobile Number (Optional)</Label>
-                        <Input
-                          id="senderPhone"
-                          type="tel"
-                          placeholder="For WhatsApp/SMS notifications"
-                          value={formData.senderPhone}
-                          onChange={(e) => handleInputChange("senderPhone", e.target.value)}
-                          data-testid="input-sender-phone"
-                        />
+                        <div className="flex gap-2">
+                          <Select
+                            value={formData.senderCountryCode}
+                            onValueChange={(value) => handleInputChange("senderCountryCode", value)}
+                          >
+                            <SelectTrigger className="w-32" data-testid="select-country-code">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {COUNTRY_CODES.map((country, index) => (
+                                <SelectItem key={`${country.code}-${index}`} value={country.code}>
+                                  {country.flag} {country.code}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            id="senderPhone"
+                            type="tel"
+                            placeholder="Mobile number"
+                            value={formData.senderPhone}
+                            onChange={(e) => handleInputChange("senderPhone", e.target.value)}
+                            className="flex-1"
+                            data-testid="input-sender-phone"
+                          />
+                        </div>
                       </div>
 
                       <div className="space-y-2">
@@ -429,7 +464,7 @@ export default function RequestPayment() {
                         {formData.senderPhone && (
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Sender Phone</span>
-                            <span className="font-medium">{formData.senderPhone}</span>
+                            <span className="font-medium">{formData.senderCountryCode} {formData.senderPhone}</span>
                           </div>
                         )}
                         <div className="flex justify-between text-sm">
