@@ -288,8 +288,8 @@ export default function SendInvoice() {
                 </div>
               </div>
 
-              <div className="lg:col-span-2">
-                <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white sticky top-4" data-testid="fee-breakdown">
+              <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-6">
+                <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown">
                   <h3 className="font-semibold text-lg">Amount</h3>
                   
                   <div className="space-y-3">
