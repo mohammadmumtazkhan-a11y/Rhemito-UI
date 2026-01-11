@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
 const EXCHANGE_RATES: Record<string, Record<string, number>> = {
   GBP: { NGN: 2000, USD: 1.27, EUR: 1.17 },
@@ -425,14 +424,26 @@ export default function RequestPayment() {
 
                       <div className="space-y-2">
                         <Label htmlFor="reason">Reason for Payment (Optional)</Label>
-                        <Textarea
-                          id="reason"
-                          placeholder="e.g., Invoice #1234, Consulting services"
+                        <Select
                           value={formData.reason}
-                          onChange={(e) => handleInputChange("reason", e.target.value)}
-                          rows={3}
-                          data-testid="input-reason"
-                        />
+                          onValueChange={(value) => handleInputChange("reason", value)}
+                        >
+                          <SelectTrigger id="reason" data-testid="select-reason">
+                            <SelectValue placeholder="Select a reason" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="family_support">Family Support</SelectItem>
+                            <SelectItem value="education_fees">Education Fees</SelectItem>
+                            <SelectItem value="medical_expenses">Medical Expenses</SelectItem>
+                            <SelectItem value="rent_payment">Rent Payment</SelectItem>
+                            <SelectItem value="business_payment">Business Payment</SelectItem>
+                            <SelectItem value="gift">Gift</SelectItem>
+                            <SelectItem value="loan_repayment">Loan Repayment</SelectItem>
+                            <SelectItem value="travel_expenses">Travel Expenses</SelectItem>
+                            <SelectItem value="invoice_payment">Invoice Payment</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </>
@@ -474,7 +485,7 @@ export default function RequestPayment() {
                         {formData.reason && (
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Reason</span>
-                            <span className="font-medium">{formData.reason}</span>
+                            <span className="font-medium capitalize">{formData.reason.replace(/_/g, " ")}</span>
                           </div>
                         )}
                       </div>
