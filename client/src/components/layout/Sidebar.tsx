@@ -13,12 +13,12 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Overview", href: "/" },
-  { icon: ArrowLeftRight, label: "Transactions", href: "/transactions" },
-  { icon: Users, label: "Recipients", href: "/recipients" },
-  { icon: Shield, label: "Compliance", href: "/compliance" },
-  { icon: HelpCircle, label: "Support", href: "/support" },
-  { icon: Settings, label: "Settings", href: "/settings" },
+  { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true },
+  { icon: ArrowLeftRight, label: "Transactions", href: "/transactions", enabled: false },
+  { icon: Users, label: "Recipients", href: "/recipients", enabled: false },
+  { icon: Shield, label: "Compliance", href: "/compliance", enabled: false },
+  { icon: HelpCircle, label: "Support", href: "/support", enabled: false },
+  { icon: Settings, label: "Settings", href: "/settings", enabled: false },
 ];
 
 export function Sidebar() {
@@ -46,6 +46,20 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map((item) => {
           const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+          
+          if (!item.enabled) {
+            return (
+              <div
+                key={item.href}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground/50 cursor-not-allowed"
+                data-testid={`link-${item.label.toLowerCase()}`}
+              >
+                <item.icon className="w-5 h-5" />
+                {item.label}
+              </div>
+            );
+          }
+          
           return (
             <Link key={item.href} href={item.href}>
               <motion.div
