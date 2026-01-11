@@ -1,0 +1,53 @@
+Build a high-fidelity Desktop UI prototype for a Fintech application called "Rhemito" using React, Tailwind CSS, and Framer Motion for animations.
+
+The design should be clean, modern, and responsive, featuring a sidebar navigation and a main content area. Use a color palette of Primary Blue (#2563EB), Teal (#14B8A6), and Purple (#8B5CF6) on a white/gray background.
+
+I need the following specific screens and flows implemented:
+
+### 1. Dashboard (Home Screen)
+* **Layout:** Left sidebar navigation (Overview, Transactions, Recipients, Compliance, Support, Settings, Logout). Top header with User Profile ("Welcome Olayinka") and Notifications.
+* **Main Content:**
+    * **Quick Services Card:** A distinct card showing action buttons. Existing buttons are "Send Money" (Blue) and "Airtime Topup" (Purple). **ADD A NEW BUTTON:** "Request Payment" (Teal/Green).
+    * **Account Summary:** Display Wallet Balance (e.g., 300 GBP) and Total Sent.
+    * **Recent Transactions Table:** Columns for Ref No, Recipient, Service, Date, Amount, Status, Actions.
+
+### 2. Request Payment Flow (The Core Feature)
+When the user clicks "Request Payment", navigate to a dedicated multi-step form:
+
+**Step 1: Transaction Details (The "They Send, You Receive" Logic)**
+* Implement a currency converter logic where the user defines what they want to *receive*.
+* **Input Field:** "I want to receive" (Amount in GBP).
+* **Read-Only Calculation:** "Sender pays" (Auto-calculated Amount in NGN based on a mock exchange rate, e.g., 1 GBP = 2000 NGN).
+* *Note:* The user mentioned "They Send, You Receive" logic is critical here.
+* **Payment Method:** Dropdown to select how the sender will pay (e.g., "Bank Transfer", "Card").
+
+**Step 2: Sender Information**
+* Collect details about the person paying.
+* **Fields:**
+    * Sender Name (Required)
+    * Sender Email Address (Required - for sending the payment link)
+    * Sender Mobile Number (Optional - for WhatsApp/SMS)
+    * Sender Date of Birth (Optional)
+    * Reason for Payment / Invoice Description (Optional)
+
+**Step 3: Review & Confirm**
+* Display a summary card showing:
+    * "You Receive: £[Amount]"
+    * "Sender Pays: ₦[Amount]"
+    * Sender Name & Email.
+    * **Disclaimer:** Add a warning text: "Kindly contact your sender to ensure this request comes from you."
+
+### 3. Success State
+* Show a success animation (checkmark).
+* Display text: "Payment Request Sent Successfully to [Sender Name]".
+* **Shareable Link:** Generate a mock URL (e.g., `remito.com/pay/ref123`) with a "Copy Link" button so the user can send it manually via WhatsApp.
+
+### 4. (Optional) Sender View
+* Create a simple standalone page that represents what the Sender sees when they click the link.
+* It should show: "Olayinka is requesting £100 (₦200,000)".
+* Button: "Pay Now" (which opens a mock payment modal).
+
+**Technical Requirements:**
+* Use `lucide-react` for icons.
+* Use `react-router-dom` for navigation between Dashboard and Request Flow.
+* Ensure the "Request Payment" button on the Dashboard is prominent.
