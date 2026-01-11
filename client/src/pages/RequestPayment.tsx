@@ -210,7 +210,7 @@ export default function RequestPayment() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -273,103 +273,113 @@ export default function RequestPayment() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {currentStep === 1 && (
-                  <>
-                    <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-6 space-y-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="receiveAmount" className="text-sm font-medium">
-                          I want to receive
-                        </Label>
-                        <div className="flex items-center gap-3">
-                          <div className="relative flex-1">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">{receiveSymbol}</span>
-                            <Input
-                              id="receiveAmount"
-                              type="number"
-                              placeholder="0.00"
-                              value={formData.receiveAmount}
-                              onChange={(e) => handleInputChange("receiveAmount", e.target.value)}
-                              className="pl-8 text-2xl font-bold h-14 bg-white"
-                              data-testid="input-receive-amount"
-                            />
-                          </div>
-                          <Select
-                            value={formData.receiveCurrency}
-                            onValueChange={(value) => handleInputChange("receiveCurrency", value)}
-                          >
-                            <SelectTrigger className="w-24 h-14 bg-white font-medium" data-testid="select-receive-currency">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="GBP">GBP</SelectItem>
-                              <SelectItem value="USD">USD</SelectItem>
-                              <SelectItem value="EUR">EUR</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="h-px bg-border" />
-
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium text-muted-foreground">
-                          Sender pays (at 1 {formData.receiveCurrency} = {senderSymbol}{getExchangeRate().toLocaleString()})
-                        </Label>
-                        <div className="flex items-center gap-3">
-                          <div className="relative flex-1">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-teal">{senderSymbol}</span>
-                            <div className="pl-8 text-2xl font-bold h-14 bg-teal/10 rounded-lg flex items-center text-teal border border-teal/20">
-                              {senderPays}
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    <div className="lg:col-span-3 space-y-6">
+                      <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-6 space-y-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="receiveAmount" className="text-sm font-medium">
+                            I want to receive
+                          </Label>
+                          <div className="flex items-center gap-3">
+                            <div className="relative flex-1">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">{receiveSymbol}</span>
+                              <Input
+                                id="receiveAmount"
+                                type="number"
+                                placeholder="0.00"
+                                value={formData.receiveAmount}
+                                onChange={(e) => handleInputChange("receiveAmount", e.target.value)}
+                                className="pl-8 text-2xl font-bold h-14 bg-white"
+                                data-testid="input-receive-amount"
+                              />
                             </div>
+                            <Select
+                              value={formData.receiveCurrency}
+                              onValueChange={(value) => handleInputChange("receiveCurrency", value)}
+                            >
+                              <SelectTrigger className="w-24 h-14 bg-white font-medium" data-testid="select-receive-currency">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="GBP">GBP</SelectItem>
+                                <SelectItem value="USD">USD</SelectItem>
+                                <SelectItem value="EUR">EUR</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
-                          <Select
-                            value={formData.senderCurrency}
-                            onValueChange={(value) => handleInputChange("senderCurrency", value)}
-                          >
-                            <SelectTrigger className="w-24 h-14 bg-teal/10 border-teal/20 font-medium text-teal" data-testid="select-sender-currency">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="NGN">NGN</SelectItem>
-                              <SelectItem value="USD">USD</SelectItem>
-                              <SelectItem value="EUR">EUR</SelectItem>
-                              <SelectItem value="GBP">GBP</SelectItem>
-                            </SelectContent>
-                          </Select>
                         </div>
+
+                        <div className="h-px bg-border" />
+
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-muted-foreground">
+                            Sender pays (at 1 {formData.receiveCurrency} = {senderSymbol}{getExchangeRate().toLocaleString()})
+                          </Label>
+                          <div className="flex items-center gap-3">
+                            <div className="relative flex-1">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-teal">{senderSymbol}</span>
+                              <div className="pl-8 text-2xl font-bold h-14 bg-teal/10 rounded-lg flex items-center text-teal border border-teal/20">
+                                {senderPays}
+                              </div>
+                            </div>
+                            <Select
+                              value={formData.senderCurrency}
+                              onValueChange={(value) => handleInputChange("senderCurrency", value)}
+                            >
+                              <SelectTrigger className="w-24 h-14 bg-teal/10 border-teal/20 font-medium text-teal" data-testid="select-sender-currency">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="NGN">NGN</SelectItem>
+                                <SelectItem value="USD">USD</SelectItem>
+                                <SelectItem value="EUR">EUR</SelectItem>
+                                <SelectItem value="GBP">GBP</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="paymentMethod">Payment Method (Optional)</Label>
+                        <Select
+                          value={formData.paymentMethod}
+                          onValueChange={(value) => handleInputChange("paymentMethod", value)}
+                        >
+                          <SelectTrigger id="paymentMethod" data-testid="select-payment-method">
+                            <SelectValue placeholder="How will the sender pay?" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="sender_choice">Let the Sender Choose</SelectItem>
+                            <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                            <SelectItem value="card">Card Payment</SelectItem>
+                            <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="paymentMethod">Payment Method (Optional)</Label>
-                      <Select
-                        value={formData.paymentMethod}
-                        onValueChange={(value) => handleInputChange("paymentMethod", value)}
-                      >
-                        <SelectTrigger id="paymentMethod" data-testid="select-payment-method">
-                          <SelectValue placeholder="How will the sender pay?" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="sender_choice">Let the Sender Choose</SelectItem>
-                          <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                          <SelectItem value="card">Card Payment</SelectItem>
-                          <SelectItem value="mobile_money">Mobile Money</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 && (
-                      <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown">
-                        <h3 className="font-semibold text-lg">Amount Breakdown</h3>
+                    <div className="lg:col-span-2">
+                      <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white sticky top-4" data-testid="fee-breakdown">
+                        <h3 className="font-semibold text-lg">Amount</h3>
                         
                         <div className="space-y-3">
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">You Request</span>
-                            <span className="font-medium">{receiveSymbol}{parseFloat(formData.receiveAmount).toFixed(2)} {formData.receiveCurrency}</span>
+                            <span className="font-medium">
+                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                                ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
+                                : `0.00 ${formData.receiveCurrency}`}
+                            </span>
                           </div>
                           
                           <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Fee</span>
-                            <span className="font-medium">{senderSymbol}{(parseFloat(formData.receiveAmount) * getExchangeRate() * 0.03).toFixed(2)} {formData.senderCurrency}</span>
+                            <span className="text-muted-foreground">Fee (3%)</span>
+                            <span className="font-medium">
+                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                                ? `${senderSymbol}${(parseFloat(formData.receiveAmount) * getExchangeRate() * 0.03).toFixed(2)} ${formData.senderCurrency}`
+                                : `0.00 ${formData.senderCurrency}`}
+                            </span>
                           </div>
                           
                           {formData.receiveCurrency !== formData.senderCurrency && (
@@ -384,16 +394,24 @@ export default function RequestPayment() {
                         
                         <div className="flex justify-between pt-1">
                           <span className="font-medium">Sender Pays</span>
-                          <span className="font-bold text-lg text-teal">{senderSymbol}{(parseFloat(formData.receiveAmount) * getExchangeRate() * 1.03).toFixed(2)} {formData.senderCurrency}</span>
+                          <span className="font-bold text-lg text-teal">
+                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                              ? `${senderSymbol}${(parseFloat(formData.receiveAmount) * getExchangeRate() * 1.03).toFixed(2)} ${formData.senderCurrency}`
+                              : `0.00 ${formData.senderCurrency}`}
+                          </span>
                         </div>
                         
                         <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
                           <span className="font-medium">You Receive</span>
-                          <span className="font-bold text-lg text-primary">{receiveSymbol}{parseFloat(formData.receiveAmount).toFixed(2)} {formData.receiveCurrency}</span>
+                          <span className="font-bold text-lg text-primary">
+                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                              ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
+                              : `0.00 ${formData.receiveCurrency}`}
+                          </span>
                         </div>
                       </div>
-                    )}
-                  </>
+                    </div>
+                  </div>
                 )}
 
                 {currentStep === 2 && (
