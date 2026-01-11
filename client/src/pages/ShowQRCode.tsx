@@ -152,7 +152,7 @@ export default function ShowQRCode() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -178,59 +178,71 @@ export default function ShowQRCode() {
             <CardDescription>Enter the amount and sender information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="bg-gradient-to-br from-purple/5 to-primary/5 rounded-xl p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 bg-purple rounded-full flex items-center justify-center">
-                  <QrCode className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <p className="font-medium">QR Code Payment</p>
-                  <p className="text-sm text-muted-foreground">Sender will receive a scannable QR code</p>
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              <div className="lg:col-span-3 space-y-6">
+                <div className="bg-gradient-to-br from-purple/5 to-primary/5 rounded-xl p-6">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-12 h-12 bg-purple rounded-full flex items-center justify-center">
+                      <QrCode className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-medium">QR Code Payment</p>
+                      <p className="text-sm text-muted-foreground">Sender will receive a scannable QR code</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="amount">Amount to Receive (Optional)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="amount"
+                        type="number"
+                        placeholder="Leave empty for any amount"
+                        value={formData.amount}
+                        onChange={(e) => handleInputChange("amount", e.target.value)}
+                        className="flex-1 bg-white"
+                        data-testid="input-qr-amount"
+                      />
+                      <Select value={formData.currency} onValueChange={(value) => handleInputChange("currency", value)}>
+                        <SelectTrigger className="w-24 bg-white" data-testid="select-qr-currency">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GBP">GBP</SelectItem>
+                          <SelectItem value="USD">USD</SelectItem>
+                          <SelectItem value="EUR">EUR</SelectItem>
+                          <SelectItem value="NGN">NGN</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Set a specific amount or leave blank to let the sender choose
+                    </p>
+                  </div>
                 </div>
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="amount">Amount to Receive (Optional)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="amount"
-                    type="number"
-                    placeholder="Leave empty for any amount"
-                    value={formData.amount}
-                    onChange={(e) => handleInputChange("amount", e.target.value)}
-                    className="flex-1 bg-white"
-                    data-testid="input-qr-amount"
-                  />
-                  <Select value={formData.currency} onValueChange={(value) => handleInputChange("currency", value)}>
-                    <SelectTrigger className="w-24 bg-white" data-testid="select-qr-currency">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GBP">GBP</SelectItem>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                      <SelectItem value="NGN">NGN</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Set a specific amount or leave blank to let the sender choose
-                </p>
-              </div>
-              
-              {formData.amount && parseFloat(formData.amount) > 0 && (
-                <div className="border-2 border-purple/20 rounded-xl p-5 space-y-4 bg-white mt-4" data-testid="fee-breakdown">
-                  <h3 className="font-semibold text-lg">Amount Breakdown</h3>
+
+              <div className="lg:col-span-2">
+                <div className="border-2 border-purple/20 rounded-xl p-5 space-y-4 bg-white sticky top-4" data-testid="fee-breakdown">
+                  <h3 className="font-semibold text-lg">Amount</h3>
                   
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">You Request</span>
-                      <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency]}{parseFloat(formData.amount).toFixed(2)} {formData.currency}</span>
+                      <span className="font-medium">
+                        {formData.amount && parseFloat(formData.amount) > 0
+                          ? `${CURRENCY_SYMBOLS[formData.currency]}${parseFloat(formData.amount).toFixed(2)} ${formData.currency}`
+                          : `0.00 ${formData.currency}`}
+                      </span>
                     </div>
                     
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Fee (3%)</span>
-                      <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency]}{(parseFloat(formData.amount) * 0.03).toFixed(2)} {formData.currency}</span>
+                      <span className="font-medium">
+                        {formData.amount && parseFloat(formData.amount) > 0
+                          ? `${CURRENCY_SYMBOLS[formData.currency]}${(parseFloat(formData.amount) * 0.03).toFixed(2)} ${formData.currency}`
+                          : `0.00 ${formData.currency}`}
+                      </span>
                     </div>
                   </div>
                   
@@ -238,15 +250,23 @@ export default function ShowQRCode() {
                   
                   <div className="flex justify-between pt-1">
                     <span className="font-medium">Sender Pays</span>
-                    <span className="font-bold text-lg text-teal">{CURRENCY_SYMBOLS[formData.currency]}{(parseFloat(formData.amount) * 1.03).toFixed(2)} {formData.currency}</span>
+                    <span className="font-bold text-lg text-teal">
+                      {formData.amount && parseFloat(formData.amount) > 0
+                        ? `${CURRENCY_SYMBOLS[formData.currency]}${(parseFloat(formData.amount) * 1.03).toFixed(2)} ${formData.currency}`
+                        : `0.00 ${formData.currency}`}
+                    </span>
                   </div>
                   
                   <div className="flex justify-between bg-purple/10 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-purple/20">
                     <span className="font-medium">You Receive</span>
-                    <span className="font-bold text-lg text-purple">{CURRENCY_SYMBOLS[formData.currency]}{parseFloat(formData.amount).toFixed(2)} {formData.currency}</span>
+                    <span className="font-bold text-lg text-purple">
+                      {formData.amount && parseFloat(formData.amount) > 0
+                        ? `${CURRENCY_SYMBOLS[formData.currency]}${parseFloat(formData.amount).toFixed(2)} ${formData.currency}`
+                        : `0.00 ${formData.currency}`}
+                    </span>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
             <div className="space-y-4">

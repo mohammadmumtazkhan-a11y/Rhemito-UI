@@ -176,7 +176,7 @@ export default function SendInvoice() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -202,118 +202,138 @@ export default function SendInvoice() {
             <CardDescription>Upload your invoice and enter payment details</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-                dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              {formData.invoiceFile ? (
-                <div className="flex items-center justify-center gap-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <FileText className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-medium">{formData.invoiceFile.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(formData.invoiceFile.size / 1024).toFixed(1)} KB
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleFileChange(null)}
-                    data-testid="button-remove-file"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
-                  <p className="font-medium mb-1">Drag and drop your invoice here</p>
-                  <p className="text-sm text-muted-foreground mb-4">PDF, PNG, or JPG up to 10MB</p>
-                  <Button
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    data-testid="button-browse-files"
-                  >
-                    Browse Files
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
-                  />
-                </>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="invoiceAmount">Invoice Amount *</Label>
-                <Input
-                  id="invoiceAmount"
-                  type="number"
-                  placeholder="0.00"
-                  value={formData.invoiceAmount}
-                  onChange={(e) => handleInputChange("invoiceAmount", e.target.value)}
-                  data-testid="input-invoice-amount"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="currency">Currency</Label>
-                <Select
-                  value={formData.currency}
-                  onValueChange={(value) => handleInputChange("currency", value)}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              <div className="lg:col-span-3 space-y-6">
+                <div
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+                    dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                  }`}
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
                 >
-                  <SelectTrigger data-testid="select-currency">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="GBP">GBP (£)</SelectItem>
-                    <SelectItem value="USD">USD ($)</SelectItem>
-                    <SelectItem value="EUR">EUR (€)</SelectItem>
-                    <SelectItem value="NGN">NGN (₦)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                  {formData.invoiceFile ? (
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                        <FileText className="w-6 h-6 text-primary" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium">{formData.invoiceFile.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {(formData.invoiceFile.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleFileChange(null)}
+                        data-testid="button-remove-file"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
+                      <p className="font-medium mb-1">Drag and drop your invoice here</p>
+                      <p className="text-sm text-muted-foreground mb-4">PDF, PNG, or JPG up to 10MB</p>
+                      <Button
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                        data-testid="button-browse-files"
+                      >
+                        Browse Files
+                      </Button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg"
+                        className="hidden"
+                        onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
+                      />
+                    </>
+                  )}
+                </div>
 
-            {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0 && (
-              <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-gradient-to-br from-primary/5 to-teal/5" data-testid="fee-breakdown">
-                <h3 className="font-semibold text-lg">Amount Breakdown</h3>
-                
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Invoice Amount</span>
-                    <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency]}{parseFloat(formData.invoiceAmount).toFixed(2)} {formData.currency}</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="invoiceAmount">Invoice Amount *</Label>
+                    <Input
+                      id="invoiceAmount"
+                      type="number"
+                      placeholder="0.00"
+                      value={formData.invoiceAmount}
+                      onChange={(e) => handleInputChange("invoiceAmount", e.target.value)}
+                      data-testid="input-invoice-amount"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="currency">Currency</Label>
+                    <Select
+                      value={formData.currency}
+                      onValueChange={(value) => handleInputChange("currency", value)}
+                    >
+                      <SelectTrigger data-testid="select-currency">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GBP">GBP (£)</SelectItem>
+                        <SelectItem value="USD">USD ($)</SelectItem>
+                        <SelectItem value="EUR">EUR (€)</SelectItem>
+                        <SelectItem value="NGN">NGN (₦)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="lg:col-span-2">
+                <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white sticky top-4" data-testid="fee-breakdown">
+                  <h3 className="font-semibold text-lg">Amount</h3>
+                  
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Invoice Amount</span>
+                      <span className="font-medium">
+                        {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0
+                          ? `${CURRENCY_SYMBOLS[formData.currency]}${parseFloat(formData.invoiceAmount).toFixed(2)} ${formData.currency}`
+                          : `0.00 ${formData.currency}`}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Fee (3%)</span>
+                      <span className="font-medium">
+                        {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0
+                          ? `${CURRENCY_SYMBOLS[formData.currency]}${(parseFloat(formData.invoiceAmount) * 0.03).toFixed(2)} ${formData.currency}`
+                          : `0.00 ${formData.currency}`}
+                      </span>
+                    </div>
                   </div>
                   
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Fee (3%)</span>
-                    <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency]}{(parseFloat(formData.invoiceAmount) * 0.03).toFixed(2)} {formData.currency}</span>
+                  <div className="h-px bg-border" />
+                  
+                  <div className="flex justify-between pt-1">
+                    <span className="font-medium">Client Pays</span>
+                    <span className="font-bold text-lg text-teal">
+                      {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0
+                        ? `${CURRENCY_SYMBOLS[formData.currency]}${(parseFloat(formData.invoiceAmount) * 1.03).toFixed(2)} ${formData.currency}`
+                        : `0.00 ${formData.currency}`}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
+                    <span className="font-medium">You Receive</span>
+                    <span className="font-bold text-lg text-primary">
+                      {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0
+                        ? `${CURRENCY_SYMBOLS[formData.currency]}${parseFloat(formData.invoiceAmount).toFixed(2)} ${formData.currency}`
+                        : `0.00 ${formData.currency}`}
+                    </span>
                   </div>
                 </div>
-                
-                <div className="h-px bg-border" />
-                
-                <div className="flex justify-between pt-1">
-                  <span className="font-medium">Client Pays</span>
-                  <span className="font-bold text-lg text-teal">{CURRENCY_SYMBOLS[formData.currency]}{(parseFloat(formData.invoiceAmount) * 1.03).toFixed(2)} {formData.currency}</span>
-                </div>
-                
-                <div className="flex justify-between bg-primary/10 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/20">
-                  <span className="font-medium">You Receive</span>
-                  <span className="font-bold text-lg text-primary">{CURRENCY_SYMBOLS[formData.currency]}{parseFloat(formData.invoiceAmount).toFixed(2)} {formData.currency}</span>
-                </div>
               </div>
-            )}
+            </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
