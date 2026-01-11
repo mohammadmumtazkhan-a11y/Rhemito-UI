@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   CheckCircle2, 
   Clock, 
@@ -10,7 +10,8 @@ import {
   Link as LinkIcon,
   QrCode,
   UserPlus,
-  X
+  X,
+  User
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -34,6 +35,22 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   EUR: "€",
   NGN: "₦",
 };
+
+interface KnownSender {
+  name: string;
+  email: string;
+}
+
+const knownSenders: KnownSender[] = [
+  { name: "John Adeyemi", email: "john.adeyemi@email.com" },
+  { name: "Sarah Williams", email: "sarah.w@company.co.uk" },
+  { name: "Michael Chen", email: "m.chen@business.com" },
+  { name: "Emma Thompson", email: "emma.t@mail.com" },
+  { name: "David Okonkwo", email: "david.o@gmail.com" },
+  { name: "Amara Obi", email: "amara.obi@outlook.com" },
+  { name: "James Peterson", email: "j.peterson@corp.io" },
+  { name: "Fatima Hassan", email: "fatima.h@company.ng" },
+];
 
 interface Payment {
   id: string;
@@ -176,6 +193,25 @@ export default function Payments() {
   const [allocateDialogOpen, setAllocateDialogOpen] = useState(false);
   const [allocateSenderName, setAllocateSenderName] = useState("");
   const [allocateSenderEmail, setAllocateSenderEmail] = useState("");
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredNameSuggestions = knownSenders.filter(sender =>
+    sender.name.toLowerCase().includes(allocateSenderName.toLowerCase())
+  );
+
+  const filteredEmailSuggestions = knownSenders.filter(sender =>
+    sender.email.toLowerCase().includes(allocateSenderEmail.toLowerCase())
+  );
+
+  const selectSender = (sender: KnownSender) => {
+    setAllocateSenderName(sender.name);
+    setAllocateSenderEmail(sender.email);
+    setShowNameSuggestions(false);
+    setShowEmailSuggestions(false);
+  };
 
   const untracedPayments = mockPayments.filter(p => !p.senderName && p.status === "completed");
   const tracedPayments = mockPayments.filter(p => p.senderName);
@@ -467,26 +503,104 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="space-y-2">
+                  <div className="space-y-2 relative">
                     <Label htmlFor="allocateName">Sender Name *</Label>
-                    <Input
-                      id="allocateName"
-                      placeholder="Enter sender's full name"
-                      value={allocateSenderName}
-                      onChange={(e) => setAllocateSenderName(e.target.value)}
-                      data-testid="input-allocate-name"
-                    />
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        ref={nameInputRef}
+                        id="allocateName"
+                        placeholder="Start typing to search..."
+                        value={allocateSenderName}
+                        onChange={(e) => {
+                          setAllocateSenderName(e.target.value);
+                          setShowNameSuggestions(true);
+                        }}
+                        onFocus={() => setShowNameSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowNameSuggestions(false), 150)}
+                        className="pl-9"
+                        data-testid="input-allocate-name"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <AnimatePresence>
+                      {showNameSuggestions && allocateSenderName && filteredNameSuggestions.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute z-50 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-auto"
+                        >
+                          {filteredNameSuggestions.map((sender) => (
+                            <button
+                              key={sender.email}
+                              type="button"
+                              className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors flex items-center gap-3 border-b last:border-b-0"
+                              onClick={() => selectSender(sender)}
+                              data-testid={`suggestion-name-${sender.name.replace(/\s+/g, '-').toLowerCase()}`}
+                            >
+                              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                                <User className="w-4 h-4 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">{sender.name}</p>
+                                <p className="text-xs text-muted-foreground">{sender.email}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 relative">
                     <Label htmlFor="allocateEmail">Sender Email (Optional)</Label>
-                    <Input
-                      id="allocateEmail"
-                      type="email"
-                      placeholder="Enter sender's email"
-                      value={allocateSenderEmail}
-                      onChange={(e) => setAllocateSenderEmail(e.target.value)}
-                      data-testid="input-allocate-email"
-                    />
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        ref={emailInputRef}
+                        id="allocateEmail"
+                        type="email"
+                        placeholder="Start typing to search..."
+                        value={allocateSenderEmail}
+                        onChange={(e) => {
+                          setAllocateSenderEmail(e.target.value);
+                          setShowEmailSuggestions(true);
+                        }}
+                        onFocus={() => setShowEmailSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowEmailSuggestions(false), 150)}
+                        className="pl-9"
+                        data-testid="input-allocate-email"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <AnimatePresence>
+                      {showEmailSuggestions && allocateSenderEmail && filteredEmailSuggestions.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute z-50 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-auto"
+                        >
+                          {filteredEmailSuggestions.map((sender) => (
+                            <button
+                              key={sender.email}
+                              type="button"
+                              className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors flex items-center gap-3 border-b last:border-b-0"
+                              onClick={() => selectSender(sender)}
+                              data-testid={`suggestion-email-${sender.email.replace(/[@.]/g, '-')}`}
+                            >
+                              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                                <User className="w-4 h-4 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">{sender.email}</p>
+                                <p className="text-xs text-muted-foreground">{sender.name}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
 
