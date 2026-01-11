@@ -220,6 +220,125 @@ export default function ShowQRCode() {
                     </p>
                   </div>
                 </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="senderFirstName">First Name *</Label>
+                    <Input
+                      id="senderFirstName"
+                      placeholder="First name"
+                      value={formData.senderFirstName}
+                      onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
+                      data-testid="input-sender-first-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="senderMiddleName">Middle Name</Label>
+                    <Input
+                      id="senderMiddleName"
+                      placeholder="Middle name"
+                      value={formData.senderMiddleName}
+                      onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
+                      data-testid="input-sender-middle-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="senderLastName">Last Name</Label>
+                    <Input
+                      id="senderLastName"
+                      placeholder="Last name"
+                      value={formData.senderLastName}
+                      onChange={(e) => handleInputChange("senderLastName", e.target.value)}
+                      data-testid="input-sender-last-name"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="senderEmail">Sender Email *</Label>
+                  <Input
+                    id="senderEmail"
+                    type="email"
+                    placeholder="Where to send the QR code"
+                    value={formData.senderEmail}
+                    onChange={(e) => handleInputChange("senderEmail", e.target.value)}
+                    data-testid="input-sender-email"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="senderPhone">Sender Phone (Optional)</Label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={formData.countryCode}
+                      onValueChange={(value) => handleInputChange("countryCode", value)}
+                    >
+                      <SelectTrigger className="w-32" data-testid="select-country-code">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTRY_CODES.map((country, index) => (
+                          <SelectItem key={`${country.code}-${index}`} value={country.code}>
+                            {country.flag} {country.code}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      id="senderPhone"
+                      type="tel"
+                      placeholder="Mobile number"
+                      value={formData.senderPhone}
+                      onChange={(e) => handleInputChange("senderPhone", e.target.value)}
+                      className="flex-1"
+                      data-testid="input-sender-phone"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reason">Reason for Payment (Optional)</Label>
+                  <Select
+                    value={formData.reason}
+                    onValueChange={(value) => handleInputChange("reason", value)}
+                  >
+                    <SelectTrigger id="reason" data-testid="select-reason">
+                      <SelectValue placeholder="Select a reason" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="family_support">Family Support</SelectItem>
+                      <SelectItem value="education_fees">Education Fees</SelectItem>
+                      <SelectItem value="medical_expenses">Medical Expenses</SelectItem>
+                      <SelectItem value="rent_payment">Rent Payment</SelectItem>
+                      <SelectItem value="business_payment">Business Payment</SelectItem>
+                      <SelectItem value="gift">Gift</SelectItem>
+                      <SelectItem value="loan_repayment">Loan Repayment</SelectItem>
+                      <SelectItem value="travel_expenses">Travel Expenses</SelectItem>
+                      <SelectItem value="invoice_payment">Invoice Payment</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setLocation("/")}
+                    className="flex-1"
+                    data-testid="button-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleSendQR}
+                    disabled={!canSubmit}
+                    className="flex-1 bg-purple hover:bg-purple/90"
+                    data-testid="button-send-qr"
+                  >
+                    <QrCode className="w-4 h-4 mr-2" />
+                    Send QR Code
+                  </Button>
+                </div>
               </div>
 
               <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-6">
@@ -267,127 +386,6 @@ export default function ShowQRCode() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="senderFirstName">First Name *</Label>
-                  <Input
-                    id="senderFirstName"
-                    placeholder="First name"
-                    value={formData.senderFirstName}
-                    onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
-                    data-testid="input-sender-first-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="senderMiddleName">Middle Name</Label>
-                  <Input
-                    id="senderMiddleName"
-                    placeholder="Middle name"
-                    value={formData.senderMiddleName}
-                    onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
-                    data-testid="input-sender-middle-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="senderLastName">Last Name</Label>
-                  <Input
-                    id="senderLastName"
-                    placeholder="Last name"
-                    value={formData.senderLastName}
-                    onChange={(e) => handleInputChange("senderLastName", e.target.value)}
-                    data-testid="input-sender-last-name"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="senderEmail">Sender Email *</Label>
-                <Input
-                  id="senderEmail"
-                  type="email"
-                  placeholder="Where to send the QR code"
-                  value={formData.senderEmail}
-                  onChange={(e) => handleInputChange("senderEmail", e.target.value)}
-                  data-testid="input-sender-email"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="senderPhone">Sender Phone (Optional)</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.countryCode}
-                    onValueChange={(value) => handleInputChange("countryCode", value)}
-                  >
-                    <SelectTrigger className="w-32" data-testid="select-country-code">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COUNTRY_CODES.map((country, index) => (
-                        <SelectItem key={`${country.code}-${index}`} value={country.code}>
-                          {country.flag} {country.code}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    id="senderPhone"
-                    type="tel"
-                    placeholder="Mobile number"
-                    value={formData.senderPhone}
-                    onChange={(e) => handleInputChange("senderPhone", e.target.value)}
-                    className="flex-1"
-                    data-testid="input-sender-phone"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="reason">Reason for Payment (Optional)</Label>
-                <Select
-                  value={formData.reason}
-                  onValueChange={(value) => handleInputChange("reason", value)}
-                >
-                  <SelectTrigger id="reason" data-testid="select-reason">
-                    <SelectValue placeholder="Select a reason" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="family_support">Family Support</SelectItem>
-                    <SelectItem value="education_fees">Education Fees</SelectItem>
-                    <SelectItem value="medical_expenses">Medical Expenses</SelectItem>
-                    <SelectItem value="rent_payment">Rent Payment</SelectItem>
-                    <SelectItem value="business_payment">Business Payment</SelectItem>
-                    <SelectItem value="gift">Gift</SelectItem>
-                    <SelectItem value="loan_repayment">Loan Repayment</SelectItem>
-                    <SelectItem value="travel_expenses">Travel Expenses</SelectItem>
-                    <SelectItem value="invoice_payment">Invoice Payment</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => setLocation("/")}
-                className="flex-1"
-                data-testid="button-cancel"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleSendQR}
-                disabled={!canSubmit}
-                className="flex-1 bg-purple hover:bg-purple/90"
-                data-testid="button-send-qr"
-              >
-                <QrCode className="w-4 h-4 mr-2" />
-                Send QR Code
-              </Button>
             </div>
           </CardContent>
         </Card>
