@@ -356,6 +356,43 @@ export default function RequestPayment() {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 && (
+                      <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown">
+                        <h3 className="font-semibold text-lg">Amount Breakdown</h3>
+                        
+                        <div className="space-y-3">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">You Request</span>
+                            <span className="font-medium">{receiveSymbol}{parseFloat(formData.receiveAmount).toFixed(2)} {formData.receiveCurrency}</span>
+                          </div>
+                          
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Fee</span>
+                            <span className="font-medium">{senderSymbol}{(parseFloat(formData.receiveAmount) * getExchangeRate() * 0.03).toFixed(2)} {formData.senderCurrency}</span>
+                          </div>
+                          
+                          {formData.receiveCurrency !== formData.senderCurrency && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Exchange Rate</span>
+                              <span className="font-medium">1 {formData.receiveCurrency} = {senderSymbol}{getExchangeRate().toLocaleString()} {formData.senderCurrency}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="h-px bg-border" />
+                        
+                        <div className="flex justify-between pt-1">
+                          <span className="font-medium">Sender Pays</span>
+                          <span className="font-bold text-lg text-teal">{senderSymbol}{(parseFloat(formData.receiveAmount) * getExchangeRate() * 1.03).toFixed(2)} {formData.senderCurrency}</span>
+                        </div>
+                        
+                        <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
+                          <span className="font-medium">You Receive</span>
+                          <span className="font-bold text-lg text-primary">{receiveSymbol}{parseFloat(formData.receiveAmount).toFixed(2)} {formData.receiveCurrency}</span>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
 

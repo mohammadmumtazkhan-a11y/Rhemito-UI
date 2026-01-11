@@ -17,6 +17,13 @@ const COUNTRY_CODES = [
   { code: "+254", country: "Kenya", flag: "🇰🇪" },
 ];
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  GBP: "£",
+  USD: "$",
+  EUR: "€",
+  NGN: "₦",
+};
+
 interface FormData {
   invoiceFile: File | null;
   invoiceAmount: string;
@@ -277,6 +284,36 @@ export default function SendInvoice() {
                 </Select>
               </div>
             </div>
+
+            {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0 && (
+              <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-gradient-to-br from-primary/5 to-teal/5" data-testid="fee-breakdown">
+                <h3 className="font-semibold text-lg">Amount Breakdown</h3>
+                
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Invoice Amount</span>
+                    <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency]}{parseFloat(formData.invoiceAmount).toFixed(2)} {formData.currency}</span>
+                  </div>
+                  
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Fee (3%)</span>
+                    <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency]}{(parseFloat(formData.invoiceAmount) * 0.03).toFixed(2)} {formData.currency}</span>
+                  </div>
+                </div>
+                
+                <div className="h-px bg-border" />
+                
+                <div className="flex justify-between pt-1">
+                  <span className="font-medium">Client Pays</span>
+                  <span className="font-bold text-lg text-teal">{CURRENCY_SYMBOLS[formData.currency]}{(parseFloat(formData.invoiceAmount) * 1.03).toFixed(2)} {formData.currency}</span>
+                </div>
+                
+                <div className="flex justify-between bg-primary/10 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/20">
+                  <span className="font-medium">You Receive</span>
+                  <span className="font-bold text-lg text-primary">{CURRENCY_SYMBOLS[formData.currency]}{parseFloat(formData.invoiceAmount).toFixed(2)} {formData.currency}</span>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">

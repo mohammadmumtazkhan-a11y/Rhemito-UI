@@ -217,6 +217,36 @@ export default function ShowQRCode() {
                   Set a specific amount or leave blank to let the sender choose
                 </p>
               </div>
+              
+              {formData.amount && parseFloat(formData.amount) > 0 && (
+                <div className="border-2 border-purple/20 rounded-xl p-5 space-y-4 bg-white mt-4" data-testid="fee-breakdown">
+                  <h3 className="font-semibold text-lg">Amount Breakdown</h3>
+                  
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">You Request</span>
+                      <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency]}{parseFloat(formData.amount).toFixed(2)} {formData.currency}</span>
+                    </div>
+                    
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Fee (3%)</span>
+                      <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency]}{(parseFloat(formData.amount) * 0.03).toFixed(2)} {formData.currency}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="h-px bg-border" />
+                  
+                  <div className="flex justify-between pt-1">
+                    <span className="font-medium">Sender Pays</span>
+                    <span className="font-bold text-lg text-teal">{CURRENCY_SYMBOLS[formData.currency]}{(parseFloat(formData.amount) * 1.03).toFixed(2)} {formData.currency}</span>
+                  </div>
+                  
+                  <div className="flex justify-between bg-purple/10 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-purple/20">
+                    <span className="font-medium">You Receive</span>
+                    <span className="font-bold text-lg text-purple">{CURRENCY_SYMBOLS[formData.currency]}{parseFloat(formData.amount).toFixed(2)} {formData.currency}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-4">
