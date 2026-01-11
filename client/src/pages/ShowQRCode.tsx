@@ -31,6 +31,7 @@ interface FormData {
   senderEmail: string;
   countryCode: string;
   senderPhone: string;
+  reason: string;
 }
 
 const initialFormData: FormData = {
@@ -40,6 +41,7 @@ const initialFormData: FormData = {
   senderEmail: "",
   countryCode: "+44",
   senderPhone: "",
+  reason: "",
 };
 
 export default function ShowQRCode() {
@@ -265,6 +267,30 @@ export default function ShowQRCode() {
                     data-testid="input-sender-phone"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reason">Reason for Payment (Optional)</Label>
+                <Select
+                  value={formData.reason}
+                  onValueChange={(value) => handleInputChange("reason", value)}
+                >
+                  <SelectTrigger id="reason" data-testid="select-reason">
+                    <SelectValue placeholder="Select a reason" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="family_support">Family Support</SelectItem>
+                    <SelectItem value="education_fees">Education Fees</SelectItem>
+                    <SelectItem value="medical_expenses">Medical Expenses</SelectItem>
+                    <SelectItem value="rent_payment">Rent Payment</SelectItem>
+                    <SelectItem value="business_payment">Business Payment</SelectItem>
+                    <SelectItem value="gift">Gift</SelectItem>
+                    <SelectItem value="loan_repayment">Loan Repayment</SelectItem>
+                    <SelectItem value="travel_expenses">Travel Expenses</SelectItem>
+                    <SelectItem value="invoice_payment">Invoice Payment</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
