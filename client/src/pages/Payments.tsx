@@ -195,6 +195,8 @@ export default function Payments() {
   const [allocateSenderEmail, setAllocateSenderEmail] = useState("");
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
   const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
+  const [allocationSuccess, setAllocationSuccess] = useState(false);
+  const [allocatedSenderInfo, setAllocatedSenderInfo] = useState<{name: string; reference: string} | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
@@ -237,10 +239,20 @@ export default function Payments() {
     .reduce((sum, p) => sum + p.amount, 0);
 
   const handleAllocateSender = () => {
+    setAllocatedSenderInfo({
+      name: allocateSenderName,
+      reference: selectedPayment?.reference || ""
+    });
     setAllocateDialogOpen(false);
+    setAllocationSuccess(true);
     setAllocateSenderName("");
     setAllocateSenderEmail("");
     setSelectedPayment(null);
+    
+    setTimeout(() => {
+      setAllocationSuccess(false);
+      setAllocatedSenderInfo(null);
+    }, 4000);
   };
 
   return (
@@ -254,6 +266,40 @@ export default function Payments() {
           <h1 className="text-2xl font-bold font-display">Payments</h1>
           <p className="text-muted-foreground mt-1">Track and manage your received payments</p>
         </motion.div>
+
+        <AnimatePresence>
+          {allocationSuccess && allocatedSenderInfo && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              className="mb-6 bg-teal/10 border border-teal/30 rounded-xl p-4 flex items-center gap-4"
+              data-testid="success-allocation-banner"
+            >
+              <div className="w-10 h-10 bg-teal rounded-full flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-teal-800">Sender Allocated Successfully</p>
+                <p className="text-sm text-teal-700">
+                  Payment <span className="font-medium">{allocatedSenderInfo.reference}</span> has been allocated to <span className="font-medium">{allocatedSenderInfo.name}</span>
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setAllocationSuccess(false);
+                  setAllocatedSenderInfo(null);
+                }}
+                className="text-teal-700 hover:text-teal-900 hover:bg-teal/20"
+                data-testid="button-dismiss-success"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <Card>
