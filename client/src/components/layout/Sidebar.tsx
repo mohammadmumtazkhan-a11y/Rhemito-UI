@@ -40,7 +40,7 @@ export function Sidebar() {
       <div className="p-6 flex items-center gap-3">
         <div className="w-10 h-10 flex items-center justify-center">
           <img 
-            src="/attached_assets/image_1768217842488.png" 
+            src="/logo.png" 
             alt="Rhemito Logo" 
             className="w-10 h-10 object-contain"
           />
