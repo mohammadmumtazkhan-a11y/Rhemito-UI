@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Copy, Check, CheckCircle2, QrCode, Search, User } from "lucide-react";
+import { ArrowLeft, Copy, Check, CheckCircle2, QrCode, Search, User, Building2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,9 +28,11 @@ const COUNTRY_CODES = [
 interface FormData {
   amount: string;
   currency: string;
+  senderType: "individual" | "business";
   senderFirstName: string;
   senderMiddleName: string;
   senderLastName: string;
+  senderBusinessName: string;
   senderEmail: string;
   countryCode: string;
   senderPhone: string;
@@ -40,9 +42,11 @@ interface FormData {
 const initialFormData: FormData = {
   amount: "",
   currency: "GBP",
+  senderType: "individual",
   senderFirstName: "",
   senderMiddleName: "",
   senderLastName: "",
+  senderBusinessName: "",
   senderEmail: "",
   countryCode: "+44",
   senderPhone: "",
@@ -66,9 +70,11 @@ export default function ShowQRCode() {
       if (sender) {
         setFormData(prev => ({
           ...prev,
+          senderType: sender.senderType,
           senderFirstName: sender.firstName,
           senderMiddleName: sender.middleName,
           senderLastName: sender.lastName,
+          senderBusinessName: sender.businessName,
           senderEmail: sender.email,
           countryCode: sender.countryCode,
           senderPhone: sender.phone,
@@ -78,17 +84,21 @@ export default function ShowQRCode() {
   }, []);
 
   const filteredSenders = knownSenders.filter(sender => {
-    const fullName = `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
+    const displayName = sender.senderType === "business" 
+      ? sender.businessName.toLowerCase() 
+      : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
     const searchLower = senderSearch.toLowerCase();
-    return fullName.includes(searchLower) || sender.email.toLowerCase().includes(searchLower);
+    return displayName.includes(searchLower) || sender.email.toLowerCase().includes(searchLower);
   });
 
   const selectKnownSender = (sender: KnownSender) => {
     setFormData(prev => ({
       ...prev,
+      senderType: sender.senderType,
       senderFirstName: sender.firstName,
       senderMiddleName: sender.middleName,
       senderLastName: sender.lastName,
+      senderBusinessName: sender.businessName,
       senderEmail: sender.email,
       countryCode: sender.countryCode,
       senderPhone: sender.phone,
@@ -113,7 +123,7 @@ export default function ShowQRCode() {
     setIsSuccess(true);
   };
 
-  const canSubmit = formData.senderFirstName && formData.senderEmail;
+  const canSubmit = (formData.senderType === "individual" ? formData.senderFirstName : formData.senderBusinessName) && formData.senderEmail;
 
   if (isSuccess) {
     return (
@@ -137,7 +147,11 @@ export default function ShowQRCode() {
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold font-display">QR Code Sent!</h2>
                 <p className="text-muted-foreground">
-                  Successfully sent to <span className="font-medium text-foreground">{[formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}</span>
+                  Successfully sent to <span className="font-medium text-foreground">
+                    {formData.senderType === "business" 
+                      ? formData.senderBusinessName 
+                      : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}
+                  </span>
                 </p>
                 {formData.amount && (
                   <p className="text-lg font-semibold text-purple">
@@ -300,10 +314,18 @@ export default function ShowQRCode() {
                             data-testid={`suggestion-sender-${sender.email.replace(/[@.]/g, '-')}`}
                           >
                             <div className="w-10 h-10 bg-purple/10 rounded-full flex items-center justify-center">
-                              <User className="w-5 h-5 text-purple" />
+                              {sender.senderType === "business" ? (
+                                <Building2 className="w-5 h-5 text-purple" />
+                              ) : (
+                                <User className="w-5 h-5 text-purple" />
+                              )}
                             </div>
                             <div>
-                              <p className="font-medium text-sm">{sender.firstName} {sender.middleName} {sender.lastName}</p>
+                              <p className="font-medium text-sm">
+                                {sender.senderType === "business" 
+                                  ? sender.businessName 
+                                  : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim()}
+                              </p>
                               <p className="text-xs text-muted-foreground">{sender.email}</p>
                             </div>
                           </button>
@@ -316,38 +338,83 @@ export default function ShowQRCode() {
 
                 <div className="h-px bg-border" />
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="senderFirstName">First Name *</Label>
-                    <Input
-                      id="senderFirstName"
-                      placeholder="First name"
-                      value={formData.senderFirstName}
-                      onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
-                      data-testid="input-sender-first-name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="senderMiddleName">Middle Name</Label>
-                    <Input
-                      id="senderMiddleName"
-                      placeholder="Middle name"
-                      value={formData.senderMiddleName}
-                      onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
-                      data-testid="input-sender-middle-name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="senderLastName">Last Name</Label>
-                    <Input
-                      id="senderLastName"
-                      placeholder="Last name"
-                      value={formData.senderLastName}
-                      onChange={(e) => handleInputChange("senderLastName", e.target.value)}
-                      data-testid="input-sender-last-name"
-                    />
+                <div className="space-y-2">
+                  <Label>Sender Type *</Label>
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange("senderType", "individual")}
+                      className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${
+                        formData.senderType === "individual"
+                          ? "border-purple bg-purple/5"
+                          : "border-border hover:border-muted-foreground/30"
+                      }`}
+                      data-testid="button-sender-type-individual"
+                    >
+                      <User className={`w-5 h-5 ${formData.senderType === "individual" ? "text-purple" : "text-muted-foreground"}`} />
+                      <span className={`font-medium ${formData.senderType === "individual" ? "text-purple" : ""}`}>Individual</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange("senderType", "business")}
+                      className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${
+                        formData.senderType === "business"
+                          ? "border-purple bg-purple/5"
+                          : "border-border hover:border-muted-foreground/30"
+                      }`}
+                      data-testid="button-sender-type-business"
+                    >
+                      <Building2 className={`w-5 h-5 ${formData.senderType === "business" ? "text-purple" : "text-muted-foreground"}`} />
+                      <span className={`font-medium ${formData.senderType === "business" ? "text-purple" : ""}`}>Business</span>
+                    </button>
                   </div>
                 </div>
+
+                {formData.senderType === "individual" ? (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="senderFirstName">First Name *</Label>
+                      <Input
+                        id="senderFirstName"
+                        placeholder="First name"
+                        value={formData.senderFirstName}
+                        onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
+                        data-testid="input-sender-first-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="senderMiddleName">Middle Name</Label>
+                      <Input
+                        id="senderMiddleName"
+                        placeholder="Middle name"
+                        value={formData.senderMiddleName}
+                        onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
+                        data-testid="input-sender-middle-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="senderLastName">Last Name</Label>
+                      <Input
+                        id="senderLastName"
+                        placeholder="Last name"
+                        value={formData.senderLastName}
+                        onChange={(e) => handleInputChange("senderLastName", e.target.value)}
+                        data-testid="input-sender-last-name"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="senderBusinessName">Business Name *</Label>
+                    <Input
+                      id="senderBusinessName"
+                      placeholder="Enter business name"
+                      value={formData.senderBusinessName}
+                      onChange={(e) => handleInputChange("senderBusinessName", e.target.value)}
+                      data-testid="input-sender-business-name"
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="senderEmail">Sender Email *</Label>

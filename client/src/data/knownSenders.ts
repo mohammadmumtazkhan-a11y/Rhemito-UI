@@ -1,7 +1,9 @@
 export interface KnownSender {
+  senderType: "individual" | "business";
   firstName: string;
   middleName: string;
   lastName: string;
+  businessName: string;
   email: string;
   countryCode: string;
   phone: string;
@@ -9,15 +11,16 @@ export interface KnownSender {
   country: string;
   currency: string;
   relationship: string;
-  entityType: string;
   createdAt: string;
 }
 
 export const knownSenders: KnownSender[] = [
   {
+    senderType: "individual",
     firstName: "John",
     middleName: "Oluwaseun",
     lastName: "Adeyemi",
+    businessName: "",
     email: "john.adeyemi@email.com",
     countryCode: "+234",
     phone: "8012345678",
@@ -25,13 +28,14 @@ export const knownSenders: KnownSender[] = [
     country: "Nigeria",
     currency: "NGN",
     relationship: "Business",
-    entityType: "Individual",
     createdAt: "2024-01-15",
   },
   {
+    senderType: "individual",
     firstName: "Sarah",
     middleName: "",
     lastName: "Williams",
+    businessName: "",
     email: "sarah.w@company.co.uk",
     countryCode: "+44",
     phone: "7700123456",
@@ -39,27 +43,29 @@ export const knownSenders: KnownSender[] = [
     country: "United Kingdom",
     currency: "GBP",
     relationship: "Personal",
-    entityType: "Individual",
     createdAt: "2024-02-20",
   },
   {
-    firstName: "Michael",
-    middleName: "Wei",
-    lastName: "Chen",
+    senderType: "business",
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    businessName: "Chen Technologies Ltd",
     email: "m.chen@business.com",
     countryCode: "+1",
     phone: "4155551234",
-    dob: "1988-11-08",
+    dob: "",
     country: "United States",
     currency: "USD",
     relationship: "Business",
-    entityType: "Individual",
     createdAt: "2024-03-10",
   },
   {
+    senderType: "individual",
     firstName: "Emma",
     middleName: "Grace",
     lastName: "Thompson",
+    businessName: "",
     email: "emma.t@mail.com",
     countryCode: "+44",
     phone: "7891234567",
@@ -67,13 +73,14 @@ export const knownSenders: KnownSender[] = [
     country: "United Kingdom",
     currency: "GBP",
     relationship: "Personal",
-    entityType: "Individual",
     createdAt: "2024-03-25",
   },
   {
+    senderType: "individual",
     firstName: "David",
     middleName: "Chukwu",
     lastName: "Okonkwo",
+    businessName: "",
     email: "david.o@gmail.com",
     countryCode: "+234",
     phone: "9034567890",
@@ -81,41 +88,44 @@ export const knownSenders: KnownSender[] = [
     country: "Nigeria",
     currency: "NGN",
     relationship: "Business",
-    entityType: "Individual",
     createdAt: "2024-04-05",
   },
   {
-    firstName: "Amara",
-    middleName: "Ngozi",
-    lastName: "Obi",
+    senderType: "business",
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    businessName: "Obi Enterprises",
     email: "amara.obi@outlook.com",
     countryCode: "+234",
     phone: "8123456789",
-    dob: "1995-01-25",
+    dob: "",
     country: "Nigeria",
     currency: "NGN",
     relationship: "Personal",
-    entityType: "Individual",
     createdAt: "2024-04-18",
   },
   {
-    firstName: "James",
-    middleName: "Robert",
-    lastName: "Peterson",
+    senderType: "business",
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    businessName: "Peterson Corp International",
     email: "j.peterson@corp.io",
     countryCode: "+1",
     phone: "2125559876",
-    dob: "1983-06-18",
+    dob: "",
     country: "United States",
     currency: "USD",
     relationship: "Business",
-    entityType: "Corporate",
     createdAt: "2024-05-02",
   },
   {
+    senderType: "individual",
     firstName: "Fatima",
     middleName: "",
     lastName: "Hassan",
+    businessName: "",
     email: "fatima.h@company.ng",
     countryCode: "+234",
     phone: "7056789012",
@@ -123,7 +133,6 @@ export const knownSenders: KnownSender[] = [
     country: "Nigeria",
     currency: "NGN",
     relationship: "Business",
-    entityType: "Individual",
     createdAt: "2024-05-15",
   },
 ];

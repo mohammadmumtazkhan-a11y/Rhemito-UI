@@ -29,9 +29,11 @@ interface FormData {
   receiveCurrency: string;
   senderCurrency: string;
   paymentMethod: string;
+  senderType: "individual" | "business";
   senderFirstName: string;
   senderMiddleName: string;
   senderLastName: string;
+  senderBusinessName: string;
   senderEmail: string;
   senderCountryCode: string;
   senderPhone: string;
@@ -63,9 +65,11 @@ const initialFormData: FormData = {
   receiveCurrency: "GBP",
   senderCurrency: "NGN",
   paymentMethod: "sender_choice",
+  senderType: "individual",
   senderFirstName: "",
   senderMiddleName: "",
   senderLastName: "",
+  senderBusinessName: "",
   senderEmail: "",
   senderCountryCode: "+44",
   senderPhone: "",
@@ -102,9 +106,11 @@ export default function RequestPayment() {
       if (sender) {
         setFormData(prev => ({
           ...prev,
+          senderType: sender.senderType,
           senderFirstName: sender.firstName,
           senderMiddleName: sender.middleName,
           senderLastName: sender.lastName,
+          senderBusinessName: sender.businessName,
           senderEmail: sender.email,
           senderCountryCode: sender.countryCode,
           senderPhone: sender.phone,
@@ -115,17 +121,21 @@ export default function RequestPayment() {
   }, []);
 
   const filteredSenders = knownSenders.filter(sender => {
-    const fullName = `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
+    const displayName = sender.senderType === "business" 
+      ? sender.businessName.toLowerCase() 
+      : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
     const searchLower = senderSearch.toLowerCase();
-    return fullName.includes(searchLower) || sender.email.toLowerCase().includes(searchLower);
+    return displayName.includes(searchLower) || sender.email.toLowerCase().includes(searchLower);
   });
 
   const selectKnownSender = (sender: KnownSender) => {
     setFormData(prev => ({
       ...prev,
+      senderType: sender.senderType,
       senderFirstName: sender.firstName,
       senderMiddleName: sender.middleName,
       senderLastName: sender.lastName,
+      senderBusinessName: sender.businessName,
       senderEmail: sender.email,
       senderCountryCode: sender.countryCode,
       senderPhone: sender.phone,
@@ -601,10 +611,18 @@ export default function RequestPayment() {
                                   data-testid={`suggestion-sender-${sender.email.replace(/[@.]/g, '-')}`}
                                 >
                                   <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                                    <User className="w-5 h-5 text-primary" />
+                                    {sender.senderType === "business" ? (
+                                      <Building2 className="w-5 h-5 text-primary" />
+                                    ) : (
+                                      <User className="w-5 h-5 text-primary" />
+                                    )}
                                   </div>
                                   <div>
-                                    <p className="font-medium text-sm">{sender.firstName} {sender.middleName} {sender.lastName}</p>
+                                    <p className="font-medium text-sm">
+                                      {sender.senderType === "business" 
+                                        ? sender.businessName 
+                                        : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim()}
+                                    </p>
                                     <p className="text-xs text-muted-foreground">{sender.email}</p>
                                   </div>
                                 </button>
@@ -617,38 +635,83 @@ export default function RequestPayment() {
 
                       <div className="h-px bg-border" />
 
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="space-y-2">
-                          <Label htmlFor="senderFirstName">First Name *</Label>
-                          <Input
-                            id="senderFirstName"
-                            placeholder="First name"
-                            value={formData.senderFirstName}
-                            onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
-                            data-testid="input-sender-first-name"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="senderMiddleName">Middle Name</Label>
-                          <Input
-                            id="senderMiddleName"
-                            placeholder="Middle name"
-                            value={formData.senderMiddleName}
-                            onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
-                            data-testid="input-sender-middle-name"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="senderLastName">Last Name</Label>
-                          <Input
-                            id="senderLastName"
-                            placeholder="Last name"
-                            value={formData.senderLastName}
-                            onChange={(e) => handleInputChange("senderLastName", e.target.value)}
-                            data-testid="input-sender-last-name"
-                          />
+                      <div className="space-y-2">
+                        <Label>Sender Type *</Label>
+                        <div className="flex gap-4">
+                          <button
+                            type="button"
+                            onClick={() => handleInputChange("senderType", "individual")}
+                            className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${
+                              formData.senderType === "individual"
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-muted-foreground/30"
+                            }`}
+                            data-testid="button-sender-type-individual"
+                          >
+                            <User className={`w-5 h-5 ${formData.senderType === "individual" ? "text-primary" : "text-muted-foreground"}`} />
+                            <span className={`font-medium ${formData.senderType === "individual" ? "text-primary" : ""}`}>Individual</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleInputChange("senderType", "business")}
+                            className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${
+                              formData.senderType === "business"
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-muted-foreground/30"
+                            }`}
+                            data-testid="button-sender-type-business"
+                          >
+                            <Building2 className={`w-5 h-5 ${formData.senderType === "business" ? "text-primary" : "text-muted-foreground"}`} />
+                            <span className={`font-medium ${formData.senderType === "business" ? "text-primary" : ""}`}>Business</span>
+                          </button>
                         </div>
                       </div>
+
+                      {formData.senderType === "individual" ? (
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="senderFirstName">First Name *</Label>
+                            <Input
+                              id="senderFirstName"
+                              placeholder="First name"
+                              value={formData.senderFirstName}
+                              onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
+                              data-testid="input-sender-first-name"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="senderMiddleName">Middle Name</Label>
+                            <Input
+                              id="senderMiddleName"
+                              placeholder="Middle name"
+                              value={formData.senderMiddleName}
+                              onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
+                              data-testid="input-sender-middle-name"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="senderLastName">Last Name</Label>
+                            <Input
+                              id="senderLastName"
+                              placeholder="Last name"
+                              value={formData.senderLastName}
+                              onChange={(e) => handleInputChange("senderLastName", e.target.value)}
+                              data-testid="input-sender-last-name"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label htmlFor="senderBusinessName">Business Name *</Label>
+                          <Input
+                            id="senderBusinessName"
+                            placeholder="Enter business name"
+                            value={formData.senderBusinessName}
+                            onChange={(e) => handleInputChange("senderBusinessName", e.target.value)}
+                            data-testid="input-sender-business-name"
+                          />
+                        </div>
+                      )}
 
                       <div className="space-y-2">
                         <Label htmlFor="senderEmail">Sender Email Address *</Label>

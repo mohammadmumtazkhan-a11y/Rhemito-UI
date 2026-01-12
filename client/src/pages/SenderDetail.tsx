@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, Trash2, Building2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,9 +30,15 @@ export default function SenderDetail() {
     );
   }
 
-  const fullName = `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim().toUpperCase();
-  const initials = `${sender.firstName[0]}${sender.lastName[0]}`.toUpperCase();
-  const refCode = `REF/${sender.firstName.toUpperCase()}`;
+  const displayName = sender.senderType === "business" 
+    ? sender.businessName.toUpperCase() 
+    : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim().toUpperCase();
+  const initials = sender.senderType === "business" 
+    ? sender.businessName.substring(0, 2).toUpperCase()
+    : `${sender.firstName[0]}${sender.lastName[0]}`.toUpperCase();
+  const refCode = sender.senderType === "business" 
+    ? `REF/${sender.businessName.split(' ')[0].toUpperCase()}`
+    : `REF/${sender.firstName.toUpperCase()}`;
   const formattedDate = new Date(sender.createdAt).toLocaleDateString('en-GB', { 
     day: '2-digit', 
     month: 'short', 
@@ -56,10 +62,19 @@ export default function SenderDetail() {
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                  <span className="text-xl font-semibold text-muted-foreground">{initials}</span>
+                  {sender.senderType === "business" ? (
+                    <Building2 className="w-8 h-8 text-muted-foreground" />
+                  ) : (
+                    <span className="text-xl font-semibold text-muted-foreground">{initials}</span>
+                  )}
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold">{fullName}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold">{displayName}</h2>
+                    {sender.senderType === "business" && (
+                      <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">Business</span>
+                    )}
+                  </div>
                   <p className="text-muted-foreground text-sm">{refCode}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="w-2 h-2 rounded-full bg-green-500"></span>
@@ -119,8 +134,8 @@ export default function SenderDetail() {
                     <p className="font-medium">{sender.currency}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Entity Type</p>
-                    <p className="font-medium">{sender.entityType}</p>
+                    <p className="text-xs text-muted-foreground">Sender Type</p>
+                    <p className="font-medium">{sender.senderType === "business" ? "Business" : "Individual"}</p>
                   </div>
                 </div>
               </div>

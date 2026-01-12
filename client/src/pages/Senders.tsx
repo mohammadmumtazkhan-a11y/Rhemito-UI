@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Plus, Send, Eye, Trash2, User, CheckCircle2 } from "lucide-react";
+import { Search, Plus, Send, Eye, Trash2, User, Building2, CheckCircle2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,11 @@ export default function Senders() {
   const [selectedSenderEmail, setSelectedSenderEmail] = useState<string>("");
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [newSender, setNewSender] = useState({
+    senderType: "individual" as "individual" | "business",
     firstName: "",
     middleName: "",
     lastName: "",
+    businessName: "",
     email: "",
     countryCode: "+234",
     phone: "",
@@ -45,9 +47,11 @@ export default function Senders() {
   });
 
   const filteredSenders = senders.filter(sender => {
-    const fullName = `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
+    const displayName = sender.senderType === "business" 
+      ? sender.businessName.toLowerCase() 
+      : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
     const searchLower = searchQuery.toLowerCase();
-    return fullName.includes(searchLower) || sender.country.toLowerCase().includes(searchLower);
+    return displayName.includes(searchLower) || sender.country.toLowerCase().includes(searchLower);
   });
 
   const handleRequestPayment = (email: string) => {
@@ -66,18 +70,28 @@ export default function Senders() {
 
   const handleAddSender = () => {
     const sender: KnownSender = {
-      ...newSender,
+      senderType: newSender.senderType,
+      firstName: newSender.firstName,
+      middleName: newSender.middleName,
+      lastName: newSender.lastName,
+      businessName: newSender.businessName,
+      email: newSender.email,
+      countryCode: newSender.countryCode,
+      phone: newSender.phone,
+      dob: newSender.dob,
+      country: newSender.country,
       currency: newSender.country === "Nigeria" ? "NGN" : newSender.country === "United Kingdom" ? "GBP" : "USD",
       relationship: "Personal",
-      entityType: "Individual",
       createdAt: new Date().toISOString().split('T')[0],
     };
     setSenders(prev => [...prev, sender]);
     setShowAddModal(false);
     setNewSender({
+      senderType: "individual",
       firstName: "",
       middleName: "",
       lastName: "",
+      businessName: "",
       email: "",
       countryCode: "+234",
       phone: "",
@@ -140,17 +154,30 @@ export default function Senders() {
                 </thead>
                 <tbody>
                   {filteredSenders.map((sender) => {
-                    const initials = `${sender.firstName[0]}${sender.lastName[0]}`.toUpperCase();
-                    const fullName = `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim();
+                    const displayName = sender.senderType === "business" 
+                      ? sender.businessName 
+                      : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim();
+                    const initials = sender.senderType === "business" 
+                      ? sender.businessName.substring(0, 2).toUpperCase()
+                      : `${sender.firstName[0]}${sender.lastName[0]}`.toUpperCase();
                     
                     return (
                       <tr key={sender.email} className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                              <span className="text-xs font-medium text-primary">{initials}</span>
+                              {sender.senderType === "business" ? (
+                                <Building2 className="w-4 h-4 text-primary" />
+                              ) : (
+                                <span className="text-xs font-medium text-primary">{initials}</span>
+                              )}
                             </div>
-                            <span className="font-medium">{fullName}</span>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{displayName}</span>
+                              {sender.senderType === "business" && (
+                                <span className="text-xs text-muted-foreground">Business</span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="py-4 px-4 text-muted-foreground">{sender.country}</td>
@@ -241,35 +268,79 @@ export default function Senders() {
                   <h2 className="text-xl font-semibold font-display mb-6">Add New Sender</h2>
                   
                   <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-2">
-                        <Label>First Name *</Label>
-                        <Input
-                          value={newSender.firstName}
-                          onChange={(e) => setNewSender(prev => ({ ...prev, firstName: e.target.value }))}
-                          placeholder="First name"
-                          data-testid="input-new-first-name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Middle Name</Label>
-                        <Input
-                          value={newSender.middleName}
-                          onChange={(e) => setNewSender(prev => ({ ...prev, middleName: e.target.value }))}
-                          placeholder="Middle name"
-                          data-testid="input-new-middle-name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Last Name *</Label>
-                        <Input
-                          value={newSender.lastName}
-                          onChange={(e) => setNewSender(prev => ({ ...prev, lastName: e.target.value }))}
-                          placeholder="Last name"
-                          data-testid="input-new-last-name"
-                        />
+                    <div className="space-y-2">
+                      <Label>Sender Type *</Label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setNewSender(prev => ({ ...prev, senderType: "individual" }))}
+                          className={`flex-1 flex items-center gap-2 p-3 rounded-lg border-2 transition-colors ${
+                            newSender.senderType === "individual"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-muted-foreground/30"
+                          }`}
+                          data-testid="button-new-sender-type-individual"
+                        >
+                          <User className={`w-4 h-4 ${newSender.senderType === "individual" ? "text-primary" : "text-muted-foreground"}`} />
+                          <span className={`text-sm font-medium ${newSender.senderType === "individual" ? "text-primary" : ""}`}>Individual</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewSender(prev => ({ ...prev, senderType: "business" }))}
+                          className={`flex-1 flex items-center gap-2 p-3 rounded-lg border-2 transition-colors ${
+                            newSender.senderType === "business"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-muted-foreground/30"
+                          }`}
+                          data-testid="button-new-sender-type-business"
+                        >
+                          <Building2 className={`w-4 h-4 ${newSender.senderType === "business" ? "text-primary" : "text-muted-foreground"}`} />
+                          <span className={`text-sm font-medium ${newSender.senderType === "business" ? "text-primary" : ""}`}>Business</span>
+                        </button>
                       </div>
                     </div>
+
+                    {newSender.senderType === "individual" ? (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-2">
+                          <Label>First Name *</Label>
+                          <Input
+                            value={newSender.firstName}
+                            onChange={(e) => setNewSender(prev => ({ ...prev, firstName: e.target.value }))}
+                            placeholder="First name"
+                            data-testid="input-new-first-name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Middle Name</Label>
+                          <Input
+                            value={newSender.middleName}
+                            onChange={(e) => setNewSender(prev => ({ ...prev, middleName: e.target.value }))}
+                            placeholder="Middle name"
+                            data-testid="input-new-middle-name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Last Name *</Label>
+                          <Input
+                            value={newSender.lastName}
+                            onChange={(e) => setNewSender(prev => ({ ...prev, lastName: e.target.value }))}
+                            placeholder="Last name"
+                            data-testid="input-new-last-name"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Label>Business Name *</Label>
+                        <Input
+                          value={newSender.businessName}
+                          onChange={(e) => setNewSender(prev => ({ ...prev, businessName: e.target.value }))}
+                          placeholder="Enter business name"
+                          data-testid="input-new-business-name"
+                        />
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <Label>Email *</Label>
@@ -345,7 +416,7 @@ export default function Senders() {
                     <Button 
                       className="flex-1" 
                       onClick={handleAddSender}
-                      disabled={!newSender.firstName || !newSender.lastName || !newSender.email}
+                      disabled={newSender.senderType === "individual" ? (!newSender.firstName || !newSender.lastName || !newSender.email) : (!newSender.businessName || !newSender.email)}
                       data-testid="button-confirm-add-sender"
                     >
                       Add Sender
