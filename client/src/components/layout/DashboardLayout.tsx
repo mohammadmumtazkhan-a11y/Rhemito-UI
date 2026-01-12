@@ -20,7 +20,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       />
       <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-56'}`}>
         <Header userName="Olayinka" onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-4 md:p-6 pt-4">
+        <main className="p-3 md:p-4 lg:p-6">
           {children}
         </main>
       </div>

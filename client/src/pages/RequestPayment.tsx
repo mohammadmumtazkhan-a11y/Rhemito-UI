@@ -297,45 +297,45 @@ export default function RequestPayment() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-4 md:mb-8"
         >
           <Button 
             variant="ghost" 
             onClick={handleBack}
-            className="mb-4 -ml-2"
+            className="mb-2 md:mb-4 -ml-2 text-sm"
             data-testid="button-back"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
+            <ArrowLeft className="w-4 h-4 mr-1 md:mr-2" />
             Back
           </Button>
           
-          <h1 className="text-2xl font-bold font-display">Request Payment</h1>
-          <p className="text-muted-foreground mt-1">Get paid by generating a payment link</p>
+          <h1 className="text-xl md:text-2xl font-bold font-display">Request Payment</h1>
+          <p className="text-muted-foreground text-sm md:text-base mt-1">Get paid by generating a payment link</p>
         </motion.div>
 
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-4 md:mb-8 overflow-x-auto pb-2">
           {steps.map((step, index) => (
-            <div key={step.id} className="flex items-center">
-              <div className="flex items-center gap-3">
+            <div key={step.id} className="flex items-center flex-shrink-0">
+              <div className="flex items-center gap-2 md:gap-3">
                 <motion.div
                   initial={false}
                   animate={{
                     backgroundColor: currentStep >= step.id ? "hsl(var(--primary))" : "hsl(var(--muted))",
                     color: currentStep >= step.id ? "white" : "hsl(var(--muted-foreground))",
                   }}
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
+                  className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-medium"
                 >
-                  {currentStep > step.id ? <Check className="w-4 h-4" /> : step.id}
+                  {currentStep > step.id ? <Check className="w-3 h-3 md:w-4 md:h-4" /> : step.id}
                 </motion.div>
                 <div className="hidden sm:block">
-                  <p className={`text-sm font-medium ${currentStep >= step.id ? "text-foreground" : "text-muted-foreground"}`}>
+                  <p className={`text-xs md:text-sm font-medium ${currentStep >= step.id ? "text-foreground" : "text-muted-foreground"}`}>
                     {step.title}
                   </p>
-                  <p className="text-xs text-muted-foreground">{step.description}</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">{step.description}</p>
                 </div>
               </div>
               {index < steps.length - 1 && (
-                <div className={`w-12 h-0.5 mx-4 ${currentStep > step.id ? "bg-primary" : "bg-muted"}`} />
+                <div className={`w-6 md:w-12 h-0.5 mx-2 md:mx-4 ${currentStep > step.id ? "bg-primary" : "bg-muted"}`} />
               )}
             </div>
           ))}
@@ -350,49 +350,49 @@ export default function RequestPayment() {
             transition={{ duration: 0.2 }}
           >
             <Card>
-              <CardHeader>
-                <CardTitle className="font-display">{steps[currentStep - 1].title}</CardTitle>
-                <CardDescription>{steps[currentStep - 1].description}</CardDescription>
+              <CardHeader className="px-4 md:px-6 py-4 md:py-6">
+                <CardTitle className="font-display text-base md:text-lg">{steps[currentStep - 1].title}</CardTitle>
+                <CardDescription className="text-xs md:text-sm">{steps[currentStep - 1].description}</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4 md:space-y-6 px-4 md:px-6">
                 {currentStep === 1 && (
-                  <div className="space-y-6">
-                    <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-6">
-                      <h3 className="font-semibold mb-4">Select your payout account</h3>
-                      <p className="text-sm text-muted-foreground mb-6">
+                  <div className="space-y-4 md:space-y-6">
+                    <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 md:p-6">
+                      <h3 className="font-semibold text-sm md:text-base mb-3 md:mb-4">Select your payout account</h3>
+                      <p className="text-xs md:text-sm text-muted-foreground mb-4 md:mb-6">
                         Choose the bank account where you want to receive the funds. You can only have one account per currency.
                       </p>
                       
-                      <div className="grid gap-3">
+                      <div className="grid gap-2 md:gap-3">
                         {availablePayoutAccounts.map((account) => (
                           <button
                             key={account.id}
                             type="button"
                             onClick={() => handleInputChange("selectedPayoutAccountId", account.id)}
-                            className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-4 text-left ${
+                            className={`w-full p-3 md:p-4 rounded-xl border-2 transition-all flex items-center gap-3 md:gap-4 text-left ${
                               formData.selectedPayoutAccountId === account.id
                                 ? "border-primary bg-primary/5"
                                 : "border-border hover:border-primary/50 bg-white"
                             }`}
                             data-testid={`payout-account-${account.id}`}
                           >
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${
                               formData.selectedPayoutAccountId === account.id ? "bg-primary text-white" : "bg-muted"
                             }`}>
-                              <Building2 className="w-5 h-5" />
+                              <Building2 className="w-4 h-4 md:w-5 md:h-5" />
                             </div>
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <p className="font-semibold">{account.bank}</p>
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-muted font-medium">{account.currency}</span>
+                                <p className="font-semibold text-sm md:text-base truncate">{account.bank}</p>
+                                <span className="text-[10px] md:text-xs px-1.5 md:px-2 py-0.5 rounded-full bg-muted font-medium flex-shrink-0">{account.currency}</span>
                               </div>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="text-xs md:text-sm text-muted-foreground truncate">
                                 ****{account.accountNumber.slice(-4)} • {account.name}
                               </p>
                             </div>
                             {formData.selectedPayoutAccountId === account.id && (
-                              <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                                <Check className="w-4 h-4 text-white" />
+                              <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                                <Check className="w-3 h-3 md:w-4 md:h-4 text-white" />
                               </div>
                             )}
                           </button>
@@ -435,23 +435,23 @@ export default function RequestPayment() {
                 )}
 
                 {currentStep === 2 && (
-                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                    <div className="lg:col-span-3 space-y-6">
-                      <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-6 space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
+                    <div className="lg:col-span-3 space-y-4 md:space-y-6">
+                      <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 md:p-6 space-y-4 md:space-y-6">
                         <div className="space-y-2">
-                          <Label htmlFor="receiveAmount" className="text-sm font-medium">
+                          <Label htmlFor="receiveAmount" className="text-xs md:text-sm font-medium">
                             I want to receive
                           </Label>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 md:gap-3">
                             <div className="relative flex-1">
-                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">{receiveSymbol}</span>
+                              <span className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-base md:text-lg font-semibold text-muted-foreground">{receiveSymbol}</span>
                               <Input
                                 id="receiveAmount"
                                 type="number"
                                 placeholder="0.00"
                                 value={formData.receiveAmount}
                                 onChange={(e) => handleInputChange("receiveAmount", e.target.value)}
-                                className="pl-8 text-2xl font-bold h-14 bg-white"
+                                className="pl-7 md:pl-8 text-xl md:text-2xl font-bold h-12 md:h-14 bg-white"
                                 data-testid="input-receive-amount"
                               />
                             </div>
@@ -459,7 +459,7 @@ export default function RequestPayment() {
                               value={formData.receiveCurrency}
                               onValueChange={(value) => handleInputChange("receiveCurrency", value)}
                             >
-                              <SelectTrigger className="w-24 h-14 bg-white font-medium" data-testid="select-receive-currency">
+                              <SelectTrigger className="w-20 md:w-24 h-12 md:h-14 bg-white font-medium text-sm" data-testid="select-receive-currency">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -475,13 +475,13 @@ export default function RequestPayment() {
                         <div className="h-px bg-border" />
 
                         <div className="space-y-2">
-                          <Label className="text-sm font-medium text-muted-foreground">
-                            Sender pays (at 1 {formData.receiveCurrency} = {senderSymbol}{getExchangeRate().toLocaleString()})
+                          <Label className="text-xs md:text-sm font-medium text-muted-foreground">
+                            Sender pays (1 {formData.receiveCurrency} = {senderSymbol}{getExchangeRate().toLocaleString()})
                           </Label>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 md:gap-3">
                             <div className="relative flex-1">
-                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-teal">{senderSymbol}</span>
-                              <div className="pl-8 text-2xl font-bold h-14 bg-teal/10 rounded-lg flex items-center text-teal border border-teal/20">
+                              <span className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-base md:text-lg font-semibold text-teal">{senderSymbol}</span>
+                              <div className="pl-7 md:pl-8 text-xl md:text-2xl font-bold h-12 md:h-14 bg-teal/10 rounded-lg flex items-center text-teal border border-teal/20">
                                 {senderPays}
                               </div>
                             </div>
@@ -489,7 +489,7 @@ export default function RequestPayment() {
                               value={formData.senderCurrency}
                               onValueChange={(value) => handleInputChange("senderCurrency", value)}
                             >
-                              <SelectTrigger className="w-24 h-14 bg-teal/10 border-teal/20 font-medium text-teal" data-testid="select-sender-currency">
+                              <SelectTrigger className="w-20 md:w-24 h-12 md:h-14 bg-teal/10 border-teal/20 font-medium text-teal text-sm" data-testid="select-sender-currency">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>

@@ -261,10 +261,10 @@ export default function Payments() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-4 md:mb-8"
         >
-          <h1 className="text-2xl font-bold font-display">Payments</h1>
-          <p className="text-muted-foreground mt-1">Track and manage your received payments</p>
+          <h1 className="text-xl md:text-2xl font-bold font-display">Payments</h1>
+          <p className="text-muted-foreground text-sm md:text-base mt-1">Track and manage your received payments</p>
         </motion.div>
 
         <AnimatePresence>
@@ -301,143 +301,145 @@ export default function Payments() {
           )}
         </AnimatePresence>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-4 md:mb-8">
           <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-teal/10 rounded-full flex items-center justify-center">
-                  <CheckCircle2 className="w-6 h-6 text-teal" />
+            <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-teal/10 rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6 text-teal" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Received</p>
-                  <p className="text-2xl font-bold">£{totalReceived.toLocaleString()}</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">Total Received</p>
+                  <p className="text-xl md:text-2xl font-bold">£{totalReceived.toLocaleString()}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-amber-600" />
+            <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                  <Clock className="w-5 h-5 md:w-6 md:h-6 text-amber-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Pending</p>
-                  <p className="text-2xl font-bold">£{pendingAmount.toLocaleString()}</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">Pending</p>
+                  <p className="text-xl md:text-2xl font-bold">£{pendingAmount.toLocaleString()}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-purple/10 rounded-full flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6 text-purple" />
+            <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-purple/10 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-purple" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Untraced Payments</p>
-                  <p className="text-2xl font-bold">{untracedPayments.length}</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">Untraced</p>
+                  <p className="text-xl md:text-2xl font-bold">{untracedPayments.length}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <Tabs defaultValue="all" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="all" data-testid="tab-all-payments">All Payments</TabsTrigger>
-            <TabsTrigger value="untraced" data-testid="tab-untraced-payments">
+        <Tabs defaultValue="all" className="space-y-4 md:space-y-6">
+          <TabsList className="h-9 md:h-10">
+            <TabsTrigger value="all" className="text-xs md:text-sm" data-testid="tab-all-payments">All Payments</TabsTrigger>
+            <TabsTrigger value="untraced" className="text-xs md:text-sm" data-testid="tab-untraced-payments">
               Untraced ({untracedPayments.length})
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="all">
             <Card>
-              <CardHeader>
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <CardHeader className="px-4 md:px-6 py-4 md:py-6">
+                <div className="flex flex-col gap-3 md:gap-4">
                   <div>
-                    <CardTitle className="font-display">Payment History</CardTitle>
-                    <CardDescription>View all received payments and their details</CardDescription>
+                    <CardTitle className="font-display text-base md:text-lg">Payment History</CardTitle>
+                    <CardDescription className="text-xs md:text-sm">View all received payments and their details</CardDescription>
                   </div>
-                  <div className="flex gap-2">
-                    <div className="relative">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1 sm:flex-none">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
-                        placeholder="Search payments..."
+                        placeholder="Search..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 w-64"
+                        className="pl-9 w-full sm:w-48 md:w-64 text-sm"
                         data-testid="input-search-payments"
                       />
                     </div>
-                    <Select value={filterStatus} onValueChange={setFilterStatus}>
-                      <SelectTrigger className="w-32" data-testid="select-filter-status">
-                        <Filter className="w-4 h-4 mr-2" />
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="failed">Failed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={filterType} onValueChange={setFilterType}>
-                      <SelectTrigger className="w-40" data-testid="select-filter-type">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value="invoice">Invoice</SelectItem>
-                        <SelectItem value="payment_request">Payment Request</SelectItem>
-                        <SelectItem value="qr_code">QR Code</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex gap-2">
+                      <Select value={filterStatus} onValueChange={setFilterStatus}>
+                        <SelectTrigger className="w-full sm:w-28 md:w-32 text-xs md:text-sm" data-testid="select-filter-status">
+                          <Filter className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="completed">Completed</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="failed">Failed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger className="w-full sm:w-32 md:w-40 text-xs md:text-sm" data-testid="select-filter-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="invoice">Invoice</SelectItem>
+                          <SelectItem value="payment_request">Request</SelectItem>
+                          <SelectItem value="qr_code">QR Code</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
+              <CardContent className="px-4 md:px-6">
+                <div className="space-y-2 md:space-y-3">
                   {filteredPayments.map((payment) => (
                     <motion.div
                       key={payment.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="flex items-center justify-between p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                      className="flex items-center justify-between p-3 md:p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
                       data-testid={`payment-row-${payment.id}`}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border">
+                      <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                        <div className="w-8 h-8 md:w-10 md:h-10 bg-white rounded-full flex items-center justify-center border flex-shrink-0">
                           {getTypeIcon(payment.type)}
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <p className="font-medium">
-                              {payment.senderName || <span className="text-muted-foreground italic">Unknown Sender</span>}
+                            <p className="font-medium text-sm md:text-base truncate">
+                              {payment.senderName || <span className="text-muted-foreground italic">Unknown</span>}
                             </p>
                             {!payment.senderName && (
-                              <Badge variant="outline" className="text-xs">Untraced</Badge>
+                              <Badge variant="outline" className="text-[10px] md:text-xs flex-shrink-0">Untraced</Badge>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <span>{getTypeLabel(payment.type)}</span>
-                            <span>•</span>
+                          <div className="flex items-center gap-1 md:gap-2 text-[10px] md:text-sm text-muted-foreground">
+                            <span className="hidden sm:inline">{getTypeLabel(payment.type)}</span>
+                            <span className="hidden sm:inline">•</span>
                             <span>{payment.reference}</span>
-                            <span>•</span>
-                            <span>{new Date(payment.date).toLocaleDateString()}</span>
+                            <span className="hidden md:inline">•</span>
+                            <span className="hidden md:inline">{new Date(payment.date).toLocaleDateString()}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
                         <div className="text-right">
-                          <p className="font-bold text-lg">
+                          <p className="font-bold text-sm md:text-lg">
                             {CURRENCY_SYMBOLS[payment.currency]}{payment.amount.toFixed(2)}
                           </p>
-                          <p className="text-sm text-muted-foreground">{payment.currency}</p>
+                          <p className="text-[10px] md:text-sm text-muted-foreground">{payment.currency}</p>
                         </div>
-                        {getStatusBadge(payment.status)}
+                        <div className="hidden sm:block">{getStatusBadge(payment.status)}</div>
                       </div>
                     </motion.div>
                   ))}
