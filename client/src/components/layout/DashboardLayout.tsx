@@ -12,7 +12,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <Sidebar />
       <div className="ml-56">
         <Header userName="Olayinka" />
-        <main className="p-6">
+        <main className="p-6 pt-4">
           {children}
         </main>
       </div>

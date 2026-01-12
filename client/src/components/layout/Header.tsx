@@ -11,7 +11,7 @@ export function Header({ userName }: HeaderProps) {
       initial={{ y: -10, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3, delay: 0.1 }}
-      className="h-16 bg-white border-b border-border flex items-center justify-end px-6 sticky top-0 z-10"
+      className="h-16 bg-white border-b border-border flex items-center justify-end px-6 sticky top-0 z-40"
     >
       <div className="flex items-center gap-4">
         <button 
