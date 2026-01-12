@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
-import { motion } from "framer-motion";
-import { ArrowLeft, Copy, Check, CheckCircle2, QrCode } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, Copy, Check, CheckCircle2, QrCode, Search, User } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { knownSenders, type KnownSender } from "@/data/knownSenders";
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   GBP: "£",
@@ -53,6 +54,29 @@ export default function ShowQRCode() {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [copied, setCopied] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [senderSearch, setSenderSearch] = useState("");
+  const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredSenders = knownSenders.filter(sender => {
+    const fullName = `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
+    const searchLower = senderSearch.toLowerCase();
+    return fullName.includes(searchLower) || sender.email.toLowerCase().includes(searchLower);
+  });
+
+  const selectKnownSender = (sender: KnownSender) => {
+    setFormData(prev => ({
+      ...prev,
+      senderFirstName: sender.firstName,
+      senderMiddleName: sender.middleName,
+      senderLastName: sender.lastName,
+      senderEmail: sender.email,
+      countryCode: sender.countryCode,
+      senderPhone: sender.phone,
+    }));
+    setSenderSearch("");
+    setShowSenderSuggestions(false);
+  };
 
   const paymentLink = `rhemito.com/pay/qr${Math.random().toString(36).substring(2, 8)}`;
 
@@ -220,6 +244,58 @@ export default function ShowQRCode() {
                     </p>
                   </div>
                 </div>
+
+                <div className="space-y-2 relative">
+                  <Label>Search Existing Sender</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      ref={searchInputRef}
+                      placeholder="Type name or email to search..."
+                      value={senderSearch}
+                      onChange={(e) => {
+                        setSenderSearch(e.target.value);
+                        setShowSenderSuggestions(true);
+                      }}
+                      onFocus={() => setShowSenderSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSenderSuggestions(false), 150)}
+                      className="pl-9 bg-purple/5 border-purple/20"
+                      data-testid="input-sender-search"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <AnimatePresence>
+                    {showSenderSuggestions && senderSearch && filteredSenders.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute z-50 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-56 overflow-auto"
+                      >
+                        {filteredSenders.map((sender) => (
+                          <button
+                            key={sender.email}
+                            type="button"
+                            className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors flex items-center gap-3 border-b last:border-b-0"
+                            onClick={() => selectKnownSender(sender)}
+                            data-testid={`suggestion-sender-${sender.email.replace(/[@.]/g, '-')}`}
+                          >
+                            <div className="w-10 h-10 bg-purple/10 rounded-full flex items-center justify-center">
+                              <User className="w-5 h-5 text-purple" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{sender.firstName} {sender.middleName} {sender.lastName}</p>
+                              <p className="text-xs text-muted-foreground">{sender.email}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <p className="text-xs text-muted-foreground">Select an existing sender or enter new details below</p>
+                </div>
+
+                <div className="h-px bg-border" />
 
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-2">
