@@ -39,13 +39,11 @@ export function Sidebar() {
     >
       <div className="p-6 flex items-center gap-3">
         <div className="w-10 h-10 flex items-center justify-center">
-          <svg viewBox="0 0 40 40" className="w-10 h-10">
-            <rect width="40" height="40" rx="8" fill="#2563EB" />
-            <path 
-              d="M12 10h10c3.5 0 6 2.5 6 6 0 2.5-1.5 4.5-3.5 5.5L28 30h-5l-3-7h-4v7h-4V10zm4 4v5h6c1.5 0 2.5-1 2.5-2.5S23.5 14 22 14h-6z" 
-              fill="white"
-            />
-          </svg>
+          <img 
+            src="/attached_assets/image_1768217842488.png" 
+            alt="Rhemito Logo" 
+            className="w-10 h-10 object-contain"
+          />
         </div>
         <button 
           className="ml-auto w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white hover:bg-primary/90 transition-colors"
