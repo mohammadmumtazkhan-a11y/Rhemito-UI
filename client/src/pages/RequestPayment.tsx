@@ -205,7 +205,7 @@ export default function RequestPayment() {
       case 2:
         return formData.receiveAmount;
       case 3:
-        return formData.senderFirstName && formData.senderEmail;
+        return formData.senderEmail && (formData.senderType === "individual" ? formData.senderFirstName : formData.senderBusinessName);
       case 4:
         return true;
       default:
@@ -235,7 +235,11 @@ export default function RequestPayment() {
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold font-display">Payment Request Sent!</h2>
                 <p className="text-muted-foreground">
-                  Successfully sent to <span className="font-medium text-foreground">{[formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}</span>
+                  Successfully sent to <span className="font-medium text-foreground">
+                    {formData.senderType === "business" 
+                      ? formData.senderBusinessName 
+                      : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}
+                  </span>
                 </p>
               </div>
 

@@ -152,7 +152,8 @@ export default function SendInvoice() {
     setIsSuccess(true);
   };
 
-  const canSubmit = formData.invoiceFile && formData.invoiceAmount && formData.recipientFirstName && formData.recipientEmail;
+  const canSubmit = formData.invoiceFile && formData.invoiceAmount && formData.recipientEmail && 
+    (formData.recipientType === "individual" ? formData.recipientFirstName : formData.recipientBusinessName);
 
   if (isSuccess) {
     return (
@@ -176,7 +177,11 @@ export default function SendInvoice() {
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold font-display">Invoice Sent!</h2>
                 <p className="text-muted-foreground">
-                  Successfully sent to <span className="font-medium text-foreground">{[formData.recipientFirstName, formData.recipientMiddleName, formData.recipientLastName].filter(Boolean).join(" ")}</span>
+                  Successfully sent to <span className="font-medium text-foreground">
+                    {formData.recipientType === "business" 
+                      ? formData.recipientBusinessName 
+                      : [formData.recipientFirstName, formData.recipientMiddleName, formData.recipientLastName].filter(Boolean).join(" ")}
+                  </span>
                 </p>
               </div>
 
