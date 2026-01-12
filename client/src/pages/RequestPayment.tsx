@@ -374,6 +374,20 @@ export default function RequestPayment() {
                           </Button>
                         </div>
                       )}
+
+                      {availablePayoutAccounts.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-border">
+                          <Button 
+                            variant="outline" 
+                            onClick={() => setLocation("/payout-accounts")}
+                            className="w-full gap-2"
+                            data-testid="button-add-new-account"
+                          >
+                            <Building2 className="w-4 h-4" />
+                            Add New Bank Account
+                          </Button>
+                        </div>
+                      )}
                     </div>
 
                     {selectedPayoutAccount && (
