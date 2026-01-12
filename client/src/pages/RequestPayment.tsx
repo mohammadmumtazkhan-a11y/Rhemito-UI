@@ -466,6 +466,7 @@ export default function RequestPayment() {
                                 <SelectItem value="GBP">GBP</SelectItem>
                                 <SelectItem value="USD">USD</SelectItem>
                                 <SelectItem value="EUR">EUR</SelectItem>
+                                <SelectItem value="NGN">NGN</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
