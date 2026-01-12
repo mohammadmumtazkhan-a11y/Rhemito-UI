@@ -522,7 +522,7 @@ export default function RequestPayment() {
                       </div>
                     </div>
 
-                    <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-6">
+                    <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
                       <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown">
                         <h3 className="font-semibold text-lg">Amount</h3>
                         
@@ -834,7 +834,7 @@ export default function RequestPayment() {
                       )}
                     </div>
 
-                    <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-6">
+                    <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
                       <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown-step2">
                         <h3 className="font-semibold text-lg">Amount</h3>
                         
