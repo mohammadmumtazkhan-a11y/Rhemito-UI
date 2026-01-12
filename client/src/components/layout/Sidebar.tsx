@@ -8,12 +8,12 @@ import {
   HelpCircle, 
   Settings, 
   LogOut,
-  ChevronLeft,
+  X,
   Wallet,
   Building2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true },
@@ -27,16 +27,16 @@ const navItems = [
   { icon: Settings, label: "Settings", href: "/settings", enabled: false },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const [location] = useLocation();
 
-  return (
-    <motion.aside 
-      initial={{ x: -20, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="w-56 bg-white border-r border-border h-screen flex flex-col fixed left-0 top-0"
-    >
+  const sidebarContent = (
+    <>
       <div className="p-6 flex items-center gap-3">
         <div className="w-10 h-10 flex items-center justify-center">
           <img 
@@ -46,14 +46,15 @@ export function Sidebar() {
           />
         </div>
         <button 
-          className="ml-auto w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white hover:bg-primary/90 transition-colors"
-          data-testid="button-collapse-sidebar"
+          onClick={onClose}
+          className="ml-auto w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white hover:bg-primary/90 transition-colors lg:hidden"
+          data-testid="button-close-sidebar"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <X className="w-4 h-4" />
         </button>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
           
@@ -74,6 +75,7 @@ export function Sidebar() {
             <Link key={item.href} href={item.href}>
               <motion.div
                 whileHover={{ x: 4 }}
+                onClick={onClose}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer",
                   isActive 
@@ -99,6 +101,39 @@ export function Sidebar() {
           Logout
         </button>
       </div>
-    </motion.aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex w-56 bg-white border-r border-border h-screen flex-col fixed left-0 top-0 z-50">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile sidebar overlay */}
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 lg:hidden"
+              onClick={onClose}
+            />
+            <motion.aside
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="fixed left-0 top-0 w-72 bg-white h-screen flex flex-col z-50 lg:hidden shadow-xl"
+            >
+              {sidebarContent}
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
