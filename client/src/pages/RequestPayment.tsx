@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Copy, AlertTriangle, CheckCircle2, Search, User } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, AlertTriangle, CheckCircle2, Search, User, Building2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { knownSenders, type KnownSender } from "@/data/knownSenders";
+import { payoutAccounts, getPayoutAccountByCurrency } from "@/data/payoutAccounts";
 
 const EXCHANGE_RATES: Record<string, Record<string, number>> = {
   GBP: { NGN: 2000, USD: 1.27, EUR: 1.17 },
@@ -39,6 +40,7 @@ interface FormData {
   bankAccountName: string;
   bankSortCode: string;
   bankAccountNumber: string;
+  selectedPayoutAccountId: string;
 }
 
 const COUNTRY_CODES = [
@@ -72,12 +74,14 @@ const initialFormData: FormData = {
   bankAccountName: "",
   bankSortCode: "",
   bankAccountNumber: "",
+  selectedPayoutAccountId: "",
 };
 
 const steps = [
-  { id: 1, title: "Transaction Details", description: "Set amount and method" },
-  { id: 2, title: "Sender Information", description: "Who's paying you?" },
-  { id: 3, title: "Review & Confirm", description: "Verify details" },
+  { id: 1, title: "Payout Account", description: "Where to receive funds" },
+  { id: 2, title: "Transaction Details", description: "Set amount and method" },
+  { id: 3, title: "Sender Information", description: "Who's paying you?" },
+  { id: 4, title: "Review & Confirm", description: "Verify details" },
 ];
 
 export default function RequestPayment() {
@@ -111,6 +115,18 @@ export default function RequestPayment() {
     setShowSenderSuggestions(false);
   };
 
+  const selectedPayoutAccount = payoutAccounts.find(a => a.id === formData.selectedPayoutAccountId);
+  const availablePayoutAccounts = payoutAccounts.filter(a => a.activated);
+
+  useEffect(() => {
+    if (formData.selectedPayoutAccountId) {
+      const account = payoutAccounts.find(a => a.id === formData.selectedPayoutAccountId);
+      if (account) {
+        setFormData(prev => ({ ...prev, receiveCurrency: account.currency }));
+      }
+    }
+  }, [formData.selectedPayoutAccountId]);
+
   const getExchangeRate = () => {
     const { receiveCurrency, senderCurrency } = formData;
     if (receiveCurrency === senderCurrency) return 1;
@@ -131,7 +147,7 @@ export default function RequestPayment() {
   };
 
   const handleNext = () => {
-    if (currentStep < 3) {
+    if (currentStep < 4) {
       setCurrentStep(currentStep + 1);
     } else {
       setIsSuccess(true);
@@ -155,10 +171,12 @@ export default function RequestPayment() {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return formData.receiveAmount;
+        return formData.selectedPayoutAccountId;
       case 2:
-        return formData.senderFirstName && formData.senderEmail;
+        return formData.receiveAmount;
       case 3:
+        return formData.senderFirstName && formData.senderEmail;
+      case 4:
         return true;
       default:
         return false;
@@ -304,6 +322,71 @@ export default function RequestPayment() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {currentStep === 1 && (
+                  <div className="space-y-6">
+                    <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-6">
+                      <h3 className="font-semibold mb-4">Select your payout account</h3>
+                      <p className="text-sm text-muted-foreground mb-6">
+                        Choose the bank account where you want to receive the funds. You can only have one account per currency.
+                      </p>
+                      
+                      <div className="grid gap-3">
+                        {availablePayoutAccounts.map((account) => (
+                          <button
+                            key={account.id}
+                            type="button"
+                            onClick={() => handleInputChange("selectedPayoutAccountId", account.id)}
+                            className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-4 text-left ${
+                              formData.selectedPayoutAccountId === account.id
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-primary/50 bg-white"
+                            }`}
+                            data-testid={`payout-account-${account.id}`}
+                          >
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                              formData.selectedPayoutAccountId === account.id ? "bg-primary text-white" : "bg-muted"
+                            }`}>
+                              <Building2 className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold">{account.bank}</p>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-muted font-medium">{account.currency}</span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                ****{account.accountNumber.slice(-4)} • {account.name}
+                              </p>
+                            </div>
+                            {formData.selectedPayoutAccountId === account.id && (
+                              <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                                <Check className="w-4 h-4 text-white" />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+
+                      {availablePayoutAccounts.length === 0 && (
+                        <div className="text-center py-8">
+                          <Building2 className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
+                          <p className="text-muted-foreground mb-4">No payout accounts set up yet</p>
+                          <Button variant="outline" onClick={() => setLocation("/payout-accounts")}>
+                            Add Payout Account
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedPayoutAccount && (
+                      <div className="bg-muted/50 rounded-lg p-4">
+                        <p className="text-sm text-muted-foreground">
+                          <strong>Selected:</strong> {selectedPayoutAccount.bank} ({selectedPayoutAccount.currency}) - ****{selectedPayoutAccount.accountNumber.slice(-4)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {currentStep === 2 && (
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 space-y-6">
                       <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-6 space-y-6">
@@ -445,7 +528,7 @@ export default function RequestPayment() {
                   </div>
                 )}
 
-                {currentStep === 2 && (
+                {currentStep === 3 && (
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 space-y-4">
                       <div className="space-y-2 relative">
@@ -704,7 +787,7 @@ export default function RequestPayment() {
                   </div>
                 )}
 
-                {currentStep === 3 && (
+                {currentStep === 4 && (
                   <>
                     <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-6 space-y-4">
                       <div className="grid grid-cols-2 gap-4">
@@ -719,6 +802,12 @@ export default function RequestPayment() {
                       </div>
                       <div className="h-px bg-border" />
                       <div className="space-y-2">
+                        {selectedPayoutAccount && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Payout Account</span>
+                            <span className="font-medium">{selectedPayoutAccount.bank} (****{selectedPayoutAccount.accountNumber.slice(-4)})</span>
+                          </div>
+                        )}
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Sender Name</span>
                           <span className="font-medium">{[formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}</span>
@@ -770,8 +859,8 @@ export default function RequestPayment() {
                     className="flex-1 bg-primary hover:bg-primary/90"
                     data-testid="button-step-next"
                   >
-                    {currentStep === 3 ? "Send Request" : "Continue"}
-                    {currentStep < 3 && <ArrowRight className="w-4 h-4 ml-2" />}
+                    {currentStep === 4 ? "Send Request" : "Continue"}
+                    {currentStep < 4 && <ArrowRight className="w-4 h-4 ml-2" />}
                   </Button>
                 </div>
               </CardContent>
