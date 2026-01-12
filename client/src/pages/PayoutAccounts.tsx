@@ -227,7 +227,7 @@ export default function PayoutAccounts() {
               <Button
                 onClick={handleAddAccount}
                 disabled={!formData.firstName || !formData.lastName || !formData.bank || !formData.accountNumber}
-                className="gap-2 bg-orange-500 hover:bg-orange-600"
+                className="gap-2"
                 data-testid="button-add-account"
               >
                 <Plus className="w-4 h-4" />
@@ -241,7 +241,7 @@ export default function PayoutAccounts() {
           <h2 className="text-lg font-semibold mb-4">Accounts</h2>
           <div className="overflow-x-auto">
             <table className="w-full bg-white rounded-lg overflow-hidden shadow-sm">
-              <thead className="bg-orange-500 text-white">
+              <thead className="bg-primary text-white">
                 <tr>
                   <th className="py-3 px-4 text-left text-sm font-medium">Ref No</th>
                   <th className="py-3 px-4 text-left text-sm font-medium">Name</th>
@@ -272,10 +272,10 @@ export default function PayoutAccounts() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              className="w-7 h-7 rounded bg-green-100 hover:bg-green-200 flex items-center justify-center transition-colors"
+                              className="w-7 h-7 rounded bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
                               data-testid={`button-edit-${account.id}`}
                             >
-                              <Edit2 className="w-3.5 h-3.5 text-green-600" />
+                              <Edit2 className="w-3.5 h-3.5 text-primary" />
                             </button>
                           </TooltipTrigger>
                           <TooltipContent>Edit</TooltipContent>
