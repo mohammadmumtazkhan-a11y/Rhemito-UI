@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Copy, Check, CheckCircle2, QrCode, Search, User } from "lucide-react";
@@ -57,6 +57,25 @@ export default function ShowQRCode() {
   const [senderSearch, setSenderSearch] = useState("");
   const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const senderEmail = params.get("sender");
+    if (senderEmail) {
+      const sender = knownSenders.find(s => s.email === senderEmail);
+      if (sender) {
+        setFormData(prev => ({
+          ...prev,
+          senderFirstName: sender.firstName,
+          senderMiddleName: sender.middleName,
+          senderLastName: sender.lastName,
+          senderEmail: sender.email,
+          countryCode: sender.countryCode,
+          senderPhone: sender.phone,
+        }));
+      }
+    }
+  }, []);
 
   const filteredSenders = knownSenders.filter(sender => {
     const fullName = `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();

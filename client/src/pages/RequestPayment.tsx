@@ -94,6 +94,26 @@ export default function RequestPayment() {
   const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const senderEmail = params.get("sender");
+    if (senderEmail) {
+      const sender = knownSenders.find(s => s.email === senderEmail);
+      if (sender) {
+        setFormData(prev => ({
+          ...prev,
+          senderFirstName: sender.firstName,
+          senderMiddleName: sender.middleName,
+          senderLastName: sender.lastName,
+          senderEmail: sender.email,
+          senderCountryCode: sender.countryCode,
+          senderPhone: sender.phone,
+          senderDob: sender.dob,
+        }));
+      }
+    }
+  }, []);
+
   const filteredSenders = knownSenders.filter(sender => {
     const fullName = `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
     const searchLower = senderSearch.toLowerCase();

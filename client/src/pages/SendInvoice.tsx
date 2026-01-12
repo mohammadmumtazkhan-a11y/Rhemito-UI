@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Upload, FileText, X, Check, Copy, CheckCircle2, Send, Search, User } from "lucide-react";
@@ -63,6 +63,25 @@ export default function SendInvoice() {
   const [senderSearch, setSenderSearch] = useState("");
   const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const senderEmail = params.get("sender");
+    if (senderEmail) {
+      const sender = knownSenders.find(s => s.email === senderEmail);
+      if (sender) {
+        setFormData(prev => ({
+          ...prev,
+          recipientFirstName: sender.firstName,
+          recipientMiddleName: sender.middleName,
+          recipientLastName: sender.lastName,
+          recipientEmail: sender.email,
+          countryCode: sender.countryCode,
+          recipientPhone: sender.phone,
+        }));
+      }
+    }
+  }, []);
 
   const filteredSenders = knownSenders.filter(sender => {
     const fullName = `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
