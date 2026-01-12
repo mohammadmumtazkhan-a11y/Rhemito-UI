@@ -9,6 +9,9 @@ import SendInvoice from "@/pages/SendInvoice";
 import ShowQRCode from "@/pages/ShowQRCode";
 import SenderView from "@/pages/SenderView";
 import Payments from "@/pages/Payments";
+import Senders from "@/pages/Senders";
+import SenderDetail from "@/pages/SenderDetail";
+import PayoutAccounts from "@/pages/PayoutAccounts";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -19,6 +22,9 @@ function Router() {
       <Route path="/send-invoice" component={SendInvoice} />
       <Route path="/show-qr-code" component={ShowQRCode} />
       <Route path="/payments" component={Payments} />
+      <Route path="/senders" component={Senders} />
+      <Route path="/senders/:email" component={SenderDetail} />
+      <Route path="/payout-accounts" component={PayoutAccounts} />
       <Route path="/pay/:id" component={SenderView} />
       <Route component={NotFound} />
     </Switch>
