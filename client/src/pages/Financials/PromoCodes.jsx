@@ -115,6 +115,14 @@ const PromoCodes = () => {
                                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Per User: {promo.usage_limit_per_user}</div>
                                         </td>
                                         <td>
+                                            <div style={{ fontSize: '0.75rem', color: '#374151' }}>
+                                                {new Date(promo.start_date).toLocaleDateString()}
+                                            </div>
+                                            <div style={{ fontSize: '0.65rem', color: '#6b7280' }}>
+                                                to {new Date(promo.end_date).toLocaleDateString()}
+                                            </div>
+                                        </td>
+                                        <td>
                                             <span className={`badge ${promo.status === 'Active' ? 'success' : 'danger'}`}>
                                                 {promo.status}
                                             </span>
