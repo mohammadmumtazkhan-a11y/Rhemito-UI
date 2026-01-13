@@ -126,22 +126,24 @@ const PromoCodes = () => {
                                             <span className={`badge ${promo.status === 'Active' ? 'success' : 'danger'}`}>
                                                 {promo.status}
                                             </span>
-                                            <button
-                                                className="btn-primary"
-                                                style={{
-                                                    padding: '4px 10px', fontSize: '0.7rem', marginLeft: 8,
-                                                    background: promo.status === 'Active' ? '#ef4444' : '#22c55e',
-                                                    boxShadow: 'none'
-                                                }}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    toggleStatus(promo.id, promo.status);
-                                                }}
-                                            >
-                                                {promo.status === 'Active' ? 'Disable' : 'Enable'}
-                                            </button>
                                         </td>
                                         <td style={{ textAlign: 'center' }}>
+                                            <div style={{ marginBottom: 4 }}>
+                                                <button
+                                                    className="btn-primary"
+                                                    style={{
+                                                        padding: '4px 10px', fontSize: '0.7rem',
+                                                        background: promo.status === 'Active' ? '#ef4444' : '#22c55e',
+                                                        boxShadow: 'none'
+                                                    }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleStatus(promo.id, promo.status);
+                                                    }}
+                                                >
+                                                    {promo.status === 'Active' ? 'Disable' : 'Enable'}
+                                                </button>
+                                            </div>
                                             {promo.last_campaign_sent ? (
                                                 <div style={{ fontSize: '0.75rem', color: '#374151' }}>
                                                     📧 {new Date(promo.last_campaign_sent).toLocaleDateString()}
@@ -150,7 +152,7 @@ const PromoCodes = () => {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>—</span>
+                                                <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>No campaigns</span>
                                             )}
                                         </td>
                                     </tr>
