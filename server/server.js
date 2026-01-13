@@ -402,7 +402,7 @@ app.get('/api/segments', (req, res) => {
 
 // 8. Distribute Promos (Story 2.0)
 app.post('/api/promocodes/distribute', (req, res) => {
-    const { segment, promo_config, criteria } = req.body;
+    const { segment, promo_config, criteria, existing_code_id } = req.body;
     let query = "";
 
     // Explicit criteria handling
@@ -428,6 +428,25 @@ app.post('/api/promocodes/distribute', (req, res) => {
 
         if (targets.length === 0) return res.json({ success: true, count: 0, message: "No users in segment" });
 
+        const now = new Date().toISOString();
+
+        // If distributing an EXISTING code, just log the campaign without creating new codes
+        if (existing_code_id) {
+            db.serialize(() => {
+                const logStmt = db.prepare("INSERT INTO email_logs VALUES (?, ?, ?, ?, ?, ?)");
+                let count = 0;
+                targets.forEach(user => {
+                    logStmt.run('log_' + Date.now() + '_' + count, user.id, existing_code_id, segment, now, 'Sent');
+                    console.log(`[EMAIL SIMULATION] Sending existing code ${existing_code_id} to ${user.email}`);
+                    count++;
+                });
+                logStmt.finalize();
+                res.json({ success: true, count, segment, existing_code: existing_code_id });
+            });
+            return;
+        }
+
+        // Otherwise, create NEW unique codes for each target
         db.serialize(() => {
             const stmt = db.prepare(`INSERT INTO promo_codes (
                 id, code, type, value, min_threshold, max_discount, currency, 
@@ -438,7 +457,6 @@ app.post('/api/promocodes/distribute', (req, res) => {
             const logStmt = db.prepare("INSERT INTO email_logs VALUES (?, ?, ?, ?, ?, ?)");
 
             let count = 0;
-            const now = new Date().toISOString();
 
             // Helper to ensure proper numeric types
             const parseNum = (val, isInt = false) => {
