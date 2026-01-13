@@ -138,8 +138,8 @@ const PromoCodes = () => {
                                                 {promo.status === 'Active' ? 'Disable' : 'Enable'}
                                             </button>
                                             {promo.last_campaign_sent ? (
-                                                <div style={{ fontSize: '0.65rem', color: '#6b7280', marginTop: 2 }}>
-                                                    📧 {new Date(promo.last_campaign_sent).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                                <div style={{ fontSize: '0.65rem', color: '#059669', marginTop: 2 }}>
+                                                    ✉️ Mail sent - {new Date(promo.last_campaign_sent).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                                                 </div>
                                             ) : (
                                                 <div style={{ fontSize: '0.65rem', color: '#9ca3af', marginTop: 2 }}>No campaigns</div>
