@@ -70,14 +70,14 @@ const PromoCodes = () => {
                             <thead>
                                 <tr>
                                     <th style={{ width: 40 }}></th>
-                                    <th>Code</th>
-                                    <th>Type</th>
-                                    <th>Value</th>
-                                    <th>Cost Incurred</th>
-                                    <th>Usage</th>
-                                    <th>Period</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
+                                    <th style={{ width: 110 }}>Code</th>
+                                    <th style={{ width: 90 }}>Type</th>
+                                    <th style={{ width: 80 }}>Value</th>
+                                    <th style={{ width: 100 }}>Cost Incurred</th>
+                                    <th style={{ width: 80 }}>Usage</th>
+                                    <th style={{ width: 100 }}>Period</th>
+                                    <th style={{ width: 80 }}>Status</th>
+                                    <th style={{ width: 120 }}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
