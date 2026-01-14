@@ -113,8 +113,25 @@ function initializeDatabase() {
             code TEXT,
             segment TEXT,
             sent_at TEXT,
-            status TEXT
+            status TEXT,
+            campaign_id TEXT -- Link to parent campaign
         )`);
+
+        db.run(`CREATE TABLE IF NOT EXISTS campaign_history (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            template_id TEXT,
+            segment TEXT,
+            promo_code TEXT,
+            sent_count INTEGER,
+            sent_at TEXT,
+            status TEXT
+        )`, () => {
+            // Seed data
+            const campStmt = db.prepare("INSERT INTO campaign_history VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            campStmt.run('camp_1', 'Welcome Blast Jan', 'welcome_v1', 'new_users', 'SAVE20', 120, '2026-01-10T10:00:00Z', 'Completed');
+            campStmt.finalize();
+        });
 
         db.run(`CREATE TABLE IF NOT EXISTS promo_codes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,10 +170,10 @@ function initializeDatabase() {
             pStmt.finalize();
 
             // Sample email campaign logs
-            const emailStmt = db.prepare("INSERT INTO email_logs VALUES (?, ?, ?, ?, ?, ?)");
-            emailStmt.run('log_demo_1', 'user_001', 'SAVE20', 'new_users', '2026-01-14T10:30:00Z', 'Sent');
-            emailStmt.run('log_demo_2', 'user_002', 'SAVE20', 'new_users', '2026-01-14T10:30:00Z', 'Sent');
-            emailStmt.run('log_demo_3', 'user_003', 'BOOSTRATE', 'churned_users', '2026-01-12T14:15:00Z', 'Sent');
+            const emailStmt = db.prepare("INSERT INTO email_logs VALUES (?, ?, ?, ?, ?, ?, ?)");
+            emailStmt.run('log_demo_1', 'user_001', 'SAVE20', 'new_users', '2026-01-14T10:30:00Z', 'Sent', null);
+            emailStmt.run('log_demo_2', 'user_002', 'SAVE20', 'new_users', '2026-01-14T10:30:00Z', 'Sent', null);
+            emailStmt.run('log_demo_3', 'user_003', 'BOOSTRATE', 'churned_users', '2026-01-12T14:15:00Z', 'Sent', null);
             emailStmt.finalize();
         });
         // Referral Configuration (Singleton)
@@ -613,6 +630,61 @@ app.post('/api/credits/manual', (req, res) => {
     stmt.run(id, user_id, parsedAmount, type, reason, admin_user || 'Admin', function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ success: true, id: id, new_balance_impact: parsedAmount });
+    });
+    stmt.finalize();
+});
+
+
+
+// --- Phase 3: Campaign Blasting API ---
+
+// 1. Get Campaign History
+app.get('/api/campaigns', (req, res) => {
+    db.all("SELECT * FROM campaign_history ORDER BY sent_at DESC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ data: rows });
+    });
+});
+
+// 2. Audience Preview (Estimate Count)
+app.post('/api/segments/preview', (req, res) => {
+    const { segment, criteria } = req.body;
+
+    // Mock Logic for Prototype (In real app, would query users table with filters)
+    let count = 0;
+    if (segment === 'new_users') count = 1250;
+    else if (segment === 'churned_users') count = 450;
+    else if (segment === 'all') count = 5000;
+    else count = 0;
+
+    // Simulate delay
+    setTimeout(() => {
+        res.json({ count: count });
+    }, 500);
+});
+
+// 3. Send Campaign
+app.post('/api/campaigns/send', (req, res) => {
+    const { name, template_id, segment, promo_code_id, criteria } = req.body;
+
+    // 1. Create Campaign Record
+    const campaignId = 'camp_' + Date.now();
+    const now = new Date().toISOString();
+
+    // Mock Sending Logic (Reusing distribution logic simplified)
+    let sentCount = 0;
+    // For prototype, we just "say" we sent it.
+    if (segment === 'new_users') sentCount = 1250;
+    else if (segment === 'churned_users') sentCount = 450;
+    else sentCount = 5000;
+
+    const stmt = db.prepare(`INSERT INTO campaign_history 
+        (id, name, template_id, segment, promo_code, sent_count, sent_at, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+
+    stmt.run(campaignId, name, template_id, segment, promo_code_id, sentCount, now, 'Completed', function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, campaign_id: campaignId, sent_count: sentCount });
     });
     stmt.finalize();
 });

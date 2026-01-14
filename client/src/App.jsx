@@ -7,6 +7,7 @@ import logo from './assets/logo.png';
 // Components
 import ReferralSettings from './pages/Growth/ReferralSettings';
 import UserCreditLedger from './pages/Growth/UserCreditLedger';
+import CampaignManager from './pages/Campaigns/CampaignManager';
 const Sidebar = ({ isOpen, onClose }) => {
 
   const location = useLocation();
@@ -92,6 +93,9 @@ const Sidebar = ({ isOpen, onClose }) => {
           </div>
         </div>
 
+        <Link to="/crm/campaigns" style={itemStyle(isActive('/crm/campaigns'))}>
+          <span>📢</span> Campaigns & Blasting
+        </Link>
         <Link to="/reports" style={itemStyle(false)}>
           <span>📄</span> Reports
         </Link>
@@ -306,6 +310,7 @@ function App() {
             {/* Growth Engine */}
             <Route path="/growth/referral-settings" element={<ReferralSettings />} />
             <Route path="/growth/credit-ledger" element={<UserCreditLedger />} />
+            <Route path="/crm/campaigns" element={<CampaignManager />} />
           </Routes>
         </main>
       </div>
