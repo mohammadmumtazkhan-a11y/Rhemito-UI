@@ -176,20 +176,25 @@ function initializeDatabase() {
             emailStmt.run('log_demo_3', 'user_003', 'BOOSTRATE', 'churned_users', '2026-01-12T14:15:00Z', 'Sent', null);
             emailStmt.finalize();
         });
-        // Referral Configuration (Singleton)
+        // Referral Rules (Multi-Record)
         db.run(`CREATE TABLE IF NOT EXISTS referral_rules (
-            id INTEGER PRIMARY KEY CHECK (id = 1), -- Ensure singleton
-            is_enabled INTEGER DEFAULT 0,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            is_enabled INTEGER DEFAULT 1,
             min_transaction_threshold REAL DEFAULT 100.0,
             referrer_reward REAL DEFAULT 5.0,
             referee_reward REAL DEFAULT 10.0,
-            reward_type TEXT DEFAULT 'BOTH', -- REFERRER, REFEREE, BOTH
+            reward_type TEXT DEFAULT 'BOTH',
             base_currency TEXT DEFAULT 'GBP',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )`, () => {
-            // Seed default config if not exists
-            db.run(`INSERT OR IGNORE INTO referral_rules (id, is_enabled, min_transaction_threshold, referrer_reward, referee_reward, reward_type, base_currency) 
-                    VALUES (1, 1, 50.0, 5.00, 10.00, 'BOTH', 'GBP')`);
+            // Seed sample rules
+            const stmt = db.prepare(`INSERT INTO referral_rules (name, is_enabled, min_transaction_threshold, referrer_reward, referee_reward, reward_type, base_currency) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+            stmt.run('Default UK Program', 1, 50.0, 5.00, 10.00, 'BOTH', 'GBP');
+            stmt.run('US High Value', 1, 100.0, 10.00, 20.00, 'BOTH', 'USD');
+            stmt.run('Nigeria Special', 0, 20000.0, 2000.00, 5000.00, 'REFEREE', 'NGN');
+            stmt.finalize();
         });
 
         // Credit Ledger (Append-Only)
@@ -553,24 +558,43 @@ app.post('/api/promocodes/distribute', (req, res) => {
     });
 });
 
-// --- Phase 1: Referral Scheme API ---
+// --- Phase 1: Referral Scheme API (CRUD) ---
 
-// 1. Get Referral Config
-app.get('/api/referral-config', (req, res) => {
-    db.get("SELECT * FROM referral_rules WHERE id = 1", (err, row) => {
+// 1. Get All Referral Rules
+app.get('/api/referral-rules', (req, res) => {
+    db.all("SELECT * FROM referral_rules ORDER BY created_at DESC", [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ data: row });
+        res.json({ data: rows });
     });
 });
 
-// 2. Update Referral Config
-app.put('/api/referral-config', (req, res) => {
-    const { is_enabled, min_transaction_threshold, referrer_reward, referee_reward, reward_type, base_currency } = req.body;
+// 2. Create New Referral Rule
+app.post('/api/referral-rules', (req, res) => {
+    const { name, is_enabled, min_transaction_threshold, referrer_reward, referee_reward, reward_type, base_currency } = req.body;
 
-    // Convert boolean to integer for SQLite
+    if (!name) return res.status(400).json({ error: "Name is required" });
+
+    const enabledInt = is_enabled ? 1 : 0;
+    const stmt = db.prepare(`INSERT INTO referral_rules 
+        (name, is_enabled, min_transaction_threshold, referrer_reward, referee_reward, reward_type, base_currency) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)`);
+
+    stmt.run(name, enabledInt, min_transaction_threshold, referrer_reward, referee_reward, reward_type, base_currency, function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, id: this.lastID });
+    });
+    stmt.finalize();
+});
+
+// 3. Update Referral Rule
+app.put('/api/referral-rules/:id', (req, res) => {
+    const { id } = req.params;
+    const { name, is_enabled, min_transaction_threshold, referrer_reward, referee_reward, reward_type, base_currency } = req.body;
+
     const enabledInt = is_enabled ? 1 : 0;
 
     const stmt = db.prepare(`UPDATE referral_rules SET 
+        name = ?,
         is_enabled = ?, 
         min_transaction_threshold = ?, 
         referrer_reward = ?, 
@@ -578,13 +602,23 @@ app.put('/api/referral-config', (req, res) => {
         reward_type = ?, 
         base_currency = ?,
         updated_at = CURRENT_TIMESTAMP
-        WHERE id = 1`);
+        WHERE id = ?`);
 
-    stmt.run(enabledInt, min_transaction_threshold, referrer_reward, referee_reward, reward_type, base_currency, function (err) {
+    stmt.run(name, enabledInt, min_transaction_threshold, referrer_reward, referee_reward, reward_type, base_currency, id, function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ success: true });
     });
     stmt.finalize();
+});
+
+// 4. Delete Referral Rule
+app.delete('/api/referral-rules/:id', (req, res) => {
+    const { id } = req.params;
+
+    db.run("DELETE FROM referral_rules WHERE id = ?", [id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
 });
 
 // --- Phase 1: Credits Ledger API ---
