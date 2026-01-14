@@ -10,7 +10,7 @@ const UserCreditLedger = () => {
         history: [
             { id: 'tx_123', created_at: '2025-05-10 14:30', amount: 50.00, type: 'EARNED', reason_code: 'REFERRAL_REWARD', scheme_name: 'Summer Referral', notes: 'Ref: #9988', user_id: 'user_123', customer_name: 'John Doe' },
             { id: 'tx_124', created_at: '2025-05-12 09:15', amount: -24.50, type: 'APPLIED', scheme_name: 'Payment Discount', notes: 'Txn: #8877', user_id: 'user_123', customer_name: 'John Doe' },
-            { id: 'tx_125', created_at: '2025-05-15 10:00', amount: 100.00, type: 'EARNED', reason_code: 'GOODWILL', scheme_name: 'Customer Loyalty', user_id: 'user_123', customer_name: 'John Doe' }
+            { id: 'tx_125', created_at: '2025-05-15 10:00', amount: 100.00, type: 'EARNED', reason_code: 'LOYALTY', scheme_name: 'Customer Loyalty', user_id: 'user_123', customer_name: 'John Doe' }
         ]
     });
     const [loading, setLoading] = useState(false);
@@ -29,7 +29,7 @@ const UserCreditLedger = () => {
     // Phase 3: FRD Adjustment Form
     const [adjAmount, setAdjAmount] = useState('');
     const [adjType, setAdjType] = useState('EARNED');
-    const [adjReasonCode, setAdjReasonCode] = useState('GOODWILL');
+    const [adjReasonCode, setAdjReasonCode] = useState('LOYALTY');
     const [adjNotes, setAdjNotes] = useState('');
     const [adjSchemeId, setAdjSchemeId] = useState('');
 
@@ -349,7 +349,7 @@ const UserCreditLedger = () => {
                                 style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid var(--border-subtle)' }}
                                 required
                             >
-                                <option value="GOODWILL">Goodwill</option>
+                                <option value="LOYALTY">Loyalty</option>
                                 <option value="CORRECTION">Correction</option>
                                 <option value="MANUAL_ADJUSTMENT">Manual Adjustment</option>
                             </select>

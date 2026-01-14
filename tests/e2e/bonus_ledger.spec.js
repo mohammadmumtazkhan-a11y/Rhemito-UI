@@ -18,7 +18,7 @@ test.describe('Bonus & Wallet Ledger', () => {
         // Create Scheme
         const schemeName = `Test Scheme ${Date.now()}`;
         await page.fill('input[placeholder="e.g. Transaction Threshold Credit"]', schemeName);
-        await page.selectOption('select:has-text("Bonus Type")', 'GOODWILL_CREDIT');
+        await page.selectOption('select:has-text("Bonus Type")', 'LOYALTY_CREDIT');
 
         await page.fill('input[placeholder="0.00"]', '50');
 

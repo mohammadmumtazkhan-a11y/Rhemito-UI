@@ -8,7 +8,7 @@ const BonusSchemeManager = () => {
 
     const [formData, setFormData] = useState({
         name: '',
-        bonus_type: 'GOODWILL_CREDIT',
+        bonus_type: 'LOYALTY_CREDIT',
         credit_amount: 10,
         currency: 'GBP',
         min_transaction_threshold: 50,
@@ -121,7 +121,7 @@ const BonusSchemeManager = () => {
     const resetForm = () => {
         setFormData({
             name: '',
-            bonus_type: 'GOODWILL_CREDIT',
+            bonus_type: 'LOYALTY_CREDIT',
             credit_amount: 10,
             currency: 'GBP',
             min_transaction_threshold: 50,
@@ -187,7 +187,7 @@ const BonusSchemeManager = () => {
                                 onChange={(e) => setFormData({ ...formData, bonus_type: e.target.value })}
                                 required
                             >
-                                <option value="GOODWILL_CREDIT">Goodwill Credit</option>
+                                <option value="LOYALTY_CREDIT">Loyalty Credit</option>
                                 <option value="TRANSACTION_THRESHOLD_CREDIT">Transaction Threshold Credit</option>
                             </select>
                         </div>

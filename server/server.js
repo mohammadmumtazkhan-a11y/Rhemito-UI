@@ -201,7 +201,7 @@ function initializeDatabase() {
         db.run(`CREATE TABLE IF NOT EXISTS bonus_schemes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            bonus_type TEXT NOT NULL, -- REFERRAL_CREDIT, GOODWILL_CREDIT, TRANSACTION_THRESHOLD_CREDIT
+            bonus_type TEXT NOT NULL, -- REFERRAL_CREDIT, LOYALTY_CREDIT, TRANSACTION_THRESHOLD_CREDIT
             credit_amount REAL NOT NULL,
             currency TEXT DEFAULT 'GBP', -- New field
             min_transaction_threshold REAL DEFAULT 0,
@@ -223,13 +223,11 @@ function initializeDatabase() {
                     const stmt = db.prepare(`INSERT INTO bonus_schemes 
                         (name, bonus_type, credit_amount, currency, min_transaction_threshold, eligibility_rules, start_date, end_date, status) 
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-                    stmt.run('First Time Bonus', 'REFERRAL_CREDIT', 10.00, 'GBP', 50.0,
-                        JSON.stringify({ corridors: ['UK-NG'], segments: ['new_users'] }),
-                        '2024-01-01', '2024-12-31', 'ACTIVE');
+
                     stmt.run('High Value Threshold Bonus', 'TRANSACTION_THRESHOLD_CREDIT', 25.00, 'USD', 500.0,
                         JSON.stringify({ paymentMethods: ['bank_transfer'], segments: ['all'] }),
                         '2024-06-01', '2024-12-31', 'ACTIVE');
-                    stmt.run('Goodwill Credit (Expired)', 'GOODWILL_CREDIT', 5.00, 'EUR', 0.0,
+                    stmt.run('Loyalty Credit (Expired)', 'LOYALTY_CREDIT', 5.00, 'EUR', 0.0,
                         JSON.stringify({ segments: ['all'] }),
                         '2023-01-01', '2023-12-31', 'EXPIRED');
                     stmt.finalize();
@@ -245,7 +243,7 @@ function initializeDatabase() {
             type TEXT, -- EARNED, APPLIED, EXPIRED, VOIDED
             scheme_id INTEGER, -- FK to bonus_schemes
             reference_id TEXT, -- Transaction ID, Promo Code ID, or Manual Reason Code
-            reason_code TEXT, -- GOODWILL, CORRECTION, MANUAL_ADJUSTMENT (Phase 3: FRD)
+            reason_code TEXT, -- LOYALTY, CORRECTION, MANUAL_ADJUSTMENT (Phase 3: FRD)
             notes TEXT, -- Admin notes (Phase 3: FRD)
             admin_user TEXT, -- For audit trail
             admin_user_id TEXT, -- Admin ID (Phase 4: FRD)
