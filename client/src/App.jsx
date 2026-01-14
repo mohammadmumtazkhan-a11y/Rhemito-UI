@@ -7,6 +7,7 @@ import logo from './assets/logo.png';
 // Components
 import ReferralSettings from './pages/Growth/ReferralSettings';
 import UserCreditLedger from './pages/Growth/UserCreditLedger';
+import BonusSchemeManager from './pages/Growth/BonusSchemeManager';
 import CampaignManager from './pages/Campaigns/CampaignManager';
 const Sidebar = ({ isOpen, onClose }) => {
 
@@ -89,6 +90,13 @@ const Sidebar = ({ isOpen, onClose }) => {
               textDecoration: 'none', fontSize: '0.85rem', fontWeight: isActive('/growth/credit-ledger') ? 600 : 400
             }}>
               Bonus Wallet / Ledger
+            </Link>
+            <Link to="/growth/bonus-schemes" style={{
+              display: 'block', padding: '8px 16px 8px 48px',
+              color: isActive('/growth/bonus-schemes') ? '#c2410c' : '#4b5563',
+              textDecoration: 'none', fontSize: '0.85rem', fontWeight: isActive('/growth/bonus-schemes') ? 600 : 400
+            }}>
+              Bonus Scheme Manager
             </Link>
           </div>
         </div>
@@ -310,6 +318,7 @@ function App() {
             {/* Growth Engine */}
             <Route path="/growth/referral-settings" element={<ReferralSettings />} />
             <Route path="/growth/credit-ledger" element={<UserCreditLedger />} />
+            <Route path="/growth/bonus-schemes" element={<BonusSchemeManager />} />
             <Route path="/crm/campaigns" element={<CampaignManager />} />
           </Routes>
         </main>
