@@ -96,10 +96,13 @@ const PromoCodes = () => {
                                             />
                                         </td>
                                         <td style={{ fontFamily: 'monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>{promo.code}</td>
-                                        <td style={{ whiteSpace: 'nowrap' }}>{promo.type === 'FX_BOOST' ? 'FX Boost' : promo.type}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>
+                                            {promo.type === 'FX_BOOST' ? 'FX Boost' :
+                                                promo.type === 'BONUS_CREDIT' ? 'Bonus Credit' : promo.type}
+                                        </td>
                                         <td style={{ whiteSpace: 'nowrap' }}>
                                             {promo.type === 'Percentage' ? `${promo.value}%` :
-                                                promo.type === 'Fixed' ? `${promo.currency} ${promo.value}` :
+                                                (promo.type === 'Fixed' || promo.type === 'BONUS_CREDIT') ? `${promo.currency} ${promo.value}` :
                                                     promo.type === 'FX_BOOST' ? `+${promo.value}` : `${promo.value}%`}
                                         </td>
                                         <td style={{ whiteSpace: 'nowrap' }}>

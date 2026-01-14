@@ -98,6 +98,7 @@ const CreatePromoModal = ({ onClose, onSuccess }) => {
                                 <option value="Percentage">Percentage</option>
                                 <option value="Waiver">Fee Waiver</option>
                                 <option value="FX_BOOST">FX Rate Boost</option>
+                                <option value="BONUS_CREDIT">Bonus Credit (Receiver)</option>
                             </select>
                         </div>
                     </div>
