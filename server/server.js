@@ -788,25 +788,55 @@ app.delete('/api/bonus-schemes/:id', (req, res) => {
     });
 });
 
-// --- Phase 1: Credits Ledger API ---
+// --- Phase 2: Enhanced Credits Ledger API (FRD) ---
 
-// 1. Get User Credit Balance & History
+// 1. Get User Credit Balance & History with Advanced Filtering
 app.get('/api/credits/:userId', (req, res) => {
     const userId = req.params.userId;
+    const { startDate, endDate, eventType, schemeId } = req.query;
 
     db.serialize(() => {
-        // Calculate Verification Balance
+        // Calculate Balance
         db.get("SELECT SUM(amount) as balance FROM credit_ledger WHERE user_id = ?", [userId], (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
 
             const balance = row && row.balance ? row.balance : 0;
 
-            // Get History
-            db.all("SELECT * FROM credit_ledger WHERE user_id = ? ORDER BY created_at DESC", [userId], (err, rows) => {
+            // Build dynamic query with filters
+            let query = `
+                SELECT cl.*, bs.name as scheme_name 
+                FROM credit_ledger cl
+                LEFT JOIN bonus_schemes bs ON cl.scheme_id = bs.id
+                WHERE cl.user_id = ?
+            `;
+            const params = [userId];
+
+            // Phase 2: FRD Filters (Section 3.2)
+            if (startDate) {
+                query += " AND cl.created_at >= ?";
+                params.push(startDate);
+            }
+            if (endDate) {
+                query += " AND cl.created_at <= ?";
+                params.push(endDate);
+            }
+            if (eventType) {
+                query += " AND cl.type = ?";
+                params.push(eventType);
+            }
+            if (schemeId) {
+                query += " AND cl.scheme_id = ?";
+                params.push(parseInt(schemeId));
+            }
+
+            query += " ORDER BY cl.created_at DESC";
+
+            // Get Filtered History
+            db.all(query, params, (err, rows) => {
                 if (err) return res.status(500).json({ error: err.message });
                 res.json({
                     balance: balance,
-                    currency: 'GBP', // Default for now
+                    currency: 'GBP',
                     history: rows
                 });
             });
@@ -814,24 +844,43 @@ app.get('/api/credits/:userId', (req, res) => {
     });
 });
 
-// 2. Manual Credit Adjustment (Grant/Void)
+// 2. Manual Credit Adjustment (Grant/Void) - Phase 3: FRD  
 app.post('/api/credits/manual', (req, res) => {
-    const { user_id, amount, type, reason, admin_user } = req.body;
+    const { user_id, amount, type, reason_code, notes, scheme_id, admin_user } = req.body;
 
-    // Basic Validation
-    if (!user_id || !amount || !type || !reason) {
-        return res.status(400).json({ error: "Missing required fields" });
+    // Phase 3: FRD Validations (Section 3.3)
+    if (!user_id || !amount || !type) {
+        return res.status(400).json({ error: "Missing required fields: user_id, amount, type" });
+    }
+    if (!reason_code) {
+        return res.status(400).json({ error: "Reason code is required (GOODWILL, CORRECTION, MANUAL_ADJUSTMENT)" });
+    }
+    if (!notes || notes.trim().length === 0) {
+        return res.status(400).json({ error: "Notes must be provided for manual adjustments" });
     }
 
     const id = 'crd_' + Date.now();
     const parsedAmount = parseFloat(amount);
 
-    const stmt = db.prepare(`INSERT INTO credit_ledger (id, user_id, amount, type, reference_id, admin_user) VALUES (?, ?, ?, ?, ?, ?)`);
+    const stmt = db.prepare(`INSERT INTO credit_ledger 
+        (id, user_id, amount, type, scheme_id, reference_id, reason_code, notes, admin_user) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
-    stmt.run(id, user_id, parsedAmount, type, reason, admin_user || 'Admin', function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ success: true, id: id, new_balance_impact: parsedAmount });
-    });
+    stmt.run(
+        id,
+        user_id,
+        parsedAmount,
+        type,
+        scheme_id || null,
+        `manual_${id}`, // reference_id
+        reason_code,
+        notes,
+        admin_user || 'Admin',
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, id: id, new_balance_impact: parsedAmount });
+        }
+    );
     stmt.finalize();
 });
 
