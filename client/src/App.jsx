@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import './index.css';
 
+import logo from './assets/logo.png';
+
 // Components
 const Sidebar = ({ isOpen, onClose }) => {
 
@@ -36,7 +38,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       }}>
       {/* Brand */}
       <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 24px', borderBottom: '1px solid #f3f4f6', marginBottom: 16 }}>
-        <div style={{ width: 24, height: 24, background: '#ea580c', marginRight: 12, borderRadius: 4 }}></div>
+        <img src={logo} alt="Mito Admin" style={{ height: 32, width: 'auto', marginRight: 12 }} />
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#1f2937' }}>Mito Admin</h2>
       </div>
 
@@ -61,13 +63,6 @@ const Sidebar = ({ isOpen, onClose }) => {
               textDecoration: 'none', fontSize: '0.85rem', fontWeight: isActive('/financials/promocodes') ? 600 : 400
             }}>
               Promo Codes
-            </Link>
-            <Link to="/financials/debits" style={{
-              display: 'block', padding: '8px 16px 8px 48px',
-              color: isActive('/financials/debits') ? '#c2410c' : '#4b5563',
-              textDecoration: 'none', fontSize: '0.85rem'
-            }}>
-              Debit Logs
             </Link>
           </div>
         </div>
@@ -153,17 +148,20 @@ const Dashboard = () => {
     <div style={{ fontFamily: 'sans-serif', color: '#4b5563' }}>
       {/* Top Banner */}
       <div style={{ background: '#dcfce7', color: '#166534', padding: '12px 24px', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, borderRadius: 4 }}>
-        <span style={{ flex: 1 }}>MIito.Money uses cookies. By using our site you agree to our privacy policy.</span>
+        <span style={{ flex: 1 }}>Mito.Money uses cookies. By using our site you agree to our privacy policy.</span>
         <button style={{ background: 'transparent', border: 'none', color: '#166534', cursor: 'pointer', fontSize: '1.2rem' }}>&times;</button>
       </div>
 
       {/* Header Area */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: '2rem', fontWeight: 300, color: '#4ade80', margin: '0 0 8px 0' }}>
-          Account Overview <span style={{ fontSize: '1rem', color: '#9ca3af', fontWeight: 400 }}>A quick dashboard view of account status</span>
+      <div style={{ marginBottom: 32 }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: 300, color: '#4ade80', margin: '0 0 4px 0' }}>
+          Account Overview
         </h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem', color: '#6b7280', background: '#f3f4f6', padding: '8px 16px', borderRadius: 4 }}>
-          <span>🏠 Home</span> <span>&gt;</span>
+        <p style={{ fontSize: '0.95rem', color: '#9ca3af', fontWeight: 400, margin: '0 0 16px 0' }}>
+          A quick dashboard view of account status
+        </p>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '0.9rem', color: '#6b7280', background: '#f3f4f6', padding: '8px 16px', borderRadius: 4 }}>
+          <span>🏠 Home</span>
         </div>
       </div>
 
@@ -171,13 +169,13 @@ const Dashboard = () => {
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }}>
 
         {/* Left Column: Chart */}
-        <div style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ background: '#e5e7eb', padding: '10px 16px', borderRadius: '4px 4px 0 0', fontWeight: 600, color: '#374151', marginBottom: 16 }}>
+        <div style={{ background: 'white', padding: 24, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ background: '#e5e7eb', padding: '12px 20px', borderRadius: 4, fontWeight: 600, color: '#374151', marginBottom: 20, fontSize: '0.95rem' }}>
             Successful transactions in the last 30 days
           </div>
-          <div style={{ height: 300, position: 'relative' }}>
+          <div style={{ height: 300, position: 'relative', padding: '8px 0' }}>
             {/* Mock Chart SVG */}
-            <svg viewBox="0 0 500 300" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+            <svg viewBox="-50 -10 560 320" style={{ width: '100%', height: '100%' }}>
               {/* Grid Lines */}
               {[0, 1, 2, 3, 4, 5].map(i => (
                 <line key={i} x1="0" y1={i * 60} x2="500" y2={i * 60} stroke="#e5e7eb" strokeWidth="1" />
@@ -187,12 +185,12 @@ const Dashboard = () => {
               ))}
 
               {/* Y Axis Labels */}
-              <text x="-10" y="300" fontSize="10" fill="#9ca3af" textAnchor="end">0</text>
-              <text x="-10" y="240" fontSize="10" fill="#9ca3af" textAnchor="end">1000</text>
-              <text x="-10" y="180" fontSize="10" fill="#9ca3af" textAnchor="end">2000</text>
-              <text x="-10" y="120" fontSize="10" fill="#9ca3af" textAnchor="end">3000</text>
-              <text x="-10" y="60" fontSize="10" fill="#9ca3af" textAnchor="end">4000</text>
-              <text x="-10" y="10" fontSize="10" fill="#9ca3af" textAnchor="end">5000</text>
+              <text x="-10" y="304" fontSize="11" fill="#6b7280" textAnchor="end">0</text>
+              <text x="-10" y="244" fontSize="11" fill="#6b7280" textAnchor="end">1000</text>
+              <text x="-10" y="184" fontSize="11" fill="#6b7280" textAnchor="end">2000</text>
+              <text x="-10" y="124" fontSize="11" fill="#6b7280" textAnchor="end">3000</text>
+              <text x="-10" y="64" fontSize="11" fill="#6b7280" textAnchor="end">4000</text>
+              <text x="-10" y="14" fontSize="11" fill="#6b7280" textAnchor="end">5000</text>
 
               {/* Data Path (Mock) */}
               <path d="M0,280 L50,220 L75,240 L100,200 L125,260 L150,160 L175,160 L200,60 L225,220 L250,160 L275,200 L300,180 L325,220 L350,220 L375,200 L400,220 L425,180 L450,230 L475,180 L500,290"
@@ -205,12 +203,12 @@ const Dashboard = () => {
         </div>
 
         {/* Right Column: Overview */}
-        <div style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ background: '#e5e7eb', padding: '10px 16px', borderRadius: '4px 4px 0 0', fontWeight: 600, color: '#374151', marginBottom: 16 }}>
+        <div style={{ background: 'white', padding: 24, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ background: '#e5e7eb', padding: '12px 20px', borderRadius: 4, fontWeight: 600, color: '#374151', marginBottom: 20, fontSize: '0.95rem' }}>
             ℹ Overview
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             <OverviewCard title="Pending Transaction" value="972" />
             <OverviewCard title="MTO Pending" value="106" />
             <OverviewCard title="Forex Pending" value="3" />
@@ -229,20 +227,20 @@ const Dashboard = () => {
 
 const OverviewCard = ({ title, value }) => (
   <div style={{
-    background: '#fef3c7', // beige/yellowish
-    borderRadius: 8,
-    padding: '16px 8px',
+    background: '#fef3c7',
+    borderRadius: 6,
+    padding: '14px 10px',
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 80
+    minHeight: 90
   }}>
-    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#78350f', lineHeight: 1.2, marginBottom: 4 }}>
+    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#78350f', lineHeight: 1.3, marginBottom: 6 }}>
       {title.split(' ').map((word, i) => <div key={i}>{word}</div>)}
     </div>
-    <div style={{ fontSize: '1.25rem', fontWeight: 400, color: '#92400e' }}>{value}</div>
+    <div style={{ fontSize: '1.4rem', fontWeight: 600, color: '#92400e' }}>{value}</div>
   </div>
 );
 

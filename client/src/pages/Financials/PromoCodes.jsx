@@ -65,7 +65,7 @@ const PromoCodes = () => {
                 {loading ? (
                     <div style={{ padding: 20, textAlign: 'center' }}>Loading...</div>
                 ) : (
-                    <div style={{ overflowX: 'auto' }}>
+                    <div className="table-wrapper" style={{ overflowX: 'auto' }}>
                         <table className="table-container" style={{ minWidth: 1000, tableLayout: 'fixed' }}>
                             <thead>
                                 <tr>
@@ -112,10 +112,10 @@ const PromoCodes = () => {
                                             {promo.usage_count}/{promo.usage_limit_global === -1 ? '∞' : promo.usage_limit_global}
                                             <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>({promo.usage_limit_per_user}/user)</div>
                                         </td>
-                                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
-                                            {new Date(promo.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}
-                                            <span style={{ color: '#9ca3af' }}> → </span>
-                                            {new Date(promo.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                        <td style={{ textAlign: 'center', fontSize: '0.8rem' }}>
+                                            <div>{new Date(promo.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
+                                            <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>to</div>
+                                            <div>{new Date(promo.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
                                         </td>
                                         <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                                             <span className={`badge ${promo.status === 'Active' ? 'success' : 'danger'}`}>

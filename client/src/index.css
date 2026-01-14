@@ -35,29 +35,40 @@ body {
   min-height: 100vh;
 }
 
-/* Custom Scrollbar Styling */
+/* Custom Scrollbar Styling - Modern & Subtle */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
   background: transparent;
+  margin: 2px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 4px;
+  background: #e5e7eb;
+  border-radius: 6px;
+  transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: #cbd5e1;
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
+  scrollbar-color: #e5e7eb transparent;
+}
+
+/* Scrollbar for table containers - even more subtle */
+.table-wrapper::-webkit-scrollbar {
+  height: 4px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: #f3f4f6;
 }
 
 /* Utilities */
