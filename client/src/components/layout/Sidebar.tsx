@@ -20,14 +20,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 const navItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true },
-  { icon: Wallet, label: "Payments", href: "/payments", enabled: true },
-  { icon: ArrowLeftRight, label: "Transactions", href: "/transactions", enabled: false },
-  { icon: Users, label: "Recipients", href: "/recipients", enabled: false },
-  { icon: UserCheck, label: "Senders", href: "/senders", enabled: true },
-  { icon: Building2, label: "Payout Accounts", href: "/payout-accounts", enabled: true },
-  { icon: Shield, label: "Compliance", href: "/compliance", enabled: false },
-  { icon: HelpCircle, label: "Support", href: "/support", enabled: false },
-  { icon: Settings, label: "Settings", href: "/settings", enabled: false },
+  { icon: ArrowLeftRight, label: "Transactions", href: "/test-checkout", enabled: true },
+  { icon: Users, label: "Recipients", href: "/recipients", enabled: true },
+  { icon: Shield, label: "Compliance", href: "/compliance", enabled: true },
+  { icon: HelpCircle, label: "Support", href: "/support", enabled: true },
+  { icon: Settings, label: "Settings", href: "/settings", enabled: true },
 ];
 
 interface SidebarProps {
