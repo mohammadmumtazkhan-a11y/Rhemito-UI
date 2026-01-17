@@ -98,8 +98,8 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <RequestPaymentModal 
-        open={showPaymentModal} 
+      <RequestPaymentModal
+        open={showPaymentModal}
         onOpenChange={setShowPaymentModal}
         onSelect={handlePaymentOptionSelect}
       />
@@ -109,7 +109,7 @@ export default function Dashboard() {
         animate="visible"
         className="space-y-4 md:space-y-6"
       >
-        <motion.h1 
+        <motion.h1
           variants={itemVariants}
           className="text-xl md:text-2xl font-semibold font-display"
         >
@@ -123,21 +123,22 @@ export default function Dashboard() {
                 <CardTitle className="text-sm md:text-base font-semibold text-teal">Quick Services</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 md:space-y-3 px-4 md:px-6">
-                <Button 
+                <Button
                   className="w-full justify-start gap-2 md:gap-3 bg-primary hover:bg-primary/90 text-white h-10 md:h-12 text-sm"
+                  onClick={() => setLocation("/send-money")}
                   data-testid="button-send-money"
                 >
                   <Send className="w-4 h-4" />
                   Send Money
                 </Button>
-                <Button 
+                <Button
                   className="w-full justify-start gap-2 md:gap-3 bg-purple hover:bg-purple/90 text-white h-10 md:h-12 text-sm"
                   data-testid="button-airtime-topup"
                 >
                   <Phone className="w-4 h-4" />
                   Airtime Topup
                 </Button>
-                <Button 
+                <Button
                   className="w-full justify-start gap-2 md:gap-3 bg-teal hover:bg-teal/90 text-white h-10 md:h-12 text-sm"
                   onClick={() => setShowPaymentModal(true)}
                   data-testid="button-request-payment"
@@ -150,27 +151,15 @@ export default function Dashboard() {
           </motion.div>
 
           <motion.div variants={itemVariants}>
-            <Card className="h-full">
+            <Card className="h-full bg-gradient-to-br from-indigo-50 to-white border-indigo-100">
               <CardHeader className="pb-3 md:pb-4 px-4 md:px-6">
-                <CardTitle className="text-sm md:text-base font-semibold">Recent Recipients</CardTitle>
+                <CardTitle className="text-sm md:text-base font-semibold text-indigo-700">Refer & Earn</CardTitle>
               </CardHeader>
-              <CardContent className="px-4 md:px-6">
-                <div className="flex items-center justify-center gap-4 md:gap-6">
-                  {recentRecipients.map((recipient) => (
-                    <motion.div
-                      key={recipient.id}
-                      whileHover={{ scale: 1.05 }}
-                      className="flex flex-col items-center gap-1.5 md:gap-2 cursor-pointer"
-                      data-testid={`recipient-${recipient.id}`}
-                    >
-                      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full ${recipient.color} flex items-center justify-center`}>
-                        <span className="text-white font-semibold text-xs md:text-sm">{recipient.initials}</span>
-                      </div>
-                      <span className="text-[10px] md:text-xs text-muted-foreground truncate max-w-[50px] md:max-w-[60px]">
-                        {recipient.name}
-                      </span>
-                    </motion.div>
-                  ))}
+              <CardContent className="px-4 md:px-6 space-y-3">
+                <p className="text-xs text-muted-foreground">Share your code and earn £10 bonus credit for every friend who joins!</p>
+                <div className="flex items-center gap-2 bg-white border border-indigo-200 rounded-lg p-2">
+                  <code className="flex-1 text-sm font-bold text-center text-indigo-800">OLAYINKA2025</code>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><ArrowRight className="w-3 h-3 text-indigo-400" /></Button>
                 </div>
               </CardContent>
             </Card>
@@ -186,21 +175,18 @@ export default function Dashboard() {
                   <span className="text-xs md:text-sm text-muted-foreground">Account</span>
                   <span className="font-semibold text-sm md:text-base">235324</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs md:text-sm text-muted-foreground">Sent</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-teal text-sm md:text-base">48744.64</span>
-                    <Badge variant="outline" className="text-[10px] md:text-xs">GBP</Badge>
-                  </div>
-                </div>
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
-                  <span className="text-xs md:text-sm font-medium">Wallet</span>
-                  <span className="text-xs md:text-sm text-muted-foreground">Balance</span>
+                  <span className="text-xs md:text-sm font-medium">Wallet Balance</span>
+                  <div className="text-right">
+                    <div className="font-bold text-primary">£300.20</div>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xl md:text-2xl font-bold text-primary">300</span>
-                  <Badge variant="outline" className="text-[10px] md:text-xs">GBP</Badge>
+                  <span className="text-xs md:text-sm font-medium text-purple-600">Bonus Credit</span>
+                  <div className="text-right">
+                    <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-200">£15.00</Badge>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -213,15 +199,15 @@ export default function Dashboard() {
               <Tabs defaultValue="recent" className="w-full">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between px-3 md:px-6 pt-3 md:pt-4 gap-2">
                   <TabsList className="bg-transparent h-auto p-0 gap-3 md:gap-6 w-full sm:w-auto">
-                    <TabsTrigger 
-                      value="recent" 
+                    <TabsTrigger
+                      value="recent"
                       className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-2 md:pb-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary font-medium text-xs md:text-sm"
                       data-testid="tab-recent-transactions"
                     >
                       Recent Transactions
                     </TabsTrigger>
-                    <TabsTrigger 
-                      value="scheduled" 
+                    <TabsTrigger
+                      value="scheduled"
                       className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-2 md:pb-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary font-medium text-xs md:text-sm"
                       data-testid="tab-scheduled-transactions"
                     >
@@ -257,13 +243,12 @@ export default function Dashboard() {
                             <TableCell className="text-muted-foreground text-xs md:text-sm hidden sm:table-cell">{tx.date}</TableCell>
                             <TableCell className="text-right font-medium text-xs md:text-sm">{tx.amount}</TableCell>
                             <TableCell className="text-center">
-                              <span className={`inline-block w-2 h-2 md:w-2.5 md:h-2.5 rounded-full ${
-                                tx.status === "completed" ? "bg-teal" : "bg-destructive"
-                              }`} />
+                              <span className={`inline-block w-2 h-2 md:w-2.5 md:h-2.5 rounded-full ${tx.status === "completed" ? "bg-teal" : "bg-destructive"
+                                }`} />
                             </TableCell>
                             <TableCell className="text-center hidden sm:table-cell">
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 className="bg-primary hover:bg-primary/90 text-white h-7 md:h-8 px-3 md:px-4 text-xs"
                                 data-testid={`button-resend-${tx.id}`}
                               >
@@ -305,8 +290,8 @@ export default function Dashboard() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-center hidden sm:table-cell">
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 variant="outline"
                                 className="h-7 md:h-8 px-3 md:px-4 text-xs"
                                 data-testid={`button-cancel-${tx.id}`}

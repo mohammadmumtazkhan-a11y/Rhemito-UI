@@ -12,6 +12,7 @@ import Payments from "@/pages/Payments";
 import Senders from "@/pages/Senders";
 import SenderDetail from "@/pages/SenderDetail";
 import PayoutAccounts from "@/pages/PayoutAccounts";
+import SendMoney from "@/pages/SendMoney";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -22,6 +23,7 @@ function Router() {
       <Route path="/send-invoice" component={SendInvoice} />
       <Route path="/show-qr-code" component={ShowQRCode} />
       <Route path="/payments" component={Payments} />
+      <Route path="/send-money" component={SendMoney} />
       <Route path="/senders" component={Senders} />
       <Route path="/senders/:email" component={SenderDetail} />
       <Route path="/payout-accounts" component={PayoutAccounts} />
