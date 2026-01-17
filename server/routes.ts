@@ -9,8 +9,35 @@ export async function registerRoutes(
   // put application routes here
   // prefix all routes with /api
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+  // Promo Code Validation
+  app.post("/api/promocodes/validate", async (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ valid: false, message: "Code required" });
+
+    const promo = await storage.getPromoCode(code);
+    if (!promo || promo.status !== 'active') {
+      return res.json({ valid: false, message: "Invalid or expired promo code" });
+    }
+
+    res.json({
+      valid: true,
+      promo: {
+        code: promo.code,
+        type: promo.type,
+        value: promo.value,
+        text: "Code Valid"
+      }
+    });
+  });
+
+  // Apply Promo Code
+  app.post("/api/promocodes/apply", async (req, res) => {
+    const { code } = req.body;
+    if (code) {
+      await storage.applyPromoCode(code);
+    }
+    res.json({ success: true });
+  });
 
   return httpServer;
 }

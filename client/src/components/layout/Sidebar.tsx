@@ -1,12 +1,12 @@
 import { Link, useLocation } from "wouter";
-import { 
-  LayoutDashboard, 
-  ArrowLeftRight, 
-  Users, 
+import {
+  LayoutDashboard,
+  ArrowLeftRight,
+  Users,
   UserCheck,
-  Shield, 
-  HelpCircle, 
-  Settings, 
+  Shield,
+  HelpCircle,
+  Settings,
   LogOut,
   X,
   Wallet,
@@ -20,14 +20,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 const navItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true },
-  { icon: Wallet, label: "Payments", href: "/payments", enabled: true },
-  { icon: ArrowLeftRight, label: "Transactions", href: "/transactions", enabled: false },
-  { icon: Users, label: "Recipients", href: "/recipients", enabled: false },
-  { icon: UserCheck, label: "Senders", href: "/senders", enabled: true },
-  { icon: Building2, label: "Payout Accounts", href: "/payout-accounts", enabled: true },
-  { icon: Shield, label: "Compliance", href: "/compliance", enabled: false },
-  { icon: HelpCircle, label: "Support", href: "/support", enabled: false },
-  { icon: Settings, label: "Settings", href: "/settings", enabled: false },
+  { icon: ArrowLeftRight, label: "Transactions", href: "/test-checkout", enabled: true },
+  { icon: Users, label: "Recipients", href: "/recipients", enabled: true },
+  { icon: Shield, label: "Compliance", href: "/compliance", enabled: true },
+  { icon: HelpCircle, label: "Support", href: "/support", enabled: true },
+  { icon: Settings, label: "Settings", href: "/settings", enabled: true },
 ];
 
 interface SidebarProps {
@@ -42,7 +39,7 @@ export function Sidebar({ isOpen = false, onClose, collapsed = false, onToggleCo
 
   const NavItem = ({ item, showLabel = true }: { item: typeof navItems[0], showLabel?: boolean }) => {
     const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
-    
+
     if (!item.enabled) {
       const content = (
         <div
@@ -67,7 +64,7 @@ export function Sidebar({ isOpen = false, onClose, collapsed = false, onToggleCo
       }
       return content;
     }
-    
+
     const content = (
       <Link key={item.href} href={item.href}>
         <motion.div
@@ -76,8 +73,8 @@ export function Sidebar({ isOpen = false, onClose, collapsed = false, onToggleCo
           className={cn(
             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer",
             !showLabel && "justify-center",
-            isActive 
-              ? "text-primary bg-primary/5" 
+            isActive
+              ? "text-primary bg-primary/5"
               : "text-muted-foreground hover:text-foreground hover:bg-muted"
           )}
           data-testid={`link-${item.label.toLowerCase()}`}
@@ -103,14 +100,14 @@ export function Sidebar({ isOpen = false, onClose, collapsed = false, onToggleCo
     <>
       <div className={cn("p-4 flex items-center", showLabels ? "gap-3 p-6" : "justify-center")}>
         <div className={cn("flex items-center justify-center", showLabels ? "w-10 h-10" : "w-8 h-8")}>
-          <img 
-            src="/logo.png" 
-            alt="Rhemito Logo" 
+          <img
+            src="/logo.png"
+            alt="Rhemito Logo"
             className={cn("object-contain", showLabels ? "w-10 h-10" : "w-8 h-8")}
           />
         </div>
         {showLabels && (
-          <button 
+          <button
             onClick={onClose || onToggleCollapse}
             className="ml-auto w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white hover:bg-primary/90 transition-colors"
             data-testid="button-collapse-sidebar"
@@ -128,7 +125,7 @@ export function Sidebar({ isOpen = false, onClose, collapsed = false, onToggleCo
 
       <div className="px-2 py-4 border-t border-border">
         {showLabels ? (
-          <button 
+          <button
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted w-full transition-colors"
             data-testid="button-logout"
           >
@@ -138,7 +135,7 @@ export function Sidebar({ isOpen = false, onClose, collapsed = false, onToggleCo
         ) : (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button 
+              <button
                 className="flex items-center justify-center p-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted w-full transition-colors"
                 data-testid="button-logout"
               >
@@ -155,14 +152,14 @@ export function Sidebar({ isOpen = false, onClose, collapsed = false, onToggleCo
   return (
     <>
       {/* Desktop sidebar */}
-      <aside 
+      <aside
         className={cn(
           "hidden lg:flex bg-white border-r border-border h-screen flex-col fixed left-0 top-0 z-50 transition-all duration-300",
           collapsed ? "w-16" : "w-56"
         )}
       >
         {sidebarContent(!collapsed)}
-        
+
         {/* Collapse toggle button */}
         <button
           onClick={onToggleCollapse}
