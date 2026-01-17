@@ -307,7 +307,7 @@ const ReferralSettings = () => {
                     {/* Reward Type & Currency */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
                         <div>
-                            <label style={labelStyle}>Who gets a reward?</label>
+                            <label style={labelStyle}>Who gets a commission?</label>
                             <select
                                 style={inputStyle}
                                 value={formData.reward_type}
@@ -325,7 +325,7 @@ const ReferralSettings = () => {
                             </select>
                         </div>
                         <div>
-                            <label style={labelStyle}>Base Currency</label>
+                            <label style={labelStyle}>Send Currency</label>
                             <CurrencySelector
                                 value={formData.base_currency}
                                 onChange={(currency) => {
@@ -348,10 +348,10 @@ const ReferralSettings = () => {
                         </div>
                     </div>
 
-                    {/* Rewards */}
+                    {/* Commissions */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
                         <div>
-                            <label style={labelStyle}>Referrer Reward</label>
+                            <label style={labelStyle}>Referrer Commission</label>
                             <input
                                 type="number"
                                 step="0.50"
@@ -367,7 +367,7 @@ const ReferralSettings = () => {
                             />
                         </div>
                         <div>
-                            <label style={labelStyle}>Referee (New User) Reward</label>
+                            <label style={labelStyle}>Referee (New User) Commission</label>
                             <input
                                 type="number"
                                 step="0.50"
@@ -432,10 +432,10 @@ const ReferralSettings = () => {
                                 <th style={tableHeaderStyle}>Rule Name</th>
                                 <th style={tableHeaderStyle}>Status</th>
                                 <th style={tableHeaderStyle}>Type</th>
-                                <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>Referrer</th>
-                                <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>Referee</th>
+                                <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>Referrer Comm.</th>
+                                <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>Referee Comm.</th>
                                 <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>Min Threshold</th>
-                                <th style={tableHeaderStyle}>Currency</th>
+                                <th style={tableHeaderStyle}>Send Currency</th>
                                 <th style={{ ...tableHeaderStyle, textAlign: 'center' }}>Actions</th>
                             </tr>
                         </thead>

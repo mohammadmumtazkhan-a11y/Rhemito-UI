@@ -9,171 +9,118 @@ import ReferralSettings from './pages/Growth/ReferralSettings';
 import UserCreditLedger from './pages/Growth/UserCreditLedger';
 import BonusSchemeManager from './pages/Growth/BonusSchemeManager';
 import CampaignManager from './pages/Campaigns/CampaignManager';
+import { LayoutGrid, BarChart3, Users, FileText, HelpCircle, Settings, LogOut, ChevronLeft } from 'lucide-react';
+
 const Sidebar = ({ isOpen, onClose }) => {
-
   const location = useLocation();
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => location.pathname.includes(path);
 
-  // New "Outlined Button" style
-  const itemStyle = (active) => ({
-    display: 'flex', alignItems: 'center', gap: 12,
-    padding: '10px 16px',
-    color: active ? '#ea580c' : '#374151', // Active: deep orange, Inactive: dark gray
-    background: 'white',
-    textDecoration: 'none',
-    fontSize: '0.9rem',
-    fontWeight: 500,
-    border: active ? '1px solid #ea580c' : '1px solid #ffedd5', // Active: bold orange, Inactive: light orange wash
-    borderRadius: 6,
-    marginBottom: 8,
-    transition: 'all 0.2s',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-  });
+  const menuItems = [
+    { name: 'Overview', icon: <LayoutGrid size={20} />, path: '/' },
+    { name: 'Transactions', icon: <BarChart3 size={20} />, path: '/test-checkout' },
+    { name: 'Recipients', icon: <Users size={20} />, path: '/recipients' },
+    { name: 'Compliance', icon: <FileText size={20} />, path: '/compliance' },
+    { name: 'Support', icon: <HelpCircle size={20} />, path: '/support' },
+    { name: 'Settings', icon: <Settings size={20} />, path: '/settings' },
+  ];
 
   return (
     <aside
       className={`sidebar-mobile ${isOpen ? 'open' : ''}`}
       style={{
-        width: 260, flexShrink: 0, height: '100vh',
-        background: '#ffffff', // White background
-        borderRight: '1px solid #f3f4f6',
+        width: 250, flexShrink: 0, height: '100vh',
+        background: '#ffffff',
+        // borderRight: '1px solid #f3f4f6', // Clean look often avoids border if shadow or bg varies, keeping for structure
         display: 'flex', flexDirection: 'column',
-        fontFamily: "'Inter', sans-serif"
+        fontFamily: "'Inter', sans-serif",
+        padding: '20px 0'
       }}>
-      {/* Brand */}
-      <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 24px', borderBottom: '1px solid #f3f4f6', marginBottom: 16 }}>
-        <img src={logo} alt="Mito Admin" style={{ height: 32, width: 'auto', marginRight: 12 }} />
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#1f2937' }}>Mito Admin</h2>
+
+      {/* Brand Logo & Back */}
+      <div style={{ padding: '0 32px', marginBottom: 40, display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {/* Logo Placeholder */}
+        <div style={{ width: 32, height: 32, background: 'none' }}>
+          {/* Simple R Logo representation */}
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M5 5H27" stroke="none" />
+            <text x="0" y="24" fontFamily="Arial" fontWeight="bold" fontSize="32" fill="#2563eb">R</text>
+          </svg>
+        </div>
+
+        <div style={{ alignSelf: 'flex-end', cursor: 'pointer', color: '#2563eb' }}>
+          <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+            <ChevronLeft size={16} />
+          </div>
+        </div>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '0 16px', overflowY: 'auto' }}>
-        <Link to="/" style={itemStyle(isActive('/'))} onClick={onClose}>
-          <span>🏠</span> Dashboard
-        </Link>
-
-        {/* Financials Section */}
-        <div style={{ ...itemStyle(false), flexDirection: 'column', alignItems: 'stretch', gap: 0, padding: 0, border: '1px solid #ffedd5', overflow: 'hidden' }}>
-          {/* Header for Group */}
-          <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', borderBottom: '1px solid #fff7ed' }}>
-            <span>💵</span> Financials
-          </div>
-
-          {/* Subitems */}
-          <div style={{ background: '#fff7ed', padding: '8px 0' }}>
-            <Link to="/financials/promocodes" style={{
-              display: 'block', padding: '8px 16px 8px 48px',
-              color: isActive('/financials/promocodes') ? '#c2410c' : '#4b5563',
-              textDecoration: 'none', fontSize: '0.85rem', fontWeight: isActive('/financials/promocodes') ? 600 : 400
+      <nav style={{ flex: 1, padding: '0 32px' }}>
+        {menuItems.map((item) => {
+          const active = isActive(item.path);
+          return (
+            <Link key={item.name} to={item.path} onClick={onClose} style={{
+              display: 'flex', alignItems: 'center', gap: 16,
+              padding: '12px 0',
+              color: active ? '#2563eb' : '#9ca3af', // Blue active, Gray inactive
+              textDecoration: 'none',
+              fontSize: '0.95rem',
+              fontWeight: active ? 600 : 400,
+              marginBottom: 8
             }}>
-              Promo Codes
+              <span style={{ color: active ? '#2563eb' : '#9ca3af' }}>{item.icon}</span>
+              <span>{item.name}</span>
             </Link>
-          </div>
+          );
+        })}
+
+        {/* Logout - Push to bottom of nav section visually or just regular list item? 
+            Design shows it with a gap. */}
+        <div style={{ marginTop: 20 }}>
+          <Link to="/logout" onClick={onClose} style={{
+            display: 'flex', alignItems: 'center', gap: 16,
+            padding: '12px 0',
+            color: '#9ca3af',
+            textDecoration: 'none',
+            fontSize: '0.95rem',
+            fontWeight: 400
+          }}>
+            <LogOut size={20} />
+            <span>Logout</span>
+          </Link>
         </div>
-
-        {/* Growth Engine Section */}
-        <div style={{ ...itemStyle(false), flexDirection: 'column', alignItems: 'stretch', gap: 0, padding: 0, border: '1px solid #ffedd5', overflow: 'hidden', marginTop: 16 }}>
-          <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #fff7ed' }}>
-            <span>🚀</span> Growth Engine
-          </div>
-          <div style={{ background: '#fff7ed', padding: '8px 0' }}>
-            <Link to="/growth/referral-settings" style={{
-              display: 'block', padding: '8px 16px 8px 48px',
-              color: isActive('/growth/referral-settings') ? '#c2410c' : '#4b5563',
-              textDecoration: 'none', fontSize: '0.85rem', fontWeight: isActive('/growth/referral-settings') ? 600 : 400
-            }}>
-              Referral Settings
-            </Link>
-            <Link to="/growth/credit-ledger" style={{
-              display: 'block', padding: '8px 16px 8px 48px',
-              color: isActive('/growth/credit-ledger') ? '#c2410c' : '#4b5563',
-              textDecoration: 'none', fontSize: '0.85rem', fontWeight: isActive('/growth/credit-ledger') ? 600 : 400
-            }}>
-              Bonus Wallet / Ledger
-            </Link>
-            <Link to="/growth/bonus-schemes" style={{
-              display: 'block', padding: '8px 16px 8px 48px',
-              color: isActive('/growth/bonus-schemes') ? '#c2410c' : '#4b5563',
-              textDecoration: 'none', fontSize: '0.85rem', fontWeight: isActive('/growth/bonus-schemes') ? 600 : 400
-            }}>
-              Bonus Scheme Manager
-            </Link>
-          </div>
-        </div>
-
-        <Link to="/crm/campaigns" style={itemStyle(isActive('/crm/campaigns'))}>
-          <span>📢</span> Campaigns & Blasting
-        </Link>
-        <Link to="/reports" style={itemStyle(false)}>
-          <span>📄</span> Reports
-        </Link>
-        <Link to="/crm" style={itemStyle(false)}>
-          <span>🤝</span> CRM & Marketing
-        </Link>
-        <Link to="/integration" style={itemStyle(false)}>
-          <span>🔌</span> Integration
-        </Link>
-        <Link to="/admin" style={itemStyle(false)}>
-          <span>👤</span> Administration
-        </Link>
-        <Link to="/config" style={itemStyle(false)}>
-          <span>⚙️</span> Configuration
-        </Link>
-        <Link to="/logs" style={itemStyle(false)}>
-          <span>📋</span> Logs
-        </Link>
-        <Link to="/kyc" style={itemStyle(false)}>
-          <span>🆔</span> New KYC Module
-        </Link>
       </nav>
 
-      {/* Profile Footer */}
-      <div style={{ padding: 16, borderTop: '1px solid #f3f4f6' }}>
-        <Link to="/profile" style={{
-          ...itemStyle(false),
-          marginBottom: 0,
-          justifyContent: 'center', // Center content or keep left? Standard usually left.
-          border: '1px solid #e5e7eb',
-          color: '#374151'
-        }} onClick={onClose}>
-          Profile
-        </Link>
-        <Link to="/support" style={{
-          ...itemStyle(false),
-          marginTop: 8,
-          marginBottom: 0,
-          border: '1px solid #e5e7eb',
-          color: '#374151'
-        }} onClick={onClose}>
-          Support
-        </Link>
-
-        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#ea580c', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>JS</div>
-          <div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>John Smith</div>
-            <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Administrator</div>
-          </div>
-        </div>
-      </div>
     </aside>
   );
 };
 
+import { Bell, ChevronDown } from 'lucide-react';
+
 const Header = () => {
   return (
-    <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-      <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Welcome back, Mito Admin</h1>
-        <p style={{ color: 'var(--text-muted)' }}>Your financial overview for today.</p>
-      </div>
+    <header style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 32, padding: '0 32px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
 
-      <div className="glass-panel" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Context:</span>
-        <select style={{ background: 'transparent', border: 'none', color: 'var(--text-main)', fontWeight: 600, outline: 'none' }}>
-          <option>Wholesale Biller</option>
-          <option>Administrator</option>
-        </select>
+        {/* Notification Bell */}
+        <div style={{ position: 'relative', cursor: 'pointer' }}>
+          <Bell size={20} color="#6b7280" />
+          <div style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: 700, borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            4
+          </div>
+        </div>
+
+        {/* Profile Dropdown */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 600 }}>
+              FA
+            </div>
+            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1f2937' }}>Individual Profile</span>
+          </div>
+          <ChevronDown size={16} color="#6b7280" />
+        </div>
+
       </div>
     </header>
   );

@@ -5,7 +5,9 @@ const BonusSchemeManager = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
+    const [newTier, setNewTier] = useState({ min: '', max: '', value: '' });
 
+    // Form state
     const [formData, setFormData] = useState({
         name: '',
         bonus_type: 'LOYALTY_CREDIT',
@@ -14,6 +16,10 @@ const BonusSchemeManager = () => {
         min_transaction_threshold: 50,
         min_transactions: 3,
         time_period_days: 30,
+        commission_type: 'FIXED',
+        commission_percentage: 0,
+        is_tiered: false,
+        tiers: [],
         eligibility_rules: {
             corridors: [],
             paymentMethods: [],
@@ -54,6 +60,13 @@ const BonusSchemeManager = () => {
 
         if (new Date(formData.start_date) >= new Date(formData.end_date)) {
             alert('Start date must be before end date');
+            setSaving(false);
+            return;
+        }
+
+        // Tier Validation
+        if (formData.is_tiered && formData.tiers.length === 0) {
+            alert('Please add at least one tier for tiered commission');
             setSaving(false);
             return;
         }
@@ -101,6 +114,10 @@ const BonusSchemeManager = () => {
             min_transaction_threshold: scheme.min_transaction_threshold,
             min_transactions: scheme.min_transactions || 0,
             time_period_days: scheme.time_period_days || 0,
+            commission_type: scheme.commission_type || 'FIXED',
+            commission_percentage: scheme.commission_percentage || 0,
+            is_tiered: !!scheme.is_tiered,
+            tiers: scheme.tiers || [],
             eligibility_rules: scheme.eligibility_rules,
             start_date: scheme.start_date,
             end_date: scheme.end_date,
@@ -131,6 +148,10 @@ const BonusSchemeManager = () => {
             min_transaction_threshold: 50,
             min_transactions: 3,
             time_period_days: 30,
+            commission_type: 'FIXED',
+            commission_percentage: 0,
+            is_tiered: false,
+            tiers: [],
             eligibility_rules: { corridors: [], paymentMethods: [], affiliates: [], segments: [] },
             start_date: '',
             end_date: '',
@@ -195,87 +216,249 @@ const BonusSchemeManager = () => {
                             >
                                 <option value="LOYALTY_CREDIT">Loyalty Credit</option>
                                 <option value="TRANSACTION_THRESHOLD_CREDIT">Transaction Threshold Credit</option>
+                                <option value="REQUEST_MONEY">Request Money Credit</option>
                             </select>
                         </div>
                     </div>
 
-                    {/* Credit Amount & Conditional Fields */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {/* Commission Type & Mode */}
+                    <div style={{ marginBottom: 24 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 16 }}>
                             <div>
-                                <label style={labelStyle}>Credit Amount *</label>
-                                <input
-                                    type="number"
-                                    step="0.50"
-                                    style={{ ...inputStyle, marginBottom: 0 }}
-                                    value={formData.credit_amount}
-                                    onChange={(e) => setFormData({ ...formData, credit_amount: parseFloat(e.target.value) || 0 })}
-                                    required
-                                    min="0.01"
-                                />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Currency *</label>
+                                <label style={labelStyle}>Commission Type *</label>
                                 <select
-                                    style={{ ...inputStyle, marginBottom: 0 }}
-                                    value={formData.currency}
-                                    onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                                    style={inputStyle}
+                                    value={formData.commission_type || 'FIXED'}
+                                    onChange={(e) => setFormData({ ...formData, commission_type: e.target.value })}
                                     required
                                 >
-                                    <option value="GBP">GBP (£)</option>
-                                    <option value="USD">USD ($)</option>
-                                    <option value="EUR">EUR (€)</option>
-                                    <option value="NGN">NGN (₦)</option>
+                                    <option value="FIXED">Fixed Amount</option>
+                                    <option value="PERCENTAGE">Percentage (%)</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Structure</label>
+                                <div style={{ display: 'flex', alignItems: 'center', height: '42px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.9rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.is_tiered}
+                                            onChange={(e) => setFormData({ ...formData, is_tiered: e.target.checked })}
+                                            style={{ width: 16, height: 16 }}
+                                        />
+                                        Enable Tiered Commission (Threshold Ranges)
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Conditional: Show for Transaction Threshold Credit */}
-                        {formData.bonus_type === 'TRANSACTION_THRESHOLD_CREDIT' && (
-                            <div>
-                                <label style={labelStyle}>Minimum Transaction Threshold (Send Currency)</label>
-                                <input
-                                    type="number"
-                                    step="10"
-                                    style={{ ...inputStyle, marginBottom: 0 }}
-                                    value={formData.min_transaction_threshold}
-                                    onChange={(e) => setFormData({ ...formData, min_transaction_threshold: parseFloat(e.target.value) || 0 })}
-                                />
-                            </div>
-                        )}
+                        {/* Tiered UI */}
+                        {formData.is_tiered ? (
+                            <div style={{ background: '#f9fafb', padding: 16, borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                                <label style={{ ...labelStyle, marginBottom: 12 }}>Commission Tiers</label>
 
-                        {/* Conditional: Show for Loyalty Credit */}
-                        {formData.bonus_type === 'LOYALTY_CREDIT' && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                                <div>
-                                    <label style={labelStyle}>Number of Transactions *</label>
-                                    <input
-                                        type="number"
-                                        step="1"
-                                        style={{ ...inputStyle, marginBottom: 0 }}
-                                        value={formData.min_transactions}
-                                        onChange={(e) => setFormData({ ...formData, min_transactions: parseInt(e.target.value) || 0 })}
-                                        required
-                                        min="1"
-                                        placeholder="e.g., 3"
-                                    />
+                                {/* Existing Tiers List */}
+                                {formData.tiers.length > 0 && (
+                                    <div style={{ marginBottom: 16 }}>
+                                        {formData.tiers.map((tier, idx) => (
+                                            <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, fontSize: '0.9rem' }}>
+                                                <span style={{ fontWeight: 500, width: 24 }}>{idx + 1}.</span>
+                                                <span style={{ background: 'white', padding: '4px 8px', borderRadius: 4, border: '1px solid #d1d5db' }}>
+                                                    {tier.min} - {tier.max}
+                                                </span>
+                                                <span>→</span>
+                                                <span style={{ fontWeight: 600, color: '#059669' }}>
+                                                    {formData.commission_type === 'PERCENTAGE' ? `${tier.value}%` : `${formData.currency} ${tier.value}`}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newTiers = [...formData.tiers];
+                                                        newTiers.splice(idx, 1);
+                                                        setFormData({ ...formData, tiers: newTiers });
+                                                    }}
+                                                    style={{ marginLeft: 'auto', color: '#dc2626', cursor: 'pointer', background: 'none', border: 'none' }}
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Add New Tier */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'end' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>Min Amount</label>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            value={newTier.min}
+                                            onChange={(e) => setNewTier({ ...newTier, min: e.target.value })}
+                                            style={{ ...inputStyle, marginBottom: 0, padding: '8px' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>Max Amount</label>
+                                        <input
+                                            type="number"
+                                            placeholder="Inf"
+                                            value={newTier.max}
+                                            onChange={(e) => setNewTier({ ...newTier, max: e.target.value })}
+                                            style={{ ...inputStyle, marginBottom: 0, padding: '8px' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                            {formData.commission_type === 'PERCENTAGE' ? 'Percentage (%)' : 'Amount'}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            value={newTier.value}
+                                            onChange={(e) => setNewTier({ ...newTier, value: e.target.value })}
+                                            style={{ ...inputStyle, marginBottom: 0, padding: '8px' }}
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!newTier.min || !newTier.value) return;
+                                            // Basic validation
+                                            const min = parseFloat(newTier.min);
+                                            const max = newTier.max ? parseFloat(newTier.max) : Infinity;
+                                            const val = parseFloat(newTier.value);
+
+                                            setFormData({
+                                                ...formData,
+                                                tiers: [...formData.tiers, { min, max, value: val }].sort((a, b) => a.min - b.min)
+                                            });
+                                            setNewTier({ min: '', max: '', value: '' });
+                                        }}
+                                        style={{ ...inputStyle, marginBottom: 0, width: 'auto', background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                                    >
+                                        Add
+                                    </button>
                                 </div>
-                                <div>
-                                    <label style={labelStyle}>Time Period (Days) *</label>
-                                    <input
-                                        type="number"
-                                        step="1"
+                                <div style={{ marginTop: 8 }}>
+                                    <label style={labelStyle}>Currency For Tiers</label>
+                                    <select
                                         style={{ ...inputStyle, marginBottom: 0 }}
-                                        value={formData.time_period_days}
-                                        onChange={(e) => setFormData({ ...formData, time_period_days: parseInt(e.target.value) || 0 })}
-                                        required
-                                        min="1"
-                                        placeholder="e.g., 30"
-                                    />
+                                        value={formData.currency}
+                                        onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                                        disabled={formData.commission_type === 'PERCENTAGE'} // Currency matters less for %, but usually base currency
+                                    >
+                                        <option value="GBP">GBP (£)</option>
+                                        <option value="USD">USD ($)</option>
+                                        <option value="EUR">EUR (€)</option>
+                                        <option value="NGN">NGN (₦)</option>
+                                    </select>
                                 </div>
                             </div>
+                        ) : (
+                            /* Simple (Non-Tiered) UI */
+                            <>
+                                {formData.commission_type === 'PERCENTAGE' ? (
+                                    <div>
+                                        <label style={labelStyle}>Commission Percentage *</label>
+                                        <div style={{ position: 'relative', marginBottom: 24 }}>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                style={{ ...inputStyle, marginBottom: 0, paddingRight: 30 }}
+                                                value={formData.commission_percentage || ''}
+                                                onChange={(e) => setFormData({ ...formData, commission_percentage: parseFloat(e.target.value) || 0 })}
+                                                required
+                                                min="0.01"
+                                                max="100"
+                                                placeholder="e.g. 5.0"
+                                            />
+                                            <span style={{ position: 'absolute', right: 10, top: 10, color: '#6b7280' }}>%</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+                                        <div>
+                                            <label style={labelStyle}>Credit Amount *</label>
+                                            <input
+                                                type="number"
+                                                step="0.50"
+                                                style={{ ...inputStyle, marginBottom: 0 }}
+                                                value={formData.credit_amount}
+                                                onChange={(e) => setFormData({ ...formData, credit_amount: parseFloat(e.target.value) || 0 })}
+                                                required
+                                                min="0.01"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Currency *</label>
+                                            <select
+                                                style={{ ...inputStyle, marginBottom: 0 }}
+                                                value={formData.currency}
+                                                onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                                                required
+                                            >
+                                                <option value="GBP">GBP (£)</option>
+                                                <option value="USD">USD ($)</option>
+                                                <option value="EUR">EUR (€)</option>
+                                                <option value="NGN">NGN (₦)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Conditional: Show for Transaction Threshold Credit OR Request Money (Simple Mode) */}
+                                {(formData.bonus_type === 'TRANSACTION_THRESHOLD_CREDIT' || formData.bonus_type === 'REQUEST_MONEY') && (
+                                    <div style={{ marginBottom: 24 }}>
+                                        <label style={labelStyle}>
+                                            {formData.bonus_type === 'REQUEST_MONEY'
+                                                ? 'Minimum Requested Amount'
+                                                : 'Minimum Transaction Threshold (Send Currency)'}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="10"
+                                            style={{ ...inputStyle, marginBottom: 0 }}
+                                            value={formData.min_transaction_threshold}
+                                            onChange={(e) => setFormData({ ...formData, min_transaction_threshold: parseFloat(e.target.value) || 0 })}
+                                        />
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
+
+                    {/* Conditional: Show for Loyalty Credit */}
+                    {formData.bonus_type === 'LOYALTY_CREDIT' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                                <label style={labelStyle}>Number of Transactions *</label>
+                                <input
+                                    type="number"
+                                    step="1"
+                                    style={{ ...inputStyle, marginBottom: 0 }}
+                                    value={formData.min_transactions}
+                                    onChange={(e) => setFormData({ ...formData, min_transactions: parseInt(e.target.value) || 0 })}
+                                    required
+                                    min="1"
+                                    placeholder="e.g., 3"
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Time Period (Days) *</label>
+                                <input
+                                    type="number"
+                                    step="1"
+                                    style={{ ...inputStyle, marginBottom: 0 }}
+                                    value={formData.time_period_days}
+                                    onChange={(e) => setFormData({ ...formData, time_period_days: parseInt(e.target.value) || 0 })}
+                                    required
+                                    min="1"
+                                    placeholder="e.g., 30"
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     {/* Validity Period */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24, marginBottom: 24 }}>
@@ -350,10 +533,10 @@ const BonusSchemeManager = () => {
                         </button>
                     </div>
                 </form>
-            </div>
+            </div >
 
             {/* Table */}
-            <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+            < div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: 24, borderBottom: '1px solid var(--border-subtle)' }}>
                     <h3 style={{ fontSize: '1.2rem', fontWeight: 600, margin: 0 }}>Existing Bonus Schemes</h3>
                 </div>
@@ -392,7 +575,15 @@ const BonusSchemeManager = () => {
                                             </span>
                                         </td>
                                         <td style={{ ...tableCellStyle, textAlign: 'right', fontWeight: 600, color: '#059669' }}>
-                                            {scheme.currency || 'GBP'} {scheme.credit_amount.toFixed(2)}
+                                            {scheme.is_tiered ? (
+                                                <span style={{ fontSize: '0.8rem', color: '#7c3aed', background: '#f5f3ff', padding: '2px 6px', borderRadius: 4 }}>
+                                                    Tiered ({scheme.tiers?.length})
+                                                </span>
+                                            ) : scheme.commission_type === 'PERCENTAGE' ? (
+                                                `${scheme.commission_percentage}%`
+                                            ) : (
+                                                `${scheme.currency || 'GBP'} ${scheme.credit_amount.toFixed(2)}`
+                                            )}
                                         </td>
                                         <td style={{ ...tableCellStyle, textAlign: 'right', color: '#6b7280' }}>
                                             {scheme.min_transaction_threshold.toFixed(2)}
@@ -441,8 +632,8 @@ const BonusSchemeManager = () => {
                         </tbody>
                     </table>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };
 

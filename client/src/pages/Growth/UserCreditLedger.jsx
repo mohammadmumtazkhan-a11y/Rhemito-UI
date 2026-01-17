@@ -189,7 +189,47 @@ const UserCreditLedger = () => {
 
                 {/* Phase 2: FRD Filters */}
                 <div className="glass-panel" style={{ padding: 16 }}>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 12, color: 'var(--text-muted)' }}>📊 Advanced Filters</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)' }}>📊 Advanced Filters</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                                type="button"
+                                style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border-subtle)', background: 'white', cursor: 'pointer' }}
+                                onClick={() => {
+                                    const end = new Date();
+                                    const start = new Date();
+                                    start.setDate(start.getDate() - 7);
+                                    setFilters({ ...filters, startDate: start.toISOString().split('T')[0], endDate: end.toISOString().split('T')[0] });
+                                    // Trigger search immediately or let user click search? 
+                                    // Let's rely on Search button for consistency, but maybe auto-trigger in React is better.
+                                    // For now, just setting state.
+                                }}
+                            >
+                                Last 7 Days
+                            </button>
+                            <button
+                                type="button"
+                                style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border-subtle)', background: 'white', cursor: 'pointer' }}
+                                onClick={() => {
+                                    const end = new Date();
+                                    const start = new Date();
+                                    start.setDate(start.getDate() - 30);
+                                    setFilters({ ...filters, startDate: start.toISOString().split('T')[0], endDate: end.toISOString().split('T')[0] });
+                                }}
+                            >
+                                Last 30 Days
+                            </button>
+                            <button
+                                type="button"
+                                style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border-subtle)', background: 'white', cursor: 'pointer' }}
+                                onClick={() => {
+                                    setFilters({ ...filters, startDate: '', endDate: '' });
+                                }}
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                         <div>
                             <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Start Date</label>
@@ -231,7 +271,7 @@ const UserCreditLedger = () => {
                                 style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid var(--border-subtle)', fontSize: '0.9rem' }}
                             >
                                 <option value="">All Schemes</option>
-                                <option key="all" value="">All Schemes</option>
+                                <option value="request_money">Request Money Scheme</option>
                                 {bonusSchemes.map(scheme => (
                                     <option key={scheme.id} value={scheme.id}>{scheme.name}</option>
                                 ))}
@@ -246,9 +286,9 @@ const UserCreditLedger = () => {
                     {/* Balance Card */}
                     <div className="glass-panel" style={{ padding: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
                         <div>
-                            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 4 }}>Current Balance</div>
+                            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 4 }}>Cost Incurred</div>
                             <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                                {userData.currency} {userData.balance.toFixed(2)}
+                                {userData.currency} {(userData.cost_incurred || 0).toFixed(2)}
                             </div>
 
                         </div>
