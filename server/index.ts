@@ -85,7 +85,12 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(port, "0.0.0.0", () => {
+  // Health check endpoint
+  app.get("/healthz", (_req, res) => {
+    res.status(200).send("OK");
+  });
+
+  httpServer.listen(port, () => {
     log(`serving on port ${port}`);
   });
 })();
