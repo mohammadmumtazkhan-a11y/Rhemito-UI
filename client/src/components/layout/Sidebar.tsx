@@ -19,6 +19,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navItems = [
+  { icon: Wallet, label: "Payments", href: "/payments", enabled: true },
+  { icon: UserCheck, label: "Senders", href: "/senders", enabled: true },
+  { icon: Building2, label: "Payout Accounts", href: "/payout-accounts", enabled: true },
   { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true },
   { icon: ArrowLeftRight, label: "Transactions", href: "/test-checkout", enabled: true },
   { icon: Users, label: "Recipients", href: "/recipients", enabled: true },
