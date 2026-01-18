@@ -13,6 +13,7 @@ import Senders from "@/pages/Senders";
 import SenderDetail from "@/pages/SenderDetail";
 import PayoutAccounts from "@/pages/PayoutAccounts";
 import SendMoney from "@/pages/SendMoney";
+import BonusAndDiscounts from "@/pages/BonusAndDiscounts";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/senders/:email" component={SenderDetail} />
       <Route path="/payout-accounts" component={PayoutAccounts} />
       <Route path="/pay/:id" component={SenderView} />
+      <Route path="/bonus-discounts" component={BonusAndDiscounts} />
       <Route component={NotFound} />
     </Switch>
   );

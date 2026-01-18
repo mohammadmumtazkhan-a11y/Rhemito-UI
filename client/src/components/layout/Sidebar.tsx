@@ -12,7 +12,8 @@ import {
   Wallet,
   Building2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Gift
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,6 +28,7 @@ const navItems = [
   { icon: Users, label: "Recipients", href: "/recipients", enabled: true },
   { icon: Shield, label: "Compliance", href: "/compliance", enabled: true },
   { icon: HelpCircle, label: "Support", href: "/support", enabled: true },
+  { icon: Gift, label: "Bonus & Discounts", href: "/bonus-discounts", enabled: true },
   { icon: Settings, label: "Settings", href: "/settings", enabled: true },
 ];
 
