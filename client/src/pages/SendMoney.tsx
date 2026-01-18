@@ -936,7 +936,7 @@ export default function SendMoney() {
 
                                                 <div className="pt-4 mt-2">
                                                     <Button
-                                                        className="w-full bg-blue-600 hover:bg-blue-700 text-lg h-12"
+                                                        className="w-full bg-blue-600 hover:bg-blue-700 h-auto py-4 flex flex-col gap-0.5 items-center justify-center leading-tight transition-all"
                                                         onClick={async () => {
                                                             if (useBonus) {
                                                                 // Redeem Bonus Logic
@@ -956,7 +956,12 @@ export default function SendMoney() {
                                                             setShowConfirmation(true); // Re-using confirmation modal for now
                                                         }}
                                                     >
-                                                        Pay {totalPay.toFixed(2)} GBP
+                                                        <span className="text-lg font-bold">Pay {totalPay.toFixed(2)} GBP</span>
+                                                        {(promoApplied || useBonus) && (
+                                                            <span className="text-xs font-medium text-blue-100/90">
+                                                                Includes {promoApplied && "Promo Code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
+                                                            </span>
+                                                        )}
                                                     </Button>
                                                 </div>
                                                 <div className="pt-2">
