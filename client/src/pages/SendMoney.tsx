@@ -1010,7 +1010,14 @@ export default function SendMoney() {
                                 </div>
                                 <h3 className="text-xl font-bold text-gray-900">Success!</h3>
                                 <p className="text-gray-600 text-base">
-                                    20% discount has been applied to your transaction.
+                                    {promoApplied && useBonus
+                                        ? `Promo Code and Referral Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} have been applied to your transaction.`
+                                        : promoApplied
+                                            ? "Promo Code has been applied to your transaction."
+                                            : useBonus
+                                                ? `Referral Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} has been applied to your transaction.`
+                                                : "Transaction submitted successfully."
+                                    }
                                 </p>
                                 <Button
                                     onClick={() => setShowConfirmation(false)}

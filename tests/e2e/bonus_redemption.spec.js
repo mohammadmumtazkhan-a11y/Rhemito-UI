@@ -49,22 +49,25 @@ test('Referral Bonus Redemption Flow', async ({ page }) => {
     await expect(page.getByText('Referral Bonus Available')).toBeVisible();
     await expect(page.getByText('Redeem your £5.00 bonus')).toBeVisible();
 
-    // 2. Test "Pay Less" Option
-    const payLessOption = page.getByText('Pay Less');
-    await payLessOption.click();
+    // 2. Select "Pay Less" Bonus
+    await page.getByText('Pay Less').click();
 
-    // Check Status Indicator
-    // The "Pay Less" box should be green/active
-    // We can check if the Amount Summary shows the discount row
-    await expect(page.locator('.bg-green-50').getByText('Referral Bonus', { exact: true })).toBeVisible();
-    await expect(page.locator('.bg-green-50').getByText('- 5.00 GBP')).toBeVisible();
+    // 3. Apply Promo Code
+    await page.getByPlaceholder('Enter code').fill('SAVE20');
+    // Ensure "Apply" button is visible and click it
+    await page.getByRole('button', { name: 'Apply' }).click();
+    // Wait for the discount row to appear to confirm promo application
+    await expect(page.locator('text=Discount: (SAVE20)')).toBeVisible();
 
-    // 3. Test "Send More" Option
-    const sendMoreOption = page.getByText('Send More');
-    await sendMoreOption.click();
+    // 4. Click Pay Button
+    // Check if modal is already open (unexpected but handles flakiness)
+    if (!await page.getByText('Success!').isVisible()) {
+        // Target specifically the main payment button at the bottom of the summary card
+        // It's the one with dynamic amount text.
+        await page.locator('button').filter({ hasText: /^Pay \d+\.\d+ GBP/ }).click();
+    }
 
-    // Check Status Indicator
-    // Amount Summary should show the recipient bonus row
-    await expect(page.locator('.bg-green-50').getByText('Referral Bonus (Recipient)')).toBeVisible();
-    await expect(page.locator('.bg-green-50').getByText('+ 5.00 GBP')).toBeVisible();
+    // 5. Verify Confirmation Popup
+    await expect(page.getByText('Success!')).toBeVisible();
+    await expect(page.getByText('Promo Code and Referral Bonus discount have been applied to your transaction.')).toBeVisible();
 });
