@@ -80,6 +80,8 @@ const itemVariants = {
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  // Bonus State - Hardcoded for Prototype
+  const [bonusBalance] = useState(5);
 
   const handlePaymentOptionSelect = (option: "request" | "invoice" | "qrcode") => {
     setShowPaymentModal(false);
@@ -125,7 +127,7 @@ export default function Dashboard() {
               <Gift className="w-4 h-4 text-pink-500" />
             </div>
             <span className="text-xs md:text-sm font-medium">
-              You have earned <span className="font-bold">£10 Referral Bonus Credit</span>. Create a Transaction to use it.
+              You have earned <span className="font-bold">£{bonusBalance.toFixed(2)} Referral Bonus Credit</span>. Create a Transaction to use it.
             </span>
           </motion.div>
         </div>
@@ -203,7 +205,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs md:text-sm font-medium text-purple-600">Bonus Credit</span>
                   <div className="text-right">
-                    <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-200">£15.00</Badge>
+                    <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-200">£{bonusBalance.toFixed(2)}</Badge>
                   </div>
                 </div>
               </CardContent>

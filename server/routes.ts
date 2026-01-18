@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { validatePromoCode, promoStorage, type PromoValidationRequest } from "./promocode";
+import { bonusService } from "./bonus";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -60,6 +61,25 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Promo application error:", error);
       return res.status(500).json({ error: "Failed to apply promo code" });
+    }
+  });
+
+  // --- Bonus Redemption Endpoints ---
+
+  app.get("/api/bonus/balance", (req, res) => {
+    const userId = (req.query.userId as string) || "user_123";
+    const balance = bonusService.getBalance(userId);
+    res.json({ balance });
+  });
+
+  app.post("/api/bonus/redeem", (req, res) => {
+    const { amount, userId } = req.body;
+    const success = bonusService.redeem(parseFloat(amount), userId || "user_123");
+
+    if (success) {
+      res.json({ success: true, message: "Bonus redeemed successfully" });
+    } else {
+      res.status(400).json({ success: false, message: "Insufficient bonus balance" });
     }
   });
 
