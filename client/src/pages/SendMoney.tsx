@@ -109,18 +109,7 @@ export default function SendMoney() {
         setPromoLoading(true);
 
         // MOCK SAVE20 Logic
-        if (code === "SAVE20") {
-            // Delay for effect
-            setTimeout(() => {
-                const discountValue = parseFloat(amount) * 0.20; // 20% of Amount
-                setPromoApplied(true);
-                setPromoDiscount(discountValue);
-                setPromoMessage("20% Discount Applied!");
-                setShowConfirmation(true);
-                setPromoLoading(false);
-            }, 600);
-            return;
-        }
+
 
         try {
             const response = await fetch("/api/promocodes/validate", {

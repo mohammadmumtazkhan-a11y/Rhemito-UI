@@ -170,13 +170,13 @@ function initializeDatabase() {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
             // Active Code
-            pStmt.run('SAVE20', 'Percentage', 20, 100, 'USD', 1000, 45, '2024-01-01T00:00:00Z', '2024-12-31T23:59:59Z', 'Active', '{}');
+            pStmt.run('SAVE20', 'Percentage', 20, 100, 'USD', 1000, 45, '2024-01-01T00:00:00Z', '2030-12-31T23:59:59Z', 'Active', '{}');
 
             // Disabled Code (Kill Switch Demo)
-            pStmt.run('GLITCH500', 'Fixed', 500, 0, 'USD', 50, 12, '2024-01-01T00:00:00Z', '2024-12-31T23:59:59Z', 'Disabled', '{}');
+            pStmt.run('GLITCH500', 'Fixed', 500, 0, 'USD', 50, 12, '2024-01-01T00:00:00Z', '2030-12-31T23:59:59Z', 'Disabled', '{}');
 
             // FX Boost Code
-            pStmt.run('BOOSTRATE', 'FX_BOOST', 5.0, 500, 'GBP', -1, 89, '2024-06-01T00:00:00Z', '2024-08-31T23:59:59Z', 'Active', '{}');
+            pStmt.run('BOOSTRATE', 'FX_BOOST', 5.0, 500, 'GBP', -1, 89, '2024-06-01T00:00:00Z', '2030-08-31T23:59:59Z', 'Active', '{}');
 
             pStmt.finalize();
 
@@ -498,11 +498,33 @@ app.post('/api/promocodes/validate', (req, res) => {
             }
         }
 
+        // Calculate Discount
+        let appliedDiscount = 0;
+        let displayText = "Code Valid";
+
+        if (promo.type === 'Percentage') {
+            // For prototype SAVE20, we treat it as Percentage off Amount (matching frontend mock)
+            appliedDiscount = amount * (promo.value / 100);
+            displayText = `${promo.value}% Discount Applied!`;
+        } else if (promo.type === 'Fixed') {
+            appliedDiscount = promo.value;
+            displayText = `${promo.currency} ${promo.value} Discount Applied!`;
+        } else if (promo.type === 'Waiver') {
+            // Logic for waiver (assumed full fee waiver, but here we just return 0 discount value on amount, client handles fee logic?)
+            // Wait, client expects 'appliedDiscount' to subtract from total.
+            // For Waiver, maybe we return 0 here and client handles fee?
+            // Let's stick to simple amount/fixed logic for now as main flow.
+            appliedDiscount = 0;
+            displayText = "Fee Waived";
+        }
+
         // Continue validation...
         res.json({
             valid: true,
             promo: promo,
-            display_text: "Code Valid"
+            appliedDiscount: appliedDiscount,
+            text: displayText, // Frontend uses 'displayText' (mapped in handleApplyPromo from data.displayText)
+            displayText: displayText // Sending both just in case
         });
     });
 });
