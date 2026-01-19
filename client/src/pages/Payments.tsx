@@ -1,17 +1,19 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle, 
-  Search, 
+import {
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Search,
   Filter,
   FileText,
   Link as LinkIcon,
   QrCode,
   UserPlus,
   X,
-  User
+  User,
+  Plus
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -186,6 +188,7 @@ const getTypeLabel = (type: string) => {
 };
 
 export default function Payments() {
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterType, setFilterType] = useState("all");
@@ -196,7 +199,7 @@ export default function Payments() {
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
   const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
   const [allocationSuccess, setAllocationSuccess] = useState(false);
-  const [allocatedSenderInfo, setAllocatedSenderInfo] = useState<{name: string; reference: string} | null>(null);
+  const [allocatedSenderInfo, setAllocatedSenderInfo] = useState<{ name: string; reference: string } | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
@@ -219,11 +222,11 @@ export default function Payments() {
   const tracedPayments = mockPayments.filter(p => p.senderName);
 
   const filteredPayments = mockPayments.filter(payment => {
-    const matchesSearch = 
+    const matchesSearch =
       payment.senderName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.senderEmail?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.reference.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesStatus = filterStatus === "all" || payment.status === filterStatus;
     const matchesType = filterType === "all" || payment.type === filterType;
 
@@ -248,7 +251,7 @@ export default function Payments() {
     setAllocateSenderName("");
     setAllocateSenderEmail("");
     setSelectedPayment(null);
-    
+
     setTimeout(() => {
       setAllocationSuccess(false);
       setAllocatedSenderInfo(null);
@@ -261,10 +264,15 @@ export default function Payments() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-4 md:mb-8"
+          className="mb-4 md:mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4"
         >
-          <h1 className="text-xl md:text-2xl font-bold font-display">Payments</h1>
-          <p className="text-muted-foreground text-sm md:text-base mt-1">Track and manage your received payments</p>
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold font-display">Received Payments</h1>
+            <p className="text-muted-foreground text-sm md:text-base mt-1">Track and manage your received payments</p>
+          </div>
+          <Button onClick={() => setLocation("/request-payment")} className="bg-primary hover:bg-primary/90">
+            <Plus className="mr-2 h-4 w-4" /> Request Payment
+          </Button>
         </motion.div>
 
         <AnimatePresence>
@@ -459,7 +467,7 @@ export default function Payments() {
               <CardHeader>
                 <CardTitle className="font-display">Untraced Payments</CardTitle>
                 <CardDescription>
-                  These payments were received but couldn't be matched to a known sender. 
+                  These payments were received but couldn't be matched to a known sender.
                   Allocate them to track your payment sources.
                 </CardDescription>
               </CardHeader>
@@ -532,7 +540,7 @@ export default function Payments() {
                 Enter the sender's details to link this payment to them.
               </DialogDescription>
             </DialogHeader>
-            
+
             {selectedPayment && (
               <div className="space-y-6">
                 <div className="bg-muted/50 rounded-lg p-4">

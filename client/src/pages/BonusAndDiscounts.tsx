@@ -7,10 +7,14 @@ import {
     Gift,
     ArrowUpRight,
     ArrowDownLeft,
-    Tag
+    Tag,
+    Send
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useLocation } from "wouter";
 
 export default function BonusAndDiscounts() {
+    const [, setLocation] = useLocation();
     // Mock Data for Prototype
     const BONUS_BALANCE = 5.00;
     const TOTAL_EARNED = 30.00; // Total lifetime earned
@@ -51,7 +55,15 @@ export default function BonusAndDiscounts() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-gray-900">£{BONUS_BALANCE.toFixed(2)}</div>
-                            <p className="text-xs text-muted-foreground mt-1">Ready to use on next transfer</p>
+                            <p className="text-xs text-muted-foreground mt-1 mb-4">Ready to use on next transfer</p>
+                            <Button
+                                size="sm"
+                                className="w-full bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white shadow-md hover:shadow-lg transition-all duration-300 group"
+                                onClick={() => setLocation("/send-money")}
+                            >
+                                <Send className="w-4 h-4 mr-2 group-hover:translate-x-1 transition-transform" />
+                                Send Money
+                            </Button>
                         </CardContent>
                     </Card>
 

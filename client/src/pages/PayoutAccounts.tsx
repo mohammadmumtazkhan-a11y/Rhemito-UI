@@ -119,15 +119,15 @@ export default function PayoutAccounts() {
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-muted-foreground">Home / Manage Payout Accounts</p>
-            <h1 className="text-2xl font-bold font-display mt-1">Payout</h1>
+            <p className="text-sm text-muted-foreground">Home / Manage Collections Accounts</p>
+            <h1 className="text-2xl font-bold font-display mt-1">Collections</h1>
           </div>
         </div>
 
         <Card>
           <CardContent className="p-6">
             <h2 className="font-semibold mb-4">Add bank account</h2>
-            
+
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="space-y-2">
                 <Label>First name *</Label>
@@ -152,8 +152,8 @@ export default function PayoutAccounts() {
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="space-y-2">
                 <Label>Country *</Label>
-                <Select 
-                  value={formData.country} 
+                <Select
+                  value={formData.country}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, country: value, bank: "" }))}
                 >
                   <SelectTrigger data-testid="select-payout-country">
@@ -168,8 +168,8 @@ export default function PayoutAccounts() {
               </div>
               <div className="space-y-2">
                 <Label>Currency *</Label>
-                <Select 
-                  value={formData.currency} 
+                <Select
+                  value={formData.currency}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, currency: value }))}
                 >
                   <SelectTrigger data-testid="select-payout-currency">
@@ -189,8 +189,8 @@ export default function PayoutAccounts() {
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="space-y-2">
                 <Label>Bank *</Label>
-                <Select 
-                  value={formData.bank} 
+                <Select
+                  value={formData.bank}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, bank: value }))}
                 >
                   <SelectTrigger data-testid="select-payout-bank">
@@ -338,8 +338,8 @@ export default function PayoutAccounts() {
                     <Button variant="outline" className="flex-1" onClick={() => setShowDeleteConfirm(null)}>
                       Cancel
                     </Button>
-                    <Button 
-                      variant="destructive" 
+                    <Button
+                      variant="destructive"
                       className="flex-1"
                       onClick={() => handleDeleteAccount(showDeleteConfirm)}
                       data-testid="button-confirm-delete-account"

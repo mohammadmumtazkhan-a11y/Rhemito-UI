@@ -16,6 +16,18 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const recentRecipients = [
   { id: 1, name: "Oluwas...", initials: "OA", color: "bg-blue-500" },
@@ -167,18 +179,53 @@ export default function Dashboard() {
           </motion.div>
 
           <motion.div variants={itemVariants}>
-            <Card className="h-full bg-gradient-to-br from-indigo-50 to-white border-indigo-100">
-              <CardHeader className="pb-3 md:pb-4 px-4 md:px-6">
-                <CardTitle className="text-sm md:text-base font-semibold text-indigo-700">Refer & Earn</CardTitle>
+            <Card className="h-full bg-gradient-to-br from-violet-50 via-indigo-50 to-purple-50 border-indigo-100/50 shadow-lg shadow-indigo-100/30 overflow-hidden relative">
+              {/* Decorative background elements */}
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-200/30 to-purple-200/30 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
+              <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-violet-200/30 to-pink-200/30 rounded-full translate-y-1/2 -translate-x-1/2 blur-xl" />
+
+              <CardHeader className="pb-2 px-4 md:px-6 relative z-10">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-300/50">
+                    <Sparkles className="w-4 h-4 text-white" />
+                  </div>
+                  <CardTitle className="text-sm md:text-base font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">Refer & Earn</CardTitle>
+                </div>
               </CardHeader>
-              <CardContent className="px-4 md:px-6 space-y-3">
-                <p className="text-xs text-muted-foreground">Share your link and earn £10 bonus credit for every friend who joins!</p>
-                <div className="flex items-center gap-2 bg-white border border-indigo-200 rounded-lg p-2 shadow-sm">
-                  <div className="flex-1 truncate text-xs md:text-sm font-medium text-indigo-600 select-all bg-indigo-50/50 px-2 py-1 rounded">
+              <CardContent className="px-4 md:px-6 space-y-4 relative z-10">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-indigo-200/50 shadow-inner cursor-default hover:shadow-md hover:border-indigo-300/70 transition-all duration-300">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center shadow-md">
+                          <Gift className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Bonus Credit</span>
+                          <p className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">£{bonusBalance.toFixed(2)}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">Ready to use</span>
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Create a Transaction to redeem your Bonus Credit</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  <span className="font-semibold text-indigo-700">Invite friends</span> with your link and get <span className="font-bold text-emerald-600">£10 bonus credit</span> when they join and make their first transfer.
+                </p>
+
+                <div className="flex items-center gap-2 bg-white border-2 border-dashed border-indigo-200 rounded-xl p-3 hover:border-indigo-400 transition-colors group">
+                  <div className="flex-1 truncate text-sm font-mono font-medium text-indigo-600 select-all">
                     rhemito.com/ref/OLAYINKA2025
                   </div>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-indigo-50 text-indigo-600">
-                    <Copy className="w-3.5 h-3.5" />
+                  <Button size="sm" className="h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg transition-all">
+                    <Copy className="w-3.5 h-3.5 mr-1" />
+                    Copy
                   </Button>
                 </div>
               </CardContent>
@@ -188,24 +235,70 @@ export default function Dashboard() {
           <motion.div variants={itemVariants}>
             <Card className="h-full">
               <CardHeader className="pb-3 md:pb-4 px-4 md:px-6">
-                <CardTitle className="text-sm md:text-base font-semibold text-purple">Account Summary</CardTitle>
+                <CardTitle className="text-sm md:text-base font-semibold text-blue-600">Account Summary</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 md:space-y-4 px-4 md:px-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs md:text-sm text-muted-foreground">Account</span>
-                  <span className="font-semibold text-sm md:text-base">235324</span>
-                </div>
-                <div className="h-px bg-border" />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs md:text-sm font-medium">Wallet Balance</span>
-                  <div className="text-right">
-                    <div className="font-bold text-primary">£300.20</div>
+              <CardContent className="space-y-4 px-4 md:px-6">
+                {/* Account Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">Account</span>
+                    <span className="text-sm">210145</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Sent</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-teal">750895.75</span>
+                      <Select defaultValue="GBP">
+                        <SelectTrigger className="h-7 w-[75px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GBP">GBP</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs md:text-sm font-medium text-purple-600">Bonus Credit</span>
-                  <div className="text-right">
-                    <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-200">£{bonusBalance.toFixed(2)}</Badge>
+
+                <div className="h-px bg-border" />
+
+                {/* Wallet Section */}
+                <div className="space-y-3">
+                  <div className="font-semibold text-sm">Wallet</div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Balance</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-blue-600">253007.92</span>
+                      <Select defaultValue="GBP">
+                        <SelectTrigger className="h-7 w-[75px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GBP">GBP</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="h-px bg-border" />
+
+                {/* Collection Account Section */}
+                <div className="space-y-3">
+                  <div className="font-semibold text-sm">Collection Account</div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Balance</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-blue-600">4357384.08</span>
+                      <Select defaultValue="GBP">
+                        <SelectTrigger className="h-7 w-[75px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GBP">GBP</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               </CardContent>
