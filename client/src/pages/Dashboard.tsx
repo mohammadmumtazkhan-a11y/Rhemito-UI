@@ -146,34 +146,74 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6">
           <motion.div variants={itemVariants}>
-            <Card className="h-full">
-              <CardHeader className="pb-3 md:pb-4 px-4 md:px-6">
-                <CardTitle className="text-sm md:text-base font-semibold text-teal">Quick Services</CardTitle>
+            <Card className="h-full bg-gradient-to-br from-white via-slate-50/50 to-blue-50/30 border border-white/40 shadow-2xl shadow-blue-100/50 overflow-hidden relative group hover:shadow-[0_20px_50px_rgba(59,130,246,0.15)] transition-all duration-500 backdrop-blur-sm">
+              {/* Ambient glow effects */}
+              <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-blue-400/20 via-indigo-400/15 to-purple-400/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl animate-pulse" />
+              <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-emerald-400/15 to-teal-400/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
+
+              {/* Subtle animated border gradient */}
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+              <CardHeader className="pb-4 md:pb-5 px-5 md:px-7 pt-5 md:pt-6 relative z-10">
+                <CardTitle className="text-base md:text-lg font-bold text-gray-800 flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-200/50">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <span className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-600 bg-clip-text text-transparent">
+                    Quick Services
+                  </span>
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 md:space-y-3 px-4 md:px-6">
-                <Button
-                  className="w-full justify-start gap-2 md:gap-3 bg-primary hover:bg-primary/90 text-white h-10 md:h-12 text-sm"
-                  onClick={() => setLocation("/send-money")}
-                  data-testid="button-send-money"
-                >
-                  <Send className="w-4 h-4" />
-                  Send Money
-                </Button>
-                <Button
-                  className="w-full justify-start gap-2 md:gap-3 bg-purple hover:bg-purple/90 text-white h-10 md:h-12 text-sm"
-                  data-testid="button-airtime-topup"
-                >
-                  <Phone className="w-4 h-4" />
-                  Airtime Topup
-                </Button>
-                <Button
-                  className="w-full justify-start gap-2 md:gap-3 bg-teal hover:bg-teal/90 text-white h-10 md:h-12 text-sm"
-                  onClick={() => setShowPaymentModal(true)}
-                  data-testid="button-request-payment"
-                >
-                  <Receipt className="w-4 h-4" />
-                  Request Payment
-                </Button>
+              <CardContent className="space-y-4 px-5 md:px-7 pb-6 relative z-10">
+                <motion.div whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }} className="relative group/btn">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl blur-lg opacity-40 group-hover/btn:opacity-60 transition-opacity duration-300" />
+                  <Button
+                    className="relative w-full justify-start gap-4 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-700 hover:via-blue-600 hover:to-indigo-700 text-white h-14 md:h-16 text-sm font-semibold rounded-2xl shadow-xl shadow-blue-300/40 transition-all duration-300 border border-white/20"
+                    onClick={() => setLocation("/send-money")}
+                    data-testid="button-send-money"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
+                      <Send className="w-5 h-5" />
+                    </div>
+                    <span className="flex-1 text-left text-[15px]">Send Money</span>
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                      <ArrowRight className="w-4 h-4" />
+                    </div>
+                  </Button>
+                </motion.div>
+
+                <motion.div whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }} className="relative group/btn">
+                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-purple-600 rounded-2xl blur-lg opacity-40 group-hover/btn:opacity-60 transition-opacity duration-300" />
+                  <Button
+                    className="relative w-full justify-start gap-4 bg-gradient-to-r from-violet-600 via-purple-500 to-fuchsia-600 hover:from-violet-700 hover:via-purple-600 hover:to-fuchsia-700 text-white h-14 md:h-16 text-sm font-semibold rounded-2xl shadow-xl shadow-purple-300/40 transition-all duration-300 border border-white/20"
+                    data-testid="button-airtime-topup"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
+                      <Phone className="w-5 h-5" />
+                    </div>
+                    <span className="flex-1 text-left text-[15px]">Airtime Topup</span>
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                      <ArrowRight className="w-4 h-4" />
+                    </div>
+                  </Button>
+                </motion.div>
+
+                <motion.div whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }} className="relative group/btn">
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl blur-lg opacity-40 group-hover/btn:opacity-60 transition-opacity duration-300" />
+                  <Button
+                    className="relative w-full justify-start gap-4 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-600 hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-700 text-white h-14 md:h-16 text-sm font-semibold rounded-2xl shadow-xl shadow-emerald-300/40 transition-all duration-300 border border-white/20"
+                    onClick={() => setShowPaymentModal(true)}
+                    data-testid="button-request-payment"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
+                      <Receipt className="w-5 h-5" />
+                    </div>
+                    <span className="flex-1 text-left text-[15px]">Request Payment</span>
+                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                      <ArrowRight className="w-4 h-4" />
+                    </div>
+                  </Button>
+                </motion.div>
               </CardContent>
             </Card>
           </motion.div>
@@ -307,29 +347,29 @@ export default function Dashboard() {
         </div>
 
         <motion.div variants={itemVariants}>
-          <Card>
+          <Card className="border-gray-100/80 shadow-xl shadow-gray-100/50 overflow-hidden">
             <CardContent className="p-0">
               <Tabs defaultValue="recent" className="w-full">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between px-3 md:px-6 pt-3 md:pt-4 gap-2">
-                  <TabsList className="bg-transparent h-auto p-0 gap-3 md:gap-6 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 md:px-6 pt-4 md:pt-5 pb-3 gap-2 border-b border-gray-100 bg-gradient-to-r from-gray-50/50 to-white">
+                  <TabsList className="bg-transparent h-auto p-0 gap-4 md:gap-8 w-full sm:w-auto">
                     <TabsTrigger
                       value="recent"
-                      className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-2 md:pb-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary font-medium text-xs md:text-sm"
+                      className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-3 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 font-semibold text-sm data-[state=active]:text-blue-600 text-gray-500 hover:text-gray-700 transition-colors"
                       data-testid="tab-recent-transactions"
                     >
                       Recent Transactions
                     </TabsTrigger>
                     <TabsTrigger
                       value="scheduled"
-                      className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-2 md:pb-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary font-medium text-xs md:text-sm"
+                      className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-3 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 font-semibold text-sm data-[state=active]:text-blue-600 text-gray-500 hover:text-gray-700 transition-colors"
                       data-testid="tab-scheduled-transactions"
                     >
                       Scheduled
                     </TabsTrigger>
                   </TabsList>
-                  <Button variant="ghost" className="text-xs md:text-sm text-muted-foreground hover:text-foreground hidden sm:flex">
+                  <Button variant="ghost" className="text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium hidden sm:flex gap-1.5 h-9 px-3 rounded-lg">
                     View All
-                    <ArrowRight className="w-3 h-3 md:w-4 md:h-4 ml-1" />
+                    <ArrowRight className="w-4 h-4" />
                   </Button>
                 </div>
 
@@ -337,32 +377,43 @@ export default function Dashboard() {
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow className="hover:bg-transparent">
-                          <TableHead className="text-xs md:text-sm w-[100px] md:w-[120px]">Ref No.</TableHead>
-                          <TableHead className="text-xs md:text-sm">Recipient</TableHead>
-                          <TableHead className="text-xs md:text-sm hidden md:table-cell">Service</TableHead>
-                          <TableHead className="text-xs md:text-sm hidden sm:table-cell">Date</TableHead>
-                          <TableHead className="text-xs md:text-sm text-right">Amount</TableHead>
-                          <TableHead className="text-xs md:text-sm text-center">Status</TableHead>
-                          <TableHead className="text-xs md:text-sm text-center hidden sm:table-cell">Actions</TableHead>
+                        <TableRow className="hover:bg-transparent bg-gray-50/50 border-b border-gray-100">
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-[100px] md:w-[130px] py-4">Ref No.</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider py-4">Recipient</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell py-4">Service</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden sm:table-cell py-4">Date</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-right py-4">Amount</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center py-4">Status</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center hidden sm:table-cell py-4">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {recentTransactions.map((tx) => (
-                          <TableRow key={tx.id} data-testid={`row-transaction-${tx.id}`}>
-                            <TableCell className="font-medium text-primary text-xs md:text-sm">{tx.id}</TableCell>
-                            <TableCell className="text-xs md:text-sm">{tx.recipient}</TableCell>
-                            <TableCell className="text-muted-foreground text-xs md:text-sm hidden md:table-cell">{tx.service}</TableCell>
-                            <TableCell className="text-muted-foreground text-xs md:text-sm hidden sm:table-cell">{tx.date}</TableCell>
-                            <TableCell className="text-right font-medium text-xs md:text-sm">{tx.amount}</TableCell>
-                            <TableCell className="text-center">
-                              <span className={`inline-block w-2 h-2 md:w-2.5 md:h-2.5 rounded-full ${tx.status === "completed" ? "bg-teal" : "bg-destructive"
-                                }`} />
+                        {recentTransactions.map((tx, index) => (
+                          <TableRow
+                            key={tx.id}
+                            data-testid={`row-transaction-${tx.id}`}
+                            className="hover:bg-blue-50/50 transition-colors duration-200 group border-b border-gray-50 last:border-b-0"
+                          >
+                            <TableCell className="font-semibold text-blue-600 text-sm py-4">{tx.id}</TableCell>
+                            <TableCell className="text-sm font-medium text-gray-900 py-4">{tx.recipient}</TableCell>
+                            <TableCell className="text-gray-500 text-sm hidden md:table-cell py-4">{tx.service}</TableCell>
+                            <TableCell className="text-gray-500 text-sm hidden sm:table-cell py-4">{tx.date}</TableCell>
+                            <TableCell className="text-right font-bold text-gray-900 text-sm py-4">{tx.amount}</TableCell>
+                            <TableCell className="text-center py-4">
+                              <div className="flex items-center justify-center gap-2">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${tx.status === "completed"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border border-amber-200"
+                                  }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${tx.status === "completed" ? "bg-emerald-500" : "bg-amber-500"}`} />
+                                  {tx.status === "completed" ? "Completed" : "Pending"}
+                                </span>
+                              </div>
                             </TableCell>
-                            <TableCell className="text-center hidden sm:table-cell">
+                            <TableCell className="text-center hidden sm:table-cell py-4">
                               <Button
                                 size="sm"
-                                className="bg-primary hover:bg-primary/90 text-white h-7 md:h-8 px-3 md:px-4 text-xs"
+                                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all"
                                 data-testid={`button-resend-${tx.id}`}
                               >
                                 Resend
@@ -379,34 +430,39 @@ export default function Dashboard() {
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow className="hover:bg-transparent">
-                          <TableHead className="text-xs md:text-sm w-[100px] md:w-[120px]">Ref No.</TableHead>
-                          <TableHead className="text-xs md:text-sm">Recipient</TableHead>
-                          <TableHead className="text-xs md:text-sm hidden md:table-cell">Service</TableHead>
-                          <TableHead className="text-xs md:text-sm hidden sm:table-cell">Date</TableHead>
-                          <TableHead className="text-xs md:text-sm text-right">Amount</TableHead>
-                          <TableHead className="text-xs md:text-sm text-center">Status</TableHead>
-                          <TableHead className="text-xs md:text-sm text-center hidden sm:table-cell">Actions</TableHead>
+                        <TableRow className="hover:bg-transparent bg-gray-50/50 border-b border-gray-100">
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-[100px] md:w-[130px] py-4">Ref No.</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider py-4">Recipient</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell py-4">Service</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden sm:table-cell py-4">Date</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-right py-4">Amount</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center py-4">Status</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center hidden sm:table-cell py-4">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {scheduledTransactions.map((tx) => (
-                          <TableRow key={tx.id} data-testid={`row-scheduled-${tx.id}`}>
-                            <TableCell className="font-medium text-primary text-xs md:text-sm">{tx.id}</TableCell>
-                            <TableCell className="text-xs md:text-sm">{tx.recipient}</TableCell>
-                            <TableCell className="text-muted-foreground text-xs md:text-sm hidden md:table-cell">{tx.service}</TableCell>
-                            <TableCell className="text-muted-foreground text-xs md:text-sm hidden sm:table-cell">{tx.date}</TableCell>
-                            <TableCell className="text-right font-medium text-xs md:text-sm">{tx.amount}</TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="outline" className="text-[10px] md:text-xs bg-blue-50 text-primary border-primary/20">
+                          <TableRow
+                            key={tx.id}
+                            data-testid={`row-scheduled-${tx.id}`}
+                            className="hover:bg-blue-50/50 transition-colors duration-200 group border-b border-gray-50 last:border-b-0"
+                          >
+                            <TableCell className="font-semibold text-blue-600 text-sm py-4">{tx.id}</TableCell>
+                            <TableCell className="text-sm font-medium text-gray-900 py-4">{tx.recipient}</TableCell>
+                            <TableCell className="text-gray-500 text-sm hidden md:table-cell py-4">{tx.service}</TableCell>
+                            <TableCell className="text-gray-500 text-sm hidden sm:table-cell py-4">{tx.date}</TableCell>
+                            <TableCell className="text-right font-bold text-gray-900 text-sm py-4">{tx.amount}</TableCell>
+                            <TableCell className="text-center py-4">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                                 Scheduled
-                              </Badge>
+                              </span>
                             </TableCell>
-                            <TableCell className="text-center hidden sm:table-cell">
+                            <TableCell className="text-center hidden sm:table-cell py-4">
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 md:h-8 px-3 md:px-4 text-xs"
+                                className="h-8 px-4 text-xs font-medium rounded-lg border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all"
                                 data-testid={`button-cancel-${tx.id}`}
                               >
                                 Cancel

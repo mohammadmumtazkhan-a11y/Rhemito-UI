@@ -230,6 +230,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         {otherNavItems.slice(2).map((item) => (
           <NavItem key={item.href} item={item} />
         ))}
+
       </nav>
 
       {/* Footer with Logout */}
