@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, CreditCard, Building2, Calendar, ShieldCheck, ArrowRight, Wallet, Loader2, Copy } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,9 +11,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import logo from "../assets/rhemito-logo-blue.png";
 
 export default function SenderView() {
+  const [, setLocation] = useLocation();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
   const [paymentStep, setPaymentStep] = useState<"method" | "card_details" | "processing_instant" | "manual_transfer" | "manual_transfer_complete">("method");
+  const [countdown, setCountdown] = useState(5);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isPaid || paymentStep === "manual_transfer_complete") {
+      timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setLocation("/marketing");
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [isPaid, paymentStep, setLocation]);
 
   const requestDetails = {
     requesterName: "Olayinka",
@@ -89,6 +109,37 @@ export default function SenderView() {
 
               <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-500 border border-slate-100">
                 <p>A receipt has been sent to your email.</p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="28"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="transparent"
+                      className="text-slate-100"
+                    />
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="28"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="transparent"
+                      strokeDasharray={175.93}
+                      strokeDashoffset={175.93 - (175.93 * countdown) / 5}
+                      className="text-blue-600 transition-all duration-1000 ease-linear"
+                    />
+                  </svg>
+                  <span className="absolute text-xl font-bold text-blue-600">{countdown}</span>
+                </div>
+                <p className="text-sm font-medium text-blue-600 animate-pulse">
+                  Redirecting to exclusive offers...
+                </p>
               </div>
 
               <Button
@@ -330,6 +381,18 @@ export default function SenderView() {
                   <p className="text-slate-500">
                     Thank you. We will verify your transfer shortly and notify you via email once completed.
                   </p>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <p className="text-sm font-medium text-blue-600 animate-pulse">
+                    Redirecting you to exclusive offers in {countdown}s...
+                  </p>
+                  <div className="h-1 w-24 bg-slate-100 rounded-full mx-auto overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 transition-all duration-1000 ease-linear"
+                      style={{ width: `${(countdown / 5) * 100}%` }}
+                    />
+                  </div>
                 </div>
                 <Button
                   variant="outline"
