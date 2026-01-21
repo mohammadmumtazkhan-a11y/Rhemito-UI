@@ -379,7 +379,7 @@ export default function Dashboard() {
                     <Table>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent bg-gray-50/50 border-b border-gray-100">
-                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-[100px] md:w-[130px] py-4">Ref No.</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-[100px] md:w-[130px] py-4 pl-6">Ref No.</TableHead>
                           <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider py-4">Recipient</TableHead>
                           <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell py-4">Service</TableHead>
                           <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden sm:table-cell py-4">Date</TableHead>
@@ -395,7 +395,7 @@ export default function Dashboard() {
                             data-testid={`row-transaction-${tx.id}`}
                             className="hover:bg-blue-50/50 transition-colors duration-200 group border-b border-gray-50 last:border-b-0"
                           >
-                            <TableCell className="font-semibold text-blue-600 text-sm py-4">{tx.id}</TableCell>
+                            <TableCell className="font-semibold text-blue-600 text-sm py-4 pl-6">{tx.id}</TableCell>
                             <TableCell className="text-sm font-medium text-gray-900 py-4">{tx.recipient}</TableCell>
                             <TableCell className="text-gray-500 text-sm hidden md:table-cell py-4">{tx.service}</TableCell>
                             <TableCell className="text-gray-500 text-sm hidden sm:table-cell py-4">{tx.date}</TableCell>
