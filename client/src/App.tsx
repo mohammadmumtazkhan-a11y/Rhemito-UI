@@ -15,6 +15,7 @@ import SenderDetail from "@/pages/SenderDetail";
 import PayoutAccounts from "@/pages/PayoutAccounts";
 import SendMoney from "@/pages/SendMoney";
 import BonusAndDiscounts from "@/pages/BonusAndDiscounts";
+import Marketing from "@/pages/Marketing";
 import NotFound from "@/pages/not-found";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -63,6 +64,7 @@ function Router() {
       <Route path="/payout-accounts" component={PayoutAccounts} />
       <Route path="/pay/:id" component={SenderView} />
       <Route path="/bonus-discounts" component={BonusAndDiscounts} />
+      <Route path="/marketing" component={Marketing} />
       <Route component={NotFound} />
     </Switch>
   );

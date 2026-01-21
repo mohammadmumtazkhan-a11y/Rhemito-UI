@@ -9,6 +9,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { knownSenders, type KnownSender } from "@/data/knownSenders";
+import { ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const COUNTRY_CODES = [
   { code: "+234", country: "Nigeria", flag: "🇳🇬" },
@@ -25,10 +40,27 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   NGN: "₦",
 };
 
+const currencies = [
+  { label: "GBP - British Pound", value: "GBP" },
+  { label: "USD - US Dollar", value: "USD" },
+  { label: "EUR - Euro", value: "EUR" },
+  { label: "NGN - Nigerian Naira", value: "NGN" },
+  { label: "CAD - Canadian Dollar", value: "CAD" },
+  { label: "AUD - Australian Dollar", value: "AUD" },
+  { label: "JPY - Japanese Yen", value: "JPY" },
+  { label: "CNY - Chinese Yuan", value: "CNY" },
+  { label: "INR - Indian Rupee", value: "INR" },
+  { label: "ZAR - South African Rand", value: "ZAR" },
+  { label: "KES - Kenyan Shilling", value: "KES" },
+  { label: "GHS - Ghanaian Cedi", value: "GHS" },
+  { label: "AED - UAE Dirham", value: "AED" },
+];
+
 interface FormData {
   invoiceFile: File | null;
   invoiceAmount: string;
   currency: string;
+  senderCurrency: string;
   recipientType: "individual" | "business";
   recipientFirstName: string;
   recipientMiddleName: string;
@@ -45,6 +77,7 @@ const initialFormData: FormData = {
   invoiceFile: null,
   invoiceAmount: "",
   currency: "GBP",
+  senderCurrency: "",
   recipientType: "individual",
   recipientFirstName: "",
   recipientMiddleName: "",
@@ -90,8 +123,8 @@ export default function SendInvoice() {
   }, []);
 
   const filteredSenders = knownSenders.filter(sender => {
-    const displayName = sender.senderType === "business" 
-      ? sender.businessName.toLowerCase() 
+    const displayName = sender.senderType === "business"
+      ? sender.businessName.toLowerCase()
       : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
     const searchLower = senderSearch.toLowerCase();
     return displayName.includes(searchLower) || sender.email.toLowerCase().includes(searchLower);
@@ -152,7 +185,7 @@ export default function SendInvoice() {
     setIsSuccess(true);
   };
 
-  const canSubmit = formData.invoiceFile && formData.invoiceAmount && formData.recipientEmail && 
+  const canSubmit = formData.invoiceFile && formData.invoiceAmount && formData.recipientEmail &&
     (formData.recipientType === "individual" ? formData.recipientFirstName : formData.recipientBusinessName);
 
   if (isSuccess) {
@@ -178,8 +211,8 @@ export default function SendInvoice() {
                 <h2 className="text-2xl font-bold font-display">Invoice Sent!</h2>
                 <p className="text-muted-foreground">
                   Successfully sent to <span className="font-medium text-foreground">
-                    {formData.recipientType === "business" 
-                      ? formData.recipientBusinessName 
+                    {formData.recipientType === "business"
+                      ? formData.recipientBusinessName
                       : [formData.recipientFirstName, formData.recipientMiddleName, formData.recipientLastName].filter(Boolean).join(" ")}
                   </span>
                 </p>
@@ -188,13 +221,13 @@ export default function SendInvoice() {
               <div className="bg-muted/50 rounded-lg p-4 space-y-3">
                 <p className="text-sm text-muted-foreground">Share this invoice link:</p>
                 <div className="flex items-center gap-2">
-                  <Input 
-                    value={`https://${invoiceLink}`} 
-                    readOnly 
+                  <Input
+                    value={`https://${invoiceLink}`}
+                    readOnly
                     className="text-sm bg-white"
                     data-testid="input-invoice-link"
                   />
-                  <Button 
+                  <Button
                     onClick={handleCopyLink}
                     variant="outline"
                     className="shrink-0"
@@ -206,15 +239,15 @@ export default function SendInvoice() {
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="flex-1"
                   onClick={() => setLocation("/")}
                   data-testid="button-back-to-dashboard"
                 >
                   Back to Dashboard
                 </Button>
-                <Button 
+                <Button
                   className="flex-1 bg-primary hover:bg-primary/90"
                   onClick={() => {
                     setFormData(initialFormData);
@@ -240,8 +273,8 @@ export default function SendInvoice() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             onClick={() => setLocation("/")}
             className="mb-4 -ml-2"
             data-testid="button-back"
@@ -249,7 +282,7 @@ export default function SendInvoice() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
-          
+
           <h1 className="text-2xl font-bold font-display">Send Invoice</h1>
           <p className="text-muted-foreground mt-1">Upload an invoice and send it to your client</p>
         </motion.div>
@@ -263,9 +296,8 @@ export default function SendInvoice() {
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
               <div className="lg:col-span-3 space-y-6">
                 <div
-                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-                    dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  }`}
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                    }`}
                   onDragEnter={handleDrag}
                   onDragLeave={handleDrag}
                   onDragOver={handleDrag}
@@ -345,6 +377,62 @@ export default function SendInvoice() {
                   </div>
                 </div>
 
+                <div className="space-y-2 flex flex-col">
+                  <Label>Sender Pays in (Optional)</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className={cn(
+                          "w-full justify-between",
+                          !formData.senderCurrency && "text-muted-foreground"
+                        )}
+                        data-testid="combobox-sender-currency"
+                      >
+                        {formData.senderCurrency
+                          ? currencies.find(
+                            (currency) => currency.value === formData.senderCurrency
+                          )?.label
+                          : "Select currency sender pays in..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0">
+                      <Command>
+                        <CommandInput placeholder="Search currency..." />
+                        <CommandList>
+                          <CommandEmpty>No currency found.</CommandEmpty>
+                          <CommandGroup>
+                            {currencies.map((currency) => (
+                              <CommandItem
+                                value={currency.label}
+                                key={currency.value}
+                                onSelect={() => {
+                                  handleInputChange("senderCurrency", currency.value);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    currency.value === formData.senderCurrency
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                {currency.label}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    If specified, we'll convert the invoice amount to this currency for the sender.
+                  </p>
+                </div>
+
                 <div className="space-y-2 relative">
                   <Label>Search Existing Recipient</Label>
                   <div className="relative">
@@ -389,8 +477,8 @@ export default function SendInvoice() {
                             </div>
                             <div>
                               <p className="font-medium text-sm">
-                                {sender.senderType === "business" 
-                                  ? sender.businessName 
+                                {sender.senderType === "business"
+                                  ? sender.businessName
                                   : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim()}
                               </p>
                               <p className="text-xs text-muted-foreground">{sender.email}</p>
@@ -411,11 +499,10 @@ export default function SendInvoice() {
                     <button
                       type="button"
                       onClick={() => handleInputChange("recipientType", "individual")}
-                      className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${
-                        formData.recipientType === "individual"
+                      className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${formData.recipientType === "individual"
                           ? "border-primary bg-primary/5"
                           : "border-border hover:border-muted-foreground/30"
-                      }`}
+                        }`}
                       data-testid="button-recipient-type-individual"
                     >
                       <User className={`w-5 h-5 ${formData.recipientType === "individual" ? "text-primary" : "text-muted-foreground"}`} />
@@ -424,11 +511,10 @@ export default function SendInvoice() {
                     <button
                       type="button"
                       onClick={() => handleInputChange("recipientType", "business")}
-                      className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${
-                        formData.recipientType === "business"
+                      className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${formData.recipientType === "business"
                           ? "border-primary bg-primary/5"
                           : "border-border hover:border-muted-foreground/30"
-                      }`}
+                        }`}
                       data-testid="button-recipient-type-business"
                     >
                       <Building2 className={`w-5 h-5 ${formData.recipientType === "business" ? "text-primary" : "text-muted-foreground"}`} />
@@ -537,15 +623,15 @@ export default function SendInvoice() {
                 </div>
 
                 <div className="flex gap-3 pt-4">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => setLocation("/")}
                     className="flex-1"
                     data-testid="button-cancel"
                   >
                     Cancel
                   </Button>
-                  <Button 
+                  <Button
                     onClick={handleSubmit}
                     disabled={!canSubmit}
                     className="flex-1 bg-primary hover:bg-primary/90"
@@ -560,7 +646,7 @@ export default function SendInvoice() {
               <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
                 <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown">
                   <h3 className="font-semibold text-lg">Amount</h3>
-                  
+
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Invoice Amount</span>
@@ -570,7 +656,7 @@ export default function SendInvoice() {
                           : `0.00 ${formData.currency}`}
                       </span>
                     </div>
-                    
+
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Fee (3%)</span>
                       <span className="font-medium">
@@ -580,9 +666,9 @@ export default function SendInvoice() {
                       </span>
                     </div>
                   </div>
-                  
+
                   <div className="h-px bg-border" />
-                  
+
                   <div className="flex justify-between pt-1">
                     <span className="font-medium">Client Pays</span>
                     <span className="font-bold text-lg text-teal">
@@ -591,7 +677,7 @@ export default function SendInvoice() {
                         : `0.00 ${formData.currency}`}
                     </span>
                   </div>
-                  
+
                   <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
                     <span className="font-medium">You Receive</span>
                     <span className="font-bold text-lg text-primary">

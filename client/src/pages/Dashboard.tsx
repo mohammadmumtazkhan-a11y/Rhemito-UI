@@ -146,71 +146,72 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6">
           <motion.div variants={itemVariants}>
-            <Card className="h-full bg-gradient-to-br from-white via-slate-50/50 to-blue-50/30 border border-white/40 shadow-2xl shadow-blue-100/50 overflow-hidden relative group hover:shadow-[0_20px_50px_rgba(59,130,246,0.15)] transition-all duration-500 backdrop-blur-sm">
-              {/* Ambient glow effects */}
-              <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-blue-400/20 via-indigo-400/15 to-purple-400/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl animate-pulse" />
-              <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-emerald-400/15 to-teal-400/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
+            <Card className="h-full bg-white/80 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-500 relative overflow-hidden">
+              {/* Subtle background mesh gradient for premium feel */}
+              <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-blue-50/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 opacity-60" />
+              <div className="absolute bottom-0 left-0 w-[200px] h-[200px] bg-purple-50/50 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 opacity-60" />
 
-              {/* Subtle animated border gradient */}
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-              <CardHeader className="pb-4 md:pb-5 px-5 md:px-7 pt-5 md:pt-6 relative z-10">
-                <CardTitle className="text-base md:text-lg font-bold text-gray-800 flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-200/50">
-                    <Sparkles className="w-4 h-4" />
+              <CardHeader className="pb-6 px-7 pt-7 relative z-10">
+                <CardTitle className="text-xl font-bold text-slate-800 flex items-center gap-3">
+                  <div className="p-2 rounded-2xl bg-white shadow-sm border border-slate-100 text-indigo-600">
+                    <Sparkles className="w-5 h-5" />
                   </div>
-                  <span className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-600 bg-clip-text text-transparent">
-                    Quick Services
-                  </span>
+                  <span className="tracking-tight">Quick Services</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4 px-5 md:px-7 pb-6 relative z-10">
-                <motion.div whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }} className="relative group/btn">
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl blur-lg opacity-40 group-hover/btn:opacity-60 transition-opacity duration-300" />
+              <CardContent className="space-y-4 px-7 pb-8 relative z-10">
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                   <Button
-                    className="relative w-full justify-start gap-4 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-700 hover:via-blue-600 hover:to-indigo-700 text-white h-14 md:h-16 text-sm font-semibold rounded-2xl shadow-xl shadow-blue-300/40 transition-all duration-300 border border-white/20"
+                    className="group w-full justify-start gap-4 bg-blue-600 hover:bg-blue-700 text-white h-[72px] text-[15px] font-semibold rounded-2xl shadow-md hover:shadow-xl hover:shadow-blue-500/20 transition-all duration-300 border-none"
                     onClick={() => setLocation("/send-money")}
                     data-testid="button-send-money"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
-                      <Send className="w-5 h-5" />
+                    <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                      <Send className="w-5 h-5 text-white" />
                     </div>
-                    <span className="flex-1 text-left text-[15px]">Send Money</span>
-                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                      <ArrowRight className="w-4 h-4" />
+                    <div className="flex-1 flex flex-col items-start gap-0.5">
+                      <span className="leading-none text-white">Send Money</span>
+                      <span className="text-xs font-normal text-blue-100">Transfer globally</span>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                      <ArrowRight className="w-4 h-4 text-white" />
                     </div>
                   </Button>
                 </motion.div>
 
-                <motion.div whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }} className="relative group/btn">
-                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-purple-600 rounded-2xl blur-lg opacity-40 group-hover/btn:opacity-60 transition-opacity duration-300" />
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                   <Button
-                    className="relative w-full justify-start gap-4 bg-gradient-to-r from-violet-600 via-purple-500 to-fuchsia-600 hover:from-violet-700 hover:via-purple-600 hover:to-fuchsia-700 text-white h-14 md:h-16 text-sm font-semibold rounded-2xl shadow-xl shadow-purple-300/40 transition-all duration-300 border border-white/20"
+                    className="group w-full justify-start gap-4 bg-[#9CA3D5] hover:bg-[#8890cc] text-white h-[72px] text-[15px] font-semibold rounded-2xl shadow-md hover:shadow-xl hover:shadow-indigo-500/20 transition-all duration-300 border-none"
                     data-testid="button-airtime-topup"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
-                      <Phone className="w-5 h-5" />
+                    <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                      <Phone className="w-5 h-5 text-white" />
                     </div>
-                    <span className="flex-1 text-left text-[15px]">Airtime Topup</span>
-                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                      <ArrowRight className="w-4 h-4" />
+                    <div className="flex-1 flex flex-col items-start gap-0.5">
+                      <span className="leading-none text-white">Airtime Topup</span>
+                      <span className="text-xs font-normal text-indigo-50">Recharge mobile</span>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                      <ArrowRight className="w-4 h-4 text-white" />
                     </div>
                   </Button>
                 </motion.div>
 
-                <motion.div whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }} className="relative group/btn">
-                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl blur-lg opacity-40 group-hover/btn:opacity-60 transition-opacity duration-300" />
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                   <Button
-                    className="relative w-full justify-start gap-4 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-600 hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-700 text-white h-14 md:h-16 text-sm font-semibold rounded-2xl shadow-xl shadow-emerald-300/40 transition-all duration-300 border border-white/20"
+                    className="group w-full justify-start gap-4 bg-[#1FC0A6] hover:bg-[#19a58e] text-white h-[72px] text-[15px] font-semibold rounded-2xl shadow-md hover:shadow-xl hover:shadow-teal-500/20 transition-all duration-300 border-none"
                     onClick={() => setShowPaymentModal(true)}
                     data-testid="button-request-payment"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
-                      <Receipt className="w-5 h-5" />
+                    <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                      <Receipt className="w-5 h-5 text-white" />
                     </div>
-                    <span className="flex-1 text-left text-[15px]">Request Payment</span>
-                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                      <ArrowRight className="w-4 h-4" />
+                    <div className="flex-1 flex flex-col items-start gap-0.5">
+                      <span className="leading-none text-white">Request Payment</span>
+                      <span className="text-xs font-normal text-teal-50">Get paid fast</span>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                      <ArrowRight className="w-4 h-4 text-white" />
                     </div>
                   </Button>
                 </motion.div>

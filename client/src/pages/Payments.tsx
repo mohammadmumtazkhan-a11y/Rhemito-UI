@@ -15,6 +15,7 @@ import {
   User,
   Plus
 } from "lucide-react";
+import { knownSenders } from "@/data/knownSenders";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,21 +39,6 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   NGN: "₦",
 };
 
-interface KnownSender {
-  name: string;
-  email: string;
-}
-
-const knownSenders: KnownSender[] = [
-  { name: "John Adeyemi", email: "john.adeyemi@email.com" },
-  { name: "Sarah Williams", email: "sarah.w@company.co.uk" },
-  { name: "Michael Chen", email: "m.chen@business.com" },
-  { name: "Emma Thompson", email: "emma.t@mail.com" },
-  { name: "David Okonkwo", email: "david.o@gmail.com" },
-  { name: "Amara Obi", email: "amara.obi@outlook.com" },
-  { name: "James Peterson", email: "j.peterson@corp.io" },
-  { name: "Fatima Hassan", email: "fatima.h@company.ng" },
-];
 
 interface Payment {
   id: string;
@@ -203,16 +189,18 @@ export default function Payments() {
   const nameInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
-  const filteredNameSuggestions = knownSenders.filter(sender =>
-    sender.name.toLowerCase().includes(allocateSenderName.toLowerCase())
-  );
+  const filteredNameSuggestions = knownSenders.filter(sender => {
+    const displayName = sender.senderType === "business" ? sender.businessName : `${sender.firstName} ${sender.lastName}`;
+    return displayName.toLowerCase().includes(allocateSenderName.toLowerCase());
+  });
 
   const filteredEmailSuggestions = knownSenders.filter(sender =>
     sender.email.toLowerCase().includes(allocateSenderEmail.toLowerCase())
   );
 
-  const selectSender = (sender: KnownSender) => {
-    setAllocateSenderName(sender.name);
+  const selectSender = (sender: (typeof knownSenders)[0]) => {
+    const displayName = sender.senderType === "business" ? sender.businessName : `${sender.firstName} ${sender.lastName}`;
+    setAllocateSenderName(displayName);
     setAllocateSenderEmail(sender.email);
     setShowNameSuggestions(false);
     setShowEmailSuggestions(false);
@@ -599,7 +587,9 @@ export default function Payments() {
                                 <User className="w-4 h-4 text-primary" />
                               </div>
                               <div>
-                                <p className="font-medium text-sm">{sender.name}</p>
+                                <p className="font-medium text-sm">
+                                  {sender.senderType === "business" ? sender.businessName : `${sender.firstName} ${sender.lastName}`}
+                                </p>
                                 <p className="text-xs text-muted-foreground">{sender.email}</p>
                               </div>
                             </button>

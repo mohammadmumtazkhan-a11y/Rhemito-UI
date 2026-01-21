@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Copy, AlertTriangle, CheckCircle2, Search, User, Building2 } from "lucide-react";
@@ -121,8 +121,8 @@ export default function RequestPayment() {
   }, []);
 
   const filteredSenders = knownSenders.filter(sender => {
-    const displayName = sender.senderType === "business" 
-      ? sender.businessName.toLowerCase() 
+    const displayName = sender.senderType === "business"
+      ? sender.businessName.toLowerCase()
       : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
     const searchLower = senderSearch.toLowerCase();
     return displayName.includes(searchLower) || sender.email.toLowerCase().includes(searchLower);
@@ -163,14 +163,14 @@ export default function RequestPayment() {
     return EXCHANGE_RATES[receiveCurrency]?.[senderCurrency] || 1;
   };
 
-  const senderPays = formData.receiveAmount 
-    ? (parseFloat(formData.receiveAmount) * getExchangeRate()).toLocaleString()
-    : "0";
+  const senderPays = formData.receiveAmount
+    ? (parseFloat(formData.receiveAmount) * getExchangeRate() * 1.03).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : "0.00";
 
   const receiveSymbol = CURRENCY_SYMBOLS[formData.receiveCurrency] || "";
   const senderSymbol = CURRENCY_SYMBOLS[formData.senderCurrency] || "";
 
-  const paymentLink = `rhemito.com/pay/ref${Math.random().toString(36).substring(2, 8)}`;
+  const paymentLink = useMemo(() => `rhemito.com/pay/ref${Math.random().toString(36).substring(2, 8)}`, []);
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -236,8 +236,8 @@ export default function RequestPayment() {
                 <h2 className="text-2xl font-bold font-display">Payment Request Sent!</h2>
                 <p className="text-muted-foreground">
                   Successfully sent to <span className="font-medium text-foreground">
-                    {formData.senderType === "business" 
-                      ? formData.senderBusinessName 
+                    {formData.senderType === "business"
+                      ? formData.senderBusinessName
                       : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}
                   </span>
                 </p>
@@ -246,13 +246,13 @@ export default function RequestPayment() {
               <div className="bg-muted/50 rounded-lg p-4 space-y-3">
                 <p className="text-sm text-muted-foreground">Share this link with your sender:</p>
                 <div className="flex items-center gap-2">
-                  <Input 
-                    value={`https://${paymentLink}`} 
-                    readOnly 
+                  <Input
+                    value={`https://${paymentLink}`}
+                    readOnly
                     className="text-sm bg-white"
                     data-testid="input-payment-link"
                   />
-                  <Button 
+                  <Button
                     onClick={handleCopyLink}
                     variant="outline"
                     className="shrink-0"
@@ -264,15 +264,15 @@ export default function RequestPayment() {
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="flex-1"
                   onClick={() => setLocation("/")}
                   data-testid="button-back-to-dashboard"
                 >
                   Back to Dashboard
                 </Button>
-                <Button 
+                <Button
                   className="flex-1 bg-primary hover:bg-primary/90"
                   onClick={() => {
                     setFormData(initialFormData);
@@ -299,8 +299,8 @@ export default function RequestPayment() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-4 md:mb-8"
         >
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             onClick={handleBack}
             className="mb-2 md:mb-4 -ml-2 text-sm"
             data-testid="button-back"
@@ -308,7 +308,7 @@ export default function RequestPayment() {
             <ArrowLeft className="w-4 h-4 mr-1 md:mr-2" />
             Back
           </Button>
-          
+
           <h1 className="text-xl md:text-2xl font-bold font-display">Request Payment</h1>
           <p className="text-muted-foreground text-sm md:text-base mt-1">Get paid by generating a payment link</p>
         </motion.div>
@@ -362,23 +362,21 @@ export default function RequestPayment() {
                       <p className="text-xs md:text-sm text-muted-foreground mb-4 md:mb-6">
                         Choose the bank account where you want to receive the funds. You can only have one account per currency.
                       </p>
-                      
+
                       <div className="grid gap-2 md:gap-3">
                         {availablePayoutAccounts.map((account) => (
                           <button
                             key={account.id}
                             type="button"
                             onClick={() => handleInputChange("selectedPayoutAccountId", account.id)}
-                            className={`w-full p-3 md:p-4 rounded-xl border-2 transition-all flex items-center gap-3 md:gap-4 text-left ${
-                              formData.selectedPayoutAccountId === account.id
-                                ? "border-primary bg-primary/5"
-                                : "border-border hover:border-primary/50 bg-white"
-                            }`}
+                            className={`w-full p-3 md:p-4 rounded-xl border-2 transition-all flex items-center gap-3 md:gap-4 text-left ${formData.selectedPayoutAccountId === account.id
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50 bg-white"
+                              }`}
                             data-testid={`payout-account-${account.id}`}
                           >
-                            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${
-                              formData.selectedPayoutAccountId === account.id ? "bg-primary text-white" : "bg-muted"
-                            }`}>
+                            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${formData.selectedPayoutAccountId === account.id ? "bg-primary text-white" : "bg-muted"
+                              }`}>
                               <Building2 className="w-4 h-4 md:w-5 md:h-5" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -411,8 +409,8 @@ export default function RequestPayment() {
 
                       {availablePayoutAccounts.length > 0 && (
                         <div className="mt-4 pt-4 border-t border-border">
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             onClick={() => setLocation("/payout-accounts")}
                             className="w-full gap-2"
                             data-testid="button-add-new-account"
@@ -525,26 +523,26 @@ export default function RequestPayment() {
                     <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
                       <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown">
                         <h3 className="font-semibold text-lg">Amount</h3>
-                        
+
                         <div className="space-y-3">
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">You Request</span>
                             <span className="font-medium">
-                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
                                 ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
                                 : `0.00 ${formData.receiveCurrency}`}
                             </span>
                           </div>
-                          
+
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Fee (3%)</span>
                             <span className="font-medium">
-                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
                                 ? `${senderSymbol}${(parseFloat(formData.receiveAmount) * getExchangeRate() * 0.03).toFixed(2)} ${formData.senderCurrency}`
                                 : `0.00 ${formData.senderCurrency}`}
                             </span>
                           </div>
-                          
+
                           {formData.receiveCurrency !== formData.senderCurrency && (
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">Exchange Rate</span>
@@ -552,22 +550,22 @@ export default function RequestPayment() {
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="h-px bg-border" />
-                        
+
                         <div className="flex justify-between pt-1">
                           <span className="font-medium">Sender Pays</span>
                           <span className="font-bold text-lg text-teal">
-                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
                               ? `${senderSymbol}${(parseFloat(formData.receiveAmount) * getExchangeRate() * 1.03).toFixed(2)} ${formData.senderCurrency}`
                               : `0.00 ${formData.senderCurrency}`}
                           </span>
                         </div>
-                        
+
                         <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
                           <span className="font-medium">You Receive</span>
                           <span className="font-bold text-lg text-primary">
-                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
                               ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
                               : `0.00 ${formData.receiveCurrency}`}
                           </span>
@@ -624,8 +622,8 @@ export default function RequestPayment() {
                                   </div>
                                   <div>
                                     <p className="font-medium text-sm">
-                                      {sender.senderType === "business" 
-                                        ? sender.businessName 
+                                      {sender.senderType === "business"
+                                        ? sender.businessName
                                         : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim()}
                                     </p>
                                     <p className="text-xs text-muted-foreground">{sender.email}</p>
@@ -646,11 +644,10 @@ export default function RequestPayment() {
                           <button
                             type="button"
                             onClick={() => handleInputChange("senderType", "individual")}
-                            className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${
-                              formData.senderType === "individual"
-                                ? "border-primary bg-primary/5"
-                                : "border-border hover:border-muted-foreground/30"
-                            }`}
+                            className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${formData.senderType === "individual"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-muted-foreground/30"
+                              }`}
                             data-testid="button-sender-type-individual"
                           >
                             <User className={`w-5 h-5 ${formData.senderType === "individual" ? "text-primary" : "text-muted-foreground"}`} />
@@ -659,11 +656,10 @@ export default function RequestPayment() {
                           <button
                             type="button"
                             onClick={() => handleInputChange("senderType", "business")}
-                            className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${
-                              formData.senderType === "business"
-                                ? "border-primary bg-primary/5"
-                                : "border-border hover:border-muted-foreground/30"
-                            }`}
+                            className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${formData.senderType === "business"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-muted-foreground/30"
+                              }`}
                             data-testid="button-sender-type-business"
                           >
                             <Building2 className={`w-5 h-5 ${formData.senderType === "business" ? "text-primary" : "text-muted-foreground"}`} />
@@ -837,21 +833,21 @@ export default function RequestPayment() {
                     <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
                       <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown-step2">
                         <h3 className="font-semibold text-lg">Amount</h3>
-                        
+
                         <div className="space-y-3">
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">You Request</span>
                             <span className="font-medium">
-                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
                                 ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
                                 : `0.00 ${formData.receiveCurrency}`}
                             </span>
                           </div>
-                          
+
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Fee (3%)</span>
                             <span className="font-medium">
-                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
                                 ? `${senderSymbol}${(parseFloat(formData.receiveAmount) * getExchangeRate() * 0.03).toFixed(2)} ${formData.senderCurrency}`
                                 : `0.00 ${formData.senderCurrency}`}
                             </span>
@@ -860,26 +856,26 @@ export default function RequestPayment() {
                           {formData.senderCurrency !== formData.receiveCurrency && (
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">Exchange Rate</span>
-                              <span className="font-medium">1 {formData.senderCurrency} = {(1 / getExchangeRate()).toFixed(4)} {formData.receiveCurrency}</span>
+                              <span className="font-medium">1 {formData.receiveCurrency} = {senderSymbol}{getExchangeRate().toLocaleString()} {formData.senderCurrency}</span>
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="h-px bg-border" />
-                        
+
                         <div className="flex justify-between pt-1">
                           <span className="font-medium">Sender Pays</span>
                           <span className="font-bold text-lg text-teal">
-                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
                               ? `${senderSymbol}${senderPays} ${formData.senderCurrency}`
                               : `0.00 ${formData.senderCurrency}`}
                           </span>
                         </div>
-                        
+
                         <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
                           <span className="font-medium">You Receive</span>
                           <span className="font-bold text-lg text-primary">
-                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0 
+                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
                               ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
                               : `0.00 ${formData.receiveCurrency}`}
                           </span>
@@ -912,7 +908,11 @@ export default function RequestPayment() {
                         )}
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Sender Name</span>
-                          <span className="font-medium">{[formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}</span>
+                          <span className="font-medium">
+                            {formData.senderType === "business"
+                              ? formData.senderBusinessName
+                              : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}
+                          </span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Sender Email</span>
@@ -947,15 +947,15 @@ export default function RequestPayment() {
                 )}
 
                 <div className="flex gap-3 pt-4">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={handleBack}
                     className="flex-1"
                     data-testid="button-step-back"
                   >
                     {currentStep === 1 ? "Cancel" : "Back"}
                   </Button>
-                  <Button 
+                  <Button
                     onClick={handleNext}
                     disabled={!canProceed()}
                     className="flex-1 bg-primary hover:bg-primary/90"
