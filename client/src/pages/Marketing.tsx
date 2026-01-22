@@ -37,7 +37,7 @@ export default function Marketing() {
             </nav>
 
             {/* Main Content - Split Screen / Compact */}
-            <div className="relative z-10 max-w-7xl mx-auto px-6 grow flex flex-col justify-center pt-24 pb-12 md:pt-0 md:pb-0">
+            <div className="relative z-10 max-w-7xl mx-auto px-6 grow flex flex-col justify-center pt-24 pb-12 md:pt-20 md:pb-12">
                 <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
 
                     {/* Left Col: Value Prop */}
@@ -94,41 +94,51 @@ export default function Marketing() {
                         {/* Decorative blurring behind cards */}
                         <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/20 to-teal/20 blur-3xl -z-10 rounded-full" />
 
-                        <div className="grid gap-5">
-                            {/* Offer 1: High Priority */}
-                            <div className="group relative bg-white/70 backdrop-blur-xl border border-white/60 p-6 md:p-8 rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:bg-white/90">
-                                <div className="absolute top-4 right-4 bg-teal/10 text-teal-700 font-bold text-xs px-2 py-1 rounded-full uppercase tracking-wider">
+                        <div className="grid gap-6">
+                            {/* Offer 1: Hero Card (Blue Gradient) */}
+                            <div className="group relative bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-3xl shadow-xl shadow-blue-900/20 hover:shadow-2xl hover:shadow-blue-900/30 transition-all duration-300 hover:-translate-y-1 overflow-hidden">
+                                {/* Decorative Background Elements */}
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl translate-x-10 -translate-y-10" />
+                                <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-500/30 rounded-full blur-2xl -translate-x-10 translate-y-10" />
+
+                                <div className="absolute top-5 right-5 bg-white/20 backdrop-blur-md border border-white/20 text-white font-bold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider animate-pulse">
                                     New Users
                                 </div>
-                                <div className="flex items-start gap-5">
-                                    <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/20 shrink-0">
-                                        <Gift className="w-6 h-6" />
+
+                                <div className="relative z-10 flex items-start gap-6">
+                                    <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner shrink-0 group-hover:bg-white/30 transition-colors">
+                                        <Gift className="w-7 h-7 drop-shadow-md" />
                                     </div>
                                     <div>
-                                        <h3 className="text-xl font-bold text-slate-900 mb-1">First Transfer Free</h3>
-                                        <p className="text-slate-500 text-sm leading-relaxed mb-4">
-                                            Send up to £500 with absolutely zero fees. Test our speed on the house.
+                                        <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">First Transfer Free</h3>
+                                        <p className="text-blue-100 text-sm leading-relaxed mb-5 opacity-90 font-medium">
+                                            Send up to £500 with absolutely <span className="text-white font-bold underline decoration-blue-300/50 underline-offset-2">zero fees</span>. Experience our premium speed on the house.
                                         </p>
-                                        <a href="https://www.rhemito.com/login" className="text-blue-600 font-bold text-sm hover:underline flex items-center gap-1 group-hover:gap-2 transition-all">
-                                            Claim Offer <ArrowRight className="w-4 h-4" />
+                                        <a href="https://www.rhemito.com/login">
+                                            <Button className="bg-white text-blue-700 hover:bg-blue-50 font-bold rounded-full h-10 px-6 text-sm shadow-lg shadow-black/10 transition-all group-hover:scale-105">
+                                                Claim Offer <ArrowRight className="w-4 h-4 ml-1" />
+                                            </Button>
                                         </a>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Offer 2 */}
-                            <div className="group relative bg-white/40 backdrop-blur-lg border border-white/40 p-6 md:p-8 rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/80">
-                                <div className="flex items-start gap-5">
-                                    <div className="w-12 h-12 rounded-2xl bg-teal flex items-center justify-center text-white shadow-lg shadow-teal/20 shrink-0">
-                                        <ShieldCheck className="w-6 h-6" />
+                            {/* Offer 2: Trust Card (Clean & Verified) */}
+                            <div className="group relative bg-white/60 backdrop-blur-xl border border-white/60 hover:border-teal/30 p-8 rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+                                <div className="flex items-start gap-6">
+                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal/20 shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                        <ShieldCheck className="w-7 h-7" />
                                     </div>
                                     <div>
-                                        <h3 className="text-xl font-bold text-slate-900 mb-1">Best Rate Guarantee</h3>
-                                        <p className="text-slate-500 text-sm leading-relaxed mb-4">
-                                            Find a better rate? We'll match it and credit you £5.
+                                        <h3 className="text-xl font-bold text-slate-900 mb-2">Best Rate Guarantee</h3>
+                                        <p className="text-slate-600 text-sm leading-relaxed mb-5">
+                                            Find a better rate elsewhere? We'll <span className="font-bold text-teal-700">match it</span> and credit your account with £5 immediately.
                                         </p>
-                                        <a href="https://www.rhemito.com/login" className="text-teal-700 font-bold text-sm hover:underline flex items-center gap-1 group-hover:gap-2 transition-all">
-                                            See Details <ArrowRight className="w-4 h-4" />
+                                        <a href="https://www.rhemito.com/login" className="inline-flex items-center gap-2 text-teal-700 font-bold text-sm group/link hover:text-teal-800 transition-colors">
+                                            <span>See Guarantee Details</span>
+                                            <div className="w-6 h-6 rounded-full bg-teal/10 flex items-center justify-center group-hover/link:bg-teal/20 transition-colors">
+                                                <ArrowRight className="w-3 h-3" />
+                                            </div>
                                         </a>
                                     </div>
                                 </div>

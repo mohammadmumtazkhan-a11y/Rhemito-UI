@@ -293,7 +293,7 @@ export default function RequestPayment() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto pb-24">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -756,16 +756,18 @@ export default function RequestPayment() {
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="senderDob">Sender Date of Birth (Optional)</Label>
-                        <Input
-                          id="senderDob"
-                          type="date"
-                          value={formData.senderDob}
-                          onChange={(e) => handleInputChange("senderDob", e.target.value)}
-                          data-testid="input-sender-dob"
-                        />
-                      </div>
+                      {formData.senderType === "individual" && (
+                        <div className="space-y-2">
+                          <Label htmlFor="senderDob">Sender Date of Birth (Optional)</Label>
+                          <Input
+                            id="senderDob"
+                            type="date"
+                            value={formData.senderDob}
+                            onChange={(e) => handleInputChange("senderDob", e.target.value)}
+                            data-testid="input-sender-dob"
+                          />
+                        </div>
+                      )}
 
                       <div className="space-y-2">
                         <Label htmlFor="reason">Reason for Payment (Optional)</Label>
