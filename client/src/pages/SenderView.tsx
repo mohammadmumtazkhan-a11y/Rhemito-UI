@@ -23,6 +23,7 @@ export default function SenderView() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isPaid, setIsPaid] = useState(false);
+  const [wasManualTransfer, setWasManualTransfer] = useState(false);
   const [paymentStep, setPaymentStep] = useState<"method" | "card_details" | "processing_instant" | "manual_transfer" | "manual_transfer_complete">("method");
 
   const [countdown, setCountdown] = useState(5);
@@ -629,6 +630,7 @@ export default function SenderView() {
                             <Button
                               className="flex-[2] h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl"
                               onClick={() => {
+                                setWasManualTransfer(true);
                                 setPaymentStep("manual_transfer_complete");
                               }}
                             >
@@ -813,6 +815,29 @@ export default function SenderView() {
                     exit={{ opacity: 0, x: -20 }}
                     className="space-y-6"
                   >
+                    {/* Success/Pending Banner */}
+                    {wasManualTransfer ? (
+                      <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+                          <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-amber-900 text-sm">Transfer Pending Verification</p>
+                          <p className="text-amber-700 text-xs">We'll notify you once your transfer is confirmed</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center shrink-0">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-emerald-900 text-sm">Payment Successful!</p>
+                          <p className="text-emerald-700 text-xs">Your transaction has been completed securely</p>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-2 mb-6">
                       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/50 border border-blue-200 text-blue-700 text-xs font-bold uppercase tracking-wider mb-2">
                         <Star className="w-3 h-3 fill-blue-600" />
