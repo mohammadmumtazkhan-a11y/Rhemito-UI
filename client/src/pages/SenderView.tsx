@@ -1,17 +1,16 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, CreditCard, Building2, Calendar, ShieldCheck, ArrowRight, Wallet, Loader2, Copy, Mail, Lock, KeyRound, MapPin, User } from "lucide-react";
+import { CheckCircle2, CreditCard, Building2, Calendar, ShieldCheck, ArrowRight, Wallet, Loader2, Copy, Mail, Lock, KeyRound, MapPin, User, Gift, Star, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 // @ts-ignore
 import logo from "../assets/rhemito-logo-blue.png";
 import { useToast } from "@/hooks/use-toast";
 
-type AuthStep = "check_email" | "login" | "register_otp" | "register_password" | "register_address" | "mini_kyc_processing" | "payment";
+type AuthStep = "check_email" | "login" | "register_otp" | "register_password" | "register_address" | "mini_kyc_processing" | "payment" | "marketing";
 
 export default function SenderView() {
   const { toast } = useToast();
@@ -23,12 +22,13 @@ export default function SenderView() {
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
   const [paymentStep, setPaymentStep] = useState<"method" | "card_details" | "processing_instant" | "manual_transfer" | "manual_transfer_complete">("method");
+
   const [countdown, setCountdown] = useState(5);
 
   // Mock Data
+
   const EXISTING_USER = "user@example.com";
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export default function SenderView() {
         setCountdown((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
-            setLocation("/marketing");
+            setAuthStep("marketing"); // Changed from setLocation("/marketing")
             return 0;
           }
           return prev - 1;
@@ -56,7 +56,7 @@ export default function SenderView() {
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [isPaid, paymentStep, setLocation]);
+  }, [isPaid, paymentStep]);
 
   const requestDetails = {
     requesterName: "Olayinka Mamukuyomi",
@@ -68,7 +68,6 @@ export default function SenderView() {
   };
 
   const handlePay = () => {
-    setShowPaymentModal(false);
     setIsPaid(true);
     setPaymentStep("method");
   };
@@ -157,81 +156,6 @@ export default function SenderView() {
     </button>
   );
 
-  if (isPaid) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md"
-        >
-          <Card className="text-center border-none shadow-xl shadow-slate-200/50">
-            <CardContent className="pt-12 pb-10 space-y-6">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-                className="w-20 h-20 bg-teal/10 rounded-full flex items-center justify-center mx-auto"
-              >
-                <CheckCircle2 className="w-10 h-10 text-teal" />
-              </motion.div>
-
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold font-display text-slate-800">Payment Successful</h2>
-                <p className="text-slate-500">
-                  You've successfully sent <span className="font-semibold text-slate-900">₦{requestDetails.amountNGN.toLocaleString()}</span> to {requestDetails.requesterName}
-                </p>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-500 border border-slate-100">
-                <p>A receipt has been sent to your email.</p>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-                  <svg className="w-full h-full transform -rotate-90">
-                    <circle
-                      cx="32"
-                      cy="32"
-                      r="28"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="transparent"
-                      className="text-slate-100"
-                    />
-                    <circle
-                      cx="32"
-                      cy="32"
-                      r="28"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="transparent"
-                      strokeDasharray={175.93}
-                      strokeDashoffset={175.93 - (175.93 * countdown) / 5}
-                      className="text-blue-600 transition-all duration-1000 ease-linear"
-                    />
-                  </svg>
-                  <span className="absolute text-xl font-bold text-blue-600">{countdown}</span>
-                </div>
-                <p className="text-sm font-medium text-blue-600 animate-pulse">
-                  Redirecting to exclusive offers...
-                </p>
-              </div>
-
-              <Button
-                variant="outline"
-                className="w-full rounded-full h-12 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                onClick={() => window.close()}
-              >
-                Close Window
-              </Button>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
       {/* Background decoration */}
@@ -257,7 +181,8 @@ export default function SenderView() {
           <div className="grid md:grid-cols-2">
 
             {/* Left Column: Payment Summary (Always Visible) */}
-            <div className={`p-8 bg-gradient-to-br from-slate-900 to-slate-800 text-white relative overflow-hidden flex flex-col justify-between ${authStep !== 'payment' ? 'md:block hidden' : 'hidden'}`}>
+            <div className={`p-8 bg-gradient-to-br from-slate-900 to-slate-800 text-white relative overflow-hidden flex flex-col justify-between hidden md:flex`}>
+
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl translate-x-20 -translate-y-20" />
               <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -translate-x-20 translate-y-20" />
 
@@ -299,14 +224,14 @@ export default function SenderView() {
               <div className="relative z-10 mt-auto pt-8">
                 <div className="flex items-center gap-2 text-blue-200/80 text-sm">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Protected by Mito.Money</span>
+                  <span>Powered by Mito.Money</span>
                 </div>
               </div>
             </div>
 
 
             {/* Right Column: Authentication / Payment Forms */}
-            <div className={`p-8 md:p-12 ${authStep === 'payment' ? 'md:col-span-2' : ''}`}>
+            <div className="p-8 md:p-12">
 
               <AnimatePresence mode="wait">
 
@@ -585,106 +510,388 @@ export default function SenderView() {
                 )}
 
 
-                {/* Step 4: Final Payment View (Premium Summary Page) */}
-                {authStep === 'payment' && (
+
+                {/* Step 4: Inline Payment Selection or Success */}
+                {authStep === 'payment' && !isPaid && (
                   <motion.div
-                    key="payment"
-                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-50/80 backdrop-blur-sm"
+                    key="payment_inline"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
                   >
-                    <div className="w-full max-w-[400px] mx-auto bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden relative">
-                      {/* Decorative top gradient */}
-                      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 via-teal-400 to-blue-600" />
+                    <div className="space-y-2 mb-6">
+                      <h2 className="text-2xl font-bold text-slate-900">
+                        {paymentStep === "method" && "How would you like to pay?"}
+                        {paymentStep === "card_details" && "Enter Card Details"}
+                        {paymentStep === "processing_instant" && "Connecting to Bank"}
+                        {paymentStep === "manual_transfer" && "Bank Transfer Details"}
+                        {paymentStep === "manual_transfer_complete" && "Thank You"}
+                      </h2>
+                      <p className="text-slate-500">
+                        {paymentStep === "method" && "Choose a secure payment method"}
+                        {paymentStep === "card_details" && "We accept all major cards"}
+                        {paymentStep === "processing_instant" && "This usually takes a few seconds"}
+                        {paymentStep === "manual_transfer" && "Use these details to send money"}
+                        {paymentStep === "manual_transfer_complete" && "We are verifying your transfer"}
+                      </p>
+                    </div>
 
-                      <div className="p-6 pb-4">
-                        <div className="text-center space-y-2 mb-8">
-                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold tracking-wide uppercase mb-2">
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            Verification Complete
-                          </div>
-                          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Payment Summary</h2>
-                          <p className="text-slate-500 font-medium text-sm">Please review your transaction details</p>
+                    <div className="pt-2">
+                      {paymentStep === "method" ? (
+                        <div className="space-y-3">
+                          <PaymentMethodRow
+                            icon={Building2}
+                            title="Instant Pay By Bank"
+                            subtitle={`You pay GBP ${requestDetails.amountGBP.toFixed(2)}`}
+                            onClick={handleInstantPay}
+                          />
+
+                          <PaymentMethodRow
+                            icon={CreditCard}
+                            title="Credit/Debit Card"
+                            subtitle={`You pay GBP ${requestDetails.amountGBP.toFixed(2)}`}
+                            onClick={() => setPaymentStep("card_details")}
+                          />
+
+                          <PaymentMethodRow
+                            icon={Building2}
+                            title="Manual Bank Transfer"
+                            subtitle="Send to our local account"
+                            onClick={() => setPaymentStep("manual_transfer")}
+                          />
+
+                          {isExistingUser && (
+                            <PaymentMethodRow
+                              icon={Wallet}
+                              title="Wallet Balance"
+                              subtitle="Available: GBP 300.20"
+                              onClick={handlePay}
+                            />
+                          )}
                         </div>
-
-                        {/* Main Card Content */}
-                        <div className="space-y-4">
-
-                          {/* Recipient Block - "Ticket" style */}
-                          <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-
-                            <div className="flex items-center gap-4 relative z-10">
-                              <div className="w-14 h-14 bg-white text-blue-600 rounded-xl shadow-sm border border-slate-100 flex items-center justify-center font-bold text-xl group-hover:scale-105 transition-transform">
-                                {requestDetails.requesterName.substring(0, 2).toUpperCase()}
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-0.5">Payment To</p>
-                                <h3 className="text-lg font-bold text-slate-900 leading-tight">{requestDetails.requesterName}</h3>
-                                <p className="text-sm text-slate-400 flex items-center gap-1.5 mt-1">
-                                  <Calendar className="w-3.5 h-3.5" />
-                                  {requestDetails.date}
-                                </p>
-                              </div>
-                            </div>
+                      ) : paymentStep === "processing_instant" ? (
+                        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                          <div className="relative">
+                            <div className="w-16 h-16 rounded-full border-4 border-slate-100" />
+                            <Loader2 className="w-16 h-16 text-blue-600 animate-spin absolute top-0 left-0" />
                           </div>
-
-                          {/* Financial Breakdown */}
-                          <div className="space-y-4 px-2">
-                            <div className="flex justify-between items-center py-1">
-                              <span className="text-slate-500 font-medium">Recipient Receives</span>
-                              <div className="text-right">
-                                <span className="font-bold text-slate-900 text-xl block">₦ {requestDetails.amountNGN.toLocaleString()}</span>
-                              </div>
-                            </div>
-                            <div className="h-px bg-slate-100 my-2" />
-                            <div className="flex justify-between items-center text-sm">
-                              <span className="text-slate-500">Exchange Rate</span>
-                              <span className="text-slate-700 font-semibold bg-slate-50 px-2 py-1 rounded">1 GBP = ₦2,000.00</span>
-                            </div>
-                            <div className="flex justify-between items-center text-sm">
-                              <span className="text-slate-500">Transfer Fee</span>
-                              <span className="text-emerald-600 font-semibold">Free</span>
-                            </div>
+                          <div className="text-center space-y-1">
+                            <h3 className="font-semibold text-lg text-slate-900">Processing Payment</h3>
+                            <p className="text-slate-500 text-sm">Securely connecting to your bank...</p>
                           </div>
+                        </div>
+                      ) : paymentStep === "manual_transfer" ? (
+                        <div className="space-y-6">
+                          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                            <p className="text-sm text-blue-700 font-medium">
+                              An email has been sent to your email ID <span className="font-bold">{email}</span> containing the Beneficiary Bank Details.
+                            </p>
+                            <p className="text-sm text-blue-700 font-medium">Please transfer exactly <span className="font-bold">£{requestDetails.amountGBP.toFixed(2)}</span> to the details below:</p>
 
-                          {/* Total Box */}
-                          <div className="bg-slate-900 rounded-2xl p-6 text-white relative overflow-hidden shadow-lg shadow-slate-900/20">
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-
-                            <div className="relative z-10 flex justify-between items-end">
-                              <div>
-                                <p className="text-blue-200 text-sm font-medium mb-1">Total to Pay</p>
-                                <div className="flex items-center gap-1.5 opacity-80">
-                                  <Lock className="w-3 h-3" />
-                                  <span className="text-[10px] uppercase tracking-wider font-semibold">Secure Payment</span>
+                            <div className="space-y-4 pt-2">
+                              <div className="flex justify-between items-center pb-2 border-b border-blue-100/50">
+                                <span className="text-sm text-slate-500">Bank Name</span>
+                                <span className="font-semibold text-slate-900">Rhemito Ltd</span>
+                              </div>
+                              <div className="flex justify-between items-center pb-2 border-b border-blue-100/50">
+                                <span className="text-sm text-slate-500">Sort Code</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-slate-900">12-34-56</span>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-100"><Copy className="w-3.5 h-3.5" /></Button>
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-4xl font-bold tracking-tighter">£{requestDetails.amountGBP.toFixed(2)}</p>
-                                <p className="text-sm text-blue-200 font-medium">GBP</p>
+                              <div className="flex justify-between items-center pb-2 border-b border-blue-100/50">
+                                <span className="text-sm text-slate-500">Account Number</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-slate-900">12345678</span>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-100"><Copy className="w-3.5 h-3.5" /></Button>
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-slate-500">Reference</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-900 bg-blue-100 px-2 py-0.5 rounded">REF12345</span>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-100"><Copy className="w-3.5 h-3.5" /></Button>
+                                </div>
                               </div>
                             </div>
+                          </div>
+
+                          <div className="flex gap-3">
+                            <Button
+                              variant="outline"
+                              className="flex-1 h-12"
+                              onClick={() => setPaymentStep("method")}
+                            >
+                              Back
+                            </Button>
+                            <Button
+                              className="flex-[2] h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl"
+                              onClick={() => {
+                                setPaymentStep("manual_transfer_complete");
+                              }}
+                            >
+                              I have sent it
+                            </Button>
+                          </div>
+                        </div>
+
+                      ) : paymentStep === "manual_transfer_complete" ? (
+                        <div className="flex flex-col items-center justify-center py-10 space-y-6 text-center">
+                          <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center">
+                            <CheckCircle2 className="w-10 h-10 text-blue-600" />
+                          </div>
+                          <div className="space-y-2 px-6">
+                            <h3 className="text-xl font-bold text-slate-900">Transfer Initiated</h3>
+                            <p className="text-slate-500">
+                              Thank you. We will verify your transfer shortly and notify you via email once completed.
+                            </p>
+                          </div>
+
+                          <div className="space-y-2 pt-2">
+                            <p className="text-sm font-medium text-blue-600 animate-pulse">
+                              Redirecting you to exclusive offers in {countdown}s...
+                            </p>
+                            <div className="h-1 w-24 bg-slate-100 rounded-full mx-auto overflow-hidden">
+                              <div
+                                className="h-full bg-blue-600 transition-all duration-1000 ease-linear"
+                                style={{ width: `${(countdown / 5) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            className="w-full max-w-[200px]"
+                            onClick={() => {
+                              setPaymentStep("method");
+                            }}
+                          >
+                            Back to Methods
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-6 pt-2">
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="cardNumber">Card Number</Label>
+                              <Input
+                                id="cardNumber"
+                                placeholder="0000 0000 0000 0000"
+                                className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
+                                data-testid="input-card-number"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="expiry">Expiry Date</Label>
+                                <Input
+                                  id="expiry"
+                                  placeholder="MM / YY"
+                                  className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
+                                  data-testid="input-card-expiry"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="cvv">CVC / CVC</Label>
+                                <Input
+                                  id="cvv"
+                                  placeholder="123"
+                                  className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
+                                  data-testid="input-card-cvv"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="name">Cardholder Name</Label>
+                              <Input
+                                id="name"
+                                placeholder="e.g. John Doe"
+                                className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
+                                data-testid="input-card-name"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex gap-3">
+                            <Button
+                              variant="outline"
+                              className="flex-1 h-12"
+                              onClick={() => setPaymentStep("method")}
+                            >
+                              Back
+                            </Button>
+                            <Button
+                              className="flex-[2] h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl"
+                              onClick={handlePay}
+                              data-testid="button-confirm-card-payment"
+                            >
+                              Pay ₦{requestDetails.amountNGN.toLocaleString()}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Step 5: Payment Success (Inline) */}
+                {authStep === 'payment' && isPaid && (
+                  <motion.div
+                    key="payment_success"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center justify-center py-12 space-y-6 text-center"
+                  >
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+                      className="w-20 h-20 bg-teal/10 rounded-full flex items-center justify-center"
+                    >
+                      <CheckCircle2 className="w-10 h-10 text-teal" />
+                    </motion.div>
+
+                    <div className="space-y-2">
+                      <h2 className="text-2xl font-bold text-slate-900">Payment Successful</h2>
+                      <p className="text-slate-500">
+                        You've successfully sent <span className="font-semibold text-slate-900">₦{requestDetails.amountNGN.toLocaleString()}</span> to {requestDetails.requesterName}
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-500 border border-slate-100">
+                      <p>A receipt has been sent to your email.</p>
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                      <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+                        <svg className="w-full h-full transform -rotate-90">
+                          <circle
+                            cx="32"
+                            cy="32"
+                            r="28"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            fill="transparent"
+                            className="text-slate-100"
+                          />
+                          <circle
+                            cx="32"
+                            cy="32"
+                            r="28"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            fill="transparent"
+                            strokeDasharray={175.93}
+                            strokeDashoffset={175.93 - (175.93 * countdown) / 5}
+                            className="text-blue-600 transition-all duration-1000 ease-linear"
+                          />
+                        </svg>
+                        <span className="absolute text-xl font-bold text-blue-600">{countdown}</span>
+                      </div>
+                      <p className="text-sm font-medium text-blue-600 animate-pulse">
+                        Redirecting to exclusive offers...
+                      </p>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      className="w-full rounded-full h-12 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                      onClick={() => window.close()}
+                    >
+                      Close Window
+                    </Button>
+                  </motion.div>
+                )}
+
+                {/* Step 6: Inline Marketing/Offers */}
+                {authStep === 'marketing' && (
+                  <motion.div
+                    key="marketing"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    <div className="space-y-2 mb-6">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/50 border border-blue-200 text-blue-700 text-xs font-bold uppercase tracking-wider mb-2">
+                        <Star className="w-3 h-3 fill-blue-600" />
+                        <span>Exclusive Offers</span>
+                      </div>
+                      <h2 className="text-2xl font-bold text-slate-900">Special Offers for You</h2>
+                      <p className="text-slate-500">Take advantage of these premium benefits</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Offer 1: First Transfer Free */}
+                      <div className="group relative bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-3xl shadow-xl shadow-blue-900/20 hover:shadow-2xl hover:shadow-blue-900/30 transition-all duration-300 hover:-translate-y-1 overflow-hidden">
+                        {/* Decorative Background */}
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl translate-x-8 -translate-y-8" />
+                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/30 rounded-full blur-xl -translate-x-8 translate-y-8" />
+
+                        <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md border border-white/20 text-white font-bold text-[10px] px-2 py-1 rounded-full uppercase tracking-wider animate-pulse">
+                          New Users
+                        </div>
+
+                        <div className="relative z-10 flex items-start gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner shrink-0 group-hover:bg-white/30 transition-colors">
+                            <Gift className="w-6 h-6 drop-shadow-md" />
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="text-xl font-bold text-white mb-2 tracking-tight">First Transfer Free</h3>
+                            <p className="text-blue-100 text-sm leading-relaxed mb-4 opacity-90 font-medium">
+                              Send up to £500 with absolutely <span className="text-white font-bold underline decoration-blue-300/50 underline-offset-2">zero fees</span>. Experience our premium speed.
+                            </p>
+                            <a href="https://www.rhemito.com/login">
+                              <Button className="bg-white text-blue-700 hover:bg-blue-50 font-bold rounded-full h-10 px-5 text-sm shadow-lg shadow-black/10 transition-all group-hover:scale-105">
+                                Claim Offer <ArrowRight className="w-4 h-4 ml-1" />
+                              </Button>
+                            </a>
                           </div>
                         </div>
                       </div>
 
-                      {/* Main Action */}
-                      <div className="p-4 pt-2 bg-slate-50 border-t border-slate-100">
-                        <Button
-                          className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all hover:scale-[1.01] hover:shadow-xl"
-                          onClick={() => {
-                            setPaymentStep("method");
-                            setShowPaymentModal(true);
-                          }}
-                          data-testid="button-summary-pay"
-                        >
-                          Proceed to Payment
-                          <ArrowRight className="w-4 h-4 ml-2" />
-                        </Button>
-                        <p className="text-center text-[10px] text-slate-400 mt-3">
-                          Encrypted by 256-bit SSL security. Your money is always safe.
-                        </p>
+                      {/* Offer 2: Best Rate Guarantee */}
+                      <div className="group relative bg-white/60 backdrop-blur-xl border border-white/60 hover:border-teal/30 p-6 rounded-3xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+                        <div className="flex items-start gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal/20 shrink-0 group-hover:scale-110 transition-transform duration-300">
+                            <ShieldCheck className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="text-lg font-bold text-slate-900 mb-2">Best Rate Guarantee</h3>
+                            <p className="text-slate-600 text-sm leading-relaxed mb-4">
+                              Find a better rate? We'll <span className="font-bold text-teal-700">match it</span> and credit your account with £5.
+                            </p>
+                            <a href="https://www.rhemito.com/login" className="inline-flex items-center gap-2 text-teal-700 font-bold text-sm group/link hover:text-teal-800 transition-colors">
+                              <span>See Details</span>
+                              <div className="w-6 h-6 rounded-full bg-teal/10 flex items-center justify-center group-hover/link:bg-teal/20 transition-colors">
+                                <ArrowRight className="w-3 h-3" />
+                              </div>
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Trust Badges */}
+                      <div className="flex items-center justify-center gap-6 pt-4 opacity-70">
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <ShieldCheck className="w-4 h-4" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">FCA Regulated</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Zap className="w-4 h-4" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">Instant Transfers</span>
+                        </div>
+                      </div>
+
+                      {/* CTA */}
+                      <div className="pt-2">
+                        <a href="https://www.rhemito.com/login" className="w-full block">
+                          <Button size="lg" className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base shadow-xl shadow-blue-600/30 transition-all hover:-translate-y-0.5">
+                            Open Free Account
+                            <ArrowRight className="w-5 h-5 ml-2" />
+                          </Button>
+                        </a>
                       </div>
                     </div>
                   </motion.div>
@@ -696,340 +903,7 @@ export default function SenderView() {
         </Card>
       </motion.div>
 
-      {/* Payment Summary Overlay (Top Level) - RHEMITO BRAND THEME (Blue/Teal) */}
-      <AnimatePresence>
-        {authStep === 'payment' && !showPaymentModal && (
-          <motion.div
-            key="payment"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-50/95 backdrop-blur-md"
-          >
-            {/* Light Backdrop */}
-            <div className="absolute inset-0" />
 
-            {/* Premium Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 0.1, duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-              className="w-full max-w-[400px] bg-white rounded-3xl shadow-2xl shadow-black/30 overflow-hidden relative"
-            >
-              {/* Brand Top Accent */}
-              <div className="h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-blue-600" />
-
-              {/* Header Section */}
-              <div className="px-6 pt-6 pb-4 bg-gradient-to-b from-slate-50 to-white">
-                <div className="text-center">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
-                    className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-xl mx-auto mb-3 flex items-center justify-center shadow-lg shadow-emerald-500/30"
-                  >
-                    <CheckCircle2 className="w-6 h-6 text-white" />
-                  </motion.div>
-                  <h2 className="text-xl font-bold text-slate-900 tracking-tight mb-0.5">Payment Summary</h2>
-                  <p className="text-slate-500 text-xs">Secure transaction • Verified recipient</p>
-                </div>
-              </div>
-
-              {/* Content Section */}
-              <div className="px-6 pb-4 space-y-4">
-
-                {/* Recipient Card */}
-                <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-3 border border-slate-200/60 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center text-white font-bold text-base shadow-lg shadow-blue-500/30">
-                      {requestDetails.requesterName.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-0.5">Sending to</p>
-                      <h3 className="text-sm font-bold text-slate-900 truncate">{requestDetails.requesterName}</h3>
-                      <p className="text-xs text-slate-400">{requestDetails.date}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Transaction Details */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center py-1 border-b border-slate-100">
-                    <span className="text-slate-600 font-medium text-sm">Recipient Receives</span>
-                    <span className="text-base font-bold text-slate-900">₦ {requestDetails.amountNGN.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-100">
-                    <span className="text-slate-500 text-xs">Exchange Rate</span>
-                    <span className="text-slate-700 font-semibold text-xs">1 GBP = ₦2,000.00</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-slate-500 text-xs">Transfer Fee</span>
-                    <span className="text-emerald-600 font-bold text-xs flex items-center gap-1">
-                      <span className="w-3.5 h-3.5 bg-emerald-100 rounded-full flex items-center justify-center">
-                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                      </span>
-                      FREE
-                    </span>
-                  </div>
-                </div>
-
-                {/* Total box - Blue/Slate Theme */}
-                <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 rounded-xl p-4 text-white relative overflow-hidden shadow-xl">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl translate-x-8 -translate-y-8" />
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-500/20 rounded-full blur-xl -translate-x-6 translate-y-6" />
-
-                  <div className="relative z-10 flex justify-between items-center">
-                    <div>
-                      <p className="text-blue-200 text-xs font-medium mb-0.5">Total Amount</p>
-                      <div className="flex items-center gap-1.5 text-slate-300/80">
-                        <Lock className="w-3 h-3" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wide">Secure Payment</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-3xl font-bold tracking-tight">£{requestDetails.amountGBP.toFixed(2)}</p>
-                      <p className="text-blue-200 text-xs font-medium">British Pounds</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Section */}
-              <div className="px-6 pb-6">
-                <Button
-                  className="w-full h-12 bg-gradient-to-r from-blue-600 via-blue-700 to-blue-600 hover:from-blue-700 hover:via-blue-800 hover:to-blue-700 text-white font-bold text-sm rounded-xl shadow-xl shadow-blue-600/30 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-blue-600/40"
-                  onClick={() => {
-                    setPaymentStep("method");
-                    setShowPaymentModal(true);
-                  }}
-                  data-testid="button-summary-pay"
-                >
-                  Proceed to Payment
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-                <div className="flex items-center justify-center gap-1.5 mt-3 text-slate-400">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-medium">256-bit SSL Encryption • Powered by Mito.Money</span>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <Dialog open={showPaymentModal} onOpenChange={(open) => {
-        setShowPaymentModal(open);
-        if (!open) setPaymentStep("method");
-      }}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden gap-0">
-          <DialogHeader className="p-6 pb-2 bg-white">
-            <DialogTitle className="font-display text-xl text-slate-900">
-              {paymentStep === "method" && "How would you like to pay?"}
-              {paymentStep === "card_details" && "Enter Card Details"}
-              {paymentStep === "processing_instant" && "Connecting to Bank"}
-              {paymentStep === "manual_transfer" && "Bank Transfer Details"}
-              {paymentStep === "manual_transfer_complete" && "Thank You"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="p-6 pt-2">
-            {paymentStep === "method" ? (
-              <div className="space-y-3">
-                <PaymentMethodRow
-                  icon={Building2}
-                  title="Instant Pay By Bank"
-                  subtitle={`You pay GBP ${requestDetails.amountGBP.toFixed(2)}`}
-                  onClick={handleInstantPay}
-                />
-
-                <PaymentMethodRow
-                  icon={CreditCard}
-                  title="Credit/Debit Card"
-                  subtitle={`You pay GBP ${requestDetails.amountGBP.toFixed(2)}`}
-                  onClick={() => setPaymentStep("card_details")}
-                />
-
-                <PaymentMethodRow
-                  icon={Building2}
-                  title="Manual Bank Transfer"
-                  subtitle="Send to our local account"
-                  onClick={() => setPaymentStep("manual_transfer")}
-                />
-
-                {isExistingUser && (
-                  <PaymentMethodRow
-                    icon={Wallet}
-                    title="Wallet Balance"
-                    subtitle="Available: GBP 300.20"
-                    onClick={handlePay}
-                  />
-                )}
-              </div>
-            ) : paymentStep === "processing_instant" ? (
-              <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-full border-4 border-slate-100" />
-                  <Loader2 className="w-16 h-16 text-blue-600 animate-spin absolute top-0 left-0" />
-                </div>
-                <div className="text-center space-y-1">
-                  <h3 className="font-semibold text-lg text-slate-900">Processing Payment</h3>
-                  <p className="text-slate-500 text-sm">Securely connecting to your bank...</p>
-                </div>
-              </div>
-            ) : paymentStep === "manual_transfer" ? (
-              <div className="space-y-6">
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-                  <p className="text-sm text-blue-700 font-medium">
-                    An email has been sent to your email ID <span className="font-bold">{email}</span> containing the Beneficiary Bank Details.
-                  </p>
-                  <p className="text-sm text-blue-700 font-medium">Please transfer exactly <span className="font-bold">£{requestDetails.amountGBP.toFixed(2)}</span> to the details below:</p>
-
-                  <div className="space-y-4 pt-2">
-                    <div className="flex justify-between items-center pb-2 border-b border-blue-100/50">
-                      <span className="text-sm text-slate-500">Bank Name</span>
-                      <span className="font-semibold text-slate-900">Rhemito Ltd</span>
-                    </div>
-                    <div className="flex justify-between items-center pb-2 border-b border-blue-100/50">
-                      <span className="text-sm text-slate-500">Sort Code</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-900">12-34-56</span>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-100"><Copy className="w-3.5 h-3.5" /></Button>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center pb-2 border-b border-blue-100/50">
-                      <span className="text-sm text-slate-500">Account Number</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-900">12345678</span>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-100"><Copy className="w-3.5 h-3.5" /></Button>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-slate-500">Reference</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 bg-blue-100 px-2 py-0.5 rounded">REF12345</span>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-100"><Copy className="w-3.5 h-3.5" /></Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-12"
-                    onClick={() => setPaymentStep("method")}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    className="flex-[2] h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl"
-                    onClick={() => {
-                      setPaymentStep("manual_transfer_complete");
-                    }}
-                  >
-                    I have sent it
-                  </Button>
-                </div>
-              </div>
-
-            ) : paymentStep === "manual_transfer_complete" ? (
-              <div className="flex flex-col items-center justify-center py-10 space-y-6 text-center">
-                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center">
-                  <CheckCircle2 className="w-10 h-10 text-blue-600" />
-                </div>
-                <div className="space-y-2 px-6">
-                  <h3 className="text-xl font-bold text-slate-900">Transfer Initiated</h3>
-                  <p className="text-slate-500">
-                    Thank you. We will verify your transfer shortly and notify you via email once completed.
-                  </p>
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <p className="text-sm font-medium text-blue-600 animate-pulse">
-                    Redirecting you to exclusive offers in {countdown}s...
-                  </p>
-                  <div className="h-1 w-24 bg-slate-100 rounded-full mx-auto overflow-hidden">
-                    <div
-                      className="h-full bg-blue-600 transition-all duration-1000 ease-linear"
-                      style={{ width: `${(countdown / 5) * 100}%` }}
-                    />
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  className="w-full max-w-[200px]"
-                  onClick={() => {
-                    setShowPaymentModal(false);
-                    setPaymentStep("method");
-                  }}
-                >
-                  Close
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-6 pt-2">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cardNumber">Card Number</Label>
-                    <Input
-                      id="cardNumber"
-                      placeholder="0000 0000 0000 0000"
-                      className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
-                      data-testid="input-card-number"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="expiry">Expiry Date</Label>
-                      <Input
-                        id="expiry"
-                        placeholder="MM / YY"
-                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
-                        data-testid="input-card-expiry"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cvv">CVC / CVC</Label>
-                      <Input
-                        id="cvv"
-                        placeholder="123"
-                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
-                        data-testid="input-card-cvv"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Cardholder Name</Label>
-                    <Input
-                      id="name"
-                      placeholder="e.g. John Doe"
-                      className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
-                      data-testid="input-card-name"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-12"
-                    onClick={() => setPaymentStep("method")}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    className="flex-[2] h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl"
-                    onClick={handlePay}
-                    data-testid="button-confirm-card-payment"
-                  >
-                    Pay ₦{requestDetails.amountNGN.toLocaleString()}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div >
   );
 }
