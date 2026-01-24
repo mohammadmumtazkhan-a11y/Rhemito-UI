@@ -37,6 +37,7 @@ let campaigns: Campaign[] = [
         status: 'active',
         createdAt: new Date('2026-01-20'),
         uniqueLink: `${window.location.origin}/contribute/demo-campaign-1`,
+        creatorName: 'John Doe',
     },
     {
         id: 'demo-campaign-2',
@@ -49,6 +50,7 @@ let campaigns: Campaign[] = [
         status: 'active',
         createdAt: new Date('2026-01-15'),
         uniqueLink: `${window.location.origin}/contribute/demo-campaign-2`,
+        creatorName: 'John Doe',
     },
 ];
 

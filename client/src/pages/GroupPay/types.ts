@@ -11,6 +11,7 @@ export interface Campaign {
     status: 'active' | 'completed' | 'cancelled' | 'paused';
     createdAt: Date;
     uniqueLink: string;
+    creatorName: string;
     fixedContributionAmount?: number; // Optional: if set, all contributors must pay this exact amount
 }
 
