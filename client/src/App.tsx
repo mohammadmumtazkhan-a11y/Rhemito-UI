@@ -16,6 +16,10 @@ import PayoutAccounts from "@/pages/PayoutAccounts";
 import SendMoney from "@/pages/SendMoney";
 import BonusAndDiscounts from "@/pages/BonusAndDiscounts";
 import Marketing from "@/pages/Marketing";
+import GroupPayDashboard from "@/pages/GroupPay/GroupPayDashboard";
+import CreateCampaign from "@/pages/GroupPay/CreateCampaign";
+import CampaignDetails from "@/pages/GroupPay/CampaignDetails";
+import ContributorView from "@/pages/GroupPay/ContributorView";
 import NotFound from "@/pages/not-found";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -65,6 +69,10 @@ function Router() {
       <Route path="/pay/:id" component={SenderView} />
       <Route path="/bonus-discounts" component={BonusAndDiscounts} />
       <Route path="/marketing" component={Marketing} />
+      <Route path="/group-pay" component={GroupPayDashboard} />
+      <Route path="/group-pay/create" component={CreateCampaign} />
+      <Route path="/group-pay/:id" component={CampaignDetails} />
+      <Route path="/contribute/:campaignId" component={ContributorView} />
       <Route component={NotFound} />
     </Switch>
   );

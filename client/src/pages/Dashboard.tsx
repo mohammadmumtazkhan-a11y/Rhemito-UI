@@ -95,7 +95,7 @@ export default function Dashboard() {
   // Bonus State - Hardcoded for Prototype
   const [bonusBalance] = useState(5);
 
-  const handlePaymentOptionSelect = (option: "request" | "invoice" | "qrcode") => {
+  const handlePaymentOptionSelect = (option: "request" | "invoice" | "qrcode" | "funding") => {
     setShowPaymentModal(false);
     switch (option) {
       case "request":
@@ -106,6 +106,9 @@ export default function Dashboard() {
         break;
       case "qrcode":
         setLocation("/show-qr-code");
+        break;
+      case "funding":
+        setLocation("/group-pay/create");
         break;
     }
   };

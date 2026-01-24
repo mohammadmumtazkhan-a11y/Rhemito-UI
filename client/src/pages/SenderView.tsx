@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, CreditCard, Building2, Calendar, ShieldCheck, ArrowRight, Wallet, Loader2, Copy, Mail, Lock, KeyRound, MapPin, User, Gift, Star, Zap } from "lucide-react";
+import { CheckCircle2, CreditCard, Building2, Calendar as CalendarIcon, ShieldCheck, ArrowRight, Wallet, Loader2, Copy, Mail, Lock, KeyRound, MapPin, User, Gift, Star, Zap } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { PremiumDatePicker } from "@/components/ui/premium-date-picker";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,9 +19,12 @@ export default function SenderView() {
   const [, setLocation] = useLocation();
   const [authStep, setAuthStep] = useState<AuthStep>("check_email");
   const [isExistingUser, setIsExistingUser] = useState(false);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState("name@example.com");
+  const [isVerifiedSource, setIsVerifiedSource] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [dob, setDob] = useState<Date | undefined>(undefined);
+  const [dobError, setDobError] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isPaid, setIsPaid] = useState(false);
@@ -31,6 +36,13 @@ export default function SenderView() {
   // Mock Data
 
   const EXISTING_USER = "user@example.com";
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("source") === "email") {
+      setIsVerifiedSource(true);
+    }
+  }, []);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -80,6 +92,13 @@ export default function SenderView() {
     }, 3000);
   };
 
+  // Mock Scenarios for Demo
+  const SCENARIOS = {
+    EXISTING: "user@example.com",
+    NEW_VERIFIED: "verified@example.com",
+    NEW_UNVERIFIED: "whatsapp_user@example.com"
+  };
+
   const checkEmail = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -93,12 +112,21 @@ export default function SenderView() {
       setFirstName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
     }
 
-    if (email === EXISTING_USER) {
+    // Demo Routing Logic
+    if (email === SCENARIOS.EXISTING) {
+      // Scenario 1: Existing User -> Login
       setAuthStep("login");
       setIsExistingUser(true);
-    } else {
-      setAuthStep("register_otp");
+    }
+    else if (email === SCENARIOS.NEW_VERIFIED) {
+      // Scenario 2: New User coming from Email Link -> Skip OTP -> Create Password
       setIsExistingUser(false);
+      setAuthStep("register_password");
+    }
+    else {
+      // Scenario 3: Default / WhatsApp User -> OTP Required
+      setIsExistingUser(false);
+      setAuthStep("register_otp");
     }
   };
 
@@ -114,6 +142,21 @@ export default function SenderView() {
 
   const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setDobError("");
+
+    if (!dob) {
+      setDobError("Date of birth is required");
+      return;
+    }
+
+    const today = new Date();
+    const adultDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+
+    if (dob > adultDate) {
+      setDobError("You must be at least 18 years old to use Rhemito");
+      return;
+    }
+
     setAuthStep("mini_kyc_processing");
   };
 
@@ -164,12 +207,12 @@ export default function SenderView() {
       <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-teal/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
       {/* Logo Header */}
-      <div className="w-full max-w-5xl mb-8 flex items-center justify-start relative z-20">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center">
+      <div className="w-full max-w-5xl mb-6 flex items-center justify-start relative z-20">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center">
             <img src={logo} alt="Rhemito Logo" className="w-full h-full object-contain" />
           </div>
-          <span className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight font-display">Rhemito</span>
+          <span className="text-lg md:text-xl font-bold text-slate-800 tracking-tight font-display">Rhemito</span>
         </div>
       </div>
 
@@ -178,7 +221,7 @@ export default function SenderView() {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-5xl relative z-10"
       >
-        <Card className="border-none shadow-xl shadow-slate-200/60 overflow-hidden bg-white/80 backdrop-blur-xl">
+        <Card className="border-none shadow-xl shadow-slate-200/60 bg-white/80 backdrop-blur-xl">
           <div className="grid md:grid-cols-2">
 
             {/* Left Column: Payment Summary (Always Visible) */}
@@ -268,9 +311,11 @@ export default function SenderView() {
                       </div>
                       <Button type="submit" className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-lg">Continue</Button>
                     </form>
-                    <p className="text-xs text-center text-slate-400">
-                      Try <span className="font-mono bg-slate-100 px-1 rounded">user@example.com</span> for existing user layout.
-                    </p>
+                    <div className="text-xs text-center text-slate-400 space-y-1">
+                      <p>Try <span className="font-mono bg-slate-100 px-1 rounded">user@example.com</span> for Existing User (Login)</p>
+                      <p>Try <span className="font-mono bg-slate-100 px-1 rounded">verified@example.com</span> for New User via Email (Skip OTP)</p>
+                      <p>Try <span className="font-mono bg-slate-100 px-1 rounded">whatsapp_user@example.com</span> for New User via WhatsApp (OTP)</p>
+                    </div>
                   </motion.div>
                 )}
 
@@ -462,12 +507,17 @@ export default function SenderView() {
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="address">Street Address</Label>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                          <Input id="address" placeholder="123 Main St" className="pl-10 h-11" required />
-                        </div>
+                      <div className="space-y-2 flex flex-col">
+                        <Label htmlFor="dob">Date of Birth</Label>
+                        <PremiumDatePicker
+                          date={dob}
+                          setDate={setDob}
+                        />
+                        {dobError && (
+                          <p className="text-sm text-red-500 font-medium animate-in fade-in slide-in-from-top-1">
+                            {dobError}
+                          </p>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">

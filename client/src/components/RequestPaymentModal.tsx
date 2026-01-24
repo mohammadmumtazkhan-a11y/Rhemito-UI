@@ -1,11 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Link2, FileText, QrCode } from "lucide-react";
+import { X, Link2, FileText, QrCode, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface RequestPaymentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelect: (option: "request" | "invoice" | "qrcode") => void;
+  onSelect: (option: "request" | "invoice" | "qrcode" | "funding") => void;
 }
 
 export function RequestPaymentModal({ open, onOpenChange, onSelect }: RequestPaymentModalProps) {
@@ -80,6 +80,20 @@ export function RequestPaymentModal({ open, onOpenChange, onSelect }: RequestPay
                   <div>
                     <p className="font-semibold text-foreground">Show QR code</p>
                     <p className="text-sm text-muted-foreground">Display a scannable QR code for payment</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => onSelect("funding")}
+                  className="w-full p-4 rounded-xl border border-border hover:border-blue-500 hover:bg-blue-50 transition-all flex items-center gap-4 text-left group"
+                  data-testid="button-funding"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                    <Users className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">Funding Campaigns</p>
+                    <p className="text-sm text-muted-foreground">Collect funds from multiple contributors</p>
                   </div>
                 </button>
               </div>

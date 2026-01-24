@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Link2, FileText, QrCode } from "lucide-react";
+import { X, Link2, FileText, QrCode, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 
@@ -87,6 +87,20 @@ export function WaysToGetPaidModal({ isOpen, onClose, senderEmail }: WaysToGetPa
                   <div>
                     <p className="font-semibold text-foreground">Show QR code</p>
                     <p className="text-sm text-muted-foreground">Display a scannable QR code for payment</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleOptionClick("/group-pay/create")}
+                  className="w-full p-4 rounded-xl border border-border hover:border-blue-500 hover:bg-blue-50 transition-all flex items-center gap-4 text-left group"
+                  data-testid="option-group-campaign"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                    <Users className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">Start funding campaign</p>
+                    <p className="text-sm text-muted-foreground">Collect funds from multiple contributors</p>
                   </div>
                 </button>
               </div>
