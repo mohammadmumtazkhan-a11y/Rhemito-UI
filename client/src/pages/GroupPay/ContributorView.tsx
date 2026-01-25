@@ -874,7 +874,7 @@ export default function ContributorView() {
                                                         </div>
                                                         <div className="space-y-1">
                                                             <h2 className="text-3xl font-bold text-slate-900">Payment Received</h2>
-                                                            <p className="text-slate-500">Thank you for supporting this campaign.</p>
+                                                            <p className="text-slate-500">Thanks for funding this collection</p>
                                                         </div>
                                                     </div>
                                                 )}
