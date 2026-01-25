@@ -214,6 +214,13 @@ export default function ContributorView() {
             email,
             amount: contributionAmount,
         });
+
+        // Update local state to reflect new contribution immediately
+        setSummary(prev => ({
+            totalRaised: prev.totalRaised + contributionAmount,
+            contributorCount: prev.contributorCount + 1
+        }));
+
         setPaymentStep("method");
     };
 
@@ -333,29 +340,7 @@ export default function ContributorView() {
                                 </div>
 
                                 {/* Contribution Preview - shows when amount is entered */}
-                                {conversion && parseFloat(amount) > 0 && (
-                                    <div className="bg-white/10 border border-white/20 rounded-2xl p-4 space-y-3 backdrop-blur-sm">
-                                        <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider">Your Contribution Preview</p>
-                                        <div className="space-y-2 text-sm">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-blue-100/70">You're sending:</span>
-                                                <span className="font-bold text-white">{formatCurrency(conversion.sendingAmount, conversion.sendingCurrency)}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-xs">
-                                                <span className="text-blue-100/50">FX Rate:</span>
-                                                <span className="text-blue-200">1 {conversion.sendingCurrency} = {conversion.fxRate.toFixed(4)} {conversion.receivingCurrency}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-xs">
-                                                <span className="text-blue-100/50">Mito Fee:</span>
-                                                <span className="text-amber-300">-{formatCurrency(conversion.mitoFee, conversion.receivingCurrency)}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center pt-2 border-t border-white/10">
-                                                <span className="text-blue-100/70">Requester receives:</span>
-                                                <span className="font-bold text-green-400">{formatCurrency(conversion.netAmount, conversion.receivingCurrency)}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+
 
                                 <div className="space-y-6 bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
                                     <div className="flex justify-between items-end">
@@ -499,7 +484,7 @@ export default function ContributorView() {
                                                         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4 space-y-3">
                                                             <div className="flex items-center gap-2 text-blue-700">
                                                                 <ArrowLeftRight className="w-4 h-4" />
-                                                                <span className="text-sm font-semibold">Currency Conversion</span>
+                                                                <span className="text-sm font-semibold">Your Contribution Preview</span>
                                                             </div>
                                                             <div className="text-xs space-y-2 text-slate-600">
                                                                 <div className="flex justify-between">
@@ -909,11 +894,9 @@ export default function ContributorView() {
                                                 <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-4 text-center shadow-inner">
                                                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Amount Contributed</p>
                                                     <p className="text-4xl font-bold text-blue-600 tracking-tight">{formatCurrency(conversion?.sendingAmount || parseFloat(amount), conversion?.sendingCurrency || campaign.currency)}</p>
-                                                    {conversion && !conversion.isSameCurrency && (
-                                                        <p className="text-sm text-slate-400 mt-1">
-                                                            ≈ {formatCurrency(conversion.netAmount, conversion.receivingCurrency)} received
-                                                        </p>
-                                                    )}
+                                                    <p className="text-sm font-medium text-slate-500 mt-2">
+                                                        Requester receives: <span className="text-green-600 font-bold">{formatCurrency(conversion?.netAmount || (parseFloat(amount) - (parseFloat(amount) * MITO_FEE_CONFIG.PERCENTAGE)), conversion?.receivingCurrency || campaign.currency)}</span>
+                                                    </p>
                                                 </div>
 
 
