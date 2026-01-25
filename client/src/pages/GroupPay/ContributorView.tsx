@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { useRoute } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Target, CheckCircle2, Mail, User, CreditCard, ArrowRight, ShieldCheck, Loader2, Lock, KeyRound, Building2, Wallet, Copy, Star, Gift, Zap } from "lucide-react";
+import { Users, Target, CheckCircle2, Mail, User, CreditCard, ArrowRight, ArrowLeftRight, ShieldCheck, Loader2, Lock, KeyRound, Building2, Wallet, Copy, Star, Gift, Zap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PremiumDatePicker } from "@/components/ui/premium-date-picker";
-import { getCampaignById, getCampaignSummary, addContributor } from "./mockData";
+import { getCampaignById, getCampaignSummary, addContributor, SUPPORTED_CURRENCIES, MOCK_FX_RATES, MITO_FEE_CONFIG, CURRENCY_SYMBOLS } from "./mockData";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Campaign } from "./types";
 import { useToast } from "@/hooks/use-toast";
 // @ts-ignore
@@ -29,6 +30,9 @@ export default function ContributorView() {
     const [email, setEmail] = useState("");
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
+    const [address, setAddress] = useState("");
+    const [city, setCity] = useState("");
+    const [postCode, setPostCode] = useState("");
     const [dob, setDob] = useState<Date | undefined>(undefined);
     const [dobError, setDobError] = useState("");
     const [password, setPassword] = useState("");
@@ -38,6 +42,7 @@ export default function ContributorView() {
     const [paymentStep, setPaymentStep] = useState<"method" | "card_details" | "processing_instant" | "manual_transfer" | "manual_transfer_complete">("method");
     const [countdown, setCountdown] = useState(1);
     const [amount, setAmount] = useState("");
+    const [selectedCurrency, setSelectedCurrency] = useState<string>("");
 
     useEffect(() => {
         try {
@@ -91,6 +96,32 @@ export default function ContributorView() {
         }).format(val);
     };
 
+    // Calculate FX conversion details
+    const getConversionDetails = () => {
+        if (!amount || !campaign) return null;
+        const amountNum = parseFloat(amount);
+        if (isNaN(amountNum) || amountNum <= 0) return null;
+
+        const effectiveCurrency = selectedCurrency || campaign.currency;
+        const rate = MOCK_FX_RATES[effectiveCurrency]?.[campaign.currency] || 1;
+        const convertedAmount = amountNum * rate;
+        const mitoFee = Math.max(convertedAmount * MITO_FEE_CONFIG.PERCENTAGE, MITO_FEE_CONFIG.MIN_FEE);
+        const netAmount = convertedAmount - mitoFee;
+
+        return {
+            sendingAmount: amountNum,
+            sendingCurrency: effectiveCurrency,
+            fxRate: rate,
+            convertedAmount,
+            mitoFee,
+            netAmount,
+            receivingCurrency: campaign.currency,
+            isSameCurrency: effectiveCurrency === campaign.currency,
+        };
+    };
+
+    const conversion = getConversionDetails();
+
     const progress = campaign ? (summary.totalRaised / campaign.targetAmount) * 100 : 0;
 
     // Mock Scenarios
@@ -132,7 +163,23 @@ export default function ContributorView() {
 
     const handleVerifyOTP = (e: React.FormEvent) => {
         e.preventDefault();
+        toast({
+            title: "Email Verified",
+            description: "Your email has been successfully verified.",
+            duration: 3000,
+        });
         setAuthStep("register_password");
+    };
+
+    const handlePasswordSubmit = () => {
+        if (password) {
+            toast({
+                title: "Password Created",
+                description: "Your account is now secure.",
+                duration: 3000,
+            });
+        }
+        setAuthStep("register_address");
     };
 
     const handleAddressSubmit = (e: React.FormEvent) => {
@@ -148,16 +195,24 @@ export default function ContributorView() {
             setDobError("You must be at least 18 years old to use Mito.Money");
             return;
         }
+        toast({
+            title: "Details Saved",
+            description: "Your verification was successful.",
+            duration: 3000,
+        });
         setAuthStep("mini_kyc_processing");
     };
 
     const handlePay = () => {
         setIsPaid(true);
+        // Save the net amount in campaign currency so progress is tracked correctly relative to goal
+        const contributionAmount = conversion ? conversion.netAmount : parseFloat(amount);
+
         addContributor({
             campaignId,
             name: firstName + " " + lastName,
             email,
-            amount: parseFloat(amount),
+            amount: contributionAmount,
         });
         setPaymentStep("method");
     };
@@ -277,6 +332,31 @@ export default function ContributorView() {
                                     </div>
                                 </div>
 
+                                {/* Contribution Preview - shows when amount is entered */}
+                                {conversion && parseFloat(amount) > 0 && (
+                                    <div className="bg-white/10 border border-white/20 rounded-2xl p-4 space-y-3 backdrop-blur-sm">
+                                        <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider">Your Contribution Preview</p>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-blue-100/70">You're sending:</span>
+                                                <span className="font-bold text-white">{formatCurrency(conversion.sendingAmount, conversion.sendingCurrency)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-blue-100/50">FX Rate:</span>
+                                                <span className="text-blue-200">1 {conversion.sendingCurrency} = {conversion.fxRate.toFixed(4)} {conversion.receivingCurrency}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-blue-100/50">Mito Fee:</span>
+                                                <span className="text-amber-300">-{formatCurrency(conversion.mitoFee, conversion.receivingCurrency)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center pt-2 border-t border-white/10">
+                                                <span className="text-blue-100/70">Requester receives:</span>
+                                                <span className="font-bold text-green-400">{formatCurrency(conversion.netAmount, conversion.receivingCurrency)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="space-y-6 bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
                                     <div className="flex justify-between items-end">
                                         <div>
@@ -378,24 +458,69 @@ export default function ContributorView() {
                                                     </div>
 
                                                     <div className="space-y-2">
-                                                        <Label htmlFor="amount">Contribution Amount ({campaign.currency})</Label>
-                                                        <div className="relative">
-                                                            <span className="absolute left-3 top-3 text-slate-500 font-medium">
-                                                                {campaign.currency === 'GBP' ? '£' : campaign.currency === 'USD' ? '$' : campaign.currency === 'EUR' ? '€' : '₦'}
-                                                            </span>
-                                                            <Input
-                                                                id="amount"
-                                                                type="number"
-                                                                min="1"
-                                                                step="0.01"
-                                                                placeholder="50.00"
-                                                                className="pl-8 h-11"
-                                                                value={amount}
-                                                                onChange={(e) => setAmount(e.target.value)}
-                                                                required
-                                                            />
+                                                        <Label htmlFor="amount">Contribution Amount</Label>
+                                                        <div className="flex gap-2">
+                                                            <Select
+                                                                value={selectedCurrency || campaign.currency}
+                                                                onValueChange={setSelectedCurrency}
+                                                            >
+                                                                <SelectTrigger className="w-24 h-11 shrink-0">
+                                                                    <SelectValue />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {SUPPORTED_CURRENCIES.map(curr => (
+                                                                        <SelectItem key={curr} value={curr}>
+                                                                            {CURRENCY_SYMBOLS[curr]} {curr}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <div className="relative flex-1">
+                                                                <span className="absolute left-3 top-3 text-slate-500 font-medium">
+                                                                    {CURRENCY_SYMBOLS[selectedCurrency || campaign.currency]}
+                                                                </span>
+                                                                <Input
+                                                                    id="amount"
+                                                                    type="number"
+                                                                    min="1"
+                                                                    step="0.01"
+                                                                    placeholder="50.00"
+                                                                    className="pl-8 h-11"
+                                                                    value={amount}
+                                                                    onChange={(e) => setAmount(e.target.value)}
+                                                                    required
+                                                                />
+                                                            </div>
                                                         </div>
                                                     </div>
+
+                                                    {/* Conversion Breakdown - shown when different currency selected */}
+                                                    {conversion && (
+                                                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                                                            <div className="flex items-center gap-2 text-blue-700">
+                                                                <ArrowLeftRight className="w-4 h-4" />
+                                                                <span className="text-sm font-semibold">Currency Conversion</span>
+                                                            </div>
+                                                            <div className="text-xs space-y-2 text-slate-600">
+                                                                <div className="flex justify-between">
+                                                                    <span>You send:</span>
+                                                                    <span className="font-bold text-slate-900">{formatCurrency(conversion.sendingAmount, conversion.sendingCurrency)}</span>
+                                                                </div>
+                                                                <div className="flex justify-between">
+                                                                    <span>FX Rate:</span>
+                                                                    <span className="text-slate-700">1 {conversion.sendingCurrency} = {conversion.fxRate.toFixed(4)} {conversion.receivingCurrency}</span>
+                                                                </div>
+                                                                <div className="flex justify-between">
+                                                                    <span>Mito Fee ({(MITO_FEE_CONFIG.PERCENTAGE * 100).toFixed(1)} %):</span>
+                                                                    <span className="text-amber-600">-{formatCurrency(conversion.mitoFee, conversion.receivingCurrency)}</span>
+                                                                </div>
+                                                                <div className="flex justify-between pt-2 border-t border-blue-200">
+                                                                    <span className="font-semibold text-slate-800">Requester receives:</span>
+                                                                    <span className="font-bold text-green-600">{formatCurrency(conversion.netAmount, conversion.receivingCurrency)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
 
                                                     <Button type="submit" disabled={!amount || !email} className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg gap-2">
                                                         Continue <ArrowRight className="w-5 h-5" />
@@ -510,7 +635,7 @@ export default function ContributorView() {
                                                     </div>
 
                                                     <div className="pt-2 space-y-3">
-                                                        <Button type="button" className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg" onClick={() => setAuthStep("register_address")}>
+                                                        <Button type="button" className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg" onClick={handlePasswordSubmit}>
                                                             {password ? "Set Password & Continue" : "Continue"}
                                                         </Button>
                                                         <Button type="button" variant="ghost" className="w-full text-slate-500 font-medium" onClick={() => setAuthStep("register_address")}>
@@ -543,6 +668,21 @@ export default function ContributorView() {
                                                         <div className="space-y-2">
                                                             <Label htmlFor="lastName">Last Name</Label>
                                                             <Input id="lastName" placeholder="Doe" className="h-11" required value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="address">Address Line 1</Label>
+                                                        <Input id="address" placeholder="123 Main St" className="h-11" required value={address} onChange={(e) => setAddress(e.target.value)} />
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="city">City</Label>
+                                                            <Input id="city" placeholder="London" className="h-11" required value={city} onChange={(e) => setCity(e.target.value)} />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="postCode">Post Code</Label>
+                                                            <Input id="postCode" placeholder="SW1A 1AA" className="h-11" required value={postCode} onChange={(e) => setPostCode(e.target.value)} />
                                                         </div>
                                                     </div>
 
@@ -610,7 +750,7 @@ export default function ContributorView() {
                                                             <PaymentMethodRow
                                                                 icon={Building2}
                                                                 title="Instant Bank Transfer"
-                                                                subtitle={`Pay ${formatCurrency(parseFloat(amount), campaign.currency)} via Open Banking`}
+                                                                subtitle={`Pay ${formatCurrency(conversion?.sendingAmount || parseFloat(amount), conversion?.sendingCurrency || campaign.currency)} via Open Banking`}
                                                                 onClick={handleInstantPay}
                                                             />
                                                             <PaymentMethodRow
@@ -644,9 +784,10 @@ export default function ContributorView() {
                                                                     </div>
                                                                 </div>
                                                             </div>
+
                                                             <div className="flex gap-3">
                                                                 <Button variant="outline" className="flex-1 h-11" onClick={() => setPaymentStep("method")}>Back</Button>
-                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={handlePay}>Contribute {formatCurrency(parseFloat(amount), campaign.currency)}</Button>
+                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={handlePay}>Contribute {formatCurrency(conversion?.sendingAmount || parseFloat(amount), conversion?.sendingCurrency || campaign.currency)}</Button>
                                                             </div>
                                                         </div>
                                                     ) : paymentStep === "processing_instant" ? (
@@ -660,7 +801,7 @@ export default function ContributorView() {
                                                                 <p className="text-sm text-blue-700 font-medium">
                                                                     An email has been sent to your email ID <span className="font-bold">{email}</span> containing the Beneficiary Bank Details.
                                                                 </p>
-                                                                <p className="text-sm text-blue-700 font-medium">Please transfer exactly <span className="font-bold">{formatCurrency(parseFloat(amount), campaign.currency)}</span> to the details below:</p>
+                                                                <p className="text-sm text-blue-700 font-medium">Please transfer exactly <span className="font-bold">{formatCurrency(conversion?.sendingAmount || parseFloat(amount), conversion?.sendingCurrency || campaign.currency)}</span> to the details below:</p>
 
                                                                 <div className="space-y-3 pt-2">
                                                                     <div className="flex justify-between items-center pb-2 border-b border-blue-100/50">
@@ -747,7 +888,7 @@ export default function ContributorView() {
                                                             <CheckCircle2 className="w-10 h-10 text-green-600" />
                                                         </div>
                                                         <div className="space-y-1">
-                                                            <h2 className="text-3xl font-bold text-slate-900">Contribution Received!</h2>
+                                                            <h2 className="text-3xl font-bold text-slate-900">Payment Received</h2>
                                                             <p className="text-slate-500">Thank you for supporting this campaign.</p>
                                                         </div>
                                                     </div>
@@ -767,7 +908,12 @@ export default function ContributorView() {
 
                                                 <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-4 text-center shadow-inner">
                                                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Amount Contributed</p>
-                                                    <p className="text-4xl font-bold text-blue-600 tracking-tight">{formatCurrency(parseFloat(amount), campaign.currency)}</p>
+                                                    <p className="text-4xl font-bold text-blue-600 tracking-tight">{formatCurrency(conversion?.sendingAmount || parseFloat(amount), conversion?.sendingCurrency || campaign.currency)}</p>
+                                                    {conversion && !conversion.isSameCurrency && (
+                                                        <p className="text-sm text-slate-400 mt-1">
+                                                            ≈ {formatCurrency(conversion.netAmount, conversion.receivingCurrency)} received
+                                                        </p>
+                                                    )}
                                                 </div>
 
 
@@ -791,14 +937,14 @@ export default function ContributorView() {
                                 )}
                             </AnimatePresence>
                         </div>
-                    </div>
-                </Card>
-            </motion.div>
+                    </div >
+                </Card >
+            </motion.div >
 
             {/* Footer */}
-            <div className="mt-6 opacity-40">
+            < div className="mt-6 opacity-40" >
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 text-center">Powered by Mito.Money</p>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

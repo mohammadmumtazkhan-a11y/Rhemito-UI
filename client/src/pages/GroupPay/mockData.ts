@@ -2,6 +2,29 @@
 
 import { Campaign, Contributor, BankAccount } from './types';
 
+// Supported currencies for contributions
+export const SUPPORTED_CURRENCIES = ['GBP', 'USD', 'EUR', 'NGN'] as const;
+export type SupportedCurrency = typeof SUPPORTED_CURRENCIES[number];
+
+// Mock FX rates (cross-currency conversion rates)
+export const MOCK_FX_RATES: Record<string, Record<string, number>> = {
+    GBP: { GBP: 1, USD: 1.27, EUR: 1.17, NGN: 1950 },
+    USD: { GBP: 0.79, USD: 1, EUR: 0.92, NGN: 1535 },
+    EUR: { GBP: 0.85, EUR: 1, USD: 1.09, NGN: 1667 },
+    NGN: { GBP: 0.00051, USD: 0.00065, EUR: 0.0006, NGN: 1 },
+};
+
+// Mito fee configuration
+export const MITO_FEE_CONFIG = {
+    PERCENTAGE: 0.015, // 1.5%
+    MIN_FEE: 0.50,     // Minimum fee in campaign currency
+};
+
+// Currency symbols
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+    GBP: '£', USD: '$', EUR: '€', NGN: '₦'
+};
+
 // Generate unique ID
 export const generateId = (): string => {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
