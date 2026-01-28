@@ -370,7 +370,7 @@ export default function SenderView() {
                   >
                     <div className="space-y-2">
                       <h2 className="text-2xl font-bold text-slate-900">Verify your email</h2>
-                      <p className="text-slate-500">We've sent a code to <span className="font-semibold text-slate-900">{email}</span></p>
+                      <p className="text-slate-500">We've sent a code to <span className="font-semibold text-slate-900">{email}</span> <button type="button" className="text-blue-600 font-medium hover:underline text-sm ml-1" onClick={() => setAuthStep('check_email')}>Change email</button></p>
                     </div>
 
                     <form onSubmit={handleVerifyOTP} className="space-y-6">
@@ -384,7 +384,7 @@ export default function SenderView() {
                       <Button type="submit" className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-lg">Verify Code</Button>
                     </form>
                     <p className="text-sm text-center text-slate-500">
-                      Didn't receive code? <button type="button" className="text-blue-600 font-medium hover:underline">Resend</button> or <button type="button" className="text-blue-600 font-medium hover:underline" onClick={() => setAuthStep('check_email')}>Change email</button>
+                      Didn't receive code? <button type="button" className="text-blue-600 font-medium hover:underline">Resend</button>
                     </p>
                   </motion.div>
                 )}

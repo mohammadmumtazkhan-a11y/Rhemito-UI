@@ -571,7 +571,7 @@ export default function ContributorView() {
                                             >
                                                 <div className="space-y-2">
                                                     <h2 className="text-2xl font-bold text-slate-900">Verify your email</h2>
-                                                    <p className="text-slate-500">We've sent a code to <span className="font-semibold text-slate-900">{email}</span></p>
+                                                    <p className="text-slate-500">We've sent a code to <span className="font-semibold text-slate-900">{email}</span> <button type="button" className="text-blue-600 font-medium hover:underline text-sm ml-1" onClick={() => setAuthStep('check_email')}>Change email</button></p>
                                                 </div>
 
                                                 <form onSubmit={handleVerifyOTP} className="space-y-6">
