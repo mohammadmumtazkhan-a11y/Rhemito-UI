@@ -20,6 +20,7 @@ import GroupPayDashboard from "@/pages/GroupPay/GroupPayDashboard";
 import CreateCampaign from "@/pages/GroupPay/CreateCampaign";
 import CampaignDetails from "@/pages/GroupPay/CampaignDetails";
 import ContributorView from "@/pages/GroupPay/ContributorView";
+import MobilePaymentSimulator from "@/pages/MobilePaymentSimulator";
 import NotFound from "@/pages/not-found";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -73,6 +74,7 @@ function Router() {
       <Route path="/group-pay/create" component={CreateCampaign} />
       <Route path="/group-pay/:id" component={CampaignDetails} />
       <Route path="/contribute/:campaignId" component={ContributorView} />
+      <Route path="/mobile-payment" component={MobilePaymentSimulator} />
       <Route component={NotFound} />
     </Switch>
   );

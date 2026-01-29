@@ -99,6 +99,71 @@ export default function SenderView() {
     NEW_UNVERIFIED: "whatsapp_user@example.com"
   };
 
+  // --- Promo Code & Bonus Logic ---
+  const [promoCode, setPromoCode] = useState("");
+  const [promoMessage, setPromoMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [appliedPromoDiscount, setAppliedPromoDiscount] = useState(0);
+
+  const [bonusBalance] = useState(5.00); // Simulated Available Balance
+  const [bonusMode, setBonusMode] = useState<"pay_less" | "send_more" | null>(null);
+
+  // Exchange Rate (Simulated derived from mock data: 200000 / 100 = 2000)
+  const EXCHANGE_RATE = 2000;
+
+  const handleApplyPromo = () => {
+    setPromoMessage(null);
+    const code = promoCode.trim().toUpperCase();
+
+    if (!code) return;
+
+    if (code === "WELCOME10") {
+      setAppliedPromoDiscount(10);
+      setPromoMessage({ type: "success", text: "Promo applied! £10.00 saved." });
+    } else if (code === "SAVE20") {
+      setAppliedPromoDiscount(20);
+      setPromoMessage({ type: "success", text: "Promo applied! £20.00 saved." });
+    } else {
+      setAppliedPromoDiscount(0);
+      setPromoMessage({ type: "error", text: "Invalid promo code." });
+    }
+  };
+
+  const toggleBonusMode = (mode: "pay_less" | "send_more") => {
+    if (bonusMode === mode) {
+      setBonusMode(null); // Toggle off if clicking same
+    } else {
+      setBonusMode(mode);
+    }
+  };
+
+  // Calculation Logic
+  const getTotals = () => {
+    const baseGBP = requestDetails.amountGBP;
+    const baseNGN = requestDetails.amountNGN; // 200,000
+
+    let finalPayGBP = baseGBP;
+    let finalReceiveNGN = baseNGN;
+
+    // Apply Promo (always reduces what you pay)
+    finalPayGBP -= appliedPromoDiscount;
+
+    // Bonus Logic
+    if (bonusMode === "pay_less") {
+      finalPayGBP -= bonusBalance;
+    } else if (bonusMode === "send_more") {
+      // User pays standard (minus promo), but recipient gets more
+      finalReceiveNGN += (bonusBalance * EXCHANGE_RATE);
+    }
+
+    // Safety check
+    if (finalPayGBP < 0) finalPayGBP = 0;
+
+    return { finalPayGBP, finalReceiveNGN };
+  };
+
+  const { finalPayGBP, finalReceiveNGN } = getTotals();
+
+
   const checkEmail = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -590,37 +655,114 @@ export default function SenderView() {
 
                     <div className="pt-2">
                       {paymentStep === "method" ? (
-                        <div className="space-y-3">
-                          <PaymentMethodRow
-                            icon={Building2}
-                            title="Instant Pay By Bank"
-                            subtitle={`You pay GBP ${requestDetails.amountGBP.toFixed(2)}`}
-                            onClick={handleInstantPay}
-                          />
+                        <div className="space-y-4">
+                          {/* --- Promo Code Section --- */}
+                          <div className="flex gap-2">
+                            <div className="relative flex-1">
+                              <Input
+                                placeholder="Enter Promo Code"
+                                value={promoCode}
+                                onChange={(e) => setPromoCode(e.target.value)}
+                                className="bg-white"
+                              />
+                              {promoMessage && (
+                                <p className={`text-xs mt-1 absolute -bottom-5 left-1 ${promoMessage.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+                                  {promoMessage.text}
+                                </p>
+                              )}
+                            </div>
+                            <Button variant="outline" onClick={handleApplyPromo}>Apply</Button>
+                          </div>
 
-                          <PaymentMethodRow
-                            icon={CreditCard}
-                            title="Credit/Debit Card"
-                            subtitle={`You pay GBP ${requestDetails.amountGBP.toFixed(2)}`}
-                            onClick={() => setPaymentStep("card_details")}
-                          />
+                          {/* --- Bonus Scheme Section --- */}
+                          <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-3 mt-4">
+                            <div className="flex items-center gap-2 text-green-800 font-semibold mb-1">
+                              <Gift className="w-5 h-5" />
+                              <span>Referral Bonus Available</span>
+                            </div>
 
-                          <PaymentMethodRow
-                            icon={Building2}
-                            title="Manual Bank Transfer"
-                            subtitle="Send to our local account"
-                            onClick={() => setPaymentStep("manual_transfer")}
-                          />
+                            <p className="text-sm text-green-700">
+                              Redeem your <span className="font-bold">£{bonusBalance.toFixed(2)}</span> bonus.
+                              <br /><span className="text-xs opacity-80">You have earned this from referring friends!</span>
+                            </p>
 
-                          {isExistingUser && (
+                            <p className="text-sm font-medium text-green-800 pt-1">How would you like to use it?</p>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div
+                                onClick={() => toggleBonusMode('pay_less')}
+                                className={`
+                                   cursor-pointer p-3 rounded-lg border-2 transition-all
+                                   ${bonusMode === 'pay_less'
+                                    ? 'bg-white border-green-600 shadow-sm'
+                                    : 'bg-white/50 border-transparent hover:bg-white hover:border-green-200'}
+                                 `}
+                              >
+                                <div className="flex items-center gap-2 mb-1">
+                                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${bonusMode === 'pay_less' ? 'border-green-600' : 'border-gray-400'}`}>
+                                    {bonusMode === 'pay_less' && <div className="w-2 h-2 rounded-full bg-green-600" />}
+                                  </div>
+                                  <span className="font-bold text-gray-900 text-sm">Pay Less</span>
+                                </div>
+                                <p className="text-xs text-green-700 ml-6">Save £{bonusBalance.toFixed(2)} now</p>
+                              </div>
+
+                              <div
+                                onClick={() => toggleBonusMode('send_more')}
+                                className={`
+                                   cursor-pointer p-3 rounded-lg border-2 transition-all
+                                   ${bonusMode === 'send_more'
+                                    ? 'bg-white border-green-600 shadow-sm'
+                                    : 'bg-white/50 border-transparent hover:bg-white hover:border-green-200'}
+                                 `}
+                              >
+                                <div className="flex items-center gap-2 mb-1">
+                                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${bonusMode === 'send_more' ? 'border-green-600' : 'border-gray-400'}`}>
+                                    {bonusMode === 'send_more' && <div className="w-2 h-2 rounded-full bg-green-600" />}
+                                  </div>
+                                  <span className="font-bold text-gray-900 text-sm">Send More</span>
+                                </div>
+                                <p className="text-xs text-green-700 ml-6">Recipient gets +£{bonusBalance.toFixed(2)}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="h-px bg-slate-200 my-2" />
+                          <p className="text-slate-500 font-medium pb-2">Select Payment Method</p>
+
+                          <div className="space-y-3">
                             <PaymentMethodRow
-                              icon={Wallet}
-                              title="Wallet Balance"
-                              subtitle="Available: GBP 300.20"
-                              onClick={handlePay}
+                              icon={Building2}
+                              title="Instant Pay By Bank"
+                              subtitle={`You pay GBP ${finalPayGBP.toFixed(2)}`}
+                              onClick={handleInstantPay}
                             />
-                          )}
+
+                            <PaymentMethodRow
+                              icon={CreditCard}
+                              title="Credit/Debit Card"
+                              subtitle={`You pay GBP ${finalPayGBP.toFixed(2)}`}
+                              onClick={() => setPaymentStep("card_details")}
+                            />
+
+                            <PaymentMethodRow
+                              icon={Building2}
+                              title="Manual Bank Transfer"
+                              subtitle="Send to our local account"
+                              onClick={() => setPaymentStep("manual_transfer")}
+                            />
+
+                            {isExistingUser && (
+                              <PaymentMethodRow
+                                icon={Wallet}
+                                title="Wallet Balance"
+                                subtitle="Available: GBP 300.20"
+                                onClick={handlePay}
+                              />
+                            )}
+                          </div>
                         </div>
+
                       ) : paymentStep === "processing_instant" ? (
                         <div className="flex flex-col items-center justify-center py-12 space-y-4">
                           <div className="relative">
