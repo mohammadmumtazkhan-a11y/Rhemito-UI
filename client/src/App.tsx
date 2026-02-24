@@ -22,6 +22,9 @@ import CampaignDetails from "@/pages/GroupPay/CampaignDetails";
 import ContributorView from "@/pages/GroupPay/ContributorView";
 import MobilePaymentSimulator from "@/pages/MobilePaymentSimulator";
 import NotFound from "@/pages/not-found";
+import SampleTicket from "@/components/SampleTicket";
+import Login from "@/pages/Auth/Login";
+import LandingPage from "@/pages/LandingPage";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -75,6 +78,9 @@ function Router() {
       <Route path="/group-pay/:id" component={CampaignDetails} />
       <Route path="/contribute/:campaignId" component={ContributorView} />
       <Route path="/mobile-payment" component={MobilePaymentSimulator} />
+      <Route path="/sample-ticket" component={SampleTicket} />
+      <Route path="/login" component={Login} />
+      <Route path="/home" component={LandingPage} />
       <Route component={NotFound} />
     </Switch>
   );
