@@ -64,10 +64,19 @@ export default function SendMoney() {
     const [paymentMethod, setPaymentMethod] = useState("");
     const [showConfirmation, setShowConfirmation] = useState(false);
 
-    // Bank transfer modal
-    const [showBankTransferModal, setShowBankTransferModal] = useState(false);
-    const [bankTransferStatus, setBankTransferStatus] = useState<'details' | 'submitting' | 'submitted'>('details');
+    // Transaction submission state
+    const [transactionSubmitted, setTransactionSubmitted] = useState(false);
+    const [submittingTransaction, setSubmittingTransaction] = useState(false);
+    const [transactionRef] = useState("24426299");
+
+    // Bank transfer inline page
+    const [showBankTransferPage, setShowBankTransferPage] = useState(false);
     const [copiedField, setCopiedField] = useState<string | null>(null);
+
+    // Payment countdown (30 minutes for bank transfer)
+    const [paymentTimeLeft, setPaymentTimeLeft] = useState(1800); // 30 min
+    const [paymentTimerActive, setPaymentTimerActive] = useState(false);
+    const [transferComplete, setTransferComplete] = useState(false);
 
     // Session timer (rate lock countdown)
     const [sessionTimeLeft, setSessionTimeLeft] = useState(523); // ~8:43
@@ -205,18 +214,41 @@ export default function SendMoney() {
 
     // Copy all bank details
     const handleCopyAll = () => {
-        const allDetails = `Transaction Reference No: 24426299\nAccount Name: Topupnigeria.com Nigeria Ltd\nBank Name: United Bank of Africa PLC (UBA)\nBank Account Number: 1018984719\nSort Code: 20-45-45`;
+        const allDetails = `Transaction Reference No: ${transactionRef}\nAccount Name: Topupnigeria.com Nigeria Ltd\nBank Name: United Bank of Africa PLC (UBA)\nBank Account Number: 1018984719\nSort Code: 20-45-45`;
         navigator.clipboard.writeText(allDetails);
         setCopiedField('all');
         setTimeout(() => setCopiedField(null), 2000);
     };
 
-    // Handle bank transfer submission
-    const handleBankTransferSubmit = async () => {
-        setBankTransferStatus('submitting');
-        // Simulate 2 second processing
+    // Handle transaction submission on Step 4 Continue
+    const handleSubmitTransaction = async () => {
+        setSubmittingTransaction(true);
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        setBankTransferStatus('submitted');
+        setTransactionSubmitted(true);
+        setSubmittingTransaction(false);
+        setCurrentStep(5);
+    };
+
+    // Payment countdown timer (30 min for bank transfer page)
+    useEffect(() => {
+        if (!paymentTimerActive || paymentTimeLeft <= 0) return;
+        const interval = setInterval(() => {
+            setPaymentTimeLeft((prev) => {
+                if (prev <= 1) {
+                    clearInterval(interval);
+                    setPaymentTimerActive(false);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [paymentTimerActive, paymentTimeLeft <= 0]);
+
+    const formatPaymentTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
     };
 
     const timerDisplay = formatTime(sessionTimeLeft);
@@ -765,14 +797,23 @@ export default function SendMoney() {
                                                 variant="outline"
                                                 onClick={handleBack}
                                                 className="flex-1 h-14 text-lg rounded-xl"
+                                                disabled={submittingTransaction}
                                             >
                                                 Back
                                             </Button>
                                             <Button
-                                                onClick={handleNext}
+                                                onClick={handleSubmitTransaction}
+                                                disabled={submittingTransaction}
                                                 className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
                                             >
-                                                Continue
+                                                {submittingTransaction ? (
+                                                    <span className="flex items-center gap-2">
+                                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                                        Creating Transaction...
+                                                    </span>
+                                                ) : (
+                                                    "Continue"
+                                                )}
                                             </Button>
                                         </div>
                                     </div>
@@ -816,7 +857,7 @@ export default function SendMoney() {
                         )}
 
                         {/* Step 5: Payment Method */}
-                        {currentStep === 5 && (
+                        {currentStep === 5 && !showBankTransferPage && (
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
@@ -825,7 +866,29 @@ export default function SendMoney() {
                                 {/* Left Column: Input Sections */}
                                 <div className="lg:col-span-3 space-y-6">
 
-
+                                    {/* Transaction Created Banner */}
+                                    {transactionSubmitted && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="relative overflow-hidden rounded-xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-5 shadow-sm"
+                                        >
+                                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-400 to-emerald-500" />
+                                            <div className="flex items-start gap-4">
+                                                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 ring-4 ring-green-50">
+                                                    <Check className="w-6 h-6 text-green-600" />
+                                                </div>
+                                                <div className="space-y-1.5 flex-1">
+                                                    <h3 className="text-lg font-bold text-green-900">Your transaction has been created!</h3>
+                                                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                                                        <span className="text-gray-600">Reference: <span className="font-semibold text-gray-900">#{transactionRef}</span></span>
+                                                        <span className="text-gray-600">Amount: <span className="font-semibold text-green-700">NGN {receiveAmount}</span></span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-600 mt-1">Please select a payment method below to complete your transfer.</p>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
 
                                     {/* Bonus Redemption Section */}
                                     <Card className="border-green-100 bg-green-50/30">
@@ -965,6 +1028,38 @@ export default function SendMoney() {
                                         <Shield className="w-4 h-4 mt-0.5 shrink-0" />
                                         <p>By clicking "Send Money", you agree to our Terms of Use and Privacy Policy. Funds are usually delivered within minutes.</p>
                                     </div>
+
+                                    {/* Continue Button */}
+                                    <div className="mt-6">
+                                        <Button
+                                            className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
+                                            disabled={!paymentMethod}
+                                            onClick={async () => {
+                                                if (useBonus) {
+                                                    try {
+                                                        await fetch("/api/bonus/redeem", {
+                                                            method: "POST",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({
+                                                                amount: Math.min(bonusBalance, parseFloat(amount)),
+                                                                userId: "user_123"
+                                                            }),
+                                                        });
+                                                    } catch (e) {
+                                                        console.error("Failed to redeem bonus", e);
+                                                    }
+                                                }
+                                                if (paymentMethod === 'manual_transfer') {
+                                                    setShowBankTransferPage(true);
+                                                    setPaymentTimerActive(true);
+                                                } else {
+                                                    setShowConfirmation(true);
+                                                }
+                                            }}
+                                        >
+                                            Continue
+                                        </Button>
+                                    </div>
                                 </div>
 
                                 {/* Right Column: Amount Summary (Sticky) */}
@@ -1031,48 +1126,16 @@ export default function SendMoney() {
                                                     </span>
                                                 </div>
 
-                                                <div className="pt-4 mt-2">
-                                                    <Button
-                                                        className="w-full bg-blue-600 hover:bg-blue-700 h-auto py-4 flex flex-col gap-0.5 items-center justify-center leading-tight transition-all"
-                                                        onClick={async () => {
-                                                            if (useBonus) {
-                                                                // Redeem Bonus Logic
-                                                                try {
-                                                                    await fetch("/api/bonus/redeem", {
-                                                                        method: "POST",
-                                                                        headers: { "Content-Type": "application/json" },
-                                                                        body: JSON.stringify({
-                                                                            amount: Math.min(bonusBalance, parseFloat(amount)),
-                                                                            userId: "user_123"
-                                                                        }),
-                                                                    });
-                                                                } catch (e) {
-                                                                    console.error("Failed to redeem bonus", e);
-                                                                }
-                                                            }
-                                                            if (paymentMethod === 'manual_transfer') {
-                                                                setBankTransferStatus('details');
-                                                                setShowBankTransferModal(true);
-                                                            } else {
-                                                                setShowConfirmation(true);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <span className="text-lg font-bold">Pay {totalPay.toFixed(2)} GBP</span>
-                                                        {(promoApplied || useBonus) && (
-                                                            <span className="text-xs font-medium text-blue-100/90">
-                                                                Includes {promoApplied && "Promo Code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
-                                                            </span>
-                                                        )}
-                                                    </Button>
-                                                </div>
-                                                <div className="pt-2">
-                                                    <button
-                                                        className="w-full text-center text-blue-600 font-medium hover:underline text-base"
-                                                        onClick={() => { }}
-                                                    >
-                                                        View Details
-                                                    </button>
+                                                <div className="pt-4 mt-2 border-t">
+                                                    <div className="flex justify-between items-center pt-2">
+                                                        <span className="text-gray-900 font-bold text-base">Total to Pay</span>
+                                                        <span className="font-bold text-lg text-gray-900">{totalPay.toFixed(2)} GBP</span>
+                                                    </div>
+                                                    {(promoApplied || useBonus) && (
+                                                        <p className="text-xs text-green-600 font-medium mt-1">
+                                                            Includes {promoApplied && "Promo Code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -1081,156 +1144,209 @@ export default function SendMoney() {
                             </motion.div>
                         )}
 
+                        {/* Step 5 — Bank Transfer Details (Inline Page) */}
+                        {currentStep === 5 && showBankTransferPage && (
+                            <motion.div
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="w-full max-w-3xl mx-auto space-y-6 pb-10"
+                            >
+                                {/* Back Button */}
+                                <button
+                                    onClick={() => { setShowBankTransferPage(false); setPaymentTimerActive(false); }}
+                                    className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors group"
+                                >
+                                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+                                    <span className="text-sm font-medium">Back to Payment Methods</span>
+                                </button>
 
+                                {/* Status Tracker */}
+                                <Card className="border-2 border-gray-100 shadow-sm overflow-hidden">
+                                    <div className="h-1 bg-gradient-to-r from-blue-500 via-blue-400 to-blue-500" />
+                                    <CardContent className="pt-6 pb-5 px-6">
+                                        <div className="flex items-center justify-between relative">
+                                            {/* Progress line behind circles */}
+                                            <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-200 z-0" />
+                                            <div className="absolute top-4 left-0 h-0.5 bg-green-500 z-0 transition-all duration-1000" style={{ width: transferComplete ? '100%' : '12%' }} />
 
+                                            {[
+                                                { label: "Transaction\nCreated", icon: Check, active: true, completed: true },
+                                                { label: "Awaiting\nPayment", icon: Clock, active: !transferComplete, completed: transferComplete },
+                                                { label: "Payment\nReceived", icon: Banknote, active: false, completed: transferComplete },
+                                                { label: "Processing\nTransfer", icon: ArrowRightLeft, active: false, completed: transferComplete },
+                                            ].map((step, idx) => (
+                                                <div key={idx} className="flex flex-col items-center z-10 relative">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                                                        step.completed ? 'bg-green-500 text-white ring-4 ring-green-100' :
+                                                        step.active ? 'bg-blue-500 text-white ring-4 ring-blue-100 animate-pulse' :
+                                                        'bg-gray-100 text-gray-400 ring-2 ring-gray-50'
+                                                    }`}>
+                                                        {step.completed ? <Check className="w-4 h-4" /> : <step.icon className="w-3.5 h-3.5" />}
+                                                    </div>
+                                                    <span className={`text-[10px] mt-2 text-center leading-tight font-medium whitespace-pre-line ${
+                                                        step.completed ? 'text-green-700' : step.active ? 'text-blue-700' : 'text-gray-400'
+                                                    }`}>{step.label}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Payment Countdown Timer */}
+                                <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 shadow-sm overflow-hidden">
+                                    <CardContent className="pt-5 pb-5 px-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative">
+                                                <div className={`w-16 h-16 rounded-full flex items-center justify-center border-4 ${
+                                                    paymentTimeLeft <= 300 ? 'border-red-400 bg-red-50' : 'border-amber-400 bg-amber-50'
+                                                }`}>
+                                                    <span className={`text-lg font-bold font-mono ${
+                                                        paymentTimeLeft <= 300 ? 'text-red-700' : 'text-amber-800'
+                                                    }`}>
+                                                        {formatPaymentTime(paymentTimeLeft)}
+                                                    </span>
+                                                </div>
+                                                {paymentTimeLeft <= 300 && (
+                                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />
+                                                )}
+                                            </div>
+                                            <div className="flex-1">
+                                                <h4 className={`font-bold text-sm ${paymentTimeLeft <= 300 ? 'text-red-800' : 'text-amber-900'}`}>
+                                                    {paymentTimeLeft <= 300 ? 'Time is running out!' : 'Complete your payment'}
+                                                </h4>
+                                                <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">
+                                                    Please transfer the funds within {Math.ceil(paymentTimeLeft / 60)} minutes. Your transaction will be automatically cancelled if payment is not received in time.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Bank Details Card */}
+                                <Card className="border-2 border-gray-100 shadow-sm overflow-hidden">
+                                    <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-600" />
+
+                                    {/* Header with Rhemito branding */}
+                                    <CardHeader className="pb-4 border-b">
+                                        <div className="flex items-center justify-center mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                                                    <span className="text-white font-bold text-sm">R</span>
+                                                </div>
+                                                <span className="text-lg font-bold text-gray-900 font-display">Rhemito</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <CardTitle className="text-lg font-bold">Pay with Bank Transfer</CardTitle>
+                                            <button
+                                                onClick={handleCopyAll}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                                                title="Copy all details"
+                                            >
+                                                {copiedField === 'all' ? (
+                                                    <>
+                                                        <Check className="w-4 h-4 text-green-600" />
+                                                        <span className="text-green-600">Copied!</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Copy className="w-4 h-4" />
+                                                        <span>Copy All</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </CardHeader>
+
+                                    <CardContent className="pt-5 space-y-5">
+                                        <div className="space-y-1">
+                                            <p className="text-gray-700 text-sm leading-relaxed">
+                                                Kindly make a payment of <span className="font-bold text-gray-900">NGN {receiveAmount}</span> to the bank account details below
+                                            </p>
+                                        </div>
+
+                                        {/* Bank Detail Rows */}
+                                        <div className="space-y-0 divide-y divide-gray-100 border rounded-xl overflow-hidden">
+                                            {[
+                                                { label: "Transaction Reference No.", value: transactionRef, key: "ref" },
+                                                { label: "Account Name", value: "Topupnigeria.com Nigeria Ltd", key: "name" },
+                                                { label: "Bank Name", value: "United Bank of Africa PLC (UBA)", key: "bank" },
+                                                { label: "Bank Account Number", value: "1018984719", key: "account" },
+                                                { label: "Sort Code", value: "20-45-45", key: "sort" },
+                                            ].map((item) => (
+                                                <div key={item.key} className="flex items-center justify-between py-3.5 px-4 hover:bg-gray-50/50 transition-colors">
+                                                    <div className="space-y-0.5 flex-1 min-w-0">
+                                                        <p className="text-xs text-gray-500 font-medium">{item.label}</p>
+                                                        <p className="text-sm font-semibold text-gray-900 truncate">{item.value}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleCopy(item.value, item.key)}
+                                                        className="ml-3 p-2 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
+                                                        title={`Copy ${item.label}`}
+                                                    >
+                                                        {copiedField === item.key ? (
+                                                            <Check className="w-4 h-4 text-green-600" />
+                                                        ) : (
+                                                            <Copy className="w-4 h-4 text-gray-400" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Email Confirmation — Prominent */}
+                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+                                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                                                <Mail className="w-5 h-5 text-blue-600" />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-semibold text-blue-900">Bank details sent to your email</p>
+                                                <p className="text-xs text-blue-700 mt-0.5 leading-relaxed">
+                                                    We've sent the bank account details to your registered email address for your reference. You can also make the payment using those details.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Navigate Away / Done */}
+                                <Card className="border-2 border-gray-100 shadow-sm">
+                                    <CardContent className="pt-5 pb-5 px-6 space-y-4">
+                                        {!transferComplete && (
+                                            <Button
+                                                onClick={() => setLocation("/")}
+                                                variant="outline"
+                                                className="w-full h-14 text-base rounded-xl font-semibold border-2 border-gray-300 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
+                                            >
+                                                <div className="flex flex-col items-center gap-0.5">
+                                                    <span>I've noted the details — take me to Dashboard</span>
+                                                    <span className="text-xs font-normal text-gray-500">I'll complete the payment within 30 minutes</span>
+                                                </div>
+                                            </Button>
+                                        )}
+
+                                        {transferComplete && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                            >
+                                                <Button
+                                                    onClick={() => setLocation("/")}
+                                                    className="w-full h-14 text-base bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
+                                                >
+                                                    Done — Go to Dashboard
+                                                </Button>
+                                            </motion.div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        )}
 
 
                     </div>
                 </div>
             </div>
-            {/* Manual Bank Transfer Modal */}
-            <AnimatePresence>
-                {showBankTransferModal && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative overflow-hidden max-h-[90vh] overflow-y-auto"
-                        >
-                            {/* Top accent bar */}
-                            <div className="h-1.5 bg-gradient-to-r from-blue-500 to-blue-600" />
-
-                            {/* Header */}
-                            <div className="px-6 pt-5 pb-4">
-                                <div className="flex items-center justify-center mb-4">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                                            <span className="text-white font-bold text-sm">R</span>
-                                        </div>
-                                        <span className="text-lg font-bold text-gray-900 font-display">Rhemito</span>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-bold text-gray-900">Pay with Bank Transfer</h3>
-                                    <button
-                                        onClick={handleCopyAll}
-                                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                        title="Copy all details"
-                                    >
-                                        {copiedField === 'all' ? (
-                                            <Check className="w-5 h-5 text-green-600" />
-                                        ) : (
-                                            <Copy className="w-5 h-5 text-gray-500" />
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="border-t" />
-
-                            {/* Body */}
-                            <div className="px-6 py-5 space-y-5">
-                                <div className="space-y-1">
-                                    <p className="text-gray-700 text-sm leading-relaxed">
-                                        Kindly make a payment of <span className="font-bold text-gray-900">NGN {receiveAmount}</span> to the bank account details below
-                                    </p>
-                                    <p className="text-xs text-gray-500">Please make payment in the next 3 hours</p>
-                                </div>
-
-                                {/* Bank Details */}
-                                <div className="space-y-0 divide-y divide-gray-100">
-                                    {[
-                                        { label: "Transaction Reference No.", value: "24426299", key: "ref" },
-                                        { label: "Account Name", value: "Topupnigeria.com Nigeria Ltd", key: "name" },
-                                        { label: "Bank Name", value: "United Bank of Africa PLC (UBA)", key: "bank" },
-                                        { label: "Bank Account Number", value: "1018984719", key: "account" },
-                                        { label: "Sort Code", value: "20-45-45", key: "sort" },
-                                    ].map((item) => (
-                                        <div key={item.key} className="flex items-center justify-between py-3">
-                                            <div className="space-y-0.5 flex-1 min-w-0">
-                                                <p className="text-xs text-gray-500 font-medium">{item.label}</p>
-                                                <p className="text-sm font-semibold text-gray-900 truncate">{item.value}</p>
-                                            </div>
-                                            <button
-                                                onClick={() => handleCopy(item.value, item.key)}
-                                                className="ml-3 p-1.5 hover:bg-gray-100 rounded-md transition-colors shrink-0"
-                                                title={`Copy ${item.label}`}
-                                            >
-                                                {copiedField === item.key ? (
-                                                    <Check className="w-4 h-4 text-green-600" />
-                                                ) : (
-                                                    <Copy className="w-4 h-4 text-gray-400" />
-                                                )}
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Email notice */}
-                                <div className="flex items-start gap-2.5 p-3 bg-blue-50 rounded-lg">
-                                    <Mail className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-                                    <p className="text-xs text-blue-700 leading-relaxed">
-                                        An email with the bank account details has been sent to your registered email address
-                                    </p>
-                                </div>
-
-                                {/* Success message - appears after submission */}
-                                <AnimatePresence>
-                                    {bankTransferStatus === 'submitted' && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="flex items-center gap-2.5 p-3 bg-green-50 border border-green-200 rounded-lg"
-                                        >
-                                            <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-                                                <Check className="w-3.5 h-3.5 text-green-600" />
-                                            </div>
-                                            <p className="text-sm font-medium text-green-800">
-                                                Transaction successfully submitted!
-                                            </p>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-
-                            {/* Footer */}
-                            <div className="px-6 pb-6">
-                                {bankTransferStatus === 'details' && (
-                                    <Button
-                                        onClick={handleBankTransferSubmit}
-                                        className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
-                                    >
-                                        Submit Transaction
-                                    </Button>
-                                )}
-                                {bankTransferStatus === 'submitting' && (
-                                    <Button
-                                        disabled
-                                        className="w-full h-12 text-base bg-gray-400 rounded-xl font-semibold"
-                                    >
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        Submitting transaction...
-                                    </Button>
-                                )}
-                                {bankTransferStatus === 'submitted' && (
-                                    <Button
-                                        onClick={() => {
-                                            setShowBankTransferModal(false);
-                                            setBankTransferStatus('details');
-                                        }}
-                                        variant="outline"
-                                        className="w-full h-12 text-base rounded-xl font-semibold border-2"
-                                    >
-                                        Close
-                                    </Button>
-                                )}
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
 
             {/* Session Extend Popup */}
             <AnimatePresence>
