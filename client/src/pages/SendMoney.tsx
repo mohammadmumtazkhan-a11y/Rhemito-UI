@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
     ArrowLeft, Check, ChevronRight, User, Building2,
     CreditCard, Wallet, Landmark, Smartphone, Banknote, Shield,
-    ChevronDown, ArrowRightLeft, BarChart3, Search, UserPlus, X
+    ChevronDown, ArrowRightLeft, BarChart3, Search, UserPlus, X,
+    Copy, Loader2, Clock, Mail, AlertTriangle
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 
 // Mock Data
 const EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN
@@ -55,11 +57,22 @@ export default function SendMoney() {
         nickName: "",
         reason: "family_support",
         bankName: "",
-        accountNumber: ""
+        accountNumber: "",
+        narration: ""
     });
 
     const [paymentMethod, setPaymentMethod] = useState("");
     const [showConfirmation, setShowConfirmation] = useState(false);
+
+    // Bank transfer modal
+    const [showBankTransferModal, setShowBankTransferModal] = useState(false);
+    const [bankTransferStatus, setBankTransferStatus] = useState<'details' | 'submitting' | 'submitted'>('details');
+    const [copiedField, setCopiedField] = useState<string | null>(null);
+
+    // Session timer (rate lock countdown)
+    const [sessionTimeLeft, setSessionTimeLeft] = useState(523); // ~8:43
+    const [showExtendPopup, setShowExtendPopup] = useState(false);
+    const [extendDismissed, setExtendDismissed] = useState(false);
 
     // Bonus State - Hardcoded for Prototype
     const [bonusBalance] = useState(5);
@@ -156,6 +169,57 @@ export default function SendMoney() {
         if (currentStep > 1) setCurrentStep((prev) => prev - 1);
         else setLocation("/");
     };
+
+    // Format seconds to MM:SS
+    const formatTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return { minutes: m, seconds: s };
+    };
+
+    // Session countdown timer
+    useEffect(() => {
+        if (sessionTimeLeft <= 0) return;
+        const interval = setInterval(() => {
+            setSessionTimeLeft((prev) => {
+                const next = prev - 1;
+                if (next === 30 && !extendDismissed) {
+                    setShowExtendPopup(true);
+                }
+                if (next <= 0) {
+                    clearInterval(interval);
+                    setLocation("/");
+                }
+                return next;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [sessionTimeLeft <= 0, extendDismissed]);
+
+    // Copy to clipboard helper
+    const handleCopy = (value: string, fieldName: string) => {
+        navigator.clipboard.writeText(value);
+        setCopiedField(fieldName);
+        setTimeout(() => setCopiedField(null), 2000);
+    };
+
+    // Copy all bank details
+    const handleCopyAll = () => {
+        const allDetails = `Transaction Reference No: 24426299\nAccount Name: Topupnigeria.com Nigeria Ltd\nBank Name: United Bank of Africa PLC (UBA)\nBank Account Number: 1018984719\nSort Code: 20-45-45`;
+        navigator.clipboard.writeText(allDetails);
+        setCopiedField('all');
+        setTimeout(() => setCopiedField(null), 2000);
+    };
+
+    // Handle bank transfer submission
+    const handleBankTransferSubmit = async () => {
+        setBankTransferStatus('submitting');
+        // Simulate 2 second processing
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        setBankTransferStatus('submitted');
+    };
+
+    const timerDisplay = formatTime(sessionTimeLeft);
 
     return (
         <DashboardLayout>
@@ -284,10 +348,17 @@ export default function SendMoney() {
                                         </div>
                                     </div>
 
-                                    <div className="pt-4">
+                                    <div className="pt-4 flex gap-3">
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleBack}
+                                            className="flex-1 h-14 text-lg rounded-xl"
+                                        >
+                                            Back
+                                        </Button>
                                         <Button
                                             onClick={handleNext}
-                                            className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
+                                            className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
                                         >
                                             Continue
                                         </Button>
@@ -341,6 +412,14 @@ export default function SendMoney() {
                                 {/* Left Column: Recipient Selection */}
                                 <div className="lg:col-span-3 space-y-8">
                                     <div className="space-y-6">
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleBack}
+                                            className="gap-2 text-gray-600 hover:text-gray-900"
+                                        >
+                                            <ArrowLeft className="w-4 h-4" />
+                                            Back
+                                        </Button>
                                         <h2 className="text-xl font-bold text-gray-900">Who are you sending to?</h2>
 
                                         {/* Recent Recipients - Circles */}
@@ -413,9 +492,9 @@ export default function SendMoney() {
                                             <CardHeader className="pb-4 border-b">
                                                 <div className="flex justify-between items-center">
                                                     <CardTitle className="text-base font-bold text-gray-900">Amount</CardTitle>
-                                                    {/* Timer Placeholder */}
-                                                    <div className="flex gap-1 text-blue-600 font-mono text-sm bg-blue-50 px-2 py-1 rounded">
-                                                        <span>08</span>:<span>43</span>
+                                                    {/* Session Timer */}
+                                                    <div className={`flex gap-1 font-mono text-sm px-2 py-1 rounded ${sessionTimeLeft <= 60 ? 'text-red-600 bg-red-50 animate-pulse' : 'text-blue-600 bg-blue-50'}`}>
+                                                        <span>{timerDisplay.minutes}</span>:<span>{timerDisplay.seconds}</span>
                                                     </div>
                                                 </div>
                                             </CardHeader>
@@ -511,13 +590,31 @@ export default function SendMoney() {
                                                     </SelectContent>
                                                 </Select>
                                             </div>
+
+                                            <div className="space-y-2">
+                                                <Label>Narration <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                                                <Textarea
+                                                    placeholder="e.g. Monthly allowance for February"
+                                                    value={recipientDetails.narration}
+                                                    onChange={e => setRecipientDetails({ ...recipientDetails, narration: e.target.value })}
+                                                    className="resize-none"
+                                                    rows={3}
+                                                />
+                                            </div>
                                         </CardContent>
                                     </Card>
 
-                                    <div className="pt-4">
+                                    <div className="pt-4 flex gap-3">
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleBack}
+                                            className="flex-1 h-14 text-lg rounded-xl"
+                                        >
+                                            Back
+                                        </Button>
                                         <Button
                                             onClick={handleNext}
-                                            className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
+                                            className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
                                         >
                                             Continue
                                         </Button>
@@ -531,9 +628,9 @@ export default function SendMoney() {
                                             <CardHeader className="pb-4 border-b">
                                                 <div className="flex justify-between items-center">
                                                     <CardTitle className="text-base font-bold text-gray-900">Amount</CardTitle>
-                                                    {/* Timer Placeholder */}
-                                                    <div className="flex gap-1 text-blue-600 font-mono text-sm bg-blue-50 px-2 py-1 rounded">
-                                                        <span>08</span>:<span>43</span>
+                                                    {/* Session Timer */}
+                                                    <div className={`flex gap-1 font-mono text-sm px-2 py-1 rounded ${sessionTimeLeft <= 60 ? 'text-red-600 bg-red-50 animate-pulse' : 'text-blue-600 bg-blue-50'}`}>
+                                                        <span>{timerDisplay.minutes}</span>:<span>{timerDisplay.seconds}</span>
                                                     </div>
                                                 </div>
                                             </CardHeader>
@@ -637,6 +734,10 @@ export default function SendMoney() {
                                                             {selectedRecipient ? selectedRecipient.account : "12345678"}
                                                         </span>
                                                     </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-600">Narration</span>
+                                                        <span className="font-medium">{recipientDetails.narration || "—"}</span>
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -659,10 +760,17 @@ export default function SendMoney() {
                                         <div className="bg-orange-50 border border-orange-100 rounded-lg p-4 text-orange-800 text-sm">
                                             By clicking the Continue button you're submitting this transaction, you also agree and accept Rhemito's Terms of Use and Privacy Policy. Kindly proceed by selecting how you'd like to pay us.
                                         </div>
-                                        <div className="pt-4">
+                                        <div className="pt-4 flex gap-3">
+                                            <Button
+                                                variant="outline"
+                                                onClick={handleBack}
+                                                className="flex-1 h-14 text-lg rounded-xl"
+                                            >
+                                                Back
+                                            </Button>
                                             <Button
                                                 onClick={handleNext}
-                                                className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
+                                                className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
                                             >
                                                 Continue
                                             </Button>
@@ -676,8 +784,8 @@ export default function SendMoney() {
                                                 <CardHeader className="pb-4 border-b">
                                                     <div className="flex justify-between items-center">
                                                         <CardTitle className="text-base font-bold text-gray-900">Amount</CardTitle>
-                                                        <div className="flex gap-1 text-blue-600 font-mono text-sm bg-blue-50 px-2 py-1 rounded">
-                                                            <span>08</span>:<span>43</span>
+                                                        <div className={`flex gap-1 font-mono text-sm px-2 py-1 rounded ${sessionTimeLeft <= 60 ? 'text-red-600 bg-red-50 animate-pulse' : 'text-blue-600 bg-blue-50'}`}>
+                                                            <span>{timerDisplay.minutes}</span>:<span>{timerDisplay.seconds}</span>
                                                         </div>
                                                     </div>
                                                 </CardHeader>
@@ -942,7 +1050,12 @@ export default function SendMoney() {
                                                                     console.error("Failed to redeem bonus", e);
                                                                 }
                                                             }
-                                                            setShowConfirmation(true); // Re-using confirmation modal for now
+                                                            if (paymentMethod === 'manual_transfer') {
+                                                                setBankTransferStatus('details');
+                                                                setShowBankTransferModal(true);
+                                                            } else {
+                                                                setShowConfirmation(true);
+                                                            }
                                                         }}
                                                     >
                                                         <span className="text-lg font-bold">Pay {totalPay.toFixed(2)} GBP</span>
@@ -975,6 +1088,194 @@ export default function SendMoney() {
                     </div>
                 </div>
             </div>
+            {/* Manual Bank Transfer Modal */}
+            <AnimatePresence>
+                {showBankTransferModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative overflow-hidden max-h-[90vh] overflow-y-auto"
+                        >
+                            {/* Top accent bar */}
+                            <div className="h-1.5 bg-gradient-to-r from-blue-500 to-blue-600" />
+
+                            {/* Header */}
+                            <div className="px-6 pt-5 pb-4">
+                                <div className="flex items-center justify-center mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                                            <span className="text-white font-bold text-sm">R</span>
+                                        </div>
+                                        <span className="text-lg font-bold text-gray-900 font-display">Rhemito</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-bold text-gray-900">Pay with Bank Transfer</h3>
+                                    <button
+                                        onClick={handleCopyAll}
+                                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                        title="Copy all details"
+                                    >
+                                        {copiedField === 'all' ? (
+                                            <Check className="w-5 h-5 text-green-600" />
+                                        ) : (
+                                            <Copy className="w-5 h-5 text-gray-500" />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="border-t" />
+
+                            {/* Body */}
+                            <div className="px-6 py-5 space-y-5">
+                                <div className="space-y-1">
+                                    <p className="text-gray-700 text-sm leading-relaxed">
+                                        Kindly make a payment of <span className="font-bold text-gray-900">NGN {receiveAmount}</span> to the bank account details below
+                                    </p>
+                                    <p className="text-xs text-gray-500">Please make payment in the next 3 hours</p>
+                                </div>
+
+                                {/* Bank Details */}
+                                <div className="space-y-0 divide-y divide-gray-100">
+                                    {[
+                                        { label: "Transaction Reference No.", value: "24426299", key: "ref" },
+                                        { label: "Account Name", value: "Topupnigeria.com Nigeria Ltd", key: "name" },
+                                        { label: "Bank Name", value: "United Bank of Africa PLC (UBA)", key: "bank" },
+                                        { label: "Bank Account Number", value: "1018984719", key: "account" },
+                                        { label: "Sort Code", value: "20-45-45", key: "sort" },
+                                    ].map((item) => (
+                                        <div key={item.key} className="flex items-center justify-between py-3">
+                                            <div className="space-y-0.5 flex-1 min-w-0">
+                                                <p className="text-xs text-gray-500 font-medium">{item.label}</p>
+                                                <p className="text-sm font-semibold text-gray-900 truncate">{item.value}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleCopy(item.value, item.key)}
+                                                className="ml-3 p-1.5 hover:bg-gray-100 rounded-md transition-colors shrink-0"
+                                                title={`Copy ${item.label}`}
+                                            >
+                                                {copiedField === item.key ? (
+                                                    <Check className="w-4 h-4 text-green-600" />
+                                                ) : (
+                                                    <Copy className="w-4 h-4 text-gray-400" />
+                                                )}
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Email notice */}
+                                <div className="flex items-start gap-2.5 p-3 bg-blue-50 rounded-lg">
+                                    <Mail className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                                    <p className="text-xs text-blue-700 leading-relaxed">
+                                        An email with the bank account details has been sent to your registered email address
+                                    </p>
+                                </div>
+
+                                {/* Success message - appears after submission */}
+                                <AnimatePresence>
+                                    {bankTransferStatus === 'submitted' && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="flex items-center gap-2.5 p-3 bg-green-50 border border-green-200 rounded-lg"
+                                        >
+                                            <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                                                <Check className="w-3.5 h-3.5 text-green-600" />
+                                            </div>
+                                            <p className="text-sm font-medium text-green-800">
+                                                Transaction successfully submitted!
+                                            </p>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="px-6 pb-6">
+                                {bankTransferStatus === 'details' && (
+                                    <Button
+                                        onClick={handleBankTransferSubmit}
+                                        className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
+                                    >
+                                        Submit Transaction
+                                    </Button>
+                                )}
+                                {bankTransferStatus === 'submitting' && (
+                                    <Button
+                                        disabled
+                                        className="w-full h-12 text-base bg-gray-400 rounded-xl font-semibold"
+                                    >
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Submitting transaction...
+                                    </Button>
+                                )}
+                                {bankTransferStatus === 'submitted' && (
+                                    <Button
+                                        onClick={() => {
+                                            setShowBankTransferModal(false);
+                                            setBankTransferStatus('details');
+                                        }}
+                                        variant="outline"
+                                        className="w-full h-12 text-base rounded-xl font-semibold border-2"
+                                    >
+                                        Close
+                                    </Button>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Session Extend Popup */}
+            <AnimatePresence>
+                {showExtendPopup && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full text-center space-y-4"
+                        >
+                            <div className="w-14 h-14 mx-auto rounded-full bg-amber-100 flex items-center justify-center">
+                                <AlertTriangle className="w-7 h-7 text-amber-600" />
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900">Rate Expiring Soon</h3>
+                            <p className="text-sm text-gray-600">
+                                Your exchange rate will expire in <span className="font-bold text-red-600">{sessionTimeLeft}</span> seconds. Would you like to extend your session?
+                            </p>
+                            <div className="flex gap-3 pt-2">
+                                <Button
+                                    variant="outline"
+                                    className="flex-1 rounded-xl"
+                                    onClick={() => {
+                                        setShowExtendPopup(false);
+                                        setExtendDismissed(true);
+                                    }}
+                                >
+                                    Dismiss
+                                </Button>
+                                <Button
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 rounded-xl"
+                                    onClick={() => {
+                                        setSessionTimeLeft((prev) => prev + 120);
+                                        setShowExtendPopup(false);
+                                        setExtendDismissed(false);
+                                    }}
+                                >
+                                    Extend 2 min
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
             {/* Promo Confirmation Popup */}
             <AnimatePresence>
                 {showConfirmation && (
