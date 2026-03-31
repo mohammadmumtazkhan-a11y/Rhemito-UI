@@ -1,7 +1,15 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+
+// Extend session to include userId
+declare module "express-session" {
+  interface SessionData {
+    userId: string;
+  }
+}
 
 const app = express();
 const httpServer = createServer(app);
@@ -21,6 +29,21 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Session middleware
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "rhemito-dev-secret-change-in-production",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: "lax",
+    },
+  })
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

@@ -1,4 +1,6 @@
 import { Link, useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -67,7 +69,18 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    try {
+      await apiRequest("POST", "/api/auth/logout");
+    } catch {
+      // session may already be gone
+    }
+    toast({ title: "Logged out", description: "You have been signed out successfully." });
+    setLocation("/sign-in-sign-up");
+  };
 
   const NavItem = ({ item, className }: { item: NavItemData, className?: string }) => {
     const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
@@ -241,6 +254,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           whileHover={{ x: 4 }}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 w-full transition-all duration-200 group"
           data-testid="button-logout"
+          onClick={handleLogout}
         >
           <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-gradient-to-br group-hover:from-red-400 group-hover:to-rose-500 flex items-center justify-center transition-all duration-200">
             <LogOut className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />

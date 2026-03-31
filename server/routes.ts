@@ -3,11 +3,14 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { validatePromoCode, promoStorage, type PromoValidationRequest } from "./promocode";
 import { bonusService } from "./bonus";
+import { registerAuthRoutes } from "./auth";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Auth routes
+  registerAuthRoutes(app);
   // Promo Code Validation Endpoint
   app.post("/api/promocodes/validate", (req, res) => {
     try {

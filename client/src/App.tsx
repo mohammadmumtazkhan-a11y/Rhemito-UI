@@ -24,6 +24,7 @@ import MobilePaymentSimulator from "@/pages/MobilePaymentSimulator";
 import NotFound from "@/pages/not-found";
 import SampleTicket from "@/components/SampleTicket";
 import Login from "@/pages/Auth/Login";
+import SignInSignUp from "@/pages/Auth/SignInSignUp";
 import LandingPage from "@/pages/LandingPage";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -80,6 +81,7 @@ function Router() {
       <Route path="/mobile-payment" component={MobilePaymentSimulator} />
       <Route path="/sample-ticket" component={SampleTicket} />
       <Route path="/login" component={Login} />
+      <Route path="/sign-in-sign-up" component={SignInSignUp} />
       <Route path="/home" component={LandingPage} />
       <Route component={NotFound} />
     </Switch>
