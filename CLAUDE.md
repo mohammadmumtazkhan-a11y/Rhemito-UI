@@ -36,6 +36,15 @@ Additional features: receiving/requesting payments, GroupPay funding campaigns, 
 - I can share images/screenshots but before implementing them blindly mind the theme/colour and logic/flow for Fintech/money transfer.
 - Mind the functionality and effects across the application when we are implementing something new (a field/flow or Text) so that we don't break the flow/functionality while adding or changing anything.
 
+## Git Workflow
+
+1. **Branch before changes:** Always create a new branch before making any changes. Use a clear branch name describing the feature or fix (e.g., `feature/add-UI-validation`, `fix/payment-amount-display`).
+2. **Run all tests:** After changes are made, run all tests (unit tests, integration tests, and UI/E2E tests) to catch any broken functionality before committing.
+3. **Open a Pull Request:** Once testing is successful, push the branch and open a pull request to merge back into the main branch.
+4. **Review before merge:** Ensure the pull request includes a review step, so potential conflicts or risks are spotted before merging.
+5. **Delete branch after merge:** After merging, delete the feature/fix branch both locally and remotely to keep the repository clean.
+6. **Monitor after merge:** After merging, monitor the functionality — if any issue arises, roll back or fix it in a new branch.
+
 ## Tech Stack
 
 | Layer | Technology |
