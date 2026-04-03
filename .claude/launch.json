@@ -5,7 +5,8 @@
       "name": "rhemito-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 5000
+      "port": 5000,
+      "autoPort": false
     }
   ]
 }

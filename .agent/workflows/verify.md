@@ -1,5 +1,5 @@
 ---
-description: Run full E2E verification suite before submitting changes
+description: Run full E2E verification suite before submitting changes to GIT
 ---
 1. Run Playwright End-to-End Tests
    - Run the full suite to ensure no regressions
