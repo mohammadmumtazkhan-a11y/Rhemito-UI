@@ -5,7 +5,7 @@ import {
     ArrowLeft, Check, ChevronRight, User, Building2,
     CreditCard, Wallet, Landmark, Smartphone, Banknote, Shield,
     ChevronDown, ArrowRightLeft, BarChart3, Search, UserPlus, X,
-    Copy, Loader2, Clock, Mail, AlertTriangle
+    Copy, Loader2, Clock, Mail, AlertTriangle, CheckCircle2, WalletCards
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,6 +82,15 @@ export default function SendMoney() {
     const [sessionTimeLeft, setSessionTimeLeft] = useState(523); // ~8:43
     const [showExtendPopup, setShowExtendPopup] = useState(false);
     const [extendDismissed, setExtendDismissed] = useState(false);
+
+    // Bank Account Balance Simulation
+    const [simulatedBankBalance, setSimulatedBankBalance] = useState("0");
+    const [showBalanceChoiceModal, setShowBalanceChoiceModal] = useState(false);
+    const [showSufficientBalanceModal, setShowSufficientBalanceModal] = useState(false);
+    const [balancePaymentChoice, setBalancePaymentChoice] = useState<"full" | "remaining" | null>(null);
+    const [deductionComplete, setDeductionComplete] = useState(false);
+    const [deductionCountdown, setDeductionCountdown] = useState(10);
+    const [deductionTimerActive, setDeductionTimerActive] = useState(false);
 
     // Bonus State - Hardcoded for Prototype
     const [bonusBalance] = useState(5);
@@ -244,6 +253,23 @@ export default function SendMoney() {
         }, 1000);
         return () => clearInterval(interval);
     }, [paymentTimerActive, paymentTimeLeft <= 0]);
+
+    // Deduction countdown timer (10 sec for Scenario 3)
+    useEffect(() => {
+        if (!deductionTimerActive || deductionCountdown <= 0) return;
+        const interval = setInterval(() => {
+            setDeductionCountdown((prev) => {
+                if (prev <= 1) {
+                    clearInterval(interval);
+                    setDeductionTimerActive(false);
+                    setLocation("/");
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [deductionTimerActive, deductionCountdown <= 0]);
 
     const formatPaymentTime = (seconds: number) => {
         const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -1001,7 +1027,7 @@ export default function SendMoney() {
                                             {[
                                                 { id: "instant_bank", title: "Instant Pay By Bank", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: Landmark },
                                                 { id: "card", title: "Credit/Debit Card", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: CreditCard },
-                                                { id: "manual_transfer", title: "Manual Bank Transfer", desc: "Send to our local account", icon: Building2 },
+                                                { id: "manual_transfer", title: "Manual Bank Transfer", desc: "Send to our local account (Pay within 3 hours)", icon: Building2 },
                                                 { id: "wallet", title: "Wallet Balance", desc: `Available: GBP 300.20`, icon: Wallet },
                                             ].map((method) => (
                                                 <div
@@ -1023,6 +1049,34 @@ export default function SendMoney() {
                                             ))}
                                         </CardContent>
                                     </Card>
+
+                                    {/* Simulation Control — Bank Account Balance */}
+                                    {paymentMethod === "manual_transfer" && (
+                                        <div className="mt-3 border-2 border-dashed border-amber-300 bg-amber-50/50 rounded-lg p-3">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Simulation — Bank Account Balance</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Label className="text-xs text-amber-700 whitespace-nowrap">GBP Balance:</Label>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={simulatedBankBalance}
+                                                    onChange={(e) => setSimulatedBankBalance(e.target.value)}
+                                                    className="h-8 text-sm w-32 bg-white border-amber-300 focus:border-amber-500"
+                                                    placeholder="0.00"
+                                                />
+                                                <span className="text-xs text-amber-600">
+                                                    {parseFloat(simulatedBankBalance) <= 0
+                                                        ? "(Scenario 1: No balance)"
+                                                        : parseFloat(simulatedBankBalance) < totalPay
+                                                            ? "(Scenario 2: Partial)"
+                                                            : "(Scenario 3: Sufficient)"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="mt-6 flex items-start gap-2 p-4 bg-yellow-50 rounded-lg text-yellow-800 text-sm">
                                         <Shield className="w-4 h-4 mt-0.5 shrink-0" />
@@ -1050,8 +1104,18 @@ export default function SendMoney() {
                                                     }
                                                 }
                                                 if (paymentMethod === 'manual_transfer') {
-                                                    setShowBankTransferPage(true);
-                                                    setPaymentTimerActive(true);
+                                                    const bal = parseFloat(simulatedBankBalance) || 0;
+                                                    if (bal > 0 && bal < totalPay) {
+                                                        // Scenario 2: Partial balance
+                                                        setShowBalanceChoiceModal(true);
+                                                    } else if (bal >= totalPay) {
+                                                        // Scenario 3: Sufficient balance
+                                                        setShowSufficientBalanceModal(true);
+                                                    } else {
+                                                        // Scenario 1: No balance — existing flow
+                                                        setShowBankTransferPage(true);
+                                                        setPaymentTimerActive(true);
+                                                    }
                                                 } else {
                                                     setShowConfirmation(true);
                                                 }
@@ -1153,7 +1217,7 @@ export default function SendMoney() {
                             >
                                 {/* Back Button */}
                                 <button
-                                    onClick={() => { setShowBankTransferPage(false); setPaymentTimerActive(false); }}
+                                    onClick={() => { setShowBankTransferPage(false); setPaymentTimerActive(false); setBalancePaymentChoice(null); }}
                                     className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors group"
                                 >
                                     <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
@@ -1261,7 +1325,7 @@ export default function SendMoney() {
                                     <CardContent className="pt-5 space-y-5">
                                         <div className="space-y-1">
                                             <p className="text-gray-700 text-sm leading-relaxed">
-                                                Kindly make a payment of <span className="font-bold text-gray-900">NGN {receiveAmount}</span> to the bank account details below
+                                                Kindly make a payment of <span className="font-bold text-gray-900">GBP {balancePaymentChoice === "remaining" ? Math.max(0, totalPay - parseFloat(simulatedBankBalance)).toFixed(2) : totalPay.toFixed(2)}</span> to the bank account details below
                                             </p>
                                         </div>
 
@@ -1269,8 +1333,8 @@ export default function SendMoney() {
                                         <div className="space-y-0 divide-y divide-gray-100 border rounded-xl overflow-hidden">
                                             {[
                                                 { label: "Transaction Reference No.", value: transactionRef, key: "ref" },
-                                                { label: "Account Name", value: "Topupnigeria.com Nigeria Ltd", key: "name" },
-                                                { label: "Bank Name", value: "United Bank of Africa PLC (UBA)", key: "bank" },
+                                                { label: "Account Name", value: "Funtech Global Communications Ltd.", key: "name" },
+                                                { label: "Bank Name", value: "The Currency Cloud Limited", key: "bank" },
                                                 { label: "Bank Account Number", value: "1018984719", key: "account" },
                                                 { label: "Sort Code", value: "20-45-45", key: "sort" },
                                             ].map((item) => (
@@ -1436,6 +1500,178 @@ export default function SendMoney() {
                     </div>
                 )}
             </AnimatePresence>
+            {/* Scenario 2 Modal — Partial Balance Choice */}
+            <AnimatePresence>
+                {showBalanceChoiceModal && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full relative"
+                        >
+                            <button
+                                onClick={() => {
+                                    setShowBalanceChoiceModal(false);
+                                    setBalancePaymentChoice(null);
+                                }}
+                                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+
+                            <div className="flex flex-col items-center text-center space-y-4 pt-2">
+                                <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <WalletCards className="w-7 h-7 text-blue-600" />
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900">You Have Existing Balance</h3>
+                                <p className="text-sm text-gray-600">
+                                    Your bank account <span className="font-semibold">****8897</span> has a balance of{" "}
+                                    <span className="font-bold text-blue-600">GBP {parseFloat(simulatedBankBalance).toFixed(2)}</span>
+                                </p>
+
+                                <div className="w-full space-y-3 pt-2">
+                                    <div
+                                        onClick={() => setBalancePaymentChoice("full")}
+                                        className={`p-4 border-2 rounded-xl cursor-pointer transition-all text-left ${balancePaymentChoice === "full"
+                                            ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
+                                            : "border-gray-200 hover:border-gray-300"
+                                            }`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="font-semibold text-gray-900">Pay full transaction amount</p>
+                                                <p className="text-sm text-gray-500 mt-0.5">Transfer the entire amount via bank</p>
+                                            </div>
+                                            <span className="font-bold text-gray-900">GBP {totalPay.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        onClick={() => setBalancePaymentChoice("remaining")}
+                                        className={`p-4 border-2 rounded-xl cursor-pointer transition-all text-left ${balancePaymentChoice === "remaining"
+                                            ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
+                                            : "border-gray-200 hover:border-gray-300"
+                                            }`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="font-semibold text-gray-900">Pay only the remaining amount</p>
+                                                <p className="text-sm text-gray-500 mt-0.5">
+                                                    Use your GBP {parseFloat(simulatedBankBalance).toFixed(2)} balance
+                                                </p>
+                                            </div>
+                                            <span className="font-bold text-green-600">GBP {Math.max(0, totalPay - parseFloat(simulatedBankBalance)).toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Button
+                                    className="w-full h-12 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold mt-2"
+                                    disabled={!balancePaymentChoice}
+                                    onClick={() => {
+                                        setShowBalanceChoiceModal(false);
+                                        setShowBankTransferPage(true);
+                                        setPaymentTimerActive(true);
+                                    }}
+                                >
+                                    Continue
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Scenario 3 Modal — Sufficient Balance */}
+            <AnimatePresence>
+                {showSufficientBalanceModal && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full relative"
+                        >
+                            {!deductionComplete ? (
+                                <div className="flex flex-col items-center text-center space-y-4">
+                                    <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
+                                        <Wallet className="w-7 h-7 text-green-600" />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-gray-900">Sufficient Balance</h3>
+                                    <p className="text-sm text-gray-600">
+                                        Your bank account <span className="font-semibold">****8897</span> has sufficient balance.
+                                        Transaction amount of{" "}
+                                        <span className="font-bold text-green-600">GBP {totalPay.toFixed(2)}</span>{" "}
+                                        will be deducted from your account.
+                                    </p>
+                                    <div className="flex gap-3 w-full pt-2">
+                                        <Button
+                                            variant="outline"
+                                            className="flex-1 rounded-xl"
+                                            onClick={() => {
+                                                setShowSufficientBalanceModal(false);
+                                                setDeductionComplete(false);
+                                            }}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            className="flex-1 bg-green-600 hover:bg-green-700 rounded-xl font-semibold"
+                                            onClick={() => {
+                                                setDeductionComplete(true);
+                                                setDeductionCountdown(10);
+                                                setDeductionTimerActive(true);
+                                            }}
+                                        >
+                                            Proceed
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center text-center space-y-4">
+                                    <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                                        className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center"
+                                    >
+                                        <CheckCircle2 className="w-9 h-9 text-green-600" />
+                                    </motion.div>
+                                    <h3 className="text-lg font-bold text-gray-900">Transaction Successful!</h3>
+                                    <p className="text-sm text-gray-600">
+                                        <span className="font-bold text-green-600">GBP {totalPay.toFixed(2)}</span> has been deducted from your account <span className="font-semibold">****8897</span>.
+                                    </p>
+                                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 w-full">
+                                        <p className="text-xs text-gray-500">Remaining Balance</p>
+                                        <p className="text-lg font-bold text-gray-900">GBP {(parseFloat(simulatedBankBalance) - totalPay).toFixed(2)}</p>
+                                    </div>
+                                    <div className="space-y-2 pt-2 w-full">
+                                        <p className="text-sm font-medium text-blue-600 animate-pulse">
+                                            Redirecting to dashboard in {deductionCountdown}s...
+                                        </p>
+                                        <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                                            <motion.div
+                                                className="h-full bg-green-500 rounded-full"
+                                                initial={{ width: "100%" }}
+                                                animate={{ width: "0%" }}
+                                                transition={{ duration: 10, ease: "linear" }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <Button
+                                        className="w-full bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold mt-1"
+                                        onClick={() => setLocation("/")}
+                                    >
+                                        Go to Dashboard
+                                    </Button>
+                                </div>
+                            )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
         </DashboardLayout >
     );
 }
