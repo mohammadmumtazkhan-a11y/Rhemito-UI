@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock Data
 const EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN
@@ -37,6 +38,7 @@ const steps = [
 
 export default function SendMoney() {
     const [, setLocation] = useLocation();
+    const { toast } = useToast();
     const [currentStep, setCurrentStep] = useState(1);
 
     // Form State
@@ -85,6 +87,9 @@ export default function SendMoney() {
 
     // Manual Bank Transfer Confirmation
     const [showManualTransferConfirm, setShowManualTransferConfirm] = useState(false);
+    const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
+    const [showExpiryPopup, setShowExpiryPopup] = useState(false);
+    const [expiryCountdown, setExpiryCountdown] = useState(5);
 
     // Bonus State - Hardcoded for Prototype
     const [bonusBalance] = useState(5);
@@ -240,6 +245,7 @@ export default function SendMoney() {
                 if (prev <= 1) {
                     clearInterval(interval);
                     setPaymentTimerActive(false);
+                    setShowExpiryPopup(true);
                     return 0;
                 }
                 return prev - 1;
@@ -247,6 +253,41 @@ export default function SendMoney() {
         }, 1000);
         return () => clearInterval(interval);
     }, [paymentTimerActive, paymentTimeLeft <= 0]);
+
+    // Auto-redirect countdown when expiry popup is shown
+    useEffect(() => {
+        if (!showExpiryPopup) return;
+        setExpiryCountdown(5);
+        const interval = setInterval(() => {
+            setExpiryCountdown((prev) => {
+                if (prev <= 1) {
+                    clearInterval(interval);
+                    handleExpiryRedirect();
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [showExpiryPopup]);
+
+    const handleExpiryRedirect = useCallback(() => {
+        setShowExpiryPopup(false);
+        setShowBankTransferPage(false);
+        setPaymentTimerActive(false);
+        setPaymentTimeLeft(1800);
+        setExpiryCountdown(5);
+        setPaymentMethod("");
+        setLocation("/");
+        // Show toast after redirect so it's visible on the dashboard
+        setTimeout(() => {
+            toast({
+                title: "Transaction Aborted",
+                description: "Your transaction has been aborted due to payment timeout. An email notification has been sent to your registered email address.",
+                variant: "destructive",
+            });
+        }, 500);
+    }, [setLocation, toast]);
 
     const formatPaymentTime = (seconds: number) => {
         const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -997,12 +1038,33 @@ export default function SendMoney() {
                                             {[
                                                 { id: "instant_bank", title: "Instant Pay By Bank", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: Landmark },
                                                 { id: "card", title: "Credit/Debit Card", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: CreditCard },
-                                                { id: "manual_transfer", title: "Manual Bank Transfer", desc: "Send to our local account (Pay within 3 hours)", icon: Building2 },
+                                                { id: "manual_transfer", title: "Manual Bank Transfer", desc: "Send to our local account (Pay within 30 minutes)", icon: Building2 },
                                                 { id: "wallet", title: "Wallet Balance", desc: `Available: GBP 300.20`, icon: Wallet },
                                             ].map((method) => (
                                                 <div
                                                     key={method.id}
-                                                    onClick={() => setPaymentMethod(method.id)}
+                                                    onClick={async () => {
+                                                        setPaymentMethod(method.id);
+                                                        if (useBonus) {
+                                                            try {
+                                                                await fetch("/api/bonus/redeem", {
+                                                                    method: "POST",
+                                                                    headers: { "Content-Type": "application/json" },
+                                                                    body: JSON.stringify({
+                                                                        amount: Math.min(bonusBalance, parseFloat(amount)),
+                                                                        userId: "user_123"
+                                                                    }),
+                                                                });
+                                                            } catch (e) {
+                                                                console.error("Failed to redeem bonus", e);
+                                                            }
+                                                        }
+                                                        if (method.id === 'manual_transfer') {
+                                                            setShowManualTransferConfirm(true);
+                                                        } else {
+                                                            setShowConfirmation(true);
+                                                        }
+                                                    }}
                                                     className={`p-4 border rounded-xl cursor-pointer flex items-center gap-4 transition-all ${paymentMethod === method.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:border-gray-300"
                                                         }`}
                                                 >
@@ -1023,38 +1085,7 @@ export default function SendMoney() {
 
                                     <div className="mt-6 flex items-start gap-2 p-4 bg-yellow-50 rounded-lg text-yellow-800 text-sm">
                                         <Shield className="w-4 h-4 mt-0.5 shrink-0" />
-                                        <p>By clicking "Send Money", you agree to our Terms of Use and Privacy Policy. Funds are usually delivered within minutes.</p>
-                                    </div>
-
-                                    {/* Continue Button */}
-                                    <div className="mt-6">
-                                        <Button
-                                            className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
-                                            disabled={!paymentMethod}
-                                            onClick={async () => {
-                                                if (useBonus) {
-                                                    try {
-                                                        await fetch("/api/bonus/redeem", {
-                                                            method: "POST",
-                                                            headers: { "Content-Type": "application/json" },
-                                                            body: JSON.stringify({
-                                                                amount: Math.min(bonusBalance, parseFloat(amount)),
-                                                                userId: "user_123"
-                                                            }),
-                                                        });
-                                                    } catch (e) {
-                                                        console.error("Failed to redeem bonus", e);
-                                                    }
-                                                }
-                                                if (paymentMethod === 'manual_transfer') {
-                                                    setShowManualTransferConfirm(true);
-                                                } else {
-                                                    setShowConfirmation(true);
-                                                }
-                                            }}
-                                        >
-                                            Continue
-                                        </Button>
+                                        <p>By selecting a payment option, you agree to our Terms of Use and Privacy Policy. Funds are usually delivered within minutes.</p>
                                     </div>
                                 </div>
 
@@ -1217,6 +1248,18 @@ export default function SendMoney() {
                                         </div>
                                     </CardContent>
                                 </Card>
+
+                                {/* Simulate Expiry - Demo Only */}
+                                <div className="flex justify-center">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-xs text-gray-400 hover:text-red-500"
+                                        onClick={() => setPaymentTimeLeft(3)}
+                                    >
+                                        Simulate Expiry (Demo)
+                                    </Button>
+                                </div>
 
                                 {/* Bank Details Card */}
                                 <Card className="border-2 border-gray-100 shadow-sm overflow-hidden">
@@ -1448,7 +1491,7 @@ export default function SendMoney() {
                                 </div>
                                 <h3 className="text-lg font-bold text-gray-900">Confirm Payment Method</h3>
                                 <p className="text-sm text-gray-600">
-                                    You have selected <span className="font-semibold text-gray-900">Manual Bank Transfer. Send to our local account (Pay within 3 hours)</span> option for payment. Do you want to proceed?
+                                    You have selected <span className="font-semibold text-gray-900">Manual Bank Transfer. Send to our local account (Pay within 30 minutes)</span> option for payment. Do you want to proceed?
                                 </p>
                                 <div className="flex gap-3 w-full pt-2">
                                     <Button
@@ -1459,16 +1502,66 @@ export default function SendMoney() {
                                         Cancel
                                     </Button>
                                     <Button
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
-                                        onClick={() => {
+                                        className="flex-1 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold text-sm"
+                                        disabled={isSubmittingTransaction}
+                                        onClick={async () => {
+                                            setIsSubmittingTransaction(true);
+                                            // Simulate transaction submission delay
+                                            await new Promise(resolve => setTimeout(resolve, 2000));
+                                            setIsSubmittingTransaction(false);
                                             setShowManualTransferConfirm(false);
                                             setShowBankTransferPage(true);
                                             setPaymentTimerActive(true);
                                         }}
                                     >
-                                        Proceed
+                                        {isSubmittingTransaction ? (
+                                            <span className="flex items-center gap-2">
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Submitting Transaction...
+                                            </span>
+                                        ) : (
+                                            "Proceed"
+                                        )}
                                     </Button>
                                 </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Transaction Expiry Popup */}
+            <AnimatePresence>
+                {showExpiryPopup && (
+                    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full relative"
+                        >
+                            <div className="flex flex-col items-center text-center space-y-4">
+                                <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center">
+                                    <AlertTriangle className="w-7 h-7 text-red-600" />
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900">Transaction Expired</h3>
+                                <p className="text-sm text-gray-600">
+                                    The payment time has expired. This transaction will now be <span className="font-semibold text-red-600">aborted</span>. You will be redirected to the dashboard in <span className="font-semibold text-gray-900">{expiryCountdown}s</span>.
+                                </p>
+                                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                    <motion.div
+                                        className="h-full bg-red-500 rounded-full"
+                                        initial={{ width: "100%" }}
+                                        animate={{ width: "0%" }}
+                                        transition={{ duration: 5, ease: "linear" }}
+                                    />
+                                </div>
+                                <Button
+                                    className="w-full bg-red-600 hover:bg-red-700 rounded-xl font-semibold"
+                                    onClick={handleExpiryRedirect}
+                                >
+                                    Go to Dashboard
+                                </Button>
                             </div>
                         </motion.div>
                     </div>

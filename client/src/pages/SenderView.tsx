@@ -811,7 +811,7 @@ export default function SenderView() {
                             <PaymentMethodRow
                               icon={Building2}
                               title="Manual Bank Transfer"
-                              subtitle="Send to our local account (Pay within 3 hours)"
+                              subtitle="Send to our local account (Pay within 30 minutes)"
                               onClick={handleManualTransferClick}
                             />
 

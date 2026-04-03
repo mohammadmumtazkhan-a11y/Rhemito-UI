@@ -410,7 +410,7 @@ const TestCheckout = () => {
                                 >
                                     <div style={styles.paymentIcon}><Building size={24} /></div>
                                     <div style={{ flex: 1 }}>
-                                        <div style={styles.paymentTitle}>Bank Transfer <span style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: 400 }}>(Pay within 3 hours)</span></div>
+                                        <div style={styles.paymentTitle}>Bank Transfer <span style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: 400 }}>(Pay within 30 minutes)</span></div>
                                         <div style={styles.paymentSub}>You pay GBP {transaction.amount.toFixed(2)} ({amountSent.toFixed(2)} + {transaction.fee.toFixed(2)} in fees)</div>
                                     </div>
                                     {transaction.payment_method === 'Bank Transfer' && <Check size={20} color="#2563eb" />}
