@@ -1079,30 +1079,6 @@ export default function SendMoney() {
                                 {/* Left Column: Input Sections */}
                                 <div className="lg:col-span-3 space-y-6">
 
-                                    {/* Transaction Created Banner */}
-                                    {transactionSubmitted && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: -10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="relative overflow-hidden rounded-xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-5 shadow-sm"
-                                        >
-                                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-400 to-emerald-500" />
-                                            <div className="flex items-start gap-4">
-                                                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 ring-4 ring-green-50">
-                                                    <Check className="w-6 h-6 text-green-600" />
-                                                </div>
-                                                <div className="space-y-1.5 flex-1">
-                                                    <h3 className="text-lg font-bold text-green-900">Your transaction has been created!</h3>
-                                                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                                                        <span className="text-gray-600">Reference: <span className="font-semibold text-gray-900">#{transactionRef}</span></span>
-                                                        <span className="text-gray-600">Amount: <span className="font-semibold text-green-700">NGN {receiveAmount}</span></span>
-                                                    </div>
-                                                    <p className="text-sm text-gray-600 mt-1">Please select a payment method below to complete your transfer.</p>
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    )}
-
                                     {/* Bonus Redemption Section */}
                                     <Card className="border-green-100 bg-green-50/30">
                                         <CardHeader className="pb-3">
@@ -1394,6 +1370,28 @@ export default function SendMoney() {
                                         </div>
                                     </CardContent>
                                 </Card>
+
+                                {/* Transaction Created Banner */}
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="relative overflow-hidden rounded-xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-5 shadow-sm"
+                                >
+                                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-400 to-emerald-500" />
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 ring-4 ring-green-50">
+                                            <Check className="w-6 h-6 text-green-600" />
+                                        </div>
+                                        <div className="space-y-1.5 flex-1">
+                                            <h3 className="text-lg font-bold text-green-900">Your transaction has been created!</h3>
+                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                                                <span className="text-gray-600">Reference: <span className="font-semibold text-gray-900">#{transactionRef}</span></span>
+                                                <span className="text-gray-600">Amount: <span className="font-semibold text-green-700">NGN {receiveAmount}</span></span>
+                                            </div>
+                                            <p className="text-sm text-gray-600 mt-1">Please complete your payment below to finalise your transfer.</p>
+                                        </div>
+                                    </div>
+                                </motion.div>
 
                                 {/* Payment Countdown Timer */}
                                 <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 shadow-sm overflow-hidden">
