@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WaysToGetPaidModal } from "@/components/modals/WaysToGetPaidModal";
-import { knownSenders, type KnownSender } from "@/data/knownSenders";
+import { knownSenders, resolveNarration, type KnownSender } from "@/data/knownSenders";
 
 const COUNTRY_CODES = [
   { code: "+234", country: "Nigeria", flag: "🇳🇬" },
@@ -83,6 +83,13 @@ export default function Senders() {
       currency: newSender.country === "Nigeria" ? "NGN" : newSender.country === "United Kingdom" ? "GBP" : "USD",
       relationship: "Personal",
       createdAt: new Date().toISOString().split('T')[0],
+      bankName: "",
+      accountNumber: "",
+      sortCode: "",
+      iban: "",
+      swift: "",
+      narration: "",
+      serviceType: "Bank Deposit",
     };
     setSenders(prev => [...prev, sender]);
     setShowAddModal(false);
@@ -148,6 +155,7 @@ export default function Senders() {
                   <tr className="border-b border-border">
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Full Name</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Country</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Account Details</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Service Type</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
                   </tr>
@@ -165,22 +173,55 @@ export default function Senders() {
                       <tr key={sender.email} className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+                            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                               {sender.senderType === "business" ? (
                                 <Building2 className="w-4 h-4 text-primary" />
                               ) : (
                                 <span className="text-xs font-medium text-primary">{initials}</span>
                               )}
                             </div>
-                            <div className="flex flex-col">
+                            <div className="flex flex-col min-w-0">
                               <span className="font-medium">{displayName}</span>
                               {sender.senderType === "business" && (
                                 <span className="text-xs text-muted-foreground">Business</span>
+                              )}
+                              {sender.bankName && (
+                                <span className="text-xs text-muted-foreground">{sender.bankName}</span>
                               )}
                             </div>
                           </div>
                         </td>
                         <td className="py-4 px-4 text-muted-foreground">{sender.country}</td>
+                        {/* Account Details column */}
+                        <td className="py-4 px-4">
+                          <div className="flex flex-col gap-1">
+                            {sender.accountNumber && (
+                              <div className="flex flex-wrap gap-1">
+                                <span className="inline-flex items-center text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">
+                                  Acct: {sender.accountNumber}
+                                </span>
+                                {sender.sortCode && (
+                                  <span className="inline-flex items-center text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-mono">
+                                    Sort: {sender.sortCode}
+                                  </span>
+                                )}
+                                {sender.iban && (
+                                  <span className="inline-flex items-center text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-mono">
+                                    IBAN: {sender.iban.slice(0, 12)}…
+                                  </span>
+                                )}
+                                {sender.swift && (
+                                  <span className="inline-flex items-center text-xs bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full font-mono">
+                                    SWIFT: {sender.swift}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            <span className="text-xs text-muted-foreground italic">
+                              "{resolveNarration(sender.narration, sender.relationship)}"
+                            </span>
+                          </div>
+                        </td>
                         <td className="py-4 px-4 text-muted-foreground">Collection</td>
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-2">

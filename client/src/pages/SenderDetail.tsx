@@ -6,7 +6,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { WaysToGetPaidModal } from "@/components/modals/WaysToGetPaidModal";
-import { knownSenders } from "@/data/knownSenders";
+import { knownSenders, resolveNarration } from "@/data/knownSenders";
 
 export default function SenderDetail() {
   const [, setLocation] = useLocation();
@@ -145,8 +145,51 @@ export default function SenderDetail() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-xs text-muted-foreground">Service Type</p>
-                    <p className="font-medium">Collection</p>
+                    <p className="font-medium">{sender.serviceType || "Collection"}</p>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Banking Details section */}
+            <div className="mt-8 pt-6 border-t border-border">
+              <h3 className="text-sm font-semibold text-muted-foreground mb-4">Banking Details</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-4">
+                {sender.bankName && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Bank</p>
+                    <p className="font-medium">{sender.bankName}</p>
+                  </div>
+                )}
+                {sender.accountNumber && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Account Number</p>
+                    <p className="font-medium font-mono">{sender.accountNumber}</p>
+                  </div>
+                )}
+                {sender.sortCode && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Sort Code</p>
+                    <p className="font-medium font-mono">{sender.sortCode}</p>
+                  </div>
+                )}
+                {sender.iban && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">IBAN</p>
+                    <p className="font-medium font-mono text-sm break-all">{sender.iban}</p>
+                  </div>
+                )}
+                {sender.swift && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">SWIFT / BIC</p>
+                    <p className="font-medium font-mono">{sender.swift}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Narration</p>
+                  <p className="font-medium italic text-gray-700">
+                    {resolveNarration(sender.narration, sender.relationship)}
+                  </p>
                 </div>
               </div>
             </div>

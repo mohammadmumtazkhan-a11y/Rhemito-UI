@@ -7,7 +7,7 @@ export default function LandingPage() {
     const [receiveAmount, setReceiveAmount] = useState("1,000.00");
 
     return (
-        <div className="min-h-screen bg-white overflow-x-hidden" style={{ fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif' }}>
+        <div className="min-h-screen bg-white overflow-x-hidden font-sans">
 
             {/* Google Fonts import */}
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />

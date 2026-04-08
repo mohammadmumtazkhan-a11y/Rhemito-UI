@@ -23,9 +23,11 @@ const EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN
 const FEE_PERCENTAGE = 0.01; // 1%
 
 const recentRecipients = [
-    { id: 1, name: "Akshita Gupta", bank: "UK Bank", account: "12345678", initials: "AG", color: "bg-blue-100 text-blue-600" },
-    { id: 2, name: "Sarah Chen", bank: "Access Bank", account: "87654321", initials: "SC", color: "bg-purple-100 text-purple-600" },
-    { id: 3, name: "David Okonkwo", bank: "GTBank", account: "11223344", initials: "DO", color: "bg-green-100 text-green-600" },
+    { id: 1, name: "Akshita Gupta",   bank: "Barclays",        account: "12345678",  sortCode: "20-45-67", iban: "",                       swift: "",          currency: "GBP", country: "UK",            narration: "",                    initials: "AG", color: "bg-blue-100 text-blue-600" },
+    { id: 2, name: "Sarah Chen",      bank: "Access Bank",     account: "87654321",  sortCode: "",         iban: "",                       swift: "",          currency: "NGN", country: "Nigeria",       narration: "Family support",      initials: "SC", color: "bg-purple-100 text-purple-600" },
+    { id: 3, name: "David Okonkwo",   bank: "GTBank",          account: "11223344",  sortCode: "",         iban: "",                       swift: "",          currency: "NGN", country: "Nigeria",       narration: "Business payment",    initials: "DO", color: "bg-green-100 text-green-600" },
+    { id: 4, name: "Hans Müller",     bank: "Deutsche Bank",   account: "DE89370400440532013000", sortCode: "", iban: "DE89 3704 0044 0532 0130 00", swift: "DEUTDEFF", currency: "EUR", country: "Germany", narration: "Invoice #DE-2024", initials: "HM", color: "bg-orange-100 text-orange-600" },
+    { id: 5, name: "James Peterson",  bank: "Chase Bank",      account: "987654321", sortCode: "",         iban: "",                       swift: "CHASUS33",  currency: "USD", country: "United States", narration: "",                    initials: "JP", color: "bg-teal-100 text-teal-600" },
 ];
 
 const steps = [
@@ -58,8 +60,14 @@ export default function SendMoney() {
         relationship: "family",
         nickName: "",
         reason: "family_support",
+        // Banking fields
         bankName: "",
         accountNumber: "",
+        sortCode: "",
+        iban: "",
+        swift: "",
+        currency: "NGN",
+        country: "Nigeria",
         narration: ""
     });
 
@@ -127,6 +135,25 @@ export default function SendMoney() {
         const val = parseFloat(amount || "0");
         setReceiveAmount((val * EXCHANGE_RATE).toFixed(2));
     }, [amount]);
+
+    // Pre-fill banking details from selected recipient
+    useEffect(() => {
+        if (selectedRecipient) {
+            setRecipientDetails(prev => ({
+                ...prev,
+                firstName: selectedRecipient.name?.split(' ')[0] || prev.firstName,
+                lastName: selectedRecipient.name?.split(' ').slice(1).join(' ') || prev.lastName,
+                bankName: selectedRecipient.bank || prev.bankName,
+                accountNumber: selectedRecipient.account || prev.accountNumber,
+                sortCode: selectedRecipient.sortCode || prev.sortCode,
+                iban: selectedRecipient.iban || prev.iban,
+                swift: selectedRecipient.swift || prev.swift,
+                currency: selectedRecipient.currency || prev.currency,
+                country: selectedRecipient.country || prev.country,
+                narration: selectedRecipient.narration || prev.narration,
+            }));
+        }
+    }, [selectedRecipient]);
 
     const handleApplyPromo = async () => {
         const code = promoCode.trim().toUpperCase();
@@ -538,18 +565,45 @@ export default function SendMoney() {
                                                     className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors group"
                                                 >
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm ${r.color} relative`}>
+                                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm ${r.color} relative flex-shrink-0`}>
                                                             {r.initials}
                                                             <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
                                                         </div>
-                                                        <div>
+                                                        <div className="min-w-0">
                                                             <div className="font-bold text-gray-900">{r.name}</div>
-                                                            <div className="text-sm text-gray-500">UK Bank</div>
+                                                            <div className="text-sm text-gray-500">{r.bank}</div>
+                                                            {/* Banking detail chips */}
+                                                            <div className="flex flex-wrap gap-1.5 mt-1">
+                                                                <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">
+                                                                    Acct: {r.account.length > 16 ? `${r.account.slice(0, 4)}…${r.account.slice(-4)}` : r.account}
+                                                                </span>
+                                                                {r.sortCode && (
+                                                                    <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-mono">
+                                                                        Sort: {r.sortCode}
+                                                                    </span>
+                                                                )}
+                                                                {r.iban && (
+                                                                    <span className="inline-flex items-center gap-1 text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-mono">
+                                                                        IBAN: {r.iban.slice(0, 12)}…
+                                                                    </span>
+                                                                )}
+                                                                {r.swift && (
+                                                                    <span className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full font-mono">
+                                                                        SWIFT: {r.swift}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {/* Narration */}
+                                                            {(r.narration || r.currency === "NGN") && (
+                                                                <div className="text-xs text-gray-400 italic mt-0.5 truncate max-w-[220px]">
+                                                                    "{r.narration || (r.currency === "NGN" ? "Money transfer" : "")}"
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
-                                                    <div className="text-right text-sm">
+                                                    <div className="text-right text-sm flex-shrink-0 ml-2">
                                                         <div className="text-blue-500 font-medium">Bank Deposit</div>
-                                                        <div className="text-gray-400">12345678</div>
+                                                        <div className="text-gray-400 font-mono">{r.currency}</div>
                                                     </div>
                                                 </div>
                                             ))}
@@ -668,7 +722,12 @@ export default function SendMoney() {
                                             </div>
 
                                             <div className="space-y-2">
-                                                <Label>Narration <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                                                <Label>Narration
+                                                    {recipientDetails.currency === "NGN"
+                                                        ? <span className="text-red-500 ml-1">*</span>
+                                                        : <span className="text-muted-foreground font-normal"> (Optional)</span>
+                                                    }
+                                                </Label>
                                                 <Textarea
                                                     placeholder="e.g. Monthly allowance for February"
                                                     value={recipientDetails.narration}
@@ -676,7 +735,89 @@ export default function SendMoney() {
                                                     className="resize-none"
                                                     rows={3}
                                                 />
+                                                {recipientDetails.currency === "NGN" && (
+                                                    <p className="text-xs text-amber-600">Narration is required for Nigerian accounts.</p>
+                                                )}
                                             </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Banking Details Card — conditional by destination */}
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="text-lg">Banking Details</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4">
+                                            <div className="space-y-2">
+                                                <Label>Bank Name</Label>
+                                                <Input
+                                                    placeholder="e.g. Barclays, Access Bank"
+                                                    value={recipientDetails.bankName}
+                                                    onChange={e => setRecipientDetails({ ...recipientDetails, bankName: e.target.value })}
+                                                />
+                                            </div>
+
+                                            {/* Nigeria (NGN): account number only */}
+                                            {recipientDetails.currency === "NGN" && (
+                                                <div className="space-y-2">
+                                                    <Label>Account Number <span className="text-red-500">*</span></Label>
+                                                    <Input
+                                                        placeholder="10-digit account number"
+                                                        value={recipientDetails.accountNumber}
+                                                        onChange={e => setRecipientDetails({ ...recipientDetails, accountNumber: e.target.value })}
+                                                        maxLength={10}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* UK (GBP): account number + sort code */}
+                                            {recipientDetails.currency === "GBP" && (
+                                                <>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <Label>Account Number <span className="text-red-500">*</span></Label>
+                                                            <Input
+                                                                placeholder="8-digit number"
+                                                                value={recipientDetails.accountNumber}
+                                                                onChange={e => setRecipientDetails({ ...recipientDetails, accountNumber: e.target.value })}
+                                                                maxLength={8}
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label>Sort Code <span className="text-red-500">*</span></Label>
+                                                            <Input
+                                                                placeholder="e.g. 20-45-67"
+                                                                value={recipientDetails.sortCode}
+                                                                onChange={e => setRecipientDetails({ ...recipientDetails, sortCode: e.target.value })}
+                                                                maxLength={8}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            {/* International (EUR / USD / other): IBAN + SWIFT */}
+                                            {recipientDetails.currency !== "NGN" && recipientDetails.currency !== "GBP" && (
+                                                <>
+                                                    <div className="space-y-2">
+                                                        <Label>IBAN / Account Number <span className="text-red-500">*</span></Label>
+                                                        <Input
+                                                            placeholder="e.g. DE89 3704 0044 0532 0130 00"
+                                                            value={recipientDetails.iban || recipientDetails.accountNumber}
+                                                            onChange={e => setRecipientDetails({ ...recipientDetails, iban: e.target.value, accountNumber: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label>SWIFT / BIC <span className="text-red-500">*</span></Label>
+                                                        <Input
+                                                            placeholder="e.g. DEUTDEFF"
+                                                            value={recipientDetails.swift}
+                                                            onChange={e => setRecipientDetails({ ...recipientDetails, swift: e.target.value })}
+                                                            maxLength={11}
+                                                        />
+                                                    </div>
+                                                </>
+                                            )}
                                         </CardContent>
                                     </Card>
 
@@ -788,31 +929,66 @@ export default function SendMoney() {
                                                     </div>
                                                     <div className="flex justify-between">
                                                         <span className="text-gray-600">Country</span>
-                                                        <span className="font-medium">UK</span>
+                                                        <span className="font-medium">{recipientDetails.country || "—"}</span>
                                                     </div>
                                                     <div className="flex justify-between">
                                                         <span className="text-gray-600">Currency</span>
-                                                        <span className="font-medium">GBP</span>
+                                                        <span className="font-medium">{recipientDetails.currency || "—"}</span>
                                                     </div>
                                                     <div className="flex justify-between">
                                                         <span className="text-gray-600">Full Name</span>
                                                         <span className="font-medium">
-                                                            {selectedRecipient ? selectedRecipient.name : `${recipientDetails.firstName} ${recipientDetails.lastName}`}
+                                                            {`${recipientDetails.firstName} ${recipientDetails.lastName}`.trim() || "—"}
                                                         </span>
                                                     </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Routing/Sort Code</span>
-                                                        <span className="font-medium">606004</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Bank Account Number</span>
-                                                        <span className="font-medium italic">
-                                                            {selectedRecipient ? selectedRecipient.account : "12345678"}
-                                                        </span>
-                                                    </div>
+                                                    {recipientDetails.bankName && (
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-600">Bank</span>
+                                                            <span className="font-medium">{recipientDetails.bankName}</span>
+                                                        </div>
+                                                    )}
+                                                    {/* Nigeria (NGN): account number */}
+                                                    {recipientDetails.currency === "NGN" && (
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-600">Account Number</span>
+                                                            <span className="font-medium font-mono">{recipientDetails.accountNumber || "—"}</span>
+                                                        </div>
+                                                    )}
+                                                    {/* UK (GBP): account number + sort code */}
+                                                    {recipientDetails.currency === "GBP" && (
+                                                        <>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-600">Account Number</span>
+                                                                <span className="font-medium font-mono">{recipientDetails.accountNumber || "—"}</span>
+                                                            </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-600">Sort Code</span>
+                                                                <span className="font-medium font-mono">{recipientDetails.sortCode || "—"}</span>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                    {/* International: IBAN + SWIFT */}
+                                                    {recipientDetails.currency !== "NGN" && recipientDetails.currency !== "GBP" && (
+                                                        <>
+                                                            {(recipientDetails.iban || recipientDetails.accountNumber) && (
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-600">IBAN / Account No.</span>
+                                                                    <span className="font-medium font-mono text-xs">{recipientDetails.iban || recipientDetails.accountNumber}</span>
+                                                                </div>
+                                                            )}
+                                                            {recipientDetails.swift && (
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-600">SWIFT / BIC</span>
+                                                                    <span className="font-medium font-mono">{recipientDetails.swift}</span>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
                                                     <div className="flex justify-between">
                                                         <span className="text-gray-600">Narration</span>
-                                                        <span className="font-medium">{recipientDetails.narration || "—"}</span>
+                                                        <span className="font-medium">
+                                                            {recipientDetails.narration || (recipientDetails.currency === "NGN" ? "Money transfer" : "—")}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
