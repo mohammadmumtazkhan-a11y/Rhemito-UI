@@ -12,6 +12,29 @@ export interface KnownSender {
   currency: string;
   relationship: string;
   createdAt: string;
+  // Banking details
+  bankName: string;
+  accountNumber: string;
+  sortCode: string;   // UK GBP — e.g. "20-45-67"
+  iban: string;       // EUR / international
+  swift: string;      // international BIC/SWIFT
+  narration: string;  // optional; mandatory display for NGN
+  serviceType: string;
+}
+
+export function resolveNarration(
+  narration: string,
+  relationship: string
+): string {
+  if (narration) return narration;
+  const map: Record<string, string> = {
+    business: "Business payment",
+    personal: "Personal transfer",
+    family: "Family support",
+    friend: "Personal transfer",
+    education: "School fees",
+  };
+  return map[relationship?.toLowerCase()] ?? "Money transfer";
 }
 
 export const knownSenders: KnownSender[] = [
@@ -29,6 +52,13 @@ export const knownSenders: KnownSender[] = [
     currency: "NGN",
     relationship: "Business",
     createdAt: "2024-01-15",
+    bankName: "Access Bank Nigeria Plc",
+    accountNumber: "0123456789",
+    sortCode: "",
+    iban: "",
+    swift: "",
+    narration: "Business payment - January",
+    serviceType: "Bank Deposit",
   },
   {
     senderType: "individual",
@@ -44,6 +74,13 @@ export const knownSenders: KnownSender[] = [
     currency: "GBP",
     relationship: "Personal",
     createdAt: "2024-02-20",
+    bankName: "Barclays",
+    accountNumber: "12345678",
+    sortCode: "20-45-67",
+    iban: "",
+    swift: "",
+    narration: "",
+    serviceType: "Bank Deposit",
   },
   {
     senderType: "business",
@@ -59,6 +96,13 @@ export const knownSenders: KnownSender[] = [
     currency: "USD",
     relationship: "Business",
     createdAt: "2024-03-10",
+    bankName: "Chase Bank",
+    accountNumber: "987654321",
+    sortCode: "",
+    iban: "",
+    swift: "CHASUS33",
+    narration: "Invoice #CT-2024-031",
+    serviceType: "Bank Deposit",
   },
   {
     senderType: "individual",
@@ -74,6 +118,13 @@ export const knownSenders: KnownSender[] = [
     currency: "GBP",
     relationship: "Personal",
     createdAt: "2024-03-25",
+    bankName: "HSBC",
+    accountNumber: "87654321",
+    sortCode: "40-47-84",
+    iban: "",
+    swift: "",
+    narration: "",
+    serviceType: "Bank Deposit",
   },
   {
     senderType: "individual",
@@ -89,6 +140,13 @@ export const knownSenders: KnownSender[] = [
     currency: "NGN",
     relationship: "Business",
     createdAt: "2024-04-05",
+    bankName: "GTBank",
+    accountNumber: "0234567890",
+    sortCode: "",
+    iban: "",
+    swift: "",
+    narration: "",
+    serviceType: "Bank Deposit",
   },
   {
     senderType: "business",
@@ -104,6 +162,13 @@ export const knownSenders: KnownSender[] = [
     currency: "NGN",
     relationship: "Personal",
     createdAt: "2024-04-18",
+    bankName: "Zenith Bank",
+    accountNumber: "1098765432",
+    sortCode: "",
+    iban: "",
+    swift: "",
+    narration: "Consulting fee Q2",
+    serviceType: "Bank Deposit",
   },
   {
     senderType: "business",
@@ -119,6 +184,13 @@ export const knownSenders: KnownSender[] = [
     currency: "USD",
     relationship: "Business",
     createdAt: "2024-05-02",
+    bankName: "Bank of America",
+    accountNumber: "112233445",
+    sortCode: "",
+    iban: "",
+    swift: "BOFAUS3N",
+    narration: "",
+    serviceType: "Bank Deposit",
   },
   {
     senderType: "individual",
@@ -134,5 +206,12 @@ export const knownSenders: KnownSender[] = [
     currency: "NGN",
     relationship: "Business",
     createdAt: "2024-05-15",
+    bankName: "First Bank of Nigeria",
+    accountNumber: "3012345678",
+    sortCode: "",
+    iban: "",
+    swift: "",
+    narration: "Monthly retainer",
+    serviceType: "Bank Deposit",
   },
 ];
