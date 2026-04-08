@@ -1397,20 +1397,64 @@ export default function SendMoney() {
                                 <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 shadow-sm overflow-hidden">
                                     <CardContent className="pt-5 pb-5 px-6">
                                         <div className="flex items-center gap-4">
-                                            <div className="relative">
-                                                <div className={`w-16 h-16 rounded-full flex items-center justify-center border-4 ${
-                                                    paymentTimeLeft <= 300 ? 'border-red-400 bg-red-50' : 'border-amber-400 bg-amber-50'
-                                                }`}>
-                                                    <span className={`text-lg font-bold font-mono ${
-                                                        paymentTimeLeft <= 300 ? 'text-red-700' : 'text-amber-800'
-                                                    }`}>
-                                                        {formatPaymentTime(paymentTimeLeft)}
-                                                    </span>
-                                                </div>
-                                                {paymentTimeLeft <= 300 && (
-                                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />
-                                                )}
-                                            </div>
+                                            {(() => {
+                                                const total = 1800;
+                                                const circumference = 2 * Math.PI * 24; // r=24 → ~150.8
+                                                const isUrgent = paymentTimeLeft <= 300;
+                                                const ringColor = isUrgent ? '#ef4444' : '#f59e0b';
+                                                const textColor = isUrgent ? '#b91c1c' : '#92400e';
+                                                // Monotonically increasing angle — no wrap-around jank
+                                                const secondAngle = (total - paymentTimeLeft) * 6;
+                                                const dashOffset = circumference * (1 - paymentTimeLeft / total);
+                                                return (
+                                                    <div className="relative w-20 h-20 shrink-0">
+                                                        <svg viewBox="0 0 64 64" className="w-full h-full">
+                                                            {/* Track ring */}
+                                                            <circle cx="32" cy="32" r="24" fill="none" stroke="#e5e7eb" strokeWidth="3.5" />
+                                                            {/* Sweeping progress ring — starts at 12 o'clock */}
+                                                            <circle
+                                                                cx="32" cy="32" r="24"
+                                                                fill="none"
+                                                                stroke={ringColor}
+                                                                strokeWidth="3.5"
+                                                                strokeLinecap="round"
+                                                                strokeDasharray={circumference}
+                                                                strokeDashoffset={dashOffset}
+                                                                transform="rotate(-90, 32, 32)"
+                                                                style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.5s ease' }}
+                                                            />
+                                                            {/* Second hand */}
+                                                            <line
+                                                                x1="32" y1="32" x2="32" y2="11"
+                                                                stroke={ringColor}
+                                                                strokeWidth="1.5"
+                                                                strokeLinecap="round"
+                                                                style={{
+                                                                    transformOrigin: '32px 32px',
+                                                                    transform: `rotate(${secondAngle}deg)`,
+                                                                    transition: 'transform 1s linear, stroke 0.5s ease',
+                                                                }}
+                                                            />
+                                                            {/* Centre pivot dot */}
+                                                            <circle cx="32" cy="32" r="2.5" fill={ringColor} style={{ transition: 'fill 0.5s ease' }} />
+                                                        </svg>
+                                                        {/* Time label */}
+                                                        <div className="absolute inset-0 flex items-center justify-center">
+                                                            <motion.span
+                                                                animate={{ color: textColor }}
+                                                                transition={{ duration: 0.5 }}
+                                                                className="text-xs font-bold font-mono leading-none"
+                                                            >
+                                                                {formatPaymentTime(paymentTimeLeft)}
+                                                            </motion.span>
+                                                        </div>
+                                                        {/* Urgency ping */}
+                                                        {isUrgent && (
+                                                            <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full animate-ping" />
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                             <div className="flex-1">
                                                 <h4 className={`font-bold text-sm ${paymentTimeLeft <= 300 ? 'text-red-800' : 'text-amber-900'}`}>
                                                     {paymentTimeLeft <= 300 ? 'Time is running out!' : 'Complete your payment'}
