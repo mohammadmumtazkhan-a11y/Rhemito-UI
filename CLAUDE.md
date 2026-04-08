@@ -36,6 +36,25 @@ Additional features: receiving/requesting payments, GroupPay funding campaigns, 
 - I can share images/screenshots but before implementing them blindly mind the theme/colour and logic/flow for Fintech/money transfer.
 - Mind the functionality and effects across the application when we are implementing something new (a field/flow or Text) so that we don't break the flow/functionality while adding or changing anything.
 
+## UX-First Rule (Mandatory — No Exceptions)
+
+**For ANY change that affects how something looks or feels**, the UX designer
+must be consulted first — before any engineer writes a single line of UI code.
+This includes: new pages, new components, animations, visual improvements,
+layout changes, redesigns, and UI enhancements of any size.
+
+**The required sequence for ALL UI work:**
+1. `uiux-designer` researches best-in-class benchmarks for the specific pattern
+2. `uiux-designer` proposes 1–3 design directions with clear rationale
+3. User reviews the proposal and either approves or requests changes
+4. `uiux-designer` iterates until user explicitly approves
+5. `frontend-web-engineer` implements exactly what was approved — nothing more, nothing less
+
+**The engineer never decides the design.** If a visual improvement is
+requested (e.g. "improve the countdown timer", "make this more modern"),
+the UX designer owns the proposal. The engineer owns the implementation.
+These are two separate and sequential steps — never combined.
+
 ## Git Workflow
 
 1. **Branch before changes:** Always create a new branch before making any changes. Use a clear branch name describing the feature or fix (e.g., `feature/add-UI-validation`, `fix/payment-amount-display`).
