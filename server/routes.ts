@@ -16,7 +16,90 @@ import {
   getUserPreferences,
   updateUserPreferences,
 } from "./notificationService";
-import type { NotificationEventType } from "@shared/schema";
+import type { NotificationEventType, NotificationPreferences as DBPrefs } from "@shared/schema";
+
+// ─── Preferences shape adapter ───────────────────────────────────────────────
+// The DB stores a flat structure (inAppEnabled, paymentEvents, quietHoursEnabled, …).
+// The client works in a nested shape ({ channels, eventTypes, quietHours }).
+// These two helpers translate between the wire format and the DB format so
+// the client and server never have to care about the other side's layout.
+
+interface ClientPrefs {
+  channels: {
+    inApp: boolean;
+    browserPush: boolean;
+    email: boolean;
+    mobilePush: boolean;
+  };
+  eventTypes: {
+    payment: boolean;
+    transactionStatus: boolean;
+    refund: boolean;
+    kyc: boolean;
+    security: boolean;
+    system: boolean;
+    marketing: boolean;
+  };
+  quietHours: {
+    enabled: boolean;
+    from: string;
+    to: string;
+    timezone: string;
+  };
+}
+
+function dbToClientPrefs(p: DBPrefs): ClientPrefs {
+  return {
+    channels: {
+      inApp: p.inAppEnabled,
+      browserPush: p.webPushEnabled,
+      email: p.emailEnabled,
+      mobilePush: p.mobilePushEnabled,
+    },
+    eventTypes: {
+      payment: p.paymentEvents,
+      transactionStatus: p.transactionEvents,
+      refund: p.refundEvents,
+      kyc: p.kycEvents,
+      security: p.securityEvents,
+      system: p.maintenanceEvents,
+      marketing: p.marketingEvents,
+    },
+    quietHours: {
+      enabled: p.quietHoursEnabled,
+      from: p.quietHoursStart ?? "22:00",
+      to: p.quietHoursEnd ?? "08:00",
+      timezone: "UTC",
+    },
+  };
+}
+
+function clientToDbPrefs(c: Partial<ClientPrefs>): Partial<DBPrefs> {
+  const out: Partial<DBPrefs> = {};
+  if (c.channels) {
+    if (c.channels.inApp !== undefined) out.inAppEnabled = c.channels.inApp;
+    if (c.channels.browserPush !== undefined) out.webPushEnabled = c.channels.browserPush;
+    if (c.channels.email !== undefined) out.emailEnabled = c.channels.email;
+    if (c.channels.mobilePush !== undefined) out.mobilePushEnabled = c.channels.mobilePush;
+  }
+  if (c.eventTypes) {
+    // AC 1.5 — critical categories (payment, transactionStatus, kyc) cannot be
+    // turned off via this endpoint. Even if the client sends false, force true.
+    out.paymentEvents = true;
+    out.transactionEvents = true;
+    out.kycEvents = true;
+    if (c.eventTypes.refund !== undefined) out.refundEvents = c.eventTypes.refund;
+    if (c.eventTypes.security !== undefined) out.securityEvents = c.eventTypes.security;
+    if (c.eventTypes.system !== undefined) out.maintenanceEvents = c.eventTypes.system;
+    if (c.eventTypes.marketing !== undefined) out.marketingEvents = c.eventTypes.marketing;
+  }
+  if (c.quietHours) {
+    if (c.quietHours.enabled !== undefined) out.quietHoursEnabled = c.quietHours.enabled;
+    if (c.quietHours.from !== undefined) out.quietHoursStart = c.quietHours.from;
+    if (c.quietHours.to !== undefined) out.quietHoursEnd = c.quietHours.to;
+  }
+  return out;
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -141,14 +224,15 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/notifications/preferences
+  // GET /api/notifications/preferences — returns the client nested shape
   app.get("/api/notifications/preferences", async (req: Request, res: Response) => {
     const userId = requireAuth(req, res);
     if (!userId) return;
 
     try {
       const prefs = await getUserPreferences(userId);
-      return res.json({ data: prefs });
+      // Return as a bare nested object so useQuery can read prefs.channels.inApp directly
+      return res.json(dbToClientPrefs(prefs));
     } catch (err) {
       console.error("GET /api/notifications/preferences error:", err);
       return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to fetch preferences" } });
@@ -184,16 +268,17 @@ export async function registerRoutes(
     }
   });
 
-  // PATCH /api/notifications/preferences — update preferences
+  // PATCH /api/notifications/preferences — accepts client nested shape
   app.patch("/api/notifications/preferences", async (req: Request, res: Response) => {
     const userId = requireAuth(req, res);
     if (!userId) return;
 
     try {
-      const updated = await updateUserPreferences(userId, req.body);
+      const patch = clientToDbPrefs(req.body ?? {});
+      const updated = await updateUserPreferences(userId, patch);
       // Dispatch a confirmation in-app notification
       await dispatchNotification({ userId, type: "preferences_updated", data: {} });
-      return res.json({ data: updated });
+      return res.json(dbToClientPrefs(updated));
     } catch (err) {
       console.error("PATCH /api/notifications/preferences error:", err);
       return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to update preferences" } });

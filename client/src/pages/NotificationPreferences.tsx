@@ -117,6 +117,8 @@ function EventRow({
   critical,
   gdprCopy,
 }: EventRowProps): React.JSX.Element {
+  // AC 1.5 — critical categories render as locked, always-on, and cannot be turned off.
+  // The toggle is force-checked and disabled; keyboard and mouse interactions are blocked.
   return (
     <div className="flex items-start gap-3 py-3.5 border-b border-border last:border-b-0">
       <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center mt-0.5">
@@ -142,9 +144,10 @@ function EventRow({
         )}
       </div>
       <Switch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        aria-label={`Toggle ${label} notifications`}
+        checked={critical ? true : checked}
+        onCheckedChange={critical ? () => undefined : onCheckedChange}
+        disabled={critical}
+        aria-label={`Toggle ${label} notifications${critical ? " (locked — critical)" : ""}`}
       />
     </div>
   );

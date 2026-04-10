@@ -13,6 +13,8 @@ import {
   FileCheck,
   Wrench,
   Settings,
+  Banknote,
+  Wallet,
   X,
 } from "lucide-react";
 import type { Notification, NotificationType } from "@/contexts/NotificationContext";
@@ -118,6 +120,33 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
     icon: Settings,
     containerClass: "bg-primary/10",
     iconClass: "text-primary",
+  },
+  // Funding Stories 16–18
+  funding_received_matched: {
+    icon: Banknote,
+    containerClass: "bg-teal/10",
+    iconClass: "text-teal",
+  },
+  funding_received_unmatched: {
+    icon: Wallet,
+    containerClass: "bg-amber/10",
+    iconClass: "text-amber",
+  },
+  funding_allocated_single: {
+    icon: Banknote,
+    containerClass: "bg-teal/10",
+    iconClass: "text-teal",
+  },
+  funding_allocated_multi: {
+    icon: Banknote,
+    containerClass: "bg-teal/10",
+    iconClass: "text-teal",
+  },
+  funding_allocated_partial: {
+    icon: AlertTriangle,
+    containerClass: "bg-amber/10",
+    iconClass: "text-amber",
+    urgent: true,
   },
 };
 

@@ -27,7 +27,13 @@ export type NotificationType =
   | "document_received"
   | "maintenance_scheduled"
   | "maintenance_complete"
-  | "preferences_updated";
+  | "preferences_updated"
+  // Funding stories 16–18
+  | "funding_received_matched"
+  | "funding_received_unmatched"
+  | "funding_allocated_single"
+  | "funding_allocated_multi"
+  | "funding_allocated_partial";
 
 export interface Notification {
   id: string;
