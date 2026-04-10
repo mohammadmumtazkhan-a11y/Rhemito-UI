@@ -13,6 +13,8 @@ import {
   FileCheck,
   Wrench,
   Settings,
+  Banknote,
+  Wallet,
   BellOff,
 } from "lucide-react";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
@@ -48,6 +50,12 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
   maintenance_scheduled: { icon: Wrench, containerClass: "bg-purple/10", iconClass: "text-purple", label: "Scheduled Maintenance" },
   maintenance_complete: { icon: CheckCircle2, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Maintenance Complete" },
   preferences_updated: { icon: Settings, containerClass: "bg-primary/10", iconClass: "text-primary", label: "Preferences Updated" },
+  // Funding Stories 16–18
+  funding_received_matched: { icon: Banknote, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Funds Received" },
+  funding_received_unmatched: { icon: Wallet, containerClass: "bg-amber/10", iconClass: "text-amber", label: "Funds Awaiting Allocation" },
+  funding_allocated_single: { icon: Banknote, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Funds Allocated" },
+  funding_allocated_multi: { icon: Banknote, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Funds Allocated" },
+  funding_allocated_partial: { icon: AlertTriangle, containerClass: "bg-amber/10", iconClass: "text-amber", label: "Partial Allocation — Payment Required" },
 };
 
 // ─── Format timestamp — full (not relative) ──────────────────────────────────

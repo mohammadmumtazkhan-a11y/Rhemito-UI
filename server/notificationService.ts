@@ -65,7 +65,23 @@ const EVENT_CATEGORY_MAP: Record<NotificationEventType, EventCategory> = {
   maintenance_scheduled: "maintenanceEvents",
   maintenance_complete: "maintenanceEvents",
   preferences_updated: "securityEvents",
+  // Funding events — treated as payment events so they respect the same category toggle
+  funding_received_matched: "paymentEvents",
+  funding_received_unmatched: "paymentEvents",
+  funding_allocated_single: "paymentEvents",
+  funding_allocated_multi: "paymentEvents",
+  funding_allocated_partial: "paymentEvents",
 };
+
+// ─── Refund ETA by method (AC 11.2) ─────────────────────────────────────────
+
+function refundEtaForMethod(method: unknown): string {
+  const m = String(method ?? "").toLowerCase();
+  if (m.includes("card")) return "3–5 business days";
+  if (m.includes("wallet") || m.includes("e-wallet") || m.includes("e_wallet")) return "within 24 hours";
+  if (m.includes("bank")) return "1–2 business days";
+  return "3–5 business days";
+}
 
 // ─── Notification copy templates ──────────────────────────────────────────────
 
@@ -86,6 +102,18 @@ export function buildNotificationContent(
   const minutesLeft = String(data.minutesLeft ?? "");
   const windowStart = String(data.windowStart ?? "");
   const windowEnd = String(data.windowEnd ?? "");
+  // Funding-story fields
+  const amountReceived = String(data.amountReceived ?? amount);
+  const amountAllocated = String(data.amountAllocated ?? amount);
+  const unallocatedBalance = String(data.unallocatedBalance ?? "");
+  const senderBank = String(data.senderBank ?? "");
+  const txnCount = String(data.txnCount ?? "");
+  const totalAllocated = String(data.totalAllocated ?? "");
+  const shortfallAmount = String(data.shortfallAmount ?? "");
+  // Refund-method fields
+  const refundAmount = String(data.refundAmount ?? amount);
+  const refundMethod = String(data.refundMethod ?? "original payment method");
+  const refundEta = String(data.refundEta ?? refundEtaForMethod(data.refundMethod));
 
   const templates: Record<NotificationEventType, NotificationContent> = {
     payment_received: {
@@ -130,7 +158,8 @@ export function buildNotificationContent(
     },
     refund_processed: {
       title: "Refund Processed",
-      body: `Your refund of ${amount} ${currency} for transaction ${txnId} has been processed and should arrive in your account within 3–5 business days.`,
+      // AC 11.2 — method-specific ETA
+      body: `Your refund of ${refundAmount} ${currency} for transaction ${txnId} has been sent to your ${refundMethod}. Please allow ${refundEta} for it to appear in your account.`,
     },
     under_review: {
       title: "Transfer Under Review",
@@ -159,6 +188,31 @@ export function buildNotificationContent(
     preferences_updated: {
       title: "Notification Preferences Updated",
       body: "Your notification preferences have been successfully updated.",
+    },
+    // ─── Story 16 — Funding matched to an existing transaction ───────────
+    funding_received_matched: {
+      title: "Funds Received — Transaction Now Processing",
+      body: `Great news! We have received your payment of ${amountReceived} ${currency} for transaction ${txnId} to ${recipient}${senderBank ? ` from ${senderBank}` : ""}. Your transfer is now being processed.`,
+    },
+    // ─── Story 17 — Funding received with no matching transaction ────────
+    funding_received_unmatched: {
+      title: "Funds Received — Awaiting Allocation",
+      body: `We have received ${amountReceived} ${currency}${senderBank ? ` from ${senderBank}` : ""} into your Rhemito funding balance. These funds will be automatically allocated to your transactions as soon as you create them.${unallocatedBalance ? ` Current unallocated balance: ${unallocatedBalance} ${currency}.` : ""}`,
+    },
+    // ─── Story 18a — Funding allocated to a single transaction ───────────
+    funding_allocated_single: {
+      title: "Funds Allocated",
+      body: `We have allocated ${amountAllocated} ${currency} from your Rhemito balance to transaction ${txnId} to ${recipient}. Your transfer is now being processed.${unallocatedBalance ? ` Remaining balance: ${unallocatedBalance} ${currency}.` : ""}`,
+    },
+    // ─── Story 18b — Funding allocated across multiple transactions ──────
+    funding_allocated_multi: {
+      title: `Funds Allocated to ${txnCount} Transactions`,
+      body: `We have allocated a total of ${totalAllocated} ${currency} from your Rhemito balance across ${txnCount} transactions. All affected transfers are now being processed.${unallocatedBalance ? ` Remaining balance: ${unallocatedBalance} ${currency}.` : ""}`,
+    },
+    // ─── Story 18c — Partial allocation, additional payment required ─────
+    funding_allocated_partial: {
+      title: "Partial Allocation — Payment Required",
+      body: `We have applied ${amountAllocated} ${currency} from your Rhemito balance to transaction ${txnId}, but an additional ${shortfallAmount} ${currency} is still required. Please complete payment to proceed with your transfer to ${recipient}.`,
     },
   };
 

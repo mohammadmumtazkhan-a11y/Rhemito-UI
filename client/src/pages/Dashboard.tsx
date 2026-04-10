@@ -552,19 +552,30 @@ export default function Dashboard() {
                               </div>
                             </TableCell>
                             <TableCell className="text-center py-4 pr-4 sm:pr-6">
-                              {tx.status === "cancelled" ? (
-                                <span className="text-gray-300 text-sm">—</span>
-                              ) : (
+                              {(() => {
+                                // Resend is offered ONLY for terminal (settled) statuses.
+                                // Terminal = completed (successful), failed, cancelled (aborted).
+                                // In-flight states (awaiting_payment, pending, scheduled) never show Resend.
+                                // Cancel is offered ONLY while awaiting_payment.
+                                const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
+                                const isTerminal = (TERMINAL_STATUSES as readonly string[]).includes(tx.status);
+                                const canCancel = tx.status === "awaiting_payment";
+                                if (!isTerminal && !canCancel) {
+                                  return <span className="text-gray-300 text-sm">—</span>;
+                                }
+                                return (
                                 <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2">
-                                  <Button
-                                    size="sm"
-                                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all"
-                                    data-testid={`button-resend-${tx.id}`}
-                                  >
-                                    Resend
-                                  </Button>
+                                  {isTerminal && (
+                                    <Button
+                                      size="sm"
+                                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all"
+                                      data-testid={`button-resend-${tx.id}`}
+                                    >
+                                      Resend
+                                    </Button>
+                                  )}
                                   <AnimatePresence>
-                                    {tx.status === "awaiting_payment" && (
+                                    {canCancel && (
                                       <motion.div
                                         key={`cancel-btn-${tx.id}`}
                                         initial={{ opacity: 0 }}
@@ -594,7 +605,8 @@ export default function Dashboard() {
                                     )}
                                   </AnimatePresence>
                                 </div>
-                              )}
+                                );
+                              })()}
                             </TableCell>
                           </TableRow>
                         ))}

@@ -1,6 +1,7 @@
 import { ReactNode, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
+import { MaintenanceBanner } from "@/components/notifications/MaintenanceBanner";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -12,6 +13,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* AC 8.2 — Non-dismissible in-app banner shown whenever a maintenance_scheduled
+          notification is active (auto-disappears via dismissible complete banner). */}
+      <MaintenanceBanner />
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

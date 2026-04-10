@@ -165,6 +165,16 @@ export const NOTIFICATION_TYPES = [
   "maintenance_scheduled",
   "maintenance_complete",
   "preferences_updated",
+  // Story 16 — funding matched to an existing Awaiting Payment transaction
+  "funding_received_matched",
+  // Story 17 — funding received without a matching transaction (unallocated balance)
+  "funding_received_unmatched",
+  // Story 18a — funding allocated to a single transaction
+  "funding_allocated_single",
+  // Story 18b — funding allocated across multiple transactions
+  "funding_allocated_multi",
+  // Story 18c — partial allocation, additional payment required
+  "funding_allocated_partial",
 ] as const;
 
 export type NotificationEventType = (typeof NOTIFICATION_TYPES)[number];
