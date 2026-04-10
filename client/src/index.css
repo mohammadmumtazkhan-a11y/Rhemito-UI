@@ -55,6 +55,8 @@
   --color-teal-foreground: hsl(var(--teal-foreground));
   --color-purple: hsl(var(--purple));
   --color-purple-foreground: hsl(var(--purple-foreground));
+  --color-amber: hsl(var(--amber));
+  --color-amber-foreground: hsl(var(--amber-foreground));
 }
 
 :root {
@@ -104,6 +106,9 @@
 
   --purple: 258 90% 66%;
   --purple-foreground: 0 0% 100%;
+
+  --amber: 38 92% 50%;
+  --amber-foreground: 0 0% 100%;
 
   --input: 214 32% 91%;
   --ring: 217 91% 60%;

@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Phone, Receipt, ArrowRight, Gift, Copy, Sparkles } from "lucide-react";
 import { RequestPaymentModal } from "@/components/RequestPaymentModal";
@@ -102,6 +104,7 @@ const itemVariants = {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   // Bonus State - Hardcoded for Prototype
   const [bonusBalance] = useState(5);
@@ -109,6 +112,20 @@ export default function Dashboard() {
   const [transactions, setTransactions] = useState(initialRecentTransactions);
   const [cancelTarget, setCancelTarget] = useState<TransactionDetails | null>(null);
   const { toast } = useToast();
+
+  // On mount: pick up any transaction cancelled from SendMoney and show it at top of list
+  useEffect(() => {
+    const raw = sessionStorage.getItem("rhemito_cancelled_tx");
+    if (raw) {
+      try {
+        const tx = JSON.parse(raw);
+        setTransactions((prev) => [tx, ...prev]);
+      } catch {
+        // malformed — ignore
+      }
+      sessionStorage.removeItem("rhemito_cancelled_tx");
+    }
+  }, []);
 
   const handlePaymentOptionSelect = (option: "request" | "invoice" | "qrcode" | "funding") => {
     setShowPaymentModal(false);
@@ -140,16 +157,33 @@ export default function Dashboard() {
   const handleCancelConfirm = async (transactionId: string): Promise<void> => {
     // Prototype: simulate 1.5s API delay
     await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+    const tx = transactions.find(t => t.id === transactionId);
     setTransactions((prev) =>
-      prev.map((tx) =>
-        tx.id === transactionId ? { ...tx, status: "cancelled" } : tx
+      prev.map((t) =>
+        t.id === transactionId ? { ...t, status: "cancelled" } : t
       )
     );
     setCancelTarget(null);
+    // Dispatch bell notification, then refresh unread count immediately
+    try {
+      await apiRequest("POST", "/api/notifications/dispatch", {
+        type: "transaction_cancelled_customer",
+        data: {
+          txnId: transactionId,
+          recipientName: tx?.recipient ?? "Unknown",
+          amount: tx?.amount ?? "",
+          service: tx?.service ?? "Bank Transfer",
+        },
+      });
+      void queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    } catch {
+      // Notification failure is non-blocking
+    }
     toast({
       title: "Transaction cancelled",
-      description: `Ref ${transactionId} has been cancelled successfully.`,
-      duration: 4000,
+      description: `Ref ${transactionId} has been cancelled successfully. A confirmation has been sent to your registered email address.`,
+      duration: 6000,
     });
   };
 

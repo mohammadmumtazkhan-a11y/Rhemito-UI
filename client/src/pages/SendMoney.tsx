@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     ArrowLeft, Check, ChevronRight, User, Building2,
@@ -17,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
 
 // Mock Data
 const EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN
@@ -41,6 +44,7 @@ const steps = [
 export default function SendMoney() {
     const [, setLocation] = useLocation();
     const { toast } = useToast();
+    const queryClient = useQueryClient();
     const [currentStep, setCurrentStep] = useState(1);
 
     // Form State
@@ -78,6 +82,9 @@ export default function SendMoney() {
     const [transactionSubmitted, setTransactionSubmitted] = useState(false);
     const [submittingTransaction, setSubmittingTransaction] = useState(false);
     const [transactionRef] = useState("24426299");
+
+    // Cancel transaction modal
+    const [cancelTarget, setCancelTarget] = useState<TransactionDetails | null>(null);
 
     // Bank transfer inline page
     const [showBankTransferPage, setShowBankTransferPage] = useState(false);
@@ -315,6 +322,78 @@ export default function SendMoney() {
             });
         }, 500);
     }, [setLocation, toast]);
+
+    const handleCancelClick = () => {
+        const serviceLabels: Record<string, string> = {
+            bank_deposit: "Bank Deposit",
+            mobile_money: "Mobile Money",
+            cash_pickup: "Cash Pickup",
+        };
+        setCancelTarget({
+            id: transactionRef,
+            recipient: selectedRecipient?.name
+                ?? (`${recipientDetails.firstName} ${recipientDetails.lastName}`.trim() || "Unknown"),
+            amount: `GBP ${totalPay.toFixed(2)}`,
+            service: serviceLabels[deliveryMethod] ?? deliveryMethod ?? "Bank Transfer",
+        });
+    };
+
+    const handleCancelConfirm = async (_transactionId: string): Promise<void> => {
+        // Resolve recipient name — from selected recent recipient or from manually entered details
+        const recipientName = selectedRecipient?.name
+            ?? (`${recipientDetails.firstName} ${recipientDetails.lastName}`.trim() || "Unknown");
+
+        // Resolve human-readable service label
+        const serviceLabels: Record<string, string> = {
+            bank_deposit: "Bank Deposit",
+            mobile_money: "Mobile Money",
+            cash_pickup: "Cash Pickup",
+        };
+        const serviceLabel = serviceLabels[deliveryMethod] ?? deliveryMethod ?? "Bank Transfer";
+
+        // Store the cancelled transaction so Dashboard can show it immediately
+        const now = new Date();
+        const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+        sessionStorage.setItem("rhemito_cancelled_tx", JSON.stringify({
+            id: transactionRef,
+            recipient: recipientName,
+            service: serviceLabel,
+            date: dateStr,
+            amount: `GBP ${totalPay.toFixed(2)}`,
+            status: "cancelled",
+        }));
+        // Dispatch bell notification, then immediately refresh unread count before navigating
+        try {
+            await apiRequest("POST", "/api/notifications/dispatch", {
+                type: "transaction_cancelled_customer",
+                data: {
+                    txnId: transactionRef,
+                    recipientName,
+                    amount: `GBP ${totalPay.toFixed(2)}`,
+                    service: serviceLabel,
+                },
+            });
+            // Invalidate so the badge updates immediately on Dashboard
+            void queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+            void queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+        } catch {
+            // Notification failure is non-blocking — continue with cancel flow
+        }
+
+        setCancelTarget(null);
+        setShowBankTransferPage(false);
+        setPaymentTimerActive(false);
+        setPaymentTimeLeft(1800);
+        setPaymentMethod("");
+        toast({
+            title: "Transaction Cancelled",
+            description: `Ref #${transactionRef} has been cancelled successfully. A confirmation has been sent to your registered email address.`,
+            variant: "destructive",
+        });
+        setLocation("/");
+    };
+
+    const handleCancelModalClose = () => setCancelTarget(null);
 
     const formatPaymentTime = (seconds: number) => {
         const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -1595,6 +1674,18 @@ export default function SendMoney() {
                                                 </Button>
                                             </motion.div>
                                         )}
+
+                                        {!transferComplete && (
+                                            <div className="pt-1 text-center">
+                                                <Button
+                                                    variant="ghost"
+                                                    className="text-destructive hover:text-destructive hover:bg-destructive/10 text-sm font-medium"
+                                                    onClick={handleCancelClick}
+                                                >
+                                                    Cancel Transaction
+                                                </Button>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             </motion.div>
@@ -1785,6 +1876,13 @@ export default function SendMoney() {
                     </div>
                 )}
             </AnimatePresence>
+
+            <CancelTransactionModal
+                open={cancelTarget !== null}
+                transaction={cancelTarget}
+                onConfirm={handleCancelConfirm}
+                onCancel={handleCancelModalClose}
+            />
 
         </DashboardLayout >
     );
