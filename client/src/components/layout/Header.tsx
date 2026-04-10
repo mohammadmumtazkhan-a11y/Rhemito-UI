@@ -1,5 +1,6 @@
-import { Bell, ChevronDown, Menu } from "lucide-react";
+import { ChevronDown, Menu } from "lucide-react";
 import { motion } from "framer-motion";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 interface HeaderProps {
   userName: string;
@@ -23,13 +24,7 @@ export function Header({ userName, onMenuClick }: HeaderProps) {
       </button>
 
       <div className="flex items-center gap-2 md:gap-4 ml-auto">
-        <button 
-          className="relative p-2 rounded-lg hover:bg-muted transition-colors"
-          data-testid="button-notifications"
-        >
-          <Bell className="w-4 h-4 md:w-5 md:h-5 text-muted-foreground" />
-          <span className="absolute top-1 right-1 md:top-1.5 md:right-1.5 w-2 h-2 bg-destructive rounded-full" />
-        </button>
+        <NotificationBell />
 
         <div className="flex items-center gap-2 cursor-pointer" data-testid="button-profile-menu">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-teal flex items-center justify-center">

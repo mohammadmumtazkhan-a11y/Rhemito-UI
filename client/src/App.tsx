@@ -4,6 +4,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { NotificationContextProvider } from "@/contexts/NotificationContext";
 import Dashboard from "@/pages/Dashboard";
 import RequestPayment from "@/pages/RequestPayment";
 import SendInvoice from "@/pages/SendInvoice";
@@ -26,6 +27,9 @@ import SampleTicket from "@/components/SampleTicket";
 import Login from "@/pages/Auth/Login";
 import SignInSignUp from "@/pages/Auth/SignInSignUp";
 import LandingPage from "@/pages/LandingPage";
+import NotificationPreferences from "@/pages/NotificationPreferences";
+import NotificationArchive from "@/pages/NotificationArchive";
+import NotificationDetail from "@/pages/NotificationDetail";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -83,6 +87,9 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/sign-in-sign-up" component={SignInSignUp} />
       <Route path="/home" component={LandingPage} />
+      <Route path="/settings/notifications" component={NotificationPreferences} />
+      <Route path="/notifications/archive" component={NotificationArchive} />
+      <Route path="/notifications/:id" component={NotificationDetail} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -92,10 +99,12 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <NotificationContextProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </NotificationContextProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

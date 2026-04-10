@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -144,3 +144,91 @@ export const otpVerifySchema = z.object({
   email: z.string().email(),
   code: z.string().length(6, "OTP must be 6 digits"),
 });
+
+// ─── Notification Event Types ────────────────────────────────────────────────
+export const NOTIFICATION_TYPES = [
+  "payment_received",
+  "awaiting_payment",
+  "payment_failed",
+  "transaction_complete",
+  "transaction_failed",
+  "transaction_cancelled_customer",
+  "transaction_cancelled_admin",
+  "transaction_cancelled_timeout",
+  "auto_cancel_reminder_15",
+  "auto_cancel_reminder_5",
+  "refund_processed",
+  "under_review",
+  "review_complete",
+  "document_required",
+  "document_received",
+  "maintenance_scheduled",
+  "maintenance_complete",
+  "preferences_updated",
+] as const;
+
+export type NotificationEventType = (typeof NOTIFICATION_TYPES)[number];
+
+export const NOTIFICATION_CHANNELS = ["in_app", "email", "web_push", "mobile_push"] as const;
+export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
+
+// ─── Notifications Table ─────────────────────────────────────────────────────
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(),
+  channel: text("channel").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("pending"),
+  isRead: boolean("is_read").notNull().default(false),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  archivedAt: timestamp("archived_at"),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+export const insertNotificationSchema = createInsertSchema(notifications);
+
+// ─── Notification Preferences Table ──────────────────────────────────────────
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  inAppEnabled: boolean("in_app_enabled").notNull().default(true),
+  emailEnabled: boolean("email_enabled").notNull().default(true),
+  webPushEnabled: boolean("web_push_enabled").notNull().default(false),
+  mobilePushEnabled: boolean("mobile_push_enabled").notNull().default(false),
+  paymentEvents: boolean("payment_events").notNull().default(true),
+  transactionEvents: boolean("transaction_events").notNull().default(true),
+  refundEvents: boolean("refund_events").notNull().default(true),
+  kycEvents: boolean("kyc_events").notNull().default(true),
+  securityEvents: boolean("security_events").notNull().default(true),
+  maintenanceEvents: boolean("maintenance_events").notNull().default(true),
+  marketingEvents: boolean("marketing_events").notNull().default(false),
+  quietHoursEnabled: boolean("quiet_hours_enabled").notNull().default(false),
+  quietHoursStart: text("quiet_hours_start"),
+  quietHoursEnd: text("quiet_hours_end"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreferences = typeof notificationPreferences.$inferInsert;
+export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences);
+
+// ─── Notification Delivery Log Table ─────────────────────────────────────────
+export const notificationDeliveryLog = pgTable("notification_delivery_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  notificationId: varchar("notification_id").notNull(),
+  channel: text("channel").notNull(),
+  status: text("status").notNull().default("pending"),
+  attemptCount: text("attempt_count").notNull().default("0"),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type NotificationDeliveryLog = typeof notificationDeliveryLog.$inferSelect;
+export type InsertNotificationDeliveryLog = typeof notificationDeliveryLog.$inferInsert;
+export const insertNotificationDeliveryLogSchema = createInsertSchema(notificationDeliveryLog);
