@@ -1040,60 +1040,6 @@ export default function MobilePaymentSimulator() {
                                         </div>
                                     </div>
 
-                                    {/* Who are you sending to Search Bar */}
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center">
-                                            <h3 className="text-xs font-bold text-slate-500">Who are you sending to?</h3>
-                                            <button
-                                                onClick={() => setShowCreateModal(true)}
-                                                className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:text-blue-700 transition-colors"
-                                            >
-                                                <Plus className="w-3 h-3" /> Create recipient
-                                            </button>
-                                        </div>
-                                        <div className="bg-white rounded-xl border border-slate-200 px-3 py-2 flex items-center gap-2 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
-                                            <Search className="w-4 h-4 text-slate-400" />
-                                            <input
-                                                type="text"
-                                                value={searchQuery}
-                                                onChange={(e) => setSearchQuery(e.target.value)}
-                                                className="w-full text-xs outline-none bg-transparent text-slate-700"
-                                                placeholder="Search name, bank or account"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Recent Recipients (Step 2 Carousel) */}
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center">
-                                            <label className="text-xs font-bold text-slate-500">Recent recipients</label>
-                                            <span className="text-[10px] font-semibold text-slate-400 cursor-pointer hover:text-slate-600">View all</span>
-                                        </div>
-                                        <div className="flex gap-3 overflow-x-auto pb-1 -mx-2 px-2 scrollbar-none">
-                                            {filteredRecipients.map((rec) => {
-                                                const isSel = selectedRecipient?.id === rec.id;
-                                                return (
-                                                    <div
-                                                        key={rec.id}
-                                                        onClick={() => setSelectedRecipient(rec)}
-                                                        className="flex flex-col items-center gap-1 shrink-0"
-                                                    >
-                                                        <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-xs ring-2 transition-all relative ${
-                                                            isSel ? "ring-blue-600 ring-offset-2" : "ring-transparent hover:ring-slate-300"
-                                                        } ${rec.color}`}>
-                                                            {rec.initials}
-                                                            {isSel && (
-                                                                <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-blue-600 text-white flex items-center justify-center border border-white">
-                                                                    <Check className="w-2.5 h-2.5" />
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <span className="text-[9px] font-bold text-slate-700 truncate max-w-[50px] text-center">{rec.name.split(" ")[0]}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
 
                                     {/* Selected Recipient Card (Step 2) */}
                                     {selectedRecipient && (
