@@ -202,6 +202,16 @@ export default function MobilePaymentSimulator() {
         }
     };
 
+    const handleScrollToBottom = () => {
+        const el = scrollContainerRef.current;
+        if (el) {
+            el.scrollTo({
+                top: el.scrollHeight,
+                behavior: "smooth"
+            });
+        }
+    };
+
     useEffect(() => {
         const timer = setTimeout(checkScrollable, 100);
         const observer = new MutationObserver(checkScrollable);
@@ -1178,9 +1188,12 @@ export default function MobilePaymentSimulator() {
                     <div className="bg-white border-t border-slate-100 px-4 pt-3 pb-2.5 z-40 flex flex-col gap-2 relative shadow-[0_-8px_24px_rgba(0,0,0,0.02)]">
                         {/* Blinking scroll indicator arrow */}
                         {showScrollIndicator && (
-                            <div className="absolute -top-12 right-4 bg-blue-600/35 border border-white/20 backdrop-blur-xs text-white rounded-full p-2.5 shadow-sm flex items-center justify-center animate-bounce-blink-right z-50 pointer-events-none">
+                            <button
+                                onClick={handleScrollToBottom}
+                                className="absolute -top-12 right-4 bg-blue-600/35 border border-white/20 backdrop-blur-xs text-white rounded-full p-2.5 shadow-sm flex items-center justify-center animate-bounce-blink-right z-50 cursor-pointer hover:bg-blue-600/50 transition-colors"
+                            >
                                 <ArrowDown className="w-3.5 h-3.5" />
-                            </div>
+                            </button>
                         )}
 
                         {showBankTransferScreen ? (
