@@ -42,4 +42,26 @@ test.describe('Rhemito Send Money Flow', () => {
         await expect(page.getByText('Recipient Details')).toBeVisible({ timeout: 5000 });
     });
 
+    test('Complete Send Money flow (Step 1 to Step 4 Payment Method)', async ({ page }) => {
+        await page.goto('/send-money');
+
+        // Step 1: Amount
+        await page.getByPlaceholder('0.00').first().fill('500');
+        await page.getByRole('button', { name: 'Continue' }).click();
+
+        // Step 2: Recipient
+        await expect(page.getByText(/Who are you sending to/i)).toBeVisible();
+
+        // Click on recent recipient "Akshita"
+        await page.getByText('Akshita', { exact: true }).first().click();
+
+        // Step 3: Details (prefilled, click Continue)
+        await expect(page.getByText('Recipient Details')).toBeVisible();
+        await page.getByRole('button', { name: 'Continue' }).click();
+
+        // Step 4: Payment Method (should be visible after simulated submission)
+        await expect(page.getByText('Referral Bonus Available')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByText('Instant Pay By Bank')).toBeVisible();
+    });
+
 });

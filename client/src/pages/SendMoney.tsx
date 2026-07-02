@@ -37,8 +37,7 @@ const steps = [
     { id: 1, title: "Amount" },
     { id: 2, title: "Recipient" },
     { id: 3, title: "Details" }, // Was "Bank" in screenshot, generalizing to Details
-    { id: 4, title: "Summary" }, // Was "Summary"
-    { id: 5, title: "Payment" }, // Was "Payment Method"
+    { id: 4, title: "Payment" }, // Was "Payment Method"
 ];
 
 export default function SendMoney() {
@@ -212,7 +211,7 @@ export default function SendMoney() {
 
 
     const handleNext = () => {
-        if (currentStep < 5) setCurrentStep((prev) => prev + 1);
+        if (currentStep < 4) setCurrentStep((prev) => prev + 1);
         else setLocation("/"); // Finish
     };
 
@@ -262,13 +261,13 @@ export default function SendMoney() {
         setTimeout(() => setCopiedField(null), 2000);
     };
 
-    // Handle transaction submission on Step 4 Continue
+    // Handle transaction submission on Step 3 Continue
     const handleSubmitTransaction = async () => {
         setSubmittingTransaction(true);
         await new Promise((resolve) => setTimeout(resolve, 2000));
         setTransactionSubmitted(true);
         setSubmittingTransaction(false);
-        setCurrentStep(5);
+        setCurrentStep(4);
     };
 
     // Payment countdown timer (30 min for bank transfer page)
@@ -409,7 +408,7 @@ export default function SendMoney() {
                 {/* Header */}
                 <div className="mb-6 flex items-center justify-between">
                     <h1 className="text-2xl font-bold">Send Money</h1>
-                    <div className="text-sm text-muted-foreground">step {currentStep} of 5</div>
+                    <div className="text-sm text-muted-foreground">step {currentStep} of {steps.length}</div>
                 </div>
 
                 {/* Stepper */}
@@ -428,9 +427,9 @@ export default function SendMoney() {
                     ))}
                 </div>
 
-                <div className={currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4 || currentStep === 5 ? "block w-full" : "grid grid-cols-1 lg:grid-cols-3 gap-8"}>
+                <div className={currentStep >= 1 && currentStep <= steps.length ? "block w-full" : "grid grid-cols-1 lg:grid-cols-3 gap-8"}>
                     {/* Main Content Area */}
-                    <div className={currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4 || currentStep === 5 ? "w-full space-y-6" : "lg:col-span-2 space-y-6"}>
+                    <div className={currentStep >= 1 && currentStep <= steps.length ? "w-full space-y-6" : "lg:col-span-2 space-y-6"}>
 
                         {/* Step 1: Amount */}
                         {currentStep === 1 && (
@@ -905,14 +904,21 @@ export default function SendMoney() {
                                             variant="outline"
                                             onClick={handleBack}
                                             className="flex-1 h-14 text-lg rounded-xl"
+                                            disabled={submittingTransaction}
                                         >
                                             Back
                                         </Button>
                                         <Button
-                                            onClick={handleNext}
+                                            onClick={handleSubmitTransaction}
+                                            disabled={submittingTransaction}
                                             className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
                                         >
-                                            Continue
+                                            {submittingTransaction ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                    <span>Processing...</span>
+                                                </div>
+                                            ) : "Continue"}
                                         </Button>
                                     </div>
                                 </div>
@@ -955,201 +961,8 @@ export default function SendMoney() {
                             </motion.div>
                         )}
 
-                        {/* Step 4: Summary */}
-                        {currentStep === 4 && (
-                            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 w-full pb-10">
-                                    <div className="lg:col-span-3 space-y-8">
-                                        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-start gap-3">
-                                            <div className="text-sm text-blue-800">
-                                                Please check your transaction summary below. If you are ok with all the details, click the "Continue" button to complete your transaction. If you would like to make changes to your transaction, click the "Back" button.
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-6">
-                                            {/* Amount Section */}
-                                            <div className="space-y-4">
-                                                <h3 className="font-bold text-lg text-gray-900 border-b pb-2">Amount</h3>
-                                                <div className="space-y-3 text-sm">
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">You Send</span>
-                                                        <span className="font-medium">{parseFloat(amount).toFixed(2)} GBP</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Amount Sent</span>
-                                                        <span className="font-medium">{(parseFloat(amount) - effectiveFee).toFixed(2)} GBP</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">They Receive</span>
-                                                        <span className="font-medium">{receiveAmount} NGN</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Rate</span>
-                                                        <span className="font-medium">1 GBP = {EXCHANGE_RATE} NGN</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Transaction Fee</span>
-                                                        <span className="font-medium">{effectiveFee.toFixed(2)} GBP</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Recipient Section */}
-                                            <div className="space-y-4">
-                                                <h3 className="font-bold text-lg text-gray-900 border-b pb-2">Recipient</h3>
-                                                <div className="space-y-3 text-sm">
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Service Type</span>
-                                                        <span className="font-medium capitalize">{deliveryMethod.replace('_', ' ')}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Recipient Type</span>
-                                                        <span className="font-medium">Individual</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Country</span>
-                                                        <span className="font-medium">{recipientDetails.country || "—"}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Currency</span>
-                                                        <span className="font-medium">{recipientDetails.currency || "—"}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Full Name</span>
-                                                        <span className="font-medium">
-                                                            {`${recipientDetails.firstName} ${recipientDetails.lastName}`.trim() || "—"}
-                                                        </span>
-                                                    </div>
-                                                    {recipientDetails.bankName && (
-                                                        <div className="flex justify-between">
-                                                            <span className="text-gray-600">Bank</span>
-                                                            <span className="font-medium">{recipientDetails.bankName}</span>
-                                                        </div>
-                                                    )}
-                                                    {/* Nigeria (NGN): account number */}
-                                                    {recipientDetails.currency === "NGN" && (
-                                                        <div className="flex justify-between">
-                                                            <span className="text-gray-600">Account Number</span>
-                                                            <span className="font-medium font-mono">{recipientDetails.accountNumber || "—"}</span>
-                                                        </div>
-                                                    )}
-                                                    {/* UK (GBP): account number + sort code */}
-                                                    {recipientDetails.currency === "GBP" && (
-                                                        <>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-gray-600">Account Number</span>
-                                                                <span className="font-medium font-mono">{recipientDetails.accountNumber || "—"}</span>
-                                                            </div>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-gray-600">Sort Code</span>
-                                                                <span className="font-medium font-mono">{recipientDetails.sortCode || "—"}</span>
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                    {/* International: IBAN + SWIFT */}
-                                                    {recipientDetails.currency !== "NGN" && recipientDetails.currency !== "GBP" && (
-                                                        <>
-                                                            {(recipientDetails.iban || recipientDetails.accountNumber) && (
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-600">IBAN / Account No.</span>
-                                                                    <span className="font-medium font-mono text-xs">{recipientDetails.iban || recipientDetails.accountNumber}</span>
-                                                                </div>
-                                                            )}
-                                                            {recipientDetails.swift && (
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-600">SWIFT / BIC</span>
-                                                                    <span className="font-medium font-mono">{recipientDetails.swift}</span>
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Narration</span>
-                                                        <span className="font-medium">
-                                                            {recipientDetails.narration || (recipientDetails.currency === "NGN" ? "Money transfer" : "—")}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Total Section */}
-                                            <div className="space-y-4">
-                                                <h3 className="font-bold text-lg text-gray-900 border-b pb-2">Total</h3>
-                                                <div className="space-y-3 text-sm">
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Total Due</span>
-                                                        <span className="font-medium">{(parseFloat(amount) + effectiveFee).toFixed(2)} GBP</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">They Receive</span>
-                                                        <span className="font-medium">{receiveAmount} NGN</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-orange-50 border border-orange-100 rounded-lg p-4 text-orange-800 text-sm">
-                                            By clicking the Continue button you're submitting this transaction, you also agree and accept Rhemito's Terms of Use and Privacy Policy. Kindly proceed by selecting how you'd like to pay us.
-                                        </div>
-                                        <div className="pt-4 flex gap-3">
-                                            <Button
-                                                variant="outline"
-                                                onClick={handleBack}
-                                                className="flex-1 h-14 text-lg rounded-xl"
-                                                disabled={submittingTransaction}
-                                            >
-                                                Back
-                                            </Button>
-                                            <Button
-                                                onClick={handleSubmitTransaction}
-                                                disabled={submittingTransaction}
-                                                className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
-                                            >
-                                                Continue
-                                            </Button>
-                                        </div>
-                                    </div>
-
-                                    {/* Right Column: Sticky Summary */}
-                                    <div className="lg:col-span-2 hidden lg:block">
-                                        <div className="sticky top-6">
-                                            <Card className="border border-blue-100 shadow-sm">
-                                                <CardHeader className="pb-4 border-b">
-                                                    <div className="flex justify-between items-center">
-                                                        <CardTitle className="text-base font-bold text-gray-900">Amount</CardTitle>
-                                                        <div className={`flex gap-1 font-mono text-sm px-2 py-1 rounded ${sessionTimeLeft <= 60 ? 'text-red-600 bg-red-50 animate-pulse' : 'text-blue-600 bg-blue-50'}`}>
-                                                            <span>{timerDisplay.minutes}</span>:<span>{timerDisplay.seconds}</span>
-                                                        </div>
-                                                    </div>
-                                                </CardHeader>
-                                                <CardContent className="space-y-4 text-sm pt-6">
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">You Send</span>
-                                                        <span className="font-medium text-gray-900">{parseFloat(amount).toFixed(2)} GBP</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-gray-600">Fees</span>
-                                                        <span className="font-medium text-gray-900">{fee.toFixed(2)} GBP</span>
-                                                    </div>
-                                                    <div className="border-t pt-2 mt-2 flex justify-between items-center">
-                                                        <span className="text-gray-900 font-bold text-base">Total to Pay</span>
-                                                        <span className="font-bold text-lg text-gray-900">{(parseFloat(amount) + effectiveFee).toFixed(2)} GBP</span>
-                                                    </div>
-
-                                                    <div className="pt-4 mt-2 bg-blue-50/50 -mx-6 px-6 py-4 mb-[-24px]">
-                                                        <div className="text-sm text-gray-600 mb-1">They Receive</div>
-                                                        <div className="text-xl font-bold text-blue-600">{receiveAmount} NGN</div>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        </div>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {/* Step 5: Payment Method */}
-                        {currentStep === 5 && !showBankTransferPage && (
+                        {/* Step 4: Payment Method */}
+                        {currentStep === 4 && !showBankTransferPage && (
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
@@ -1402,8 +1215,8 @@ export default function SendMoney() {
                             </motion.div>
                         )}
 
-                        {/* Step 5 — Bank Transfer Details (Inline Page) */}
-                        {currentStep === 5 && showBankTransferPage && (
+                        {/* Step 4 — Bank Transfer Details (Inline Page) */}
+                        {currentStep === 4 && showBankTransferPage && (
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
