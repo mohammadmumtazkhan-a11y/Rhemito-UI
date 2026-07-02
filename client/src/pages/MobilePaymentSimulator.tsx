@@ -42,6 +42,10 @@ export default function MobilePaymentSimulator() {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [showScrollIndicator, setShowScrollIndicator] = useState(false);
 
+    // Account verification popup states
+    const [isNewRecipientCreated, setIsNewRecipientCreated] = useState(false);
+    const [showVerificationPopup, setShowVerificationPopup] = useState(false);
+
     // Recipients State
     const [recipients, setRecipients] = useState(recentRecipients);
     const [selectedRecipient, setSelectedRecipient] = useState(recentRecipients[0]);
@@ -130,6 +134,7 @@ export default function MobilePaymentSimulator() {
         };
         setRecipients([newRec, ...recipients]);
         setSelectedRecipient(newRec);
+        setIsNewRecipientCreated(true);
         setShowCreateModal(false);
         // Clear form
         setNewName("");
@@ -226,6 +231,20 @@ export default function MobilePaymentSimulator() {
             window.removeEventListener("resize", checkScrollable);
         };
     }, [currentStep, showBankTransferScreen, recipients, selectedRecipient]);
+
+    // Trigger verification popup when new recipient reaches Step 3
+    useEffect(() => {
+        if (currentStep === 3 && isNewRecipientCreated) {
+            setShowVerificationPopup(true);
+            setIsNewRecipientCreated(false); // Reset so it only fires once per creation
+
+            // Auto dismiss after 6 seconds (comfortable for slow reading)
+            const timer = setTimeout(() => {
+                setShowVerificationPopup(false);
+            }, 6000);
+            return () => clearTimeout(timer);
+        }
+    }, [currentStep, isNewRecipientCreated]);
 
     // Handle Amount Conversion
     const handleSendChange = (val: string) => {
@@ -949,8 +968,35 @@ export default function MobilePaymentSimulator() {
                                     animate="center"
                                     exit="exit"
                                     transition={{ duration: 0.25, ease: "easeInOut" }}
-                                    className="p-4 space-y-4 flex flex-col flex-1"
+                                    className="p-4 space-y-4 flex flex-col flex-1 relative"
                                 >
+                                    {/* Account Verification Popup */}
+                                    <AnimatePresence>
+                                        {showVerificationPopup && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: -15 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, y: -15 }}
+                                                className="absolute top-2 left-4 right-4 bg-emerald-600/95 backdrop-blur-md text-white rounded-2xl p-3 shadow-lg border border-emerald-500/25 z-50 flex items-start gap-2.5"
+                                            >
+                                                <div className="w-6.5 h-6.5 rounded-full bg-white/20 flex items-center justify-center shrink-0 mt-0.5 animate-pulse">
+                                                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                                                </div>
+                                                <div className="flex-1 space-y-0.5">
+                                                    <h4 className="text-[10px] font-bold font-display leading-tight">Recipient Verified</h4>
+                                                    <p className="text-[8px] text-emerald-100 font-semibold leading-relaxed">
+                                                        We've successfully verified the bank account details for <strong>{selectedRecipient?.name}</strong>. It is safe to proceed.
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => setShowVerificationPopup(false)}
+                                                    className="p-0.5 text-white/60 hover:text-white transition-colors hover:bg-white/10 rounded shrink-0"
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                     {/* Mini summary card */}
                                     <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-sm flex items-center justify-between text-xs">
                                         <div className="flex items-center gap-1.5">
