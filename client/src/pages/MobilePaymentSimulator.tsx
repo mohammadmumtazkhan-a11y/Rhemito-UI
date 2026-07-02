@@ -1325,22 +1325,25 @@ export default function MobilePaymentSimulator() {
                                     className="absolute inset-0 bg-black/60 z-50 rounded-[42px] backdrop-blur-xs"
                                 />
                                 <motion.div
-                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    initial={{ opacity: 0, scale: 0.95 }}
                                     animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-3xl p-5 text-center space-y-4 shadow-2xl max-w-[280px] z-50"
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/95 backdrop-blur-md rounded-[28px] p-6 text-center space-y-4 shadow-[0_20px_50px_rgba(0,0,0,0.15)] w-[320px] max-w-[88%] border border-slate-100/80 z-50"
                                 >
-                                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-                                        <Building2 className="w-6 h-6 text-blue-600" />
+                                    <div className="w-14 h-14 bg-gradient-to-tr from-blue-50 to-indigo-50 border border-blue-100/50 rounded-2xl flex items-center justify-center mx-auto shadow-xs text-blue-600">
+                                        <Building2 className="w-7 h-7" />
                                     </div>
-                                    <h3 className="text-sm font-extrabold text-slate-800">Confirm Payment Method</h3>
-                                    <p className="text-[11px] text-slate-500 leading-normal">
-                                        You have selected <span className="font-bold text-slate-700">Manual Bank Transfer. Send to our local account (Pay within 30 minutes)</span> option for payment. Do you want to proceed?
+                                    <div className="space-y-0.5">
+                                        <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">Confirm Payment Method</h3>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Manual Bank Transfer</p>
+                                    </div>
+                                    <p className="text-xs text-slate-500 leading-relaxed px-1">
+                                        You have selected the <span className="font-bold text-slate-800">Send to our local account (Pay within 30 minutes)</span> option. Do you want to proceed?
                                     </p>
-                                    <div className="flex gap-2.5 pt-1">
+                                    <div className="flex gap-3 pt-1.5 w-full">
                                         <button
                                             onClick={() => setShowConfirmModal(false)}
-                                            className="flex-1 h-9 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50"
+                                            className="flex-1 h-10 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-all bg-white"
                                         >
                                             Cancel
                                         </button>
@@ -1353,7 +1356,7 @@ export default function MobilePaymentSimulator() {
                                                 setShowBankTransferScreen(true);
                                                 setTimerSeconds(1800);
                                             }}
-                                            className="flex-1 h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs font-bold text-white shadow-sm"
+                                            className="flex-1 h-10 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-xs font-bold text-white shadow-md hover:shadow-lg shadow-blue-500/10 transition-all"
                                         >
                                             Proceed
                                         </button>
