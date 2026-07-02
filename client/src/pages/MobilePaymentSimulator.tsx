@@ -303,9 +303,8 @@ export default function MobilePaymentSimulator() {
                                             <span className="bg-slate-100 px-2 py-0.5 rounded-md font-medium">Fee: £{fee.toFixed(2)}</span>
                                             <span className="font-medium text-slate-400">1 GBP = {EXCHANGE_RATE} NGN</span>
                                         </div>
-                                        <div className="flex items-center gap-1 text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                                            <Lock className="w-3 h-3" />
-                                            <span>Rate locked</span>
+                                        <div className="flex items-center justify-center text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                                            <Lock className="w-3.5 h-3.5" />
                                         </div>
                                     </div>
 
