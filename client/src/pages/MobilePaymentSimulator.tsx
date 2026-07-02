@@ -1342,23 +1342,32 @@ export default function MobilePaymentSimulator() {
                                     </p>
                                     <div className="flex gap-3 pt-1.5 w-full">
                                         <button
+                                            disabled={isSubmitting}
                                             onClick={() => setShowConfirmModal(false)}
-                                            className="flex-1 h-10 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-all bg-white"
+                                            className="flex-1 h-10 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-all bg-white disabled:opacity-50 disabled:pointer-events-none"
                                         >
                                             Cancel
                                         </button>
                                         <button
+                                            disabled={isSubmitting}
                                             onClick={async () => {
-                                                setShowConfirmModal(false);
                                                 setIsSubmitting(true);
-                                                await new Promise(r => setTimeout(r, 1500));
+                                                await new Promise(r => setTimeout(r, 2000));
                                                 setIsSubmitting(false);
+                                                setShowConfirmModal(false);
                                                 setShowBankTransferScreen(true);
                                                 setTimerSeconds(1800);
                                             }}
-                                            className="flex-1 h-10 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-xs font-bold text-white shadow-md hover:shadow-lg shadow-blue-500/10 transition-all"
+                                            className="flex-1 h-10 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-xs font-bold text-white shadow-md hover:shadow-lg shadow-blue-500/10 transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-1.5"
                                         >
-                                            Proceed
+                                            {isSubmitting ? (
+                                                <>
+                                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                    <span className="truncate">Submitting Transaction...</span>
+                                                </>
+                                            ) : (
+                                                <span>Proceed</span>
+                                            )}
                                         </button>
                                     </div>
                                 </motion.div>
