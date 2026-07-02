@@ -53,6 +53,13 @@ export default function MobilePaymentSimulator() {
     const [showBankTransferScreen, setShowBankTransferScreen] = useState(false);
     const [timerSeconds, setTimerSeconds] = useState(1800);
 
+    // Edit Recipient States
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editName, setEditName] = useState("");
+    const [editBank, setEditBank] = useState("");
+    const [editAcc, setEditAcc] = useState("");
+    const [editSort, setEditSort] = useState("");
+
     // Form States - Step 1
     const [sendAmount, setSendAmount] = useState("500.00");
     const [receiveAmount, setReceiveAmount] = useState("1,012,750.00");
@@ -124,6 +131,44 @@ export default function MobilePaymentSimulator() {
         setNewBank("");
         setNewAcc("");
         setNewSort("");
+    };
+
+    const handleOpenEditModal = () => {
+        if (!selectedRecipient) return;
+        setEditName(selectedRecipient.name);
+        setEditBank(selectedRecipient.bankName);
+        setEditAcc(selectedRecipient.accountNumber);
+        setEditSort(selectedRecipient.sortCode);
+        setShowEditModal(true);
+    };
+
+    const handleSaveRecipient = () => {
+        if (!selectedRecipient) return;
+        if (!editName.trim() || !editBank.trim() || !editAcc.trim() || !editSort.trim()) return;
+        
+        const updatedRecipients = recipients.map(r => {
+            if (r.id === selectedRecipient.id) {
+                const initials = editName.trim().split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+                return {
+                    ...r,
+                    name: editName.trim(),
+                    bankName: editBank.trim(),
+                    accountNumber: editAcc.trim(),
+                    sortCode: editSort.trim(),
+                    initials
+                };
+            }
+            return r;
+        });
+        
+        setRecipients(updatedRecipients);
+        
+        const updatedSel = updatedRecipients.find(r => r.id === selectedRecipient.id);
+        if (updatedSel) {
+            setSelectedRecipient(updatedSel);
+        }
+        
+        setShowEditModal(false);
     };
 
     // Timer countdown for bank transfer
@@ -631,7 +676,10 @@ export default function MobilePaymentSimulator() {
                                                     <p className="text-[9px] text-slate-500 font-mono">Acc: ****{selectedRecipient.accountNumber.slice(-4)}  Sort: {selectedRecipient.sortCode}</p>
                                                 </div>
                                             </div>
-                                            <button className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5 hover:text-blue-700 transition-colors">
+                                            <button
+                                                onClick={handleOpenEditModal}
+                                                className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5 hover:text-blue-700 transition-colors"
+                                            >
                                                 <Edit2 className="w-3 h-3" /> Edit
                                             </button>
                                         </div>
@@ -747,7 +795,10 @@ export default function MobilePaymentSimulator() {
                                                     <p className="text-[9px] text-slate-500 font-mono">Acc: ****{selectedRecipient.accountNumber.slice(-4)}  Sort: {selectedRecipient.sortCode}</p>
                                                 </div>
                                             </div>
-                                            <button className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5 hover:text-blue-700 transition-colors">
+                                            <button
+                                                onClick={handleOpenEditModal}
+                                                className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5 hover:text-blue-700 transition-colors"
+                                            >
                                                 <Edit2 className="w-3 h-3" /> Edit
                                             </button>
                                         </div>
@@ -1306,6 +1357,95 @@ export default function MobilePaymentSimulator() {
                                         >
                                             Proceed
                                         </button>
+                                    </div>
+                                </motion.div>
+                            </>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Edit Recipient Bottom Sheet */}
+                    <AnimatePresence>
+                        {showEditModal && (
+                            <>
+                                {/* Backdrop */}
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    onClick={() => setShowEditModal(false)}
+                                    className="absolute inset-0 bg-black/60 z-50 rounded-[42px]"
+                                />
+                                {/* Bottom Sheet */}
+                                <motion.div
+                                    initial={{ y: "100%" }}
+                                    animate={{ y: 0 }}
+                                    exit={{ y: "100%" }}
+                                    transition={{ type: "spring", damping: 25, stiffness: 250 }}
+                                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] p-5 space-y-4 z-50 shadow-2xl border-t border-slate-100"
+                                >
+                                    <div className="flex justify-between items-center border-b pb-3 border-slate-100">
+                                        <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+                                            <span className="w-1.5 h-3.5 bg-blue-600 rounded-full" />
+                                            Edit Recipient Details
+                                        </h3>
+                                        <button
+                                            onClick={() => setShowEditModal(false)}
+                                            className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-3.5 text-xs">
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] font-bold text-slate-500">Full Name</Label>
+                                            <Input
+                                                placeholder="e.g. Akshita Gupta"
+                                                value={editName}
+                                                onChange={(e) => setEditName(e.target.value)}
+                                                className="h-9 text-xs rounded-lg"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] font-bold text-slate-500">Bank Name</Label>
+                                            <Input
+                                                placeholder="e.g. Barclays Bank"
+                                                value={editBank}
+                                                onChange={(e) => setEditBank(e.target.value)}
+                                                className="h-9 text-xs rounded-lg"
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Account Number</Label>
+                                                <Input
+                                                    placeholder="8-10 digit number"
+                                                    value={editAcc}
+                                                    onChange={(e) => setEditAcc(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                    maxLength={10}
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Sort Code</Label>
+                                                <Input
+                                                    placeholder="xx-xx-xx"
+                                                    value={editSort}
+                                                    onChange={(e) => setEditSort(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <Button
+                                            onClick={handleSaveRecipient}
+                                            disabled={!editName.trim() || !editBank.trim() || !editAcc.trim() || !editSort.trim()}
+                                            className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white mt-2 shadow-md"
+                                        >
+                                            Save Changes
+                                        </Button>
                                     </div>
                                 </motion.div>
                             </>
