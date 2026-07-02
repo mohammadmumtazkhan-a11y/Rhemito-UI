@@ -319,7 +319,16 @@ export default function MobilePaymentSimulator() {
                     <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between z-30">
                         <div className="flex items-center gap-2">
                             {currentStep > 1 && currentStep < 4 ? (
-                                <button onClick={handleBack} className="p-1 hover:bg-slate-100 rounded-full transition-colors text-slate-600">
+                                <button
+                                    onClick={() => {
+                                        if (showBankTransferScreen) {
+                                            setShowBankTransferScreen(false);
+                                        } else {
+                                            handleBack();
+                                        }
+                                    }}
+                                    className="p-1 hover:bg-slate-100 rounded-full transition-colors text-slate-600"
+                                >
                                     <ArrowLeft className="w-5 h-5" />
                                 </button>
                             ) : (
@@ -513,7 +522,7 @@ export default function MobilePaymentSimulator() {
                                         </button>
                                     </div>
                                 </motion.div>
-                            ) : currentStep === 1 && (
+                            ) : !showBankTransferScreen && currentStep === 1 && (
                                 <motion.div
                                     key="step1"
                                     custom={direction}
@@ -698,7 +707,7 @@ export default function MobilePaymentSimulator() {
                                 </motion.div>
                             )}
 
-                            {currentStep === 2 && (
+                            {!showBankTransferScreen && currentStep === 2 && (
                                 <motion.div
                                     key="step2"
                                     custom={direction}
@@ -932,7 +941,7 @@ export default function MobilePaymentSimulator() {
                                 </motion.div>
                             )}
 
-                            {currentStep === 3 && (
+                            {!showBankTransferScreen && currentStep === 3 && (
                                 <motion.div
                                     key="step3"
                                     custom={direction}
