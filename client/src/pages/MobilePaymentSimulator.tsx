@@ -496,6 +496,14 @@ export default function MobilePaymentSimulator() {
         };
     }, [currentStep, showBankTransferScreen, recipients, selectedRecipient]);
 
+    // Scroll container back to top when view/step changes
+    useEffect(() => {
+        const el = scrollContainerRef.current;
+        if (el) {
+            el.scrollTop = 0;
+        }
+    }, [currentStep, showBankTransferScreen]);
+
     // Trigger verification popup when new recipient reaches Step 3
     useEffect(() => {
         if (currentStep === 3 && isNewRecipientCreated) {
