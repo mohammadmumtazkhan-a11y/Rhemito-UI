@@ -37,12 +37,22 @@ export default function MobilePaymentSimulator() {
     const [currentStep, setCurrentStep] = useState(1);
     const [direction, setDirection] = useState(1); // 1 for next, -1 for back
 
+    // Recipients State
+    const [recipients, setRecipients] = useState(recentRecipients);
+    const [selectedRecipient, setSelectedRecipient] = useState(recentRecipients[0]);
+
+    // Create Recipient States
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [newName, setNewName] = useState("");
+    const [newBank, setNewBank] = useState("");
+    const [newAcc, setNewAcc] = useState("");
+    const [newSort, setNewSort] = useState("");
+
     // Form States - Step 1
     const [sendAmount, setSendAmount] = useState("500.00");
     const [receiveAmount, setReceiveAmount] = useState("1,012,750.00");
     const [deliveryMethod, setDeliveryMethod] = useState("bank_deposit");
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedRecipient, setSelectedRecipient] = useState(recentRecipients[0]);
 
     // Form States - Step 2 (Prefilled from selected recipient)
     const [firstName, setFirstName] = useState("Akshita");
@@ -76,6 +86,40 @@ export default function MobilePaymentSimulator() {
             setSortCode(selectedRecipient.sortCode);
         }
     }, [selectedRecipient]);
+
+    const handleCreateRecipient = () => {
+        if (!newName.trim() || !newBank.trim() || !newAcc.trim() || !newSort.trim()) return;
+        const initials = newName.trim().split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+        const colors = [
+            "bg-blue-100 text-blue-600",
+            "bg-purple-100 text-purple-600",
+            "bg-green-100 text-green-600",
+            "bg-orange-100 text-orange-600",
+            "bg-teal-100 text-teal-600",
+            "bg-pink-100 text-pink-600",
+            "bg-indigo-100 text-indigo-600"
+        ];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        const newRec = {
+            id: (recipients.length + 1).toString(),
+            name: newName.trim(),
+            bankName: newBank.trim(),
+            accountNumber: newAcc.trim(),
+            sortCode: newSort.trim(),
+            initials,
+            color: randomColor,
+            country: "UK",
+            currency: "GBP"
+        };
+        setRecipients([newRec, ...recipients]);
+        setSelectedRecipient(newRec);
+        setShowCreateModal(false);
+        // Clear form
+        setNewName("");
+        setNewBank("");
+        setNewAcc("");
+        setNewSort("");
+    };
 
     // Handle Amount Conversion
     const handleSendChange = (val: string) => {
@@ -147,7 +191,7 @@ export default function MobilePaymentSimulator() {
     };
 
     // Filter recipients based on search
-    const filteredRecipients = recentRecipients.filter(r =>
+    const filteredRecipients = recipients.filter(r =>
         r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         r.bankName.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -361,7 +405,10 @@ export default function MobilePaymentSimulator() {
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center">
                                             <label className="text-xs font-bold text-slate-500">Select recipient</label>
-                                            <button className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:text-blue-700 transition-colors">
+                                            <button
+                                                onClick={() => setShowCreateModal(true)}
+                                                className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:text-blue-700 transition-colors"
+                                            >
                                                 <Plus className="w-3 h-3" /> Create recipient
                                             </button>
                                         </div>
@@ -471,18 +518,78 @@ export default function MobilePaymentSimulator() {
                                     </div>
 
                                     {/* Who are you sending to Search Bar */}
-                                    <div className="space-y-1">
-                                        <h3 className="text-xs font-bold text-slate-500">Who are you sending to?</h3>
-                                        <div className="bg-white rounded-xl border border-slate-200 px-3 py-2 flex items-center gap-2 shadow-sm">
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <h3 className="text-xs font-bold text-slate-500">Who are you sending to?</h3>
+                                            <button
+                                                onClick={() => setShowCreateModal(true)}
+                                                className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:text-blue-700 transition-colors"
+                                            >
+                                                <Plus className="w-3 h-3" /> Create recipient
+                                            </button>
+                                        </div>
+                                        <div className="bg-white rounded-xl border border-slate-200 px-3 py-2 flex items-center gap-2 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
                                             <Search className="w-4 h-4 text-slate-400" />
                                             <input
                                                 type="text"
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
                                                 className="w-full text-xs outline-none bg-transparent text-slate-700"
                                                 placeholder="Search name, bank or account"
-                                                defaultValue={selectedRecipient ? selectedRecipient.name : ""}
                                             />
                                         </div>
                                     </div>
+
+                                    {/* Recent Recipients (Step 2 Carousel) */}
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-xs font-bold text-slate-500">Recent recipients</label>
+                                            <span className="text-[10px] font-semibold text-slate-400 cursor-pointer hover:text-slate-600">View all</span>
+                                        </div>
+                                        <div className="flex gap-3 overflow-x-auto pb-1 -mx-2 px-2 scrollbar-none">
+                                            {filteredRecipients.map((rec) => {
+                                                const isSel = selectedRecipient?.id === rec.id;
+                                                return (
+                                                    <div
+                                                        key={rec.id}
+                                                        onClick={() => setSelectedRecipient(rec)}
+                                                        className="flex flex-col items-center gap-1 shrink-0"
+                                                    >
+                                                        <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-xs ring-2 transition-all relative ${
+                                                            isSel ? "ring-blue-600 ring-offset-2" : "ring-transparent hover:ring-slate-300"
+                                                        } ${rec.color}`}>
+                                                            {rec.initials}
+                                                            {isSel && (
+                                                                <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-blue-600 text-white flex items-center justify-center border border-white">
+                                                                    <Check className="w-2.5 h-2.5" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-[9px] font-bold text-slate-700 truncate max-w-[50px] text-center">{rec.name.split(" ")[0]}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Selected Recipient Card (Step 2) */}
+                                    {selectedRecipient && (
+                                        <div className="bg-white rounded-2xl p-3 border-2 border-blue-600 bg-blue-50/10 shadow-sm flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs ${selectedRecipient.color}`}>
+                                                    {selectedRecipient.initials}
+                                                </div>
+                                                <div className="space-y-0.5">
+                                                    <h4 className="text-xs font-bold text-slate-800">{selectedRecipient.name}</h4>
+                                                    <p className="text-[9px] text-slate-400 font-semibold">{selectedRecipient.bankName} • {selectedRecipient.currency === "NGN" ? "Mobile Wallet" : "Bank Deposit"}</p>
+                                                    <p className="text-[9px] text-slate-500 font-mono">Acc: ****{selectedRecipient.accountNumber.slice(-4)}  Sort: {selectedRecipient.sortCode}</p>
+                                                </div>
+                                            </div>
+                                            <button className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5 hover:text-blue-700 transition-colors">
+                                                <Edit2 className="w-3 h-3" /> Edit
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Recipient Details Form */}
                                     <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3.5 shadow-sm">
@@ -897,6 +1004,95 @@ export default function MobilePaymentSimulator() {
                             )}
                         </AnimatePresence>
                     </div>
+
+                    {/* Add New Recipient Bottom Sheet */}
+                    <AnimatePresence>
+                        {showCreateModal && (
+                            <>
+                                {/* Backdrop */}
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    onClick={() => setShowCreateModal(false)}
+                                    className="absolute inset-0 bg-black/60 z-50 rounded-[42px]"
+                                />
+                                {/* Bottom Sheet */}
+                                <motion.div
+                                    initial={{ y: "100%" }}
+                                    animate={{ y: 0 }}
+                                    exit={{ y: "100%" }}
+                                    transition={{ type: "spring", damping: 25, stiffness: 250 }}
+                                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] p-5 space-y-4 z-50 shadow-2xl border-t border-slate-100"
+                                >
+                                    <div className="flex justify-between items-center border-b pb-3 border-slate-100">
+                                        <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+                                            <span className="w-1.5 h-3.5 bg-blue-600 rounded-full" />
+                                            Add New Recipient
+                                        </h3>
+                                        <button
+                                            onClick={() => setShowCreateModal(false)}
+                                            className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-3.5 text-xs">
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] font-bold text-slate-500">Full Name</Label>
+                                            <Input
+                                                placeholder="e.g. Akshita Gupta"
+                                                value={newName}
+                                                onChange={(e) => setNewName(e.target.value)}
+                                                className="h-9 text-xs rounded-lg"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] font-bold text-slate-500">Bank Name</Label>
+                                            <Input
+                                                placeholder="e.g. Barclays Bank"
+                                                value={newBank}
+                                                onChange={(e) => setNewBank(e.target.value)}
+                                                className="h-9 text-xs rounded-lg"
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Account Number</Label>
+                                                <Input
+                                                    placeholder="8-10 digit number"
+                                                    value={newAcc}
+                                                    onChange={(e) => setNewAcc(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                    maxLength={10}
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Sort Code</Label>
+                                                <Input
+                                                    placeholder="xx-xx-xx"
+                                                    value={newSort}
+                                                    onChange={(e) => setNewSort(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <Button
+                                            onClick={handleCreateRecipient}
+                                            disabled={!newName.trim() || !newBank.trim() || !newAcc.trim() || !newSort.trim()}
+                                            className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white mt-2 shadow-md"
+                                        >
+                                            Add Recipient & Select
+                                        </Button>
+                                    </div>
+                                </motion.div>
+                            </>
+                        )}
+                    </AnimatePresence>
 
                     {/* Smartphone Navigation Bar / Home Indicator */}
                     <div className="h-6 flex items-center justify-center pb-2 z-40 bg-white border-t border-slate-50">
