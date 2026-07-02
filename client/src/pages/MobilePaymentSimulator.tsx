@@ -309,31 +309,31 @@ export default function MobilePaymentSimulator() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4 md:p-8 font-sans">
+        <div className="min-h-screen bg-slate-50 md:bg-slate-900 flex flex-col items-center justify-center p-0 md:p-4 font-sans overflow-hidden">
             
             {/* Header info */}
-            <div className="text-center mb-6">
+            <div className="hidden md:block text-center mb-6">
                 <h1 className="text-2xl font-bold text-slate-800">Mobile Send Money Prototype</h1>
                 <p className="text-sm text-slate-500 mt-1">Realistic smartphone simulator demonstrating the 3-step payment flow</p>
             </div>
 
             {/* Smartphone Container */}
-            <div className="relative w-full max-w-[390px] aspect-[9/19.5] bg-slate-950 rounded-[55px] p-3.5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.4)] border-4 border-slate-800 ring-1 ring-slate-700/50 flex flex-col overflow-hidden">
+            <div className="relative w-full h-screen md:h-auto md:max-w-[390px] md:aspect-[9/19.5] bg-slate-50 md:bg-slate-950 md:rounded-[55px] p-0 md:p-3.5 md:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.4)] md:border-4 md:border-slate-800 md:ring-1 md:ring-slate-700/50 flex flex-col overflow-hidden">
                 
                 {/* Dynamic Island / Camera Notch */}
-                <div className="absolute top-6 left-1/2 -translate-x-1/2 w-28 h-7 bg-black rounded-full z-50 flex items-center justify-between px-2.5">
+                <div className="hidden md:flex absolute top-6 left-1/2 -translate-x-1/2 w-28 h-7 bg-black rounded-full z-50 items-center justify-between px-2.5">
                     <div className="w-3.5 h-3.5 bg-slate-900 rounded-full border border-slate-800" />
                     <div className="w-1.5 h-1.5 bg-blue-900/30 rounded-full" />
                 </div>
 
                 {/* Speaker Grill */}
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 w-16 h-1 bg-slate-800 rounded-full z-50" />
+                <div className="hidden md:block absolute top-4 left-1/2 -translate-x-1/2 w-16 h-1 bg-slate-800 rounded-full z-50" />
 
                 {/* Smartphone Screen Content */}
-                <div className="bg-slate-50 rounded-[42px] flex-1 overflow-hidden flex flex-col relative select-none">
+                <div className="bg-slate-50 rounded-none md:rounded-[42px] flex-1 overflow-hidden flex flex-col relative select-none">
                     
                     {/* Status Bar */}
-                    <div className="h-11 pt-3 flex items-center justify-between px-7 text-slate-900 text-xs font-semibold z-40 select-none">
+                    <div className="hidden md:flex h-11 pt-3 items-center justify-between px-7 text-slate-900 text-xs font-semibold z-40 select-none">
                         <span>12:30</span>
                         <div className="flex items-center gap-1.5">
                             <Signal className="w-3.5 h-3.5" />
@@ -1506,7 +1506,7 @@ export default function MobilePaymentSimulator() {
                     </AnimatePresence>
 
                     {/* Smartphone Navigation Bar / Home Indicator */}
-                    <div className="h-6 flex items-center justify-center pb-2 z-40 bg-white border-t border-slate-50">
+                    <div className="hidden md:flex h-6 items-center justify-center pb-2 z-40 bg-white border-t border-slate-50">
                         <div className="w-32 h-1 bg-slate-300 rounded-full" />
                     </div>
 
@@ -1514,7 +1514,7 @@ export default function MobilePaymentSimulator() {
             </div>
 
             {/* Simulated Phone side buttons */}
-            <div className="text-xs text-slate-400 mt-6 flex gap-6 bg-white px-4 py-2.5 rounded-full border border-slate-200 shadow-sm">
+            <div className="hidden md:flex text-xs text-slate-400 mt-6 gap-6 bg-white px-4 py-2.5 rounded-full border border-slate-200 shadow-sm">
                 <span>⚡ Rate: GBP 1 = NGN {EXCHANGE_RATE}</span>
                 <span>🎁 Try promo codes: <strong>SAVE20</strong>, <strong>WELCOME</strong></span>
             </div>
