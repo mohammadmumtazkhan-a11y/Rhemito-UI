@@ -5,7 +5,7 @@ import {
     ArrowLeft, Check, CreditCard, Building2, Wallet, Gift,
     ChevronRight, X, Smartphone, Battery, Wifi, Signal,
     Lock, ArrowRight, CheckCircle2, Copy, Search, Plus, Info, Edit2, Landmark,
-    ArrowDown, ChevronDown, User, Briefcase, Globe
+    ArrowDown, ChevronDown, User, Briefcase, Globe, QrCode, Scan, Camera
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -168,6 +168,12 @@ export default function MobilePaymentSimulator() {
     const [newBank, setNewBank] = useState("");
     const [newAcc, setNewAcc] = useState("");
     const [newSort, setNewSort] = useState("");
+
+    // QR & Paper Scan/Scraper States
+    const [showScanModal, setShowScanModal] = useState(false);
+    const [scanScanning, setScanScanning] = useState(false);
+    const [scanType, setScanType] = useState<"qr" | "paper_full" | "paper_acc_only">("qr");
+    const [showScrapeAlert, setShowScrapeAlert] = useState(false);
 
     // Manual Bank Transfer States
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -395,6 +401,48 @@ export default function MobilePaymentSimulator() {
         }
         
         setShowEditModal(false);
+    };
+
+    const handleScanCapture = async () => {
+        setScanScanning(true);
+        // Play scan animation for 1.8 seconds
+        await new Promise(resolve => setTimeout(resolve, 1800));
+        setScanScanning(false);
+        setShowScanModal(false);
+
+        if (scanType === "qr") {
+            // Autofill complete recipient details (individual)
+            setNewRecipientType("individual");
+            setNewName("Gabriel");
+            setNewLastName("Silva");
+            setNewAddress("88 Kingsland Road");
+            setNewCity("London");
+            setNewStateProvince("Greater London");
+            setNewPostcode("E2 8DP");
+            setNewRelationship("Friend");
+            setNewNickname("Gabriel QR");
+            setNewReason("Family Support");
+            setNewNarration("Mito instant transfer");
+            setNewBank("Revolut");
+            setNewAcc("44332211");
+            setNewSort("04-00-75");
+            setShowScrapeAlert(false);
+        } else if (scanType === "paper_full") {
+            // Autofill bank fields and name, leave other details empty
+            setNewRecipientType("individual");
+            setNewName("Sarah");
+            setNewLastName("Chen");
+            setNewBank("Access Bank");
+            setNewAcc("88776655");
+            setNewSort("20-30-40");
+            setShowScrapeAlert(false);
+        } else if (scanType === "paper_acc_only") {
+            // Autofill only Account number, clear others, trigger warning alert
+            setNewAcc("98765432");
+            setNewBank("");
+            setNewSort("");
+            setShowScrapeAlert(true);
+        }
     };
 
     // Timer countdown for bank transfer
@@ -1701,12 +1749,24 @@ export default function MobilePaymentSimulator() {
                                             <span className="w-1.5 h-3.5 bg-blue-600 rounded-full" />
                                             Add New Recipient
                                         </h3>
-                                        <button
-                                            onClick={() => setShowCreateModal(false)}
-                                            className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    setShowScanModal(true);
+                                                    setShowScrapeAlert(false);
+                                                }}
+                                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] font-bold border border-blue-100 transition-all shrink-0 active:scale-95"
+                                            >
+                                                <QrCode className="w-3.5 h-3.5" />
+                                                <span>Scan QR / Paper</span>
+                                            </button>
+                                            <button
+                                                onClick={() => setShowCreateModal(false)}
+                                                className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </div>
 
                                     {/* Individual vs Business Toggle */}
@@ -1929,6 +1989,22 @@ export default function MobilePaymentSimulator() {
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                                             Banking Details
                                         </h4>
+
+                                        {showScrapeAlert && (
+                                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[10px] text-amber-800 space-y-1 animate-fade-in">
+                                                <span className="font-bold flex items-center gap-1">
+                                                    <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                                    Only Account Number scraped
+                                                </span>
+                                                <p className="leading-relaxed font-semibold">
+                                                    {newDeliveryMethod === "direct_bank" 
+                                                        ? "Please manually enter the remaining details (Bank Name and Sort Code) as required for the Direct to Bank corridor."
+                                                        : "Please manually enter the remaining details (Bank Name and SWIFT/BIC Code) as required for the SWIFT international corridor."
+                                                    }
+                                                </p>
+                                            </div>
+                                        )}
+
                                         <div className="space-y-1 text-xs">
                                             <Label className="text-[10px] font-bold text-slate-500">Bank Name*</Label>
                                             <Input
@@ -1951,9 +2027,11 @@ export default function MobilePaymentSimulator() {
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold text-slate-500">Sort Code*</Label>
+                                                <Label className="text-[10px] font-bold text-slate-500">
+                                                    {newDeliveryMethod === "swift" ? "SWIFT/BIC Code*" : "Sort Code*"}
+                                                </Label>
                                                 <Input
-                                                    placeholder="xx-xx-xx"
+                                                    placeholder={newDeliveryMethod === "swift" ? "e.g. BARCGB22XXX" : "xx-xx-xx"}
                                                     value={newSort}
                                                     onChange={(e) => setNewSort(e.target.value)}
                                                     className="h-9 text-xs rounded-lg"
@@ -2367,6 +2445,180 @@ export default function MobilePaymentSimulator() {
                                             </Button>
                                         );
                                     })()}
+                                </motion.div>
+                            </>
+                        )}
+                    </AnimatePresence>
+
+                    {/* QR & Paper Scanner Overlay Modal */}
+                    <AnimatePresence>
+                        {showScanModal && (
+                            <>
+                                {/* Scanner Backdrop */}
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    onClick={() => !scanScanning && setShowScanModal(false)}
+                                    className="absolute inset-0 bg-black/85 z-55 rounded-[42px] backdrop-blur-xs flex flex-col justify-end"
+                                />
+
+                                {/* Scanner Bottom Sheet */}
+                                <motion.div
+                                    initial={{ y: "100%" }}
+                                    animate={{ y: 0 }}
+                                    exit={{ y: "100%" }}
+                                    transition={{ type: "spring", damping: 26, stiffness: 220 }}
+                                    className="absolute bottom-0 left-0 right-0 bg-slate-900 text-white rounded-t-[32px] p-5 space-y-4 z-55 shadow-2xl border-t border-slate-800 max-h-[85vh] overflow-y-auto select-none scrollbar-none flex flex-col"
+                                >
+                                    {/* Header */}
+                                    <div className="flex justify-between items-center border-b pb-3 border-slate-800">
+                                        <div className="flex items-center gap-2">
+                                            <Camera className="w-4 h-4 text-blue-500 animate-pulse" />
+                                            <h3 className="text-xs font-black tracking-wider uppercase text-slate-200">
+                                                Scan & Extract Details
+                                            </h3>
+                                        </div>
+                                        <button
+                                            disabled={scanScanning}
+                                            onClick={() => setShowScanModal(false)}
+                                            className="p-1 hover:bg-slate-800 rounded-full text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    {/* Scanner Mode Toggle */}
+                                    <div className="flex bg-slate-800/80 p-1 rounded-xl gap-1">
+                                        <button
+                                            disabled={scanScanning}
+                                            onClick={() => setScanType("qr")}
+                                            className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                                                scanType === "qr"
+                                                    ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
+                                                    : "text-slate-400 hover:text-slate-200"
+                                            } disabled:opacity-50`}
+                                        >
+                                            Mito QR Code
+                                        </button>
+                                        <button
+                                            disabled={scanScanning}
+                                            onClick={() => setScanType("paper_full")}
+                                            className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                                                scanType === "paper_full"
+                                                    ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
+                                                    : "text-slate-400 hover:text-slate-200"
+                                            } disabled:opacity-50`}
+                                        >
+                                            Paper (Full)
+                                        </button>
+                                        <button
+                                            disabled={scanScanning}
+                                            onClick={() => setScanType("paper_acc_only")}
+                                            className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                                                scanType === "paper_acc_only"
+                                                    ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
+                                                    : "text-slate-400 hover:text-slate-200"
+                                            } disabled:opacity-50`}
+                                        >
+                                            Paper (Acc Only)
+                                        </button>
+                                    </div>
+
+                                    {/* Camera Viewfinder & Laser Scan Simulation */}
+                                    <div className="relative aspect-video w-full rounded-2xl bg-black overflow-hidden border border-slate-800 flex items-center justify-center shadow-inner">
+                                        {/* Camera viewfinder corners */}
+                                        <div className="absolute top-4 left-4 w-4 h-4 border-t-2 border-l-2 border-blue-500 rounded-tl-sm" />
+                                        <div className="absolute top-4 right-4 w-4 h-4 border-t-2 border-r-2 border-blue-500 rounded-tr-sm" />
+                                        <div className="absolute bottom-4 left-4 w-4 h-4 border-b-2 border-l-2 border-blue-500 rounded-bl-sm" />
+                                        <div className="absolute bottom-4 right-4 w-4 h-4 border-b-2 border-r-2 border-blue-500 rounded-br-sm" />
+
+                                        {/* Glowing Green Scanning Laser */}
+                                        {scanScanning && (
+                                            <motion.div
+                                                initial={{ y: "-100%" }}
+                                                animate={{ y: "100%" }}
+                                                transition={{
+                                                    repeat: Infinity,
+                                                    repeatType: "reverse",
+                                                    duration: 1.0,
+                                                    ease: "easeInOut"
+                                                }}
+                                                className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-green-400 to-transparent shadow-[0_0_8px_#4ade80] z-20"
+                                            />
+                                        )}
+
+                                        {/* Live Scan Targets Mockup preview */}
+                                        <div className="z-10 p-4 w-full flex justify-center">
+                                            {scanType === "qr" && (
+                                                <div className="flex flex-col items-center gap-2 bg-slate-900/90 border border-slate-700/80 rounded-xl p-3 shadow-2xl scale-90 w-[180px]">
+                                                    <div className="bg-white p-2 rounded-lg relative flex items-center justify-center">
+                                                        <QrCode className="w-20 h-20 text-slate-900" />
+                                                        <div className="absolute w-5 h-5 bg-blue-600 rounded flex items-center justify-center border border-white">
+                                                            <span className="text-[7px] text-white font-extrabold">Mito</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-center leading-none mt-1">
+                                                        <span className="text-[9px] font-black text-blue-400">Gabriel Silva</span>
+                                                        <span className="text-[6px] text-slate-400 block mt-0.5 font-bold uppercase tracking-wider">Verified Recipient QR</span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {scanType === "paper_full" && (
+                                                <div className="bg-amber-50 text-slate-800 border-2 border-dashed border-amber-200 rounded-xl p-4 shadow-2xl font-mono text-[9px] w-[200px] leading-relaxed shadow-slate-950/50">
+                                                    <div className="border-b border-amber-200 pb-1.5 mb-1.5 flex justify-between items-center text-[7px] font-bold text-amber-600">
+                                                        <span>📄 WRITTEN NOTE</span>
+                                                        <span>SCRAPABLE</span>
+                                                    </div>
+                                                    <div className="space-y-0.5 font-semibold">
+                                                        <p><span className="text-slate-400">Bank:</span> Access Bank</p>
+                                                        <p><span className="text-slate-400">Acc:</span> 88776655</p>
+                                                        <p><span className="text-slate-400">Sort:</span> 20-30-40</p>
+                                                        <p><span className="text-slate-400">Name:</span> Sarah Chen</p>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {scanType === "paper_acc_only" && (
+                                                <div className="bg-amber-50 text-slate-800 border-2 border-dashed border-amber-200 rounded-xl p-4 shadow-2xl font-mono text-[9px] w-[200px] leading-relaxed shadow-slate-950/50">
+                                                    <div className="border-b border-amber-200 pb-1.5 mb-1.5 flex justify-between items-center text-[7px] font-bold text-amber-600">
+                                                        <span>📄 WRITTEN NOTE</span>
+                                                        <span>ACC ONLY</span>
+                                                    </div>
+                                                    <div className="space-y-0.5 font-semibold py-2">
+                                                        <p className="text-[10px]"><span className="text-slate-400">Account:</span> 98765432</p>
+                                                        <p className="text-[6px] text-amber-600/60 mt-1 italic font-sans">(Other details torn/missing)</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Scan overlay text */}
+                                        <div className="absolute bottom-2 left-0 right-0 text-center z-15">
+                                            <span className="text-[8px] bg-black/60 text-slate-300 font-bold px-2 py-0.5 rounded-full inline-block">
+                                                {scanScanning ? "Analyzing image fields..." : "Align recipient target inside viewfinder"}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="space-y-2">
+                                        <Button
+                                            disabled={scanScanning}
+                                            onClick={handleScanCapture}
+                                            className="w-full h-11 text-xs font-black uppercase tracking-wider rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md disabled:bg-slate-800 disabled:text-slate-500 active:scale-98 transition-transform"
+                                        >
+                                            {scanScanning ? (
+                                                <div className="flex items-center justify-center gap-1.5">
+                                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                    <span>Extracting details...</span>
+                                                </div>
+                                            ) : (
+                                                <span>Scan & Auto-fill</span>
+                                            )}
+                                        </Button>
+                                    </div>
                                 </motion.div>
                             </>
                         )}
