@@ -551,7 +551,7 @@ export default function MobilePaymentSimulator() {
                                                 type="number"
                                                 value={sendAmount}
                                                 onChange={(e) => handleSendChange(e.target.value)}
-                                                className="w-1/2 text-right font-extrabold text-2xl outline-none text-slate-800 bg-transparent"
+                                                className="flex-1 w-0 text-right font-extrabold text-2xl outline-none text-slate-800 bg-transparent"
                                                 placeholder="0.00"
                                             />
                                         </div>
@@ -580,7 +580,7 @@ export default function MobilePaymentSimulator() {
                                                 type="text"
                                                 value={receiveAmount}
                                                 onChange={(e) => handleReceiveChange(e.target.value)}
-                                                className="w-1/2 text-right font-extrabold text-2xl outline-none text-slate-800 bg-transparent"
+                                                className="flex-1 w-0 text-right font-extrabold text-2xl outline-none text-slate-800 bg-transparent"
                                                 placeholder="0.00"
                                             />
                                         </div>
