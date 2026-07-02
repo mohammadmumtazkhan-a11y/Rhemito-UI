@@ -89,7 +89,7 @@ export default function MobilePaymentSimulator() {
     const [promoApplied, setPromoApplied] = useState(false);
     const [promoDiscount, setPromoDiscount] = useState(0);
     const [promoMessage, setPromoMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-    const [paymentMethod, setPaymentMethod] = useState("instant_bank");
+    const [paymentMethod, setPaymentMethod] = useState("manual_transfer");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Sync form values when selected recipient changes
