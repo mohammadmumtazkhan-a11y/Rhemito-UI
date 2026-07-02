@@ -497,30 +497,8 @@ export default function MobilePaymentSimulator() {
                                         </div>
                                     </div>
 
-                                    {/* Action buttons */}
-                                    <div className="space-y-2 pt-2 mt-auto">
-                                        <Button
-                                            onClick={() => {
-                                                setShowBankTransferScreen(false);
-                                                setCurrentStep(1);
-                                            }}
-                                            className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                                        >
-                                            <div className="text-center">
-                                                <p>I've noted the details — take me to Dashboard</p>
-                                                <p className="text-[8px] font-medium text-blue-100 mt-0.5">I'll complete the payment within 30 minutes</p>
-                                            </div>
-                                        </Button>
-                                        <button
-                                            onClick={() => {
-                                                setShowBankTransferScreen(false);
-                                                setTimerSeconds(1800);
-                                            }}
-                                            className="w-full text-center text-xs font-bold text-rose-600 hover:text-rose-700 block py-1.5"
-                                        >
-                                            Cancel Transaction
-                                        </button>
-                                    </div>
+                                    {/* Spacer to prevent scroll clipping under sticky footer */}
+                                    <div className="h-24" />
                                 </motion.div>
                             ) : !showBankTransferScreen && currentStep === 1 && (
                                 <motion.div
@@ -694,16 +672,8 @@ export default function MobilePaymentSimulator() {
                                         </div>
                                     )}
 
-                                    {/* Sticky space spacer */}
-                                    <div className="flex-1 min-h-[20px]" />
-
-                                    {/* Next Action Button */}
-                                    <Button
-                                        onClick={handleNext}
-                                        className="w-full h-12 text-sm font-bold rounded-2xl bg-blue-600 hover:bg-blue-700 shadow-lg text-white"
-                                    >
-                                        Continue
-                                    </Button>
+                                    {/* Spacer to prevent scroll clipping under sticky footer */}
+                                    <div className="h-16" />
                                 </motion.div>
                             )}
 
@@ -922,22 +892,8 @@ export default function MobilePaymentSimulator() {
                                         </div>
                                     </div>
 
-                                    {/* Action Buttons */}
-                                    <div className="flex gap-2 mt-2 pt-2">
-                                        <Button
-                                            variant="ghost"
-                                            onClick={handleBack}
-                                            className="flex-1 h-12 text-sm font-bold text-slate-500 border border-slate-200 rounded-2xl"
-                                        >
-                                            Back
-                                        </Button>
-                                        <Button
-                                            onClick={handleNext}
-                                            className="flex-[2] h-12 text-sm font-bold rounded-2xl bg-blue-600 hover:bg-blue-700 text-white"
-                                        >
-                                            Continue
-                                        </Button>
-                                    </div>
+                                    {/* Spacer to prevent scroll clipping under sticky footer */}
+                                    <div className="h-16" />
                                 </motion.div>
                             )}
 
@@ -1115,37 +1071,8 @@ export default function MobilePaymentSimulator() {
                                         By proceeding, you agree to our Terms of Use and Privacy Policy. Funds are usually delivered within minutes.
                                     </p>
 
-                                    {/* Back/Pay buttons */}
-                                    <div className="flex gap-2 pt-1 mt-auto">
-                                        <Button
-                                            variant="ghost"
-                                            onClick={handleBack}
-                                            className="flex-1 h-12 text-sm font-bold text-slate-500 border border-slate-200 rounded-2xl"
-                                            disabled={isSubmitting}
-                                        >
-                                            Back
-                                        </Button>
-                                         <Button
-                                             onClick={() => {
-                                                 if (paymentMethod === "manual_transfer") {
-                                                     setShowConfirmModal(true);
-                                                 } else {
-                                                     handleSubmitPayment();
-                                                 }
-                                             }}
-                                             disabled={isSubmitting}
-                                            className="flex-[2] h-12 text-sm font-bold rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white flex items-center justify-center gap-1.5 shadow-lg"
-                                        >
-                                            {isSubmitting ? (
-                                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                            ) : (
-                                                <>
-                                                    <Lock className="w-3.5 h-3.5" />
-                                                    <span>Pay £{totalToPay.toFixed(2)}</span>
-                                                </>
-                                            )}
-                                        </Button>
-                                    </div>
+                                    {/* Spacer to prevent scroll clipping under sticky footer */}
+                                    <div className="h-16" />
                                 </motion.div>
                             )}
 
@@ -1207,30 +1134,102 @@ export default function MobilePaymentSimulator() {
                                         </div>
                                     </div>
 
-                                    {/* Action button */}
-                                    <Button
-                                        onClick={() => {
-                                            setCurrentStep(1);
-                                            setSendAmount("500.00");
-                                            setReceiveAmount("1,012,750.00");
-                                            setPromoApplied(false);
-                                            setPromoCode("");
-                                            setUseBonus(false);
-                                        }}
-                                        className="w-full h-12 text-sm font-bold rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
-                                    >
-                                        Send More Money
-                                    </Button>
-
-                                    <button
-                                        onClick={() => setLocation("/")}
-                                        className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
-                                    >
-                                        Go to Dashboard
-                                    </button>
+                                    {/* Spacer to prevent scroll clipping under sticky footer */}
+                                    <div className="h-24" />
                                 </motion.div>
                             )}
                         </AnimatePresence>
+                    </div>
+
+                    {/* Sticky bottom CTA and scroll indicator */}
+                    <div className="bg-white border-t border-slate-100 px-4 pt-3 pb-2.5 z-40 flex flex-col gap-2 relative shadow-[0_-8px_24px_rgba(0,0,0,0.02)]">
+                        {/* Blinking scroll indicator arrow */}
+                        {showScrollIndicator && (
+                            <div className="absolute -top-11 left-1/2 bg-blue-600/90 text-white rounded-full p-2 shadow-md flex items-center justify-center animate-bounce-blink z-50 pointer-events-none">
+                                <ArrowDown className="w-3.5 h-3.5" />
+                            </div>
+                        )}
+
+                        {showBankTransferScreen ? (
+                            <div className="space-y-2 w-full">
+                                <Button
+                                    onClick={() => {
+                                        setShowBankTransferScreen(false);
+                                        setCurrentStep(1);
+                                    }}
+                                    className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex flex-col items-center justify-center"
+                                >
+                                    <span className="font-extrabold">I've noted the details — take me to Dashboard</span>
+                                    <span className="text-[8px] font-medium text-blue-100">I'll complete the payment within 30 minutes</span>
+                                </Button>
+                                <button
+                                    onClick={() => {
+                                        setShowBankTransferScreen(false);
+                                        setTimerSeconds(1800);
+                                    }}
+                                    className="w-full text-center text-xs font-bold text-rose-600 hover:text-rose-700 block py-1"
+                                >
+                                    Cancel Transaction
+                                </button>
+                            </div>
+                        ) : currentStep === 1 ? (
+                            <Button
+                                onClick={handleNext}
+                                className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 shadow-sm text-white"
+                            >
+                                Continue
+                            </Button>
+                        ) : currentStep === 2 ? (
+                            <Button
+                                onClick={handleNext}
+                                className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 shadow-sm text-white"
+                            >
+                                Continue
+                            </Button>
+                        ) : currentStep === 3 ? (
+                            <Button
+                                onClick={() => {
+                                    if (paymentMethod === "manual_transfer") {
+                                        setShowConfirmModal(true);
+                                    } else {
+                                        handleSubmitPayment();
+                                    }
+                                }}
+                                disabled={isSubmitting}
+                                className="w-full h-11 text-xs font-bold rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white flex items-center justify-center gap-1.5 shadow-sm"
+                            >
+                                {isSubmitting ? (
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <>
+                                        <Lock className="w-3.5 h-3.5" />
+                                        <span>Pay £{totalToPay.toFixed(2)}</span>
+                                    </>
+                                )}
+                            </Button>
+                        ) : currentStep === 4 ? (
+                            <div className="space-y-2 w-full">
+                                <Button
+                                    onClick={() => {
+                                        setCurrentStep(1);
+                                        setSendAmount("500.00");
+                                        setReceiveAmount("1,012,750.00");
+                                        setPromoApplied(false);
+                                        setPromoCode("");
+                                        setUseBonus(false);
+                                    }}
+                                    className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                                >
+                                    Send More Money
+                                </Button>
+                                <button
+                                    onClick={() => setLocation("/")}
+                                    className="w-full text-center text-xs font-bold text-slate-400 hover:text-slate-600 block py-1"
+                                >
+                                    Go to Dashboard
+                                </button>
+                            </div>
+                        ) : null}
                     </div>
 
                     {/* Add New Recipient Bottom Sheet */}

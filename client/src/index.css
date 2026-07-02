@@ -209,4 +209,19 @@
     color: hsl(var(--muted-foreground));
     pointer-events: none;
   }
+
+  @keyframes bounceBlink {
+    0%, 100% {
+      transform: translate(-50%, 0);
+      opacity: 0.4;
+    }
+    50% {
+      transform: translate(-50%, 6px);
+      opacity: 1;
+    }
+  }
+
+  .animate-bounce-blink {
+    animation: bounceBlink 1.4s ease-in-out infinite;
+  }
 }
