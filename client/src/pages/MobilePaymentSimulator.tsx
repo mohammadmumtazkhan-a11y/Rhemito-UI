@@ -5,7 +5,7 @@ import {
     ArrowLeft, Check, CreditCard, Building2, Wallet, Gift,
     ChevronRight, X, Smartphone, Battery, Wifi, Signal,
     Lock, ArrowRight, CheckCircle2, Copy, Search, Plus, Info, Edit2, Landmark,
-    ArrowDown, ChevronDown
+    ArrowDown, ChevronDown, User, Briefcase, Globe
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,11 +20,111 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const EXCHANGE_RATE = 2025.50;
 
 const recentRecipients = [
-    { id: "1", name: "Akshita Gupta", bankName: "Barclays", accountNumber: "12345678", sortCode: "20-45-67", initials: "AG", color: "bg-blue-100 text-blue-600", country: "UK", currency: "GBP" },
-    { id: "2", name: "Sarah Chen", bankName: "Access Bank", accountNumber: "87654321", sortCode: "30-20-10", initials: "SC", color: "bg-purple-100 text-purple-600", country: "Nigeria", currency: "NGN" },
-    { id: "3", name: "David Okonkwo", bankName: "GTBank", accountNumber: "11223344", sortCode: "10-10-10", initials: "DO", color: "bg-green-100 text-green-600", country: "Nigeria", currency: "NGN" },
-    { id: "4", name: "Hans Müller", bankName: "Deutsche Bank", accountNumber: "99887766", sortCode: "40-40-40", initials: "HM", color: "bg-orange-100 text-orange-600", country: "Germany", currency: "EUR" },
-    { id: "5", name: "James Peterson", bankName: "Chase Bank", accountNumber: "55667788", sortCode: "50-50-50", initials: "JP", color: "bg-teal-100 text-teal-600", country: "United States", currency: "USD" },
+    { 
+        id: "1", 
+        name: "Akshita Gupta", 
+        bankName: "Barclays", 
+        accountNumber: "12345678", 
+        sortCode: "20-45-67", 
+        initials: "AG", 
+        color: "bg-blue-100 text-blue-600", 
+        country: "UK", 
+        currency: "GBP",
+        recipientType: "individual" as "individual" | "business",
+        deliveryMethodChoice: "direct_bank" as "direct_bank" | "swift",
+        address: "42 London Road",
+        city: "London",
+        stateProvince: "Greater London",
+        postcode: "SE1 6LN",
+        relationship: "Family",
+        nickname: "Akshita",
+        reason: "Family Support",
+        narration: "Rent assistance"
+    },
+    { 
+        id: "2", 
+        name: "Sarah Chen", 
+        bankName: "Access Bank", 
+        accountNumber: "87654321", 
+        sortCode: "30-20-10", 
+        initials: "SC", 
+        color: "bg-purple-100 text-purple-600", 
+        country: "Nigeria", 
+        currency: "NGN",
+        recipientType: "individual" as "individual" | "business",
+        deliveryMethodChoice: "direct_bank" as "direct_bank" | "swift",
+        address: "7b Admiralty Way",
+        city: "Lagos",
+        stateProvince: "Lagos State",
+        postcode: "101233",
+        relationship: "Friend",
+        nickname: "Sarah",
+        reason: "Family Support",
+        narration: "Birthday present"
+    },
+    { 
+        id: "3", 
+        name: "David Okonkwo", 
+        bankName: "GTBank", 
+        accountNumber: "11223344", 
+        sortCode: "10-10-10", 
+        initials: "DO", 
+        color: "bg-green-100 text-green-600", 
+        country: "Nigeria", 
+        currency: "NGN",
+        recipientType: "business" as "individual" | "business",
+        deliveryMethodChoice: "swift" as "direct_bank" | "swift",
+        address: "15 Marina Street",
+        city: "Lagos",
+        stateProvince: "Lagos State",
+        postcode: "100211",
+        relationship: "Business Partner",
+        nickname: "David Business",
+        reason: "Services Paid",
+        narration: "Invoice payment"
+    },
+    { 
+        id: "4", 
+        name: "Hans Müller", 
+        bankName: "Deutsche Bank", 
+        accountNumber: "99887766", 
+        sortCode: "40-40-40", 
+        initials: "HM", 
+        color: "bg-orange-100 text-orange-600", 
+        country: "Germany", 
+        currency: "EUR",
+        recipientType: "individual" as "individual" | "business",
+        deliveryMethodChoice: "swift" as "direct_bank" | "swift",
+        address: "Kaiserstraße 12",
+        city: "Frankfurt",
+        stateProvince: "Hessen",
+        postcode: "60311",
+        relationship: "Other",
+        nickname: "Hans",
+        reason: "Education",
+        narration: "Semester fees"
+    },
+    { 
+        id: "5", 
+        name: "James Peterson", 
+        bankName: "Chase Bank", 
+        accountNumber: "55667788", 
+        sortCode: "50-50-50", 
+        initials: "JP", 
+        color: "bg-teal-100 text-teal-600", 
+        country: "United States", 
+        currency: "USD",
+        recipientType: "individual" as "individual" | "business",
+        deliveryMethodChoice: "swift" as "direct_bank" | "swift",
+        address: "500 Park Avenue",
+        city: "New York",
+        stateProvince: "New York",
+        postcode: "10022",
+        relationship: "Family",
+        nickname: "Uncle James",
+        reason: "Family Support",
+        narration: "Support allowance"
+    },
 ];
 
 const PROMO_CODES: Record<string, number> = {
@@ -52,7 +152,19 @@ export default function MobilePaymentSimulator() {
 
     // Create Recipient States
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [newName, setNewName] = useState("");
+    const [newRecipientType, setNewRecipientType] = useState<"individual" | "business">("individual");
+    const [newDeliveryMethod, setNewDeliveryMethod] = useState<"direct_bank" | "swift">("direct_bank");
+    const [newName, setNewName] = useState(""); // First Name
+    const [newLastName, setNewLastName] = useState("");
+    const [newCompanyName, setNewCompanyName] = useState("");
+    const [newAddress, setNewAddress] = useState("");
+    const [newCity, setNewCity] = useState("");
+    const [newStateProvince, setNewStateProvince] = useState("Select-");
+    const [newPostcode, setNewPostcode] = useState("");
+    const [newRelationship, setNewRelationship] = useState("Select-");
+    const [newNickname, setNewNickname] = useState("");
+    const [newReason, setNewReason] = useState("Select-");
+    const [newNarration, setNewNarration] = useState("");
     const [newBank, setNewBank] = useState("");
     const [newAcc, setNewAcc] = useState("");
     const [newSort, setNewSort] = useState("");
@@ -64,7 +176,19 @@ export default function MobilePaymentSimulator() {
 
     // Edit Recipient States
     const [showEditModal, setShowEditModal] = useState(false);
-    const [editName, setEditName] = useState("");
+    const [editRecipientType, setEditRecipientType] = useState<"individual" | "business">("individual");
+    const [editDeliveryMethod, setEditDeliveryMethod] = useState<"direct_bank" | "swift">("direct_bank");
+    const [editName, setEditName] = useState(""); // First Name
+    const [editLastName, setEditLastName] = useState("");
+    const [editCompanyName, setEditCompanyName] = useState("");
+    const [editAddress, setEditAddress] = useState("");
+    const [editCity, setEditCity] = useState("");
+    const [editStateProvince, setEditStateProvince] = useState("Select-");
+    const [editPostcode, setEditPostcode] = useState("");
+    const [editRelationship, setEditRelationship] = useState("Select-");
+    const [editNickname, setEditNickname] = useState("");
+    const [editReason, setEditReason] = useState("Select-");
+    const [editNarration, setEditNarration] = useState("");
     const [editBank, setEditBank] = useState("");
     const [editAcc, setEditAcc] = useState("");
     const [editSort, setEditSort] = useState("");
@@ -76,12 +200,19 @@ export default function MobilePaymentSimulator() {
     const [searchQuery, setSearchQuery] = useState("");
 
     // Form States - Step 2 (Prefilled from selected recipient)
+    const [recipientType, setRecipientType] = useState<"individual" | "business">("individual");
+    const [deliveryMethodChoice, setDeliveryMethodChoice] = useState<"direct_bank" | "swift">("direct_bank");
     const [firstName, setFirstName] = useState("Akshita");
     const [lastName, setLastName] = useState("Gupta");
+    const [companyName, setCompanyName] = useState("");
+    const [address, setAddress] = useState("42 London Road");
+    const [city, setCity] = useState("London");
+    const [stateProvince, setStateProvince] = useState("Greater London");
+    const [postcode, setPostcode] = useState("SE1 6LN");
     const [relationship, setRelationship] = useState("Family");
-    const [nickname, setNickname] = useState("e.g. My Sister");
+    const [nickname, setNickname] = useState("Akshita");
     const [reason, setReason] = useState("Family Support");
-    const [narration, setNarration] = useState("e.g. Monthly allowance for February");
+    const [narration, setNarration] = useState("Rent assistance");
     const [bankName, setBankName] = useState("Barclays");
     const [accountNumber, setAccountNumber] = useState("12345678");
     const [sortCode, setSortCode] = useState("20-45-67");
@@ -99,9 +230,29 @@ export default function MobilePaymentSimulator() {
     // Sync form values when selected recipient changes
     useEffect(() => {
         if (selectedRecipient) {
-            const names = selectedRecipient.name.split(" ");
-            setFirstName(names[0] || "");
-            setLastName(names[1] || "");
+            const isBiz = selectedRecipient.recipientType === "business";
+            setRecipientType(isBiz ? "business" : "individual");
+            setDeliveryMethodChoice(selectedRecipient.deliveryMethodChoice || "direct_bank");
+            
+            if (isBiz) {
+                setFirstName("");
+                setLastName("");
+                setCompanyName(selectedRecipient.name || "");
+            } else {
+                const names = selectedRecipient.name.split(" ");
+                setFirstName(names[0] || "");
+                setLastName(names[1] || "");
+                setCompanyName("");
+            }
+            
+            setAddress(selectedRecipient.address || "");
+            setCity(selectedRecipient.city || "");
+            setStateProvince(selectedRecipient.stateProvince || "Select-");
+            setPostcode(selectedRecipient.postcode || "");
+            setRelationship(selectedRecipient.relationship || "Select-");
+            setNickname(selectedRecipient.nickname || "");
+            setReason(selectedRecipient.reason || "Select-");
+            setNarration(selectedRecipient.narration || "");
             setBankName(selectedRecipient.bankName);
             setAccountNumber(selectedRecipient.accountNumber);
             setSortCode(selectedRecipient.sortCode);
@@ -109,8 +260,15 @@ export default function MobilePaymentSimulator() {
     }, [selectedRecipient]);
 
     const handleCreateRecipient = () => {
-        if (!newName.trim() || !newBank.trim() || !newAcc.trim() || !newSort.trim()) return;
-        const initials = newName.trim().split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+        const isBiz = newRecipientType === "business";
+        const displayName = isBiz ? newCompanyName.trim() : `${newName.trim()} ${newLastName.trim()}`.trim();
+        
+        if (!displayName || !newBank.trim() || !newAcc.trim() || !newSort.trim()) return;
+        
+        const initials = isBiz 
+            ? displayName.slice(0, 2).toUpperCase()
+            : newName.trim().split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+            
         const colors = [
             "bg-blue-100 text-blue-600",
             "bg-purple-100 text-purple-600",
@@ -121,23 +279,46 @@ export default function MobilePaymentSimulator() {
             "bg-indigo-100 text-indigo-600"
         ];
         const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        
         const newRec = {
             id: (recipients.length + 1).toString(),
-            name: newName.trim(),
+            name: displayName,
             bankName: newBank.trim(),
             accountNumber: newAcc.trim(),
             sortCode: newSort.trim(),
             initials,
             color: randomColor,
             country: "UK",
-            currency: "GBP"
+            currency: "GBP",
+            recipientType: newRecipientType,
+            deliveryMethodChoice: newDeliveryMethod,
+            address: newAddress.trim(),
+            city: newCity.trim(),
+            stateProvince: newStateProvince,
+            postcode: newPostcode.trim(),
+            relationship: newRelationship,
+            nickname: newNickname.trim(),
+            reason: newReason,
+            narration: newNarration.trim()
         };
+        
         setRecipients([newRec, ...recipients]);
         setSelectedRecipient(newRec);
         setIsNewRecipientCreated(true);
         setShowCreateModal(false);
+        
         // Clear form
         setNewName("");
+        setNewLastName("");
+        setNewCompanyName("");
+        setNewAddress("");
+        setNewCity("");
+        setNewStateProvince("Select-");
+        setNewPostcode("");
+        setNewRelationship("Select-");
+        setNewNickname("");
+        setNewReason("Select-");
+        setNewNarration("");
         setNewBank("");
         setNewAcc("");
         setNewSort("");
@@ -145,7 +326,27 @@ export default function MobilePaymentSimulator() {
 
     const handleOpenEditModal = () => {
         if (!selectedRecipient) return;
-        setEditName(selectedRecipient.name);
+        const isBiz = selectedRecipient.recipientType === "business";
+        setEditRecipientType(isBiz ? "business" : "individual");
+        setEditDeliveryMethod(selectedRecipient.deliveryMethodChoice || "direct_bank");
+        if (isBiz) {
+            setEditName("");
+            setEditLastName("");
+            setEditCompanyName(selectedRecipient.name);
+        } else {
+            const names = selectedRecipient.name.split(" ");
+            setEditName(names[0] || "");
+            setEditLastName(names[1] || "");
+            setEditCompanyName("");
+        }
+        setEditAddress(selectedRecipient.address || "");
+        setEditCity(selectedRecipient.city || "");
+        setEditStateProvince(selectedRecipient.stateProvince || "Select-");
+        setEditPostcode(selectedRecipient.postcode || "");
+        setEditRelationship(selectedRecipient.relationship || "Select-");
+        setEditNickname(selectedRecipient.nickname || "");
+        setEditReason(selectedRecipient.reason || "Select-");
+        setEditNarration(selectedRecipient.narration || "");
         setEditBank(selectedRecipient.bankName);
         setEditAcc(selectedRecipient.accountNumber);
         setEditSort(selectedRecipient.sortCode);
@@ -154,18 +355,33 @@ export default function MobilePaymentSimulator() {
 
     const handleSaveRecipient = () => {
         if (!selectedRecipient) return;
-        if (!editName.trim() || !editBank.trim() || !editAcc.trim() || !editSort.trim()) return;
+        const isBiz = editRecipientType === "business";
+        const displayName = isBiz ? editCompanyName.trim() : `${editName.trim()} ${editLastName.trim()}`.trim();
+        
+        if (!displayName || !editBank.trim() || !editAcc.trim() || !editSort.trim()) return;
         
         const updatedRecipients = recipients.map(r => {
             if (r.id === selectedRecipient.id) {
-                const initials = editName.trim().split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+                const initials = isBiz 
+                    ? displayName.slice(0, 2).toUpperCase()
+                    : editName.trim().split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
                 return {
                     ...r,
-                    name: editName.trim(),
+                    name: displayName,
                     bankName: editBank.trim(),
                     accountNumber: editAcc.trim(),
                     sortCode: editSort.trim(),
-                    initials
+                    initials,
+                    recipientType: editRecipientType,
+                    deliveryMethodChoice: editDeliveryMethod,
+                    address: editAddress.trim(),
+                    city: editCity.trim(),
+                    stateProvince: editStateProvince,
+                    postcode: editPostcode.trim(),
+                    relationship: editRelationship,
+                    nickname: editNickname.trim(),
+                    reason: editReason,
+                    narration: editNarration.trim()
                 };
             }
             return r;
@@ -851,72 +1067,208 @@ export default function MobilePaymentSimulator() {
                                             <span className="w-1.5 h-3 bg-blue-600 rounded-full" />
                                             Recipient Details
                                         </h3>
+
+                                        {/* Individual vs Business Toggle */}
+                                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                                            <button
+                                                onClick={() => setRecipientType("individual")}
+                                                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                    recipientType === "individual"
+                                                        ? "bg-white text-blue-600 shadow-sm"
+                                                        : "text-slate-500 hover:text-slate-700"
+                                                }`}
+                                            >
+                                                <User className="w-3.5 h-3.5" />
+                                                Individual
+                                            </button>
+                                            <button
+                                                onClick={() => setRecipientType("business")}
+                                                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                    recipientType === "business"
+                                                        ? "bg-white text-blue-600 shadow-sm"
+                                                        : "text-slate-500 hover:text-slate-700"
+                                                }`}
+                                            >
+                                                <Briefcase className="w-3.5 h-3.5" />
+                                                Business
+                                            </button>
+                                        </div>
+
+                                        {/* Delivery Method Selection */}
+                                        <div className="space-y-1.5 text-xs">
+                                            <Label className="text-[10px] font-bold text-slate-500">Delivery Method</Label>
+                                            <div className="grid grid-cols-2 gap-2.5">
+                                                <div
+                                                    onClick={() => setDeliveryMethodChoice("direct_bank")}
+                                                    className={`cursor-pointer rounded-xl border p-2.5 flex items-center gap-2 transition-all ${
+                                                        deliveryMethodChoice === "direct_bank"
+                                                            ? "border-blue-500 bg-blue-50/20 shadow-sm"
+                                                            : "border-slate-200 bg-white hover:bg-slate-50"
+                                                    }`}
+                                                >
+                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                                        deliveryMethodChoice === "direct_bank" ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
+                                                    }`}>
+                                                        <Building2 className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="text-left leading-tight">
+                                                        <h4 className="text-[10px] font-bold text-slate-800">Direct To Bank</h4>
+                                                        <span className="text-[8px] text-slate-400 font-semibold block">Local transfers - 30mins</span>
+                                                    </div>
+                                                </div>
+
+                                                <div
+                                                    onClick={() => setDeliveryMethodChoice("swift")}
+                                                    className={`cursor-pointer rounded-xl border p-2.5 flex items-center gap-2 transition-all ${
+                                                        deliveryMethodChoice === "swift"
+                                                            ? "border-blue-500 bg-blue-50/20 shadow-sm"
+                                                            : "border-slate-200 bg-white hover:bg-slate-50"
+                                                    }`}
+                                                >
+                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                                        deliveryMethodChoice === "swift" ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
+                                                    }`}>
+                                                        <Globe className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="text-left leading-tight">
+                                                        <h4 className="text-[10px] font-bold text-slate-800">Swift</h4>
+                                                        <span className="text-[8px] text-slate-400 font-semibold block">International transfers-24hrs</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                         
+                                        {/* Name Fields - Conditional on recipient type */}
+                                        {recipientType === "individual" ? (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <Label className="text-[10px] font-bold text-slate-500">First Name*</Label>
+                                                    <Input
+                                                        value={firstName}
+                                                        onChange={e => setFirstName(e.target.value)}
+                                                        className="h-9 text-xs rounded-lg"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-[10px] font-bold text-slate-500">Last Name*</Label>
+                                                    <Input
+                                                        value={lastName}
+                                                        onChange={e => setLastName(e.target.value)}
+                                                        className="h-9 text-xs rounded-lg"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Company Name*</Label>
+                                                <Input
+                                                    value={companyName}
+                                                    onChange={e => setCompanyName(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Address & City */}
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold text-slate-500">First name</Label>
+                                                <Label className="text-[10px] font-bold text-slate-500">Address*</Label>
                                                 <Input
-                                                    value={firstName}
-                                                    onChange={e => setFirstName(e.target.value)}
+                                                    value={address}
+                                                    onChange={e => setAddress(e.target.value)}
                                                     className="h-9 text-xs rounded-lg"
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold text-slate-500">Last name</Label>
+                                                <Label className="text-[10px] font-bold text-slate-500">City*</Label>
                                                 <Input
-                                                    value={lastName}
-                                                    onChange={e => setLastName(e.target.value)}
+                                                    value={city}
+                                                    onChange={e => setCity(e.target.value)}
                                                     className="h-9 text-xs rounded-lg"
                                                 />
                                             </div>
                                         </div>
 
+                                        {/* State/Province & Postcode */}
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold text-slate-500">Relationship</Label>
+                                                <Label className="text-[10px] font-bold text-slate-500">State/Province</Label>
+                                                <Select value={stateProvince} onValueChange={setStateProvince}>
+                                                    <SelectTrigger className="h-9 text-xs rounded-lg">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Select-">Select-</SelectItem>
+                                                        <SelectItem value="Greater London">Greater London</SelectItem>
+                                                        <SelectItem value="Hessen">Hessen</SelectItem>
+                                                        <SelectItem value="New York">New York</SelectItem>
+                                                        <SelectItem value="Lagos State">Lagos State</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Postcode*</Label>
+                                                <Input
+                                                    value={postcode}
+                                                    onChange={e => setPostcode(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Relationship & Nickname */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Relationship*</Label>
                                                 <Select value={relationship} onValueChange={setRelationship}>
                                                     <SelectTrigger className="h-9 text-xs rounded-lg">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
+                                                        <SelectItem value="Select-">Select-</SelectItem>
                                                         <SelectItem value="Family">Family</SelectItem>
                                                         <SelectItem value="Friend">Friend</SelectItem>
-                                                        <SelectItem value="Business">Business</SelectItem>
+                                                        <SelectItem value="Business Partner">Business Partner</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold text-slate-500">Nickname (optional)</Label>
+                                                <Label className="text-[10px] font-bold text-slate-500">Unique Nick Name (Min 5 chars)*</Label>
                                                 <Input
                                                     value={nickname}
                                                     onChange={e => setNickname(e.target.value)}
-                                                    className="h-9 text-xs rounded-lg text-slate-700 bg-slate-50/50"
+                                                    className="h-9 text-xs rounded-lg"
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] font-bold text-slate-500">Reason for transfer</Label>
-                                            <Select value={reason} onValueChange={setReason}>
-                                                <SelectTrigger className="h-9 text-xs rounded-lg">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="Family Support">Family Support</SelectItem>
-                                                    <SelectItem value="Education">Education</SelectItem>
-                                                    <SelectItem value="Medical Bills">Medical Bills</SelectItem>
-                                                    <SelectItem value="Services Paid">Services Paid</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] font-bold text-slate-500">Narration (optional)</Label>
-                                            <Input
-                                                value={narration}
-                                                onChange={e => setNarration(e.target.value)}
-                                                className="h-9 text-xs rounded-lg text-slate-700 bg-slate-50/50"
-                                            />
+                                        {/* Reason & Narration */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Reason*</Label>
+                                                <Select value={reason} onValueChange={setReason}>
+                                                    <SelectTrigger className="h-9 text-xs rounded-lg">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Select-">Select-</SelectItem>
+                                                        <SelectItem value="Family Support">Family Support</SelectItem>
+                                                        <SelectItem value="Education">Education</SelectItem>
+                                                        <SelectItem value="Medical Bills">Medical Bills</SelectItem>
+                                                        <SelectItem value="Services Paid">Services Paid</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Narration</Label>
+                                                <Input
+                                                    value={narration}
+                                                    onChange={e => setNarration(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
@@ -1342,7 +1694,7 @@ export default function MobilePaymentSimulator() {
                                     animate={{ y: 0 }}
                                     exit={{ y: "100%" }}
                                     transition={{ type: "spring", damping: 25, stiffness: 250 }}
-                                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] p-5 space-y-4 z-50 shadow-2xl border-t border-slate-100"
+                                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] p-5 space-y-4 z-50 shadow-2xl border-t border-slate-100 max-h-[85vh] overflow-y-auto select-none scrollbar-none"
                                 >
                                     <div className="flex justify-between items-center border-b pb-3 border-slate-100">
                                         <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
@@ -1357,19 +1709,228 @@ export default function MobilePaymentSimulator() {
                                         </button>
                                     </div>
 
+                                    {/* Individual vs Business Toggle */}
+                                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                                        <button
+                                            onClick={() => setNewRecipientType("individual")}
+                                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                newRecipientType === "individual"
+                                                    ? "bg-white text-blue-600 shadow-sm"
+                                                    : "text-slate-500 hover:text-slate-700"
+                                            }`}
+                                        >
+                                            <User className="w-3.5 h-3.5" />
+                                            Individual
+                                        </button>
+                                        <button
+                                            onClick={() => setNewRecipientType("business")}
+                                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                newRecipientType === "business"
+                                                    ? "bg-white text-blue-600 shadow-sm"
+                                                    : "text-slate-500 hover:text-slate-700"
+                                            }`}
+                                        >
+                                            <Briefcase className="w-3.5 h-3.5" />
+                                            Business
+                                        </button>
+                                    </div>
+
+                                    {/* Delivery Method Selection */}
+                                    <div className="space-y-1.5 text-xs">
+                                        <Label className="text-[10px] font-bold text-slate-500">Delivery Method</Label>
+                                        <div className="grid grid-cols-2 gap-2.5">
+                                            <div
+                                                onClick={() => setNewDeliveryMethod("direct_bank")}
+                                                className={`cursor-pointer rounded-xl border p-2.5 flex items-center gap-2 transition-all ${
+                                                    newDeliveryMethod === "direct_bank"
+                                                        ? "border-blue-500 bg-blue-50/20 shadow-sm"
+                                                        : "border-slate-200 bg-white hover:bg-slate-50"
+                                                }`}
+                                            >
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                                    newDeliveryMethod === "direct_bank" ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
+                                                }`}>
+                                                    <Building2 className="w-4 h-4" />
+                                                </div>
+                                                <div className="text-left leading-tight">
+                                                    <h4 className="text-[10px] font-bold text-slate-800">Direct To Bank</h4>
+                                                    <span className="text-[8px] text-slate-400 font-semibold block">Local transfers - 30mins</span>
+                                                </div>
+                                            </div>
+
+                                            <div
+                                                onClick={() => setNewDeliveryMethod("swift")}
+                                                className={`cursor-pointer rounded-xl border p-2.5 flex items-center gap-2 transition-all ${
+                                                    newDeliveryMethod === "swift"
+                                                        ? "border-blue-500 bg-blue-50/20 shadow-sm"
+                                                        : "border-slate-200 bg-white hover:bg-slate-50"
+                                                }`}
+                                            >
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                                    newDeliveryMethod === "swift" ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
+                                                }`}>
+                                                    <Globe className="w-4 h-4" />
+                                                </div>
+                                                <div className="text-left leading-tight">
+                                                    <h4 className="text-[10px] font-bold text-slate-800">Swift</h4>
+                                                    <span className="text-[8px] text-slate-400 font-semibold block">International transfers-24hrs</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Recipient Details */}
                                     <div className="space-y-3.5 text-xs">
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] font-bold text-slate-500">Full Name</Label>
-                                            <Input
-                                                placeholder="e.g. Akshita Gupta"
-                                                value={newName}
-                                                onChange={(e) => setNewName(e.target.value)}
-                                                className="h-9 text-xs rounded-lg"
-                                            />
+                                        <div className="border-t pt-3 border-slate-100">
+                                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                                Recipient Details
+                                            </h4>
                                         </div>
 
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] font-bold text-slate-500">Bank Name</Label>
+                                        {newRecipientType === "individual" ? (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <Label className="text-[10px] font-bold text-slate-500">First Name*</Label>
+                                                    <Input
+                                                        placeholder="e.g. Akshita"
+                                                        value={newName}
+                                                        onChange={(e) => setNewName(e.target.value)}
+                                                        className="h-9 text-xs rounded-lg animate-fade-in"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-[10px] font-bold text-slate-500">Last Name*</Label>
+                                                    <Input
+                                                        placeholder="e.g. Gupta"
+                                                        value={newLastName}
+                                                        onChange={(e) => setNewLastName(e.target.value)}
+                                                        className="h-9 text-xs rounded-lg animate-fade-in"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Company Name*</Label>
+                                                <Input
+                                                    placeholder="e.g. Acme Corporation"
+                                                    value={newCompanyName}
+                                                    onChange={(e) => setNewCompanyName(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg animate-fade-in"
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Address*</Label>
+                                                <Input
+                                                    placeholder="e.g. 42 London Road"
+                                                    value={newAddress}
+                                                    onChange={(e) => setNewAddress(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">City*</Label>
+                                                <Input
+                                                    placeholder="e.g. London"
+                                                    value={newCity}
+                                                    onChange={(e) => setNewCity(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">State/Province</Label>
+                                                <Select value={newStateProvince} onValueChange={setNewStateProvince}>
+                                                    <SelectTrigger className="h-9 text-xs rounded-lg">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Select-">Select-</SelectItem>
+                                                        <SelectItem value="Greater London">Greater London</SelectItem>
+                                                        <SelectItem value="Hessen">Hessen</SelectItem>
+                                                        <SelectItem value="New York">New York</SelectItem>
+                                                        <SelectItem value="Lagos State">Lagos State</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Postcode*</Label>
+                                                <Input
+                                                    placeholder="e.g. SE1 6LN"
+                                                    value={newPostcode}
+                                                    onChange={(e) => setNewPostcode(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Relationship*</Label>
+                                                <Select value={newRelationship} onValueChange={setNewRelationship}>
+                                                    <SelectTrigger className="h-9 text-xs rounded-lg">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Select-">Select-</SelectItem>
+                                                        <SelectItem value="Family">Family</SelectItem>
+                                                        <SelectItem value="Friend">Friend</SelectItem>
+                                                        <SelectItem value="Business Partner">Business Partner</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Unique Nick Name (Min 5 chars)*</Label>
+                                                <Input
+                                                    placeholder="e.g. Akshita Gupta"
+                                                    value={newNickname}
+                                                    onChange={(e) => setNewNickname(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Reason*</Label>
+                                                <Select value={newReason} onValueChange={setNewReason}>
+                                                    <SelectTrigger className="h-9 text-xs rounded-lg">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Select-">Select-</SelectItem>
+                                                        <SelectItem value="Family Support">Family Support</SelectItem>
+                                                        <SelectItem value="Education">Education</SelectItem>
+                                                        <SelectItem value="Medical Bills">Medical Bills</SelectItem>
+                                                        <SelectItem value="Services Paid">Services Paid</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Narration</Label>
+                                                <Input
+                                                    placeholder="e.g. Rent allowance"
+                                                    value={newNarration}
+                                                    onChange={(e) => setNewNarration(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Banking Details */}
+                                    <div className="border-t pt-3 border-slate-100 space-y-3">
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                            Banking Details
+                                        </h4>
+                                        <div className="space-y-1 text-xs">
+                                            <Label className="text-[10px] font-bold text-slate-500">Bank Name*</Label>
                                             <Input
                                                 placeholder="e.g. Barclays Bank"
                                                 value={newBank}
@@ -1378,9 +1939,9 @@ export default function MobilePaymentSimulator() {
                                             />
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-2 gap-3 text-xs">
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold text-slate-500">Account Number</Label>
+                                                <Label className="text-[10px] font-bold text-slate-500">Account Number*</Label>
                                                 <Input
                                                     placeholder="8-10 digit number"
                                                     value={newAcc}
@@ -1390,7 +1951,7 @@ export default function MobilePaymentSimulator() {
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold text-slate-500">Sort Code</Label>
+                                                <Label className="text-[10px] font-bold text-slate-500">Sort Code*</Label>
                                                 <Input
                                                     placeholder="xx-xx-xx"
                                                     value={newSort}
@@ -1399,15 +1960,34 @@ export default function MobilePaymentSimulator() {
                                                 />
                                             </div>
                                         </div>
-
-                                        <Button
-                                            onClick={handleCreateRecipient}
-                                            disabled={!newName.trim() || !newBank.trim() || !newAcc.trim() || !newSort.trim()}
-                                            className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white mt-2 shadow-md"
-                                        >
-                                            Add Recipient & Select
-                                        </Button>
                                     </div>
+
+                                    {(() => {
+                                        const isIndiv = newRecipientType === "individual";
+                                        const isNameValid = isIndiv 
+                                            ? (newName.trim() !== "" && newLastName.trim() !== "")
+                                            : newCompanyName.trim() !== "";
+                                        const isDetailsValid = newAddress.trim() !== "" && 
+                                            newCity.trim() !== "" && 
+                                            newPostcode.trim() !== "" && 
+                                            newRelationship !== "Select-" && 
+                                            newReason !== "Select-" && 
+                                            newNickname.trim().length >= 5;
+                                        const isBankValid = newBank.trim() !== "" && 
+                                            newAcc.trim() !== "" && 
+                                            newSort.trim() !== "";
+                                        const isFormValid = isNameValid && isDetailsValid && isBankValid;
+
+                                        return (
+                                            <Button
+                                                onClick={handleCreateRecipient}
+                                                disabled={!isFormValid}
+                                                className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white mt-2 shadow-md disabled:bg-slate-100 disabled:text-slate-400"
+                                            >
+                                                Add Recipient & Select
+                                            </Button>
+                                        );
+                                    })()}
                                 </motion.div>
                             </>
                         )}
@@ -1493,7 +2073,7 @@ export default function MobilePaymentSimulator() {
                                     animate={{ y: 0 }}
                                     exit={{ y: "100%" }}
                                     transition={{ type: "spring", damping: 25, stiffness: 250 }}
-                                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] p-5 space-y-4 z-50 shadow-2xl border-t border-slate-100"
+                                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] p-5 space-y-4 z-50 shadow-2xl border-t border-slate-100 max-h-[85vh] overflow-y-auto select-none scrollbar-none"
                                 >
                                     <div className="flex justify-between items-center border-b pb-3 border-slate-100">
                                         <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
@@ -1508,19 +2088,228 @@ export default function MobilePaymentSimulator() {
                                         </button>
                                     </div>
 
+                                    {/* Individual vs Business Toggle */}
+                                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                                        <button
+                                            onClick={() => setEditRecipientType("individual")}
+                                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                editRecipientType === "individual"
+                                                    ? "bg-white text-blue-600 shadow-sm"
+                                                    : "text-slate-500 hover:text-slate-700"
+                                            }`}
+                                        >
+                                            <User className="w-3.5 h-3.5" />
+                                            Individual
+                                        </button>
+                                        <button
+                                            onClick={() => setEditRecipientType("business")}
+                                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                editRecipientType === "business"
+                                                    ? "bg-white text-blue-600 shadow-sm"
+                                                    : "text-slate-500 hover:text-slate-700"
+                                            }`}
+                                        >
+                                            <Briefcase className="w-3.5 h-3.5" />
+                                            Business
+                                        </button>
+                                    </div>
+
+                                    {/* Delivery Method Selection */}
+                                    <div className="space-y-1.5 text-xs">
+                                        <Label className="text-[10px] font-bold text-slate-500">Delivery Method</Label>
+                                        <div className="grid grid-cols-2 gap-2.5">
+                                            <div
+                                                onClick={() => setEditDeliveryMethod("direct_bank")}
+                                                className={`cursor-pointer rounded-xl border p-2.5 flex items-center gap-2 transition-all ${
+                                                    editDeliveryMethod === "direct_bank"
+                                                        ? "border-blue-500 bg-blue-50/20 shadow-sm"
+                                                        : "border-slate-200 bg-white hover:bg-slate-50"
+                                                }`}
+                                            >
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                                    editDeliveryMethod === "direct_bank" ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
+                                                }`}>
+                                                    <Building2 className="w-4 h-4" />
+                                                </div>
+                                                <div className="text-left leading-tight">
+                                                    <h4 className="text-[10px] font-bold text-slate-800">Direct To Bank</h4>
+                                                    <span className="text-[8px] text-slate-400 font-semibold block">Local transfers - 30mins</span>
+                                                </div>
+                                            </div>
+
+                                            <div
+                                                onClick={() => setEditDeliveryMethod("swift")}
+                                                className={`cursor-pointer rounded-xl border p-2.5 flex items-center gap-2 transition-all ${
+                                                    editDeliveryMethod === "swift"
+                                                        ? "border-blue-500 bg-blue-50/20 shadow-sm"
+                                                        : "border-slate-200 bg-white hover:bg-slate-50"
+                                                }`}
+                                            >
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                                    editDeliveryMethod === "swift" ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
+                                                }`}>
+                                                    <Globe className="w-4 h-4" />
+                                                </div>
+                                                <div className="text-left leading-tight">
+                                                    <h4 className="text-[10px] font-bold text-slate-800">Swift</h4>
+                                                    <span className="text-[8px] text-slate-400 font-semibold block">International transfers-24hrs</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Recipient Details */}
                                     <div className="space-y-3.5 text-xs">
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] font-bold text-slate-500">Full Name</Label>
-                                            <Input
-                                                placeholder="e.g. Akshita Gupta"
-                                                value={editName}
-                                                onChange={(e) => setEditName(e.target.value)}
-                                                className="h-9 text-xs rounded-lg"
-                                            />
+                                        <div className="border-t pt-3 border-slate-100">
+                                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                                Recipient Details
+                                            </h4>
                                         </div>
 
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] font-bold text-slate-500">Bank Name</Label>
+                                        {editRecipientType === "individual" ? (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <Label className="text-[10px] font-bold text-slate-500">First Name*</Label>
+                                                    <Input
+                                                        placeholder="e.g. Akshita"
+                                                        value={editName}
+                                                        onChange={(e) => setEditName(e.target.value)}
+                                                        className="h-9 text-xs rounded-lg animate-fade-in"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-[10px] font-bold text-slate-500">Last Name*</Label>
+                                                    <Input
+                                                        placeholder="e.g. Gupta"
+                                                        value={editLastName}
+                                                        onChange={(e) => setEditLastName(e.target.value)}
+                                                        className="h-9 text-xs rounded-lg animate-fade-in"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Company Name*</Label>
+                                                <Input
+                                                    placeholder="e.g. Acme Corporation"
+                                                    value={editCompanyName}
+                                                    onChange={(e) => setEditCompanyName(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg animate-fade-in"
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Address*</Label>
+                                                <Input
+                                                    placeholder="e.g. 42 London Road"
+                                                    value={editAddress}
+                                                    onChange={(e) => setEditAddress(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">City*</Label>
+                                                <Input
+                                                    placeholder="e.g. London"
+                                                    value={editCity}
+                                                    onChange={(e) => setEditCity(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">State/Province</Label>
+                                                <Select value={editStateProvince} onValueChange={setEditStateProvince}>
+                                                    <SelectTrigger className="h-9 text-xs rounded-lg">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Select-">Select-</SelectItem>
+                                                        <SelectItem value="Greater London">Greater London</SelectItem>
+                                                        <SelectItem value="Hessen">Hessen</SelectItem>
+                                                        <SelectItem value="New York">New York</SelectItem>
+                                                        <SelectItem value="Lagos State">Lagos State</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Postcode*</Label>
+                                                <Input
+                                                    placeholder="e.g. SE1 6LN"
+                                                    value={editPostcode}
+                                                    onChange={(e) => setEditPostcode(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Relationship*</Label>
+                                                <Select value={editRelationship} onValueChange={setEditRelationship}>
+                                                    <SelectTrigger className="h-9 text-xs rounded-lg">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Select-">Select-</SelectItem>
+                                                        <SelectItem value="Family">Family</SelectItem>
+                                                        <SelectItem value="Friend">Friend</SelectItem>
+                                                        <SelectItem value="Business Partner">Business Partner</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Unique Nick Name (Min 5 chars)*</Label>
+                                                <Input
+                                                    placeholder="e.g. Akshita Gupta"
+                                                    value={editNickname}
+                                                    onChange={(e) => setEditNickname(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Reason*</Label>
+                                                <Select value={editReason} onValueChange={setEditReason}>
+                                                    <SelectTrigger className="h-9 text-xs rounded-lg">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Select-">Select-</SelectItem>
+                                                        <SelectItem value="Family Support">Family Support</SelectItem>
+                                                        <SelectItem value="Education">Education</SelectItem>
+                                                        <SelectItem value="Medical Bills">Medical Bills</SelectItem>
+                                                        <SelectItem value="Services Paid">Services Paid</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[10px] font-bold text-slate-500">Narration</Label>
+                                                <Input
+                                                    placeholder="e.g. Rent allowance"
+                                                    value={editNarration}
+                                                    onChange={(e) => setEditNarration(e.target.value)}
+                                                    className="h-9 text-xs rounded-lg"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Banking Details */}
+                                    <div className="border-t pt-3 border-slate-100 space-y-3">
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                            Banking Details
+                                        </h4>
+                                        <div className="space-y-1 text-xs">
+                                            <Label className="text-[10px] font-bold text-slate-500">Bank Name*</Label>
                                             <Input
                                                 placeholder="e.g. Barclays Bank"
                                                 value={editBank}
@@ -1529,9 +2318,9 @@ export default function MobilePaymentSimulator() {
                                             />
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-2 gap-3 text-xs">
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold text-slate-500">Account Number</Label>
+                                                <Label className="text-[10px] font-bold text-slate-500">Account Number*</Label>
                                                 <Input
                                                     placeholder="8-10 digit number"
                                                     value={editAcc}
@@ -1541,7 +2330,7 @@ export default function MobilePaymentSimulator() {
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold text-slate-500">Sort Code</Label>
+                                                <Label className="text-[10px] font-bold text-slate-500">Sort Code*</Label>
                                                 <Input
                                                     placeholder="xx-xx-xx"
                                                     value={editSort}
@@ -1550,15 +2339,34 @@ export default function MobilePaymentSimulator() {
                                                 />
                                             </div>
                                         </div>
-
-                                        <Button
-                                            onClick={handleSaveRecipient}
-                                            disabled={!editName.trim() || !editBank.trim() || !editAcc.trim() || !editSort.trim()}
-                                            className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white mt-2 shadow-md"
-                                        >
-                                            Save Changes
-                                        </Button>
                                     </div>
+
+                                    {(() => {
+                                        const isIndiv = editRecipientType === "individual";
+                                        const isNameValid = isIndiv 
+                                            ? (editName.trim() !== "" && editLastName.trim() !== "")
+                                            : editCompanyName.trim() !== "";
+                                        const isDetailsValid = editAddress.trim() !== "" && 
+                                            editCity.trim() !== "" && 
+                                            editPostcode.trim() !== "" && 
+                                            editRelationship !== "Select-" && 
+                                            editReason !== "Select-" && 
+                                            editNickname.trim().length >= 5;
+                                        const isBankValid = editBank.trim() !== "" && 
+                                            editAcc.trim() !== "" && 
+                                            editSort.trim() !== "";
+                                        const isFormValid = isNameValid && isDetailsValid && isBankValid;
+
+                                        return (
+                                            <Button
+                                                onClick={handleSaveRecipient}
+                                                disabled={!isFormValid}
+                                                className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white mt-2 shadow-md disabled:bg-slate-100 disabled:text-slate-400"
+                                            >
+                                                Save Changes
+                                            </Button>
+                                        );
+                                    })()}
                                 </motion.div>
                             </>
                         )}
