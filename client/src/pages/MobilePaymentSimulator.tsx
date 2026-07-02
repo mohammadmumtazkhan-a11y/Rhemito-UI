@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import {
     ArrowLeft, Check, CreditCard, Building2, Wallet, Gift,
     ChevronRight, X, Smartphone, Battery, Wifi, Signal,
-    Lock, ArrowRight, CheckCircle2, Copy, Search, Plus, Info, Edit2, Landmark
+    Lock, ArrowRight, CheckCircle2, Copy, Search, Plus, Info, Edit2, Landmark,
+    ArrowDown, ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,10 @@ export default function MobilePaymentSimulator() {
     const [, setLocation] = useLocation();
     const [currentStep, setCurrentStep] = useState(1);
     const [direction, setDirection] = useState(1); // 1 for next, -1 for back
+
+    // Scroll detection states & refs
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [showScrollIndicator, setShowScrollIndicator] = useState(false);
 
     // Recipients State
     const [recipients, setRecipients] = useState(recentRecipients);
@@ -187,6 +192,30 @@ export default function MobilePaymentSimulator() {
         const secs = sec % 60;
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
+
+    const checkScrollable = () => {
+        const el = scrollContainerRef.current;
+        if (el) {
+            const isScrollable = el.scrollHeight > el.clientHeight;
+            const isAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 15;
+            setShowScrollIndicator(isScrollable && !isAtBottom);
+        }
+    };
+
+    useEffect(() => {
+        const timer = setTimeout(checkScrollable, 100);
+        const observer = new MutationObserver(checkScrollable);
+        const el = scrollContainerRef.current;
+        if (el) {
+            observer.observe(el, { childList: true, subtree: true, characterData: true });
+        }
+        window.addEventListener("resize", checkScrollable);
+        return () => {
+            clearTimeout(timer);
+            observer.disconnect();
+            window.removeEventListener("resize", checkScrollable);
+        };
+    }, [currentStep, showBankTransferScreen, recipients, selectedRecipient]);
 
     // Handle Amount Conversion
     const handleSendChange = (val: string) => {
@@ -380,7 +409,11 @@ export default function MobilePaymentSimulator() {
                     )}
 
                     {/* Screen View Area */}
-                    <div className="flex-1 overflow-y-auto relative flex flex-col">
+                    <div
+                        ref={scrollContainerRef}
+                        onScroll={checkScrollable}
+                        className="flex-1 overflow-y-auto relative flex flex-col"
+                    >
                         <AnimatePresence initial={false} custom={direction} mode="wait">
                             {showBankTransferScreen ? (
                                 <motion.div
