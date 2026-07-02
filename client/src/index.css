@@ -210,18 +210,18 @@
     pointer-events: none;
   }
 
-  @keyframes bounceBlink {
+  @keyframes bounceBlinkRight {
     0%, 100% {
-      transform: translate(-50%, 0);
-      opacity: 0.4;
+      transform: translateY(0);
+      opacity: 0.25;
     }
     50% {
-      transform: translate(-50%, 6px);
-      opacity: 1;
+      transform: translateY(6px);
+      opacity: 0.7;
     }
   }
 
-  .animate-bounce-blink {
-    animation: bounceBlink 1.4s ease-in-out infinite;
+  .animate-bounce-blink-right {
+    animation: bounceBlinkRight 1.4s ease-in-out infinite;
   }
 }
