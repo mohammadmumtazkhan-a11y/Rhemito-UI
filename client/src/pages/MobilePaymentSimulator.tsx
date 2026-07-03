@@ -179,6 +179,21 @@ export default function MobilePaymentSimulator() {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showBankTransferScreen, setShowBankTransferScreen] = useState(false);
     const [timerSeconds, setTimerSeconds] = useState(1800);
+    const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+    // Bank transfer account details (single source of truth for the Bank Transfer screen)
+    const bankDetails = [
+        { label: "Transaction Reference No.", val: "24426299" },
+        { label: "Account Name", val: "Funtech Global Communications Ltd." },
+        { label: "Bank Name", val: "The Currency Cloud Limited" },
+        { label: "Bank Account Number", val: "1018984719" },
+        { label: "Sort Code", val: "20-45-45" }
+    ];
+    const copyBankValue = (key: string, value: string) => {
+        navigator.clipboard?.writeText(value);
+        setCopiedKey(key);
+        window.setTimeout(() => setCopiedKey(k => (k === key ? null : k)), 1500);
+    };
 
     // Edit Recipient States
     const [showEditModal, setShowEditModal] = useState(false);
@@ -646,7 +661,7 @@ export default function MobilePaymentSimulator() {
                     </div>
 
                     {/* App Header (Dynamic) */}
-                    <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between z-30">
+                    <div className="bg-white/90 backdrop-blur-sm border-b border-slate-200/70 px-4 py-3 flex items-center justify-between z-30">
                         <div className="flex items-center gap-2">
                             {currentStep > 1 && currentStep < 4 ? (
                                 <button
@@ -657,7 +672,7 @@ export default function MobilePaymentSimulator() {
                                             handleBack();
                                         }
                                     }}
-                                    className="p-1 hover:bg-slate-100 rounded-full transition-colors text-slate-600"
+                                    className="p-1.5 hover:bg-slate-100 active:scale-95 rounded-full transition-all text-slate-600"
                                 >
                                     <ArrowLeft className="w-5 h-5" />
                                 </button>
@@ -668,10 +683,10 @@ export default function MobilePaymentSimulator() {
                         </div>
                         {currentStep < 4 && (
                             <div className="flex items-center gap-2">
-                                <span className="text-xs text-slate-400 font-semibold bg-slate-100 px-2.5 py-1 rounded-full">
+                                <span className="text-xs text-slate-500 font-semibold bg-slate-100/80 px-2.5 py-1 rounded-full">
                                     Step {currentStep} of 3
                                 </span>
-                                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
+                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-xs ring-2 ring-white shadow-sm">
                                     OM
                                 </div>
                             </div>
@@ -730,91 +745,123 @@ export default function MobilePaymentSimulator() {
                                     {/* Back to Payment Methods */}
                                     <button
                                         onClick={() => setShowBankTransferScreen(false)}
-                                        className="flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-slate-700 w-fit"
+                                        className="group flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-slate-800 w-fit rounded-full pl-1.5 pr-3 py-1 hover:bg-slate-100 transition-colors"
                                     >
-                                        <ArrowLeft className="w-3.5 h-3.5" /> Back to Payment Methods
+                                        <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" /> Back to Payment Methods
                                     </button>
 
                                     {/* Stepper Tracker */}
-                                    <div className="bg-white border border-slate-100 rounded-2xl p-3 shadow-xs flex justify-between items-center text-[9px] font-bold text-slate-400">
-                                        <div className="flex items-center gap-1 text-emerald-500">
-                                            <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[8px]"><Check className="w-2.5 h-2.5" /></div>
-                                            <span>Created</span>
-                                        </div>
-                                        <div className="h-0.5 w-4 bg-emerald-200 flex-1 mx-1" />
-                                        <div className="flex items-center gap-1 text-blue-600">
-                                            <div className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[8px]">⏰</div>
-                                            <span>Awaiting Pay</span>
-                                        </div>
-                                        <div className="h-0.5 w-4 bg-slate-100 flex-1 mx-1" />
-                                        <div className="flex items-center gap-1">
-                                            <div className="w-4 h-4 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[8px]">3</div>
-                                            <span>Received</span>
-                                        </div>
-                                        <div className="h-0.5 w-4 bg-slate-100 flex-1 mx-1" />
-                                        <div className="flex items-center gap-1">
-                                            <div className="w-4 h-4 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[8px]">4</div>
-                                            <span>Processing</span>
+                                    <div className="bg-white border border-slate-200/60 rounded-2xl px-3 pt-3 pb-2.5 shadow-sm ring-1 ring-black/[0.02]">
+                                        <div className="flex items-start justify-between">
+                                            {/* Created */}
+                                            <div className="flex flex-col items-center gap-1 w-[22%]">
+                                                <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[8px] shadow-sm shadow-emerald-500/30 ring-4 ring-emerald-50">
+                                                    <Check className="w-3 h-3" />
+                                                </div>
+                                                <span className="text-[8.5px] font-bold text-emerald-600 leading-none text-center whitespace-nowrap">Created</span>
+                                            </div>
+                                            {/* connector */}
+                                            <div className="h-[2px] flex-1 mt-3 rounded-full bg-gradient-to-r from-emerald-300 to-blue-400" />
+                                            {/* Awaiting Pay */}
+                                            <div className="flex flex-col items-center gap-1 w-[26%]">
+                                                <div className="relative w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] shadow-sm shadow-blue-600/40 ring-4 ring-blue-50">
+                                                    <span className="absolute inset-0 rounded-full bg-blue-500/50 animate-ping" />
+                                                    <span className="relative text-[9px] leading-none">⏰</span>
+                                                </div>
+                                                <span className="text-[8.5px] font-bold text-blue-600 leading-none text-center whitespace-nowrap">Awaiting Pay</span>
+                                            </div>
+                                            {/* connector */}
+                                            <div className="h-[2px] flex-1 mt-3 rounded-full bg-slate-200/80" />
+                                            {/* Received */}
+                                            <div className="flex flex-col items-center gap-1 w-[22%]">
+                                                <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[8px] ring-4 ring-slate-50/60 font-bold">3</div>
+                                                <span className="text-[8.5px] font-bold text-slate-400 leading-none text-center whitespace-nowrap">Received</span>
+                                            </div>
+                                            {/* connector */}
+                                            <div className="h-[2px] flex-1 mt-3 rounded-full bg-slate-200/80" />
+                                            {/* Processing */}
+                                            <div className="flex flex-col items-center gap-1 w-[22%]">
+                                                <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[8px] ring-4 ring-slate-50/60 font-bold">4</div>
+                                                <span className="text-[8.5px] font-bold text-slate-400 leading-none text-center whitespace-nowrap">Processing</span>
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Success banner */}
-                                    <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 space-y-1 text-[11px] text-emerald-800">
-                                        <div className="flex items-center gap-1.5 font-extrabold text-emerald-700">
-                                            <CheckCircle2 className="w-4 h-4" />
-                                            <span>Your transaction has been created!</span>
+                                    <div className="relative overflow-hidden rounded-2xl border border-emerald-100 shadow-sm">
+                                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 to-teal-400" />
+                                        <div className="bg-emerald-50/70 p-3.5 pt-4 space-y-1.5">
+                                            <div className="flex items-center gap-2 font-extrabold text-emerald-700">
+                                                <div className="w-6 h-6 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center ring-1 ring-emerald-500/20">
+                                                    <CheckCircle2 className="w-4 h-4" />
+                                                </div>
+                                                <span className="text-[12px]">Your transaction has been created!</span>
+                                            </div>
+                                            <p className="text-slate-600 text-[10px] leading-relaxed pl-8">
+                                                Reference: <span className="font-extrabold text-slate-800 tabular-nums">#24426299</span> Amount: <span className="font-extrabold text-slate-800 tabular-nums">₦{finalReceiveNGN}</span>. Please complete your payment below to finalise your transfer.
+                                            </p>
                                         </div>
-                                        <p className="text-slate-600 text-[10px] leading-relaxed">
-                                            Reference: <span className="font-extrabold text-slate-800">#24426299</span> Amount: <span className="font-extrabold text-slate-800">₦{finalReceiveNGN}</span>. Please complete your payment below to finalise your transfer.
-                                        </p>
                                     </div>
 
                                     {/* Warning countdown banner */}
                                     {timerSeconds > 0 ? (
-                                        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 flex gap-2.5 text-[10px] leading-normal text-amber-800">
-                                            <div className="w-10 h-10 rounded-full border-2 border-amber-500 flex items-center justify-center font-extrabold text-xs text-amber-600 shrink-0 bg-white shadow-sm">
+                                        <div className="bg-gradient-to-br from-amber-50 to-orange-50/60 border border-amber-200/70 rounded-2xl p-3.5 flex gap-3 text-[10px] leading-normal text-amber-800 shadow-sm">
+                                            <div className="relative w-11 h-11 rounded-full border-2 border-amber-500 flex items-center justify-center font-extrabold text-xs text-amber-600 shrink-0 bg-white shadow-sm tabular-nums">
                                                 {formatTimer(timerSeconds)}
+                                                <span className="absolute inset-0 rounded-full ring-2 ring-amber-400/30 animate-pulse" />
                                             </div>
                                             <div className="space-y-0.5">
-                                                <p className="font-bold text-amber-900">Complete your payment</p>
+                                                <p className="font-bold text-amber-900 text-[11px]">Complete your payment</p>
                                                 <p className="text-slate-600 text-[9px] leading-snug">Please transfer the funds within 30 minutes. Your transaction will be automatically cancelled if payment is not received in time.</p>
-                                                <button onClick={() => setTimerSeconds(0)} className="text-[8px] font-bold text-blue-600 hover:underline block pt-0.5">Simulate Expiry (Demo)</button>
+                                                <button onClick={() => setTimerSeconds(0)} className="inline-flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700 hover:underline block pt-0.5">Simulate Expiry (Demo)</button>
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="bg-rose-50 border border-rose-100 rounded-2xl p-3 flex gap-2.5 text-[10px] leading-normal text-rose-800">
-                                            <div className="w-10 h-10 rounded-full border-2 border-rose-500 flex items-center justify-center font-extrabold text-xs text-rose-600 shrink-0 bg-white shadow-sm">
+                                        <div className="bg-gradient-to-br from-rose-50 to-red-50/50 border border-rose-200/70 rounded-2xl p-3.5 flex gap-3 text-[10px] leading-normal text-rose-800 shadow-sm">
+                                            <div className="w-11 h-11 rounded-full border-2 border-rose-500 flex items-center justify-center font-extrabold text-[9px] text-rose-600 shrink-0 bg-white shadow-sm">
                                                 Expired
                                             </div>
                                             <div className="space-y-0.5">
-                                                <p className="font-bold text-rose-900">Transaction Expired</p>
+                                                <p className="font-bold text-rose-900 text-[11px]">Transaction Expired</p>
                                                 <p className="text-slate-600 text-[9px] leading-snug">This transaction was automatically cancelled because we did not receive payment within 30 minutes.</p>
-                                                <button onClick={() => setTimerSeconds(1800)} className="text-[8px] font-bold text-blue-600 hover:underline block pt-0.5">Restart Timer (Demo)</button>
+                                                <button onClick={() => setTimerSeconds(1800)} className="inline-flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700 hover:underline block pt-0.5">Restart Timer (Demo)</button>
                                             </div>
                                         </div>
                                     )}
 
                                     {/* Bank details card */}
-                                    <div className="bg-white rounded-2xl border border-slate-200 p-3.5 space-y-3 shadow-sm text-xs">
-                                        <div className="flex justify-between items-center border-b pb-2 border-slate-100">
-                                            <span className="font-bold text-slate-800">Pay with Bank Transfer</span>
-                                            <button className="text-[9px] font-bold text-blue-600 hover:underline">Copy All</button>
+                                    <div className="bg-white rounded-2xl border border-slate-200/70 p-4 space-y-1 shadow-md ring-1 ring-black/[0.02] text-xs">
+                                        <div className="flex justify-between items-center pb-2.5 -mt-0.5">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center ring-1 ring-blue-100">
+                                                    <Landmark className="w-4 h-4" />
+                                                </div>
+                                                <span className="font-bold text-slate-800 text-[13px]">Pay with Bank Transfer</span>
+                                            </div>
+                                            <button
+                                                onClick={() => copyBankValue("all", bankDetails.map(d => d.val).join("\n"))}
+                                                className="inline-flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50/70 hover:bg-blue-100 rounded-full px-2.5 py-1 transition-colors"
+                                            >
+                                                {copiedKey === "all" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                                {copiedKey === "all" ? "Copied" : "Copy All"}
+                                            </button>
                                         </div>
-                                        
-                                        <div className="space-y-2.5 text-[10px]">
-                                            {[
-                                                { label: "Transaction Reference No.", val: "24426299" },
-                                                { label: "Account Name", val: "Funtech Global Communications Ltd." },
-                                                { label: "Bank Name", val: "The Currency Cloud Limited" },
-                                                { label: "Bank Account Number", val: "1018984719" },
-                                                { label: "Sort Code", val: "20-45-45" }
-                                            ].map(item => (
-                                                <div key={item.label} className="flex justify-between items-start">
-                                                    <span className="text-slate-400 font-medium max-w-[120px]">{item.label}</span>
-                                                    <div className="flex items-center gap-1 font-bold text-slate-800 font-mono text-right">
-                                                        <span className="truncate max-w-[120px]">{item.val}</span>
-                                                        <button className="p-0.5 hover:bg-slate-100 rounded text-slate-400">
-                                                            <Copy className="w-3 h-3" />
+
+                                        <div className="space-y-0.5 text-[10px]">
+                                            {bankDetails.map(item => (
+                                                <div
+                                                    key={item.label}
+                                                    className="group flex justify-between items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50/80 transition-colors"
+                                                >
+                                                    <span className="text-slate-400 font-medium">{item.label}</span>
+                                                    <div className="flex items-center gap-1.5 text-right">
+                                                        <span className="font-bold text-slate-900 font-mono tabular-nums truncate max-w-[130px]">{item.val}</span>
+                                                        <button
+                                                            onClick={() => copyBankValue(item.label, item.val)}
+                                                            className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                                            aria-label={`Copy ${item.label}`}
+                                                        >
+                                                            {copiedKey === item.label ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -823,10 +870,12 @@ export default function MobilePaymentSimulator() {
                                     </div>
 
                                     {/* Bottom notification message */}
-                                    <div className="bg-blue-50/50 border border-blue-100/50 rounded-2xl p-3 flex gap-2 text-[10px] text-blue-800">
-                                        <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                                    <div className="bg-gradient-to-br from-blue-50/70 to-indigo-50/40 border border-blue-100/70 rounded-2xl p-3.5 flex gap-2.5 text-[10px] text-blue-800 shadow-sm">
+                                        <div className="w-6 h-6 rounded-full bg-blue-500/15 text-blue-600 flex items-center justify-center shrink-0 mt-0.5 ring-1 ring-blue-500/20">
+                                            <Info className="w-3.5 h-3.5" />
+                                        </div>
                                         <div className="space-y-0.5">
-                                            <p className="font-bold text-blue-900">Bank details sent to your email</p>
+                                            <p className="font-bold text-blue-900 text-[11px]">Bank details sent to your email</p>
                                             <p className="text-slate-600 text-[9px] leading-relaxed">We've sent the bank account details to your registered email address for your reference. You can also make the payment using those details.</p>
                                         </div>
                                     </div>
@@ -1603,7 +1652,7 @@ export default function MobilePaymentSimulator() {
                                         setShowBankTransferScreen(false);
                                         setCurrentStep(1);
                                     }}
-                                    className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex flex-col items-center justify-center"
+                                    className="w-full h-12 text-xs font-bold rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-600/25 transition-all active:scale-[0.98] flex flex-col items-center justify-center ring-1 ring-blue-700/20"
                                 >
                                     <span className="font-extrabold">I've noted the details — take me to Dashboard</span>
                                     <span className="text-[8px] font-medium text-blue-100">I'll complete the payment within 30 minutes</span>
@@ -1613,7 +1662,7 @@ export default function MobilePaymentSimulator() {
                                         setShowBankTransferScreen(false);
                                         setTimerSeconds(1800);
                                     }}
-                                    className="w-full text-center text-xs font-bold text-rose-600 hover:text-rose-700 block py-1"
+                                    className="w-full text-center text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg block py-1.5 transition-colors"
                                 >
                                     Cancel Transaction
                                 </button>
