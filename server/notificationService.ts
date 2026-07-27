@@ -339,6 +339,81 @@ function dispatchMobilePush(
   );
 }
 
+// ─── Demo seed data ───────────────────────────────────────────────────────────
+//
+// Stable, human-readable IDs so demo URLs like /notifications/demo-notification-1
+// always render real content on a freshly started server — mirroring how
+// /contribute/demo-campaign-1 works for Group Pay. Idempotent: re-running on an
+// already-seeded store is a no-op.
+
+const DEMO_USER_ID = "user_123"; // matches requireAuth() fallback in routes.ts
+
+const DEMO_NOTIFICATIONS: Array<{
+  id: string;
+  type: NotificationEventType;
+  data: Record<string, unknown>;
+  ageMinutes: number;
+}> = [
+  {
+    id: "demo-notification-1",
+    type: "payment_received",
+    data: { txnId: "TXN-DEMO-001", amount: "250.00", currency: "GBP", recipientName: "Jane Carter" },
+    ageMinutes: 12,
+  },
+  {
+    id: "demo-notification-2",
+    type: "transaction_complete",
+    data: { txnId: "TXN-DEMO-002", amount: "1,200.00", currency: "GBP", recipientName: "Marco Silva" },
+    ageMinutes: 95,
+  },
+  {
+    id: "demo-notification-3",
+    type: "document_required",
+    data: { txnId: "TXN-DEMO-003" },
+    ageMinutes: 240,
+  },
+  {
+    id: "demo-notification-4",
+    type: "funding_allocated_multi",
+    data: {
+      currency: "GBP",
+      txnCount: "3",
+      totalAllocated: "750.00",
+      unallocatedBalance: "120.00",
+    },
+    ageMinutes: 30,
+  },
+];
+
+export function seedDemoNotifications(): void {
+  const now = new Date();
+
+  for (const seed of DEMO_NOTIFICATIONS) {
+    // Skip if already present (idempotent — survives HMR / multiple boots)
+    if (notificationsStore.has(seed.id)) continue;
+
+    const content = buildNotificationContent(seed.type, seed.data);
+    const createdAt = new Date(now.getTime() - seed.ageMinutes * 60 * 1000);
+
+    const notification: Notification = {
+      id: seed.id,
+      userId: DEMO_USER_ID,
+      type: seed.type,
+      channel: "in_app",
+      title: content.title,
+      body: content.body,
+      status: "delivered",
+      isRead: false,
+      metadata: Object.keys(seed.data).length > 0 ? seed.data : null,
+      createdAt,
+      expiresAt: new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000), // +7 days
+      archivedAt: null,
+    };
+
+    notificationsStore.set(notification.id, notification);
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**

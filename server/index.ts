@@ -3,6 +3,11 @@ import session from "express-session";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { seedDemoNotifications } from "./notificationService";
+
+// Seed demo notifications so /notifications/demo-notification-* URLs render real
+// content on a fresh boot. Idempotent — safe to call before every startup.
+seedDemoNotifications();
 
 // Extend session to include userId
 declare module "express-session" {
