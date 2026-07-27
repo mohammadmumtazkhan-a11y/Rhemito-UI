@@ -112,14 +112,23 @@ export default function NotificationDetail(): React.JSX.Element {
 
   const handleDismiss = async (): Promise<void> => {
     if (!notification) return;
+    const deletedId = notification.id;
+    // Navigate away FIRST (synchronously) so this component unmounts before
+    // react-query refetches the now-deleted notification and flips into its
+    // 404 "Notification not found" error state. window.history.back() is async
+    // and loses the race; routing to a concrete destination is predictable.
+    navigate("/");
     try {
-      await apiRequest("DELETE", `/api/notifications/${notification.id}`);
+      await apiRequest("DELETE", `/api/notifications/${deletedId}`);
+    } catch {
+      // ignore — UI has already navigated away
+    } finally {
       void qc.invalidateQueries({ queryKey: ["/api/notifications"] });
       void qc.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
-    } catch {
-      // ignore
+      // Drop the deleted detail from the cache so a later back-nav doesn't
+      // briefly re-render the stale (now-deleted) notification.
+      void qc.removeQueries({ queryKey: [`/api/notifications/${deletedId}`] });
     }
-    handleBack();
   };
 
   return (
