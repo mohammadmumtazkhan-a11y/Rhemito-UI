@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Upload, FileText, X, Check, Copy, CheckCircle2, Send, Search, User, Building2 } from "lucide-react";
+import { ArrowLeft, Upload, FileText, X, Check, Copy, CheckCircle2, Send, Search, User, Building2, AlertCircle } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useToast } from "@/hooks/use-toast";
 
 const COUNTRY_CODES = [
   { code: "+234", country: "Nigeria", flag: "🇳🇬" },
@@ -209,17 +210,19 @@ export default function SendInvoice() {
 
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold font-display">Invoice Sent!</h2>
-                <p className="text-muted-foreground">
-                  Successfully sent to <span className="font-medium text-foreground">
+                <p className="text-muted-foreground text-sm">
+                  The invoice and payment link have been emailed to{" "}
+                  <span className="font-semibold text-foreground">{formData.recipientEmail}</span> for{" "}
+                  <span className="font-semibold text-foreground">
                     {formData.recipientType === "business"
                       ? formData.recipientBusinessName
                       : [formData.recipientFirstName, formData.recipientMiddleName, formData.recipientLastName].filter(Boolean).join(" ")}
-                  </span>
+                  </span>.
                 </p>
               </div>
 
               <div className="bg-muted/50 rounded-lg p-4 space-y-3">
-                <p className="text-sm text-muted-foreground">Share this invoice link:</p>
+                <p className="text-xs text-muted-foreground">You can also share this invoice link directly:</p>
                 <div className="flex items-center gap-2">
                   <Input
                     value={`https://${invoiceLink}`}
@@ -295,54 +298,80 @@ export default function SendInvoice() {
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
               <div className="lg:col-span-3 space-y-6">
-                <div
-                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold text-foreground">
+                      Invoice Document <span className="text-destructive">*</span>
+                    </Label>
+                    <span className="text-xs font-semibold text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
+                      Mandatory
+                    </span>
+                  </div>
+
+                  <div
+                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+                      dragActive
+                        ? "border-primary bg-primary/5"
+                        : !formData.invoiceFile
+                        ? "border-slate-300 hover:border-primary/50 bg-slate-50/50"
+                        : "border-primary/40 bg-primary/5"
                     }`}
-                  onDragEnter={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDragOver={handleDrag}
-                  onDrop={handleDrop}
-                >
-                  {formData.invoiceFile ? (
-                    <div className="flex items-center justify-center gap-4">
-                      <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                        <FileText className="w-6 h-6 text-primary" />
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                  >
+                    {formData.invoiceFile ? (
+                      <div className="flex items-center justify-center gap-4">
+                        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                          <FileText className="w-6 h-6 text-primary" />
+                        </div>
+                        <div className="text-left">
+                          <p className="font-medium text-sm text-foreground">{formData.invoiceFile.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(formData.invoiceFile.size / 1024).toFixed(1)} KB • Attached
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleFileChange(null)}
+                          data-testid="button-remove-file"
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
                       </div>
-                      <div className="text-left">
-                        <p className="font-medium">{formData.invoiceFile.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {(formData.invoiceFile.size / 1024).toFixed(1)} KB
+                    ) : (
+                      <>
+                        <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                        <p className="font-medium text-sm text-slate-800 mb-1">
+                          Drag and drop your invoice here <span className="text-destructive">*</span>
                         </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleFileChange(null)}
-                        data-testid="button-remove-file"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
-                      <p className="font-medium mb-1">Drag and drop your invoice here</p>
-                      <p className="text-sm text-muted-foreground mb-4">PDF, PNG, or JPG up to 10MB</p>
-                      <Button
-                        variant="outline"
-                        onClick={() => fileInputRef.current?.click()}
-                        data-testid="button-browse-files"
-                      >
-                        Browse Files
-                      </Button>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".pdf,.png,.jpg,.jpeg"
-                        className="hidden"
-                        onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
-                      />
-                    </>
+                        <p className="text-xs text-muted-foreground mb-4">PDF, PNG, or JPG up to 10MB (Mandatory)</p>
+                        <Button
+                          variant="outline"
+                          onClick={() => fileInputRef.current?.click()}
+                          data-testid="button-browse-files"
+                          className="bg-white shadow-sm"
+                        >
+                          Browse Files
+                        </Button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          className="hidden"
+                          onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
+                        />
+                      </>
+                    )}
+                  </div>
+                  {!formData.invoiceFile && (
+                    <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-0.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      An invoice document must be attached before sending.
+                    </p>
                   )}
                 </div>
 
