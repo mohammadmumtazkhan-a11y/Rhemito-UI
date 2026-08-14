@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import {
   COUNTRY_OPTIONS,
   SUPPORTED_COUNTRIES,
@@ -82,6 +83,7 @@ const initialAccounts: PayoutAccount[] = [
 
 export default function PayoutAccounts() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [accounts, setAccounts] = useState<PayoutAccount[]>(initialAccounts);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -318,6 +320,10 @@ export default function PayoutAccounts() {
           })
         );
         setSuccessText("Payout bank account updated successfully.");
+        toast({
+          title: "Account Updated",
+          description: `${selectedBank} (${currentCurrency}) payout details have been updated.`,
+        });
       } else {
         const newAcc: PayoutAccount = {
           id: Date.now().toString(),
@@ -338,6 +344,10 @@ export default function PayoutAccounts() {
         };
         setAccounts((prev) => [...prev, newAcc]);
         setSuccessText("Payout bank account added successfully.");
+        toast({
+          title: "Account Added",
+          description: `${selectedBank} (${currentCurrency}) was added to your payout accounts.`,
+        });
       }
 
       resetForm();
@@ -345,6 +355,11 @@ export default function PayoutAccounts() {
       setTimeout(() => setShowSuccessMessage(false), 4000);
     } catch (error) {
       console.error("Save account error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save payout account. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -387,11 +402,16 @@ export default function PayoutAccounts() {
   };
 
   const handleDeleteAccount = (id: string) => {
+    const target = accounts.find((a) => a.id === id);
     setAccounts((prev) => prev.filter((a) => a.id !== id));
     setShowDeleteConfirm(null);
     setSuccessText("Payout bank account deleted successfully.");
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 4000);
+    toast({
+      title: "Account Removed",
+      description: `${target?.bank || "Payout account"} (${target?.currency || ""}) has been deleted.`,
+    });
   };
 
   return (

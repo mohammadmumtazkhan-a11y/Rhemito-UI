@@ -29,6 +29,7 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 import { knownSenders, type KnownSender } from "@/data/knownSenders";
 import { payoutAccounts as initialPayoutAccounts, getDefaultPayoutAccount, type PayoutAccount } from "@/data/payoutAccounts";
 
@@ -86,6 +87,7 @@ const steps = [
 
 export default function RequestPayment() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSuccess, setIsSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -233,6 +235,11 @@ export default function RequestPayment() {
       setIsAddAccountModalOpen(false);
       setIsChangingPayoutAccount(false);
 
+      toast({
+        title: "Payout Account Added",
+        description: `${newAcc.bank} (${newAcc.currency}) was added and selected for this request.`,
+      });
+
       // Reset modal fields
       setNewAccountData({
         name: "John Doe",
@@ -248,7 +255,15 @@ export default function RequestPayment() {
     if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
     } else {
+      const recipientName =
+        formData.senderType === "business"
+          ? formData.senderBusinessName
+          : [formData.senderFirstName, formData.senderLastName].filter(Boolean).join(" ");
       setIsSuccess(true);
+      toast({
+        title: "Payment Request Created",
+        description: `Payment link successfully generated for ${recipientName || "sender"}.`,
+      });
     }
   };
 
@@ -263,6 +278,10 @@ export default function RequestPayment() {
   const handleCopyLink = () => {
     navigator.clipboard.writeText(`https://${paymentLink}`);
     setCopied(true);
+    toast({
+      title: "Link Copied!",
+      description: "Payment link has been copied to your clipboard.",
+    });
     setTimeout(() => setCopied(false), 2000);
   };
 
