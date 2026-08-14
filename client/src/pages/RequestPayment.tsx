@@ -255,15 +255,7 @@ export default function RequestPayment() {
     if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
     } else {
-      const recipientName =
-        formData.senderType === "business"
-          ? formData.senderBusinessName
-          : [formData.senderFirstName, formData.senderLastName].filter(Boolean).join(" ");
       setIsSuccess(true);
-      toast({
-        title: "Payment Request Created",
-        description: `Payment link successfully generated for ${recipientName || "sender"}.`,
-      });
     }
   };
 
