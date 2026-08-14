@@ -345,10 +345,19 @@ export default function RequestPayment() {
                 </div>
                 <div className="flex justify-between text-xs font-semibold pt-1 border-t border-border/60">
                   <span className="text-primary">You Receive in Bank:</span>
-                  <span className="text-primary font-bold">{payoutSymbol}{netPayoutAmount.toFixed(2)} {payoutCurrency}</span>
+                  <span className="text-primary font-bold">
+                    {senderCurrency === payoutCurrency
+                      ? `${payoutSymbol}${netBeforeFx.toFixed(2)} ${payoutCurrency}`
+                      : `${senderSymbol}${netBeforeFx.toFixed(2)} ${senderCurrency}`}
+                  </span>
                 </div>
+                {senderCurrency !== payoutCurrency && (
+                  <p className="text-[11px] text-amber-800 font-medium">
+                    Converted to {payoutCurrency} on FX spot rate when payment is completed.
+                  </p>
+                )}
                 <div className="text-[11px] text-muted-foreground">
-                  Payout to: {selectedPayoutAccount?.bank} (****{selectedPayoutAccount?.accountNumber.slice(-4)})
+                  Payout to: {selectedPayoutAccount?.bank} ({payoutCurrency})
                 </div>
               </div>
 
@@ -683,15 +692,13 @@ export default function RequestPayment() {
 
                           <div className="flex justify-between text-xs text-muted-foreground">
                             <span>Net before FX:</span>
-                            <span>{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
+                            <span className="font-semibold text-slate-700">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
                           </div>
 
                           {senderCurrency !== payoutCurrency && (
-                            <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                              <span className="text-muted-foreground">FX Rate:</span>
-                              <span className="font-semibold text-slate-800">
-                                1 {senderCurrency} = {payoutSymbol}{fxRate.toLocaleString()} {payoutCurrency}
-                              </span>
+                            <div className="flex items-center justify-between text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900">
+                              <span className="font-medium">FX Conversion:</span>
+                              <span className="font-semibold">Live Spot Rate at Payout</span>
                             </div>
                           )}
                         </div>
@@ -699,14 +706,28 @@ export default function RequestPayment() {
                         <div className="h-px bg-border" />
 
                         <div className="bg-primary/5 -mx-5 px-5 py-3.5 -mb-5 rounded-b-xl border-t border-primary/15">
-                          <p className="text-xs text-muted-foreground mb-0.5">You Receive in Bank:</p>
-                          <div className="flex items-baseline justify-between">
-                            <span className="text-xl md:text-2xl font-extrabold text-primary">
-                              {payoutSymbol}{netPayoutAmount.toFixed(2)}
-                            </span>
-                            <span className="text-xs font-bold text-primary">{payoutCurrency}</span>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-1">
+                          <p className="text-xs text-muted-foreground mb-0.5">You Receive in Bank ({payoutCurrency}):</p>
+                          {senderCurrency === payoutCurrency ? (
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-xl md:text-2xl font-extrabold text-primary">
+                                {payoutSymbol}{netBeforeFx.toFixed(2)}
+                              </span>
+                              <span className="text-xs font-bold text-primary">{payoutCurrency}</span>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="flex items-baseline justify-between">
+                                <span className="text-xl md:text-2xl font-extrabold text-primary">
+                                  {senderSymbol}{netBeforeFx.toFixed(2)}
+                                </span>
+                                <span className="text-xs font-bold text-slate-600">{senderCurrency}</span>
+                              </div>
+                              <p className="text-[11px] font-medium text-amber-800 mt-1 leading-snug">
+                                Converted to {payoutCurrency} at live spot rate when sender pays
+                              </p>
+                            </div>
+                          )}
+                          <p className="text-[10px] text-muted-foreground mt-1.5">
                             Deposited to {selectedPayoutAccount?.bank || "Default Account"}
                           </p>
                         </div>
@@ -963,8 +984,15 @@ export default function RequestPayment() {
                         <div>
                           <p className="text-xs text-muted-foreground uppercase font-semibold">You Receive in Bank</p>
                           <p className="text-2xl font-bold text-primary mt-0.5">
-                            {payoutSymbol}{netPayoutAmount.toFixed(2)} {payoutCurrency}
+                            {senderCurrency === payoutCurrency
+                              ? `${payoutSymbol}${netBeforeFx.toFixed(2)} ${payoutCurrency}`
+                              : `${senderSymbol}${netBeforeFx.toFixed(2)} ${senderCurrency}`}
                           </p>
+                          {senderCurrency !== payoutCurrency && (
+                            <p className="text-[11px] text-amber-800 font-medium mt-0.5">
+                              Converted to {payoutCurrency} on live spot rate upon payment
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -974,17 +1002,22 @@ export default function RequestPayment() {
                           <span className="font-medium text-red-600">-{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
                         </div>
 
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-muted-foreground">Net Payout Amount:</span>
+                          <span className="font-semibold text-slate-800">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
+                        </div>
+
                         {senderCurrency !== payoutCurrency && (
-                          <div className="flex justify-between py-1 border-b border-slate-100">
-                            <span className="text-muted-foreground">Exchange Rate:</span>
-                            <span className="font-medium">1 {senderCurrency} = {payoutSymbol}{fxRate.toLocaleString()} {payoutCurrency}</span>
+                          <div className="flex justify-between py-1 border-b border-slate-100 text-amber-900 bg-amber-50/70 px-2 py-1.5 rounded">
+                            <span className="font-medium text-xs">FX Conversion:</span>
+                            <span className="font-semibold text-xs">Applied at live spot rate upon payout</span>
                           </div>
                         )}
 
                         <div className="flex justify-between py-1 border-b border-slate-100">
                           <span className="text-muted-foreground">Destination Payout Account:</span>
                           <span className="font-semibold text-slate-800">
-                            {selectedPayoutAccount?.bank} (****{selectedPayoutAccount?.accountNumber.slice(-4)})
+                            {selectedPayoutAccount?.bank} ({payoutCurrency})
                           </span>
                         </div>
 
@@ -1209,14 +1242,16 @@ export default function RequestPayment() {
                 <span className="font-semibold text-slate-800">{senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Destination Payout Account:</span>
-                <span className="font-semibold text-slate-800">{selectedPayoutAccount?.bank} ({payoutCurrency})</span>
+                <span className="text-muted-foreground">Fee Absorbed (3%):</span>
+                <span className="font-medium text-red-600">-{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Net Payout Amount:</span>
+                <span className="font-semibold text-slate-800">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
               </div>
               <div className="flex justify-between pt-1 border-t border-slate-200/60">
-                <span className="text-muted-foreground">Estimated Spot Rate:</span>
-                <span className="font-semibold text-primary">
-                  1 {senderCurrency} = {payoutSymbol}{fxRate.toLocaleString()} {payoutCurrency}
-                </span>
+                <span className="text-muted-foreground">Destination Payout Account:</span>
+                <span className="font-semibold text-slate-800">{selectedPayoutAccount?.bank} ({payoutCurrency})</span>
               </div>
             </div>
           </div>
