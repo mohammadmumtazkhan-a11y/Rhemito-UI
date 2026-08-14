@@ -1,20 +1,36 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Copy, AlertTriangle, CheckCircle2, Search, User, Building2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Copy,
+  AlertTriangle,
+  CheckCircle2,
+  Search,
+  User,
+  Building2,
+  HelpCircle,
+  CreditCard,
+  ChevronDown,
+  ArrowRightLeft
+} from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { knownSenders, type KnownSender } from "@/data/knownSenders";
-import { payoutAccounts, getPayoutAccountByCurrency } from "@/data/payoutAccounts";
+import { payoutAccounts, getDefaultPayoutAccount, type PayoutAccount } from "@/data/payoutAccounts";
 
 const EXCHANGE_RATES: Record<string, Record<string, number>> = {
-  GBP: { NGN: 2000, USD: 1.27, EUR: 1.17 },
-  USD: { NGN: 1575, GBP: 0.79, EUR: 0.92 },
-  EUR: { NGN: 1712, GBP: 0.85, USD: 1.09 },
+  GBP: { NGN: 2000, USD: 1.27, EUR: 1.17, GBP: 1 },
+  USD: { NGN: 1575, GBP: 0.79, EUR: 0.92, USD: 1 },
+  EUR: { NGN: 1712, GBP: 0.85, USD: 1.09, EUR: 1 },
+  NGN: { GBP: 0.0005, USD: 0.00063, EUR: 0.00058, NGN: 1 },
 };
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -25,9 +41,9 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 };
 
 interface FormData {
-  receiveAmount: string;
-  receiveCurrency: string;
+  requestAmount: string;
   senderCurrency: string;
+  selectedPayoutAccountId: string;
   paymentMethod: string;
   senderType: "individual" | "business";
   senderFirstName: string;
@@ -39,10 +55,6 @@ interface FormData {
   senderPhone: string;
   senderDob: string;
   reason: string;
-  bankAccountName: string;
-  bankSortCode: string;
-  bankAccountNumber: string;
-  selectedPayoutAccountId: string;
 }
 
 const COUNTRY_CODES = [
@@ -60,43 +72,48 @@ const COUNTRY_CODES = [
   { code: "+971", country: "UAE", flag: "🇦🇪" },
 ];
 
-const initialFormData: FormData = {
-  receiveAmount: "",
-  receiveCurrency: "GBP",
-  senderCurrency: "NGN",
-  paymentMethod: "sender_choice",
-  senderType: "individual",
-  senderFirstName: "",
-  senderMiddleName: "",
-  senderLastName: "",
-  senderBusinessName: "",
-  senderEmail: "",
-  senderCountryCode: "+44",
-  senderPhone: "",
-  senderDob: "",
-  reason: "",
-  bankAccountName: "",
-  bankSortCode: "",
-  bankAccountNumber: "",
-  selectedPayoutAccountId: "",
-};
-
 const steps = [
-  { id: 1, title: "Payout Account", description: "Where to receive funds" },
-  { id: 2, title: "Transaction Details", description: "Set amount and method" },
-  { id: 3, title: "Sender Information", description: "Who's paying you?" },
-  { id: 4, title: "Review & Confirm", description: "Verify details" },
+  { id: 1, title: "Amount & Currencies", description: "Set amount & payout destination" },
+  { id: 2, title: "Sender Information", description: "Who's paying you?" },
+  { id: 3, title: "Review & Confirm", description: "Verify details & send" },
 ];
 
 export default function RequestPayment() {
   const [, setLocation] = useLocation();
   const [currentStep, setCurrentStep] = useState(1);
-  const [formData, setFormData] = useState<FormData>(initialFormData);
   const [isSuccess, setIsSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
   const [senderSearch, setSenderSearch] = useState("");
   const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
+  const [isChangingPayoutAccount, setIsChangingPayoutAccount] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const availablePayoutAccounts = useMemo(() => payoutAccounts.filter(a => a.activated), []);
+  const defaultAccount = useMemo(() => getDefaultPayoutAccount() || availablePayoutAccounts[0], [availablePayoutAccounts]);
+
+  const [formData, setFormData] = useState<FormData>({
+    requestAmount: "",
+    senderCurrency: "GBP",
+    selectedPayoutAccountId: defaultAccount ? defaultAccount.id : "",
+    paymentMethod: "sender_choice",
+    senderType: "individual",
+    senderFirstName: "",
+    senderMiddleName: "",
+    senderLastName: "",
+    senderBusinessName: "",
+    senderEmail: "",
+    senderCountryCode: "+44",
+    senderPhone: "",
+    senderDob: "",
+    reason: "",
+  });
+
+  // Ensure default payout account is selected on load
+  useEffect(() => {
+    if (!formData.selectedPayoutAccountId && defaultAccount) {
+      setFormData(prev => ({ ...prev, selectedPayoutAccountId: defaultAccount.id }));
+    }
+  }, [defaultAccount, formData.selectedPayoutAccountId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -119,6 +136,13 @@ export default function RequestPayment() {
       }
     }
   }, []);
+
+  const selectedPayoutAccount: PayoutAccount | undefined = useMemo(() => {
+    return availablePayoutAccounts.find(a => a.id === formData.selectedPayoutAccountId) || defaultAccount;
+  }, [availablePayoutAccounts, formData.selectedPayoutAccountId, defaultAccount]);
+
+  const payoutCurrency = selectedPayoutAccount?.currency || "GBP";
+  const senderCurrency = formData.senderCurrency;
 
   const filteredSenders = knownSenders.filter(sender => {
     const displayName = sender.senderType === "business"
@@ -145,30 +169,20 @@ export default function RequestPayment() {
     setShowSenderSuggestions(false);
   };
 
-  const selectedPayoutAccount = payoutAccounts.find(a => a.id === formData.selectedPayoutAccountId);
-  const availablePayoutAccounts = payoutAccounts.filter(a => a.activated);
-
-  useEffect(() => {
-    if (formData.selectedPayoutAccountId) {
-      const account = payoutAccounts.find(a => a.id === formData.selectedPayoutAccountId);
-      if (account) {
-        setFormData(prev => ({ ...prev, receiveCurrency: account.currency }));
-      }
-    }
-  }, [formData.selectedPayoutAccountId]);
-
   const getExchangeRate = () => {
-    const { receiveCurrency, senderCurrency } = formData;
-    if (receiveCurrency === senderCurrency) return 1;
-    return EXCHANGE_RATES[receiveCurrency]?.[senderCurrency] || 1;
+    if (senderCurrency === payoutCurrency) return 1;
+    return EXCHANGE_RATES[senderCurrency]?.[payoutCurrency] || 1;
   };
 
-  const senderPays = formData.receiveAmount
-    ? (parseFloat(formData.receiveAmount) * getExchangeRate() * 1.03).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : "0.00";
+  const parsedAmount = parseFloat(formData.requestAmount) || 0;
+  const platformFeeRate = 0.03; // 3% fee absorbed by requester
+  const platformFeeAmount = parsedAmount * platformFeeRate;
+  const netBeforeFx = parsedAmount - platformFeeAmount;
+  const fxRate = getExchangeRate();
+  const netPayoutAmount = netBeforeFx * fxRate;
 
-  const receiveSymbol = CURRENCY_SYMBOLS[formData.receiveCurrency] || "";
-  const senderSymbol = CURRENCY_SYMBOLS[formData.senderCurrency] || "";
+  const senderSymbol = CURRENCY_SYMBOLS[senderCurrency] || "";
+  const payoutSymbol = CURRENCY_SYMBOLS[payoutCurrency] || "";
 
   const paymentLink = useMemo(() => `rhemito.com/pay/ref${Math.random().toString(36).substring(2, 8)}`, []);
 
@@ -177,7 +191,7 @@ export default function RequestPayment() {
   };
 
   const handleNext = () => {
-    if (currentStep < 4) {
+    if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
     } else {
       setIsSuccess(true);
@@ -201,12 +215,10 @@ export default function RequestPayment() {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return formData.selectedPayoutAccountId;
+        return parsedAmount > 0 && !!selectedPayoutAccount;
       case 2:
-        return formData.receiveAmount;
+        return !!formData.senderEmail && (formData.senderType === "individual" ? !!formData.senderFirstName : !!formData.senderBusinessName);
       case 3:
-        return formData.senderEmail && (formData.senderType === "individual" ? formData.senderFirstName : formData.senderBusinessName);
-      case 4:
         return true;
       default:
         return false;
@@ -217,25 +229,26 @@ export default function RequestPayment() {
     return (
       <DashboardLayout>
         <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
+          initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-lg mx-auto mt-12"
+          className="max-w-lg mx-auto mt-10 md:mt-14"
         >
-          <Card className="text-center">
-            <CardContent className="pt-12 pb-8 space-y-6">
+          <Card className="text-center shadow-lg border-teal/20">
+            <CardContent className="pt-10 pb-8 space-y-6">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-                className="w-20 h-20 bg-teal rounded-full flex items-center justify-center mx-auto"
+                transition={{ type: "spring", stiffness: 200, delay: 0.15 }}
+                className="w-16 h-16 bg-teal-500 rounded-full flex items-center justify-center mx-auto shadow-md"
               >
-                <CheckCircle2 className="w-10 h-10 text-white" />
+                <CheckCircle2 className="w-9 h-9 text-white" />
               </motion.div>
 
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold font-display">Payment Request Sent!</h2>
-                <p className="text-muted-foreground">
-                  Successfully sent to <span className="font-medium text-foreground">
+              <div className="space-y-1.5">
+                <h2 className="text-2xl font-bold font-display text-slate-900">Payment Request Ready!</h2>
+                <p className="text-sm text-muted-foreground">
+                  A payment link has been created for{" "}
+                  <span className="font-semibold text-foreground">
                     {formData.senderType === "business"
                       ? formData.senderBusinessName
                       : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}
@@ -243,27 +256,46 @@ export default function RequestPayment() {
                 </p>
               </div>
 
-              <div className="bg-muted/50 rounded-lg p-4 space-y-3">
-                <p className="text-sm text-muted-foreground">Share this link with your sender:</p>
+              <div className="p-4 bg-muted/40 rounded-xl space-y-2 text-left border border-border">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Requested Amount (Sender Pays):</span>
+                  <span className="font-medium text-foreground">{senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Fee Absorbed (3%):</span>
+                  <span className="font-medium text-foreground">-{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold pt-1 border-t border-border/60">
+                  <span className="text-primary">You Receive in Bank:</span>
+                  <span className="text-primary font-bold">{payoutSymbol}{netPayoutAmount.toFixed(2)} {payoutCurrency}</span>
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Payout to: {selectedPayoutAccount?.bank} (****{selectedPayoutAccount?.accountNumber.slice(-4)})
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 space-y-3 border border-primary/10">
+                <p className="text-xs font-medium text-slate-700">Share this link directly with your sender:</p>
                 <div className="flex items-center gap-2">
                   <Input
                     value={`https://${paymentLink}`}
                     readOnly
-                    className="text-sm bg-white"
+                    className="text-sm bg-white font-mono"
                     data-testid="input-payment-link"
                   />
                   <Button
                     onClick={handleCopyLink}
                     variant="outline"
-                    className="shrink-0"
+                    className="shrink-0 gap-1.5"
                     data-testid="button-copy-link"
                   >
-                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                    <span>{copied ? "Copied" : "Copy"}</span>
                   </Button>
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-2">
                 <Button
                   variant="outline"
                   className="flex-1"
@@ -275,7 +307,22 @@ export default function RequestPayment() {
                 <Button
                   className="flex-1 bg-primary hover:bg-primary/90"
                   onClick={() => {
-                    setFormData(initialFormData);
+                    setFormData({
+                      requestAmount: "",
+                      senderCurrency: "GBP",
+                      selectedPayoutAccountId: defaultAccount ? defaultAccount.id : "",
+                      paymentMethod: "sender_choice",
+                      senderType: "individual",
+                      senderFirstName: "",
+                      senderMiddleName: "",
+                      senderLastName: "",
+                      senderBusinessName: "",
+                      senderEmail: "",
+                      senderCountryCode: "+44",
+                      senderPhone: "",
+                      senderDob: "",
+                      reason: "",
+                    });
                     setCurrentStep(1);
                     setIsSuccess(false);
                   }}
@@ -295,25 +342,26 @@ export default function RequestPayment() {
     <DashboardLayout>
       <div className="max-w-4xl mx-auto pb-24">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-4 md:mb-8"
+          className="mb-4 md:mb-6"
         >
           <Button
             variant="ghost"
             onClick={handleBack}
-            className="mb-2 md:mb-4 -ml-2 text-sm"
+            className="mb-2 md:mb-3 -ml-2 text-sm text-muted-foreground hover:text-foreground"
             data-testid="button-back"
           >
             <ArrowLeft className="w-4 h-4 mr-1 md:mr-2" />
             Back
           </Button>
 
-          <h1 className="text-xl md:text-2xl font-bold font-display">Request Payment</h1>
-          <p className="text-muted-foreground text-sm md:text-base mt-1">Get paid by generating a payment link</p>
+          <h1 className="text-xl md:text-2xl font-bold font-display text-slate-900">Request Payment</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Request money from customers or clients worldwide with instant payout</p>
         </motion.div>
 
-        <div className="flex items-center justify-between mb-4 md:mb-8 overflow-x-auto pb-2">
+        {/* Step Indicator */}
+        <div className="flex items-center justify-between mb-6 md:mb-8 overflow-x-auto pb-2">
           {steps.map((step, index) => (
             <div key={step.id} className="flex items-center flex-shrink-0">
               <div className="flex items-center gap-2 md:gap-3">
@@ -323,19 +371,19 @@ export default function RequestPayment() {
                     backgroundColor: currentStep >= step.id ? "hsl(var(--primary))" : "hsl(var(--muted))",
                     color: currentStep >= step.id ? "white" : "hsl(var(--muted-foreground))",
                   }}
-                  className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-medium"
+                  className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-semibold"
                 >
-                  {currentStep > step.id ? <Check className="w-3 h-3 md:w-4 md:h-4" /> : step.id}
+                  {currentStep > step.id ? <Check className="w-3.5 h-3.5 md:w-4 md:h-4" /> : step.id}
                 </motion.div>
-                <div className="hidden sm:block">
+                <div>
                   <p className={`text-xs md:text-sm font-medium ${currentStep >= step.id ? "text-foreground" : "text-muted-foreground"}`}>
                     {step.title}
                   </p>
-                  <p className="text-[10px] md:text-xs text-muted-foreground">{step.description}</p>
+                  <p className="hidden sm:block text-[11px] text-muted-foreground">{step.description}</p>
                 </div>
               </div>
               {index < steps.length - 1 && (
-                <div className={`w-6 md:w-12 h-0.5 mx-2 md:mx-4 ${currentStep > step.id ? "bg-primary" : "bg-muted"}`} />
+                <div className={`w-8 md:w-16 h-0.5 mx-2 md:mx-4 ${currentStep > step.id ? "bg-primary" : "bg-muted"}`} />
               )}
             </div>
           ))}
@@ -344,611 +392,563 @@ export default function RequestPayment() {
         <AnimatePresence mode="wait">
           <motion.div
             key={currentStep}
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: 15 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, x: -15 }}
+            transition={{ duration: 0.18 }}
           >
-            <Card>
-              <CardHeader className="px-4 md:px-6 py-4 md:py-6">
+            <Card className="border-border shadow-sm">
+              <CardHeader className="px-5 md:px-6 py-4 md:py-5 border-b border-border/50">
                 <CardTitle className="font-display text-base md:text-lg">{steps[currentStep - 1].title}</CardTitle>
                 <CardDescription className="text-xs md:text-sm">{steps[currentStep - 1].description}</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4 md:space-y-6 px-4 md:px-6">
-                {currentStep === 1 && (
-                  <div className="space-y-4 md:space-y-6">
-                    <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 md:p-6">
-                      <h3 className="font-semibold text-sm md:text-base mb-3 md:mb-4">Select your payout account</h3>
-                      <p className="text-xs md:text-sm text-muted-foreground mb-4 md:mb-6">
-                        Choose the bank account where you want to receive the funds. You can only have one account per currency.
-                      </p>
+              <CardContent className="space-y-6 px-5 md:px-6 pt-6">
 
-                      <div className="grid gap-2 md:gap-3">
-                        {availablePayoutAccounts.map((account) => (
-                          <button
-                            key={account.id}
-                            type="button"
-                            onClick={() => handleInputChange("selectedPayoutAccountId", account.id)}
-                            className={`w-full p-3 md:p-4 rounded-xl border-2 transition-all flex items-center gap-3 md:gap-4 text-left ${formData.selectedPayoutAccountId === account.id
-                              ? "border-primary bg-primary/5"
-                              : "border-border hover:border-primary/50 bg-white"
-                              }`}
-                            data-testid={`payout-account-${account.id}`}
-                          >
-                            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${formData.selectedPayoutAccountId === account.id ? "bg-primary text-white" : "bg-muted"
-                              }`}>
-                              <Building2 className="w-4 h-4 md:w-5 md:h-5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-semibold text-sm md:text-base truncate">{account.bank}</p>
-                                <span className="text-[10px] md:text-xs px-1.5 md:px-2 py-0.5 rounded-full bg-muted font-medium flex-shrink-0">{account.currency}</span>
-                              </div>
-                              <p className="text-xs md:text-sm text-muted-foreground truncate">
-                                ****{account.accountNumber.slice(-4)} • {account.name}
+                {/* ================= STEP 1: AMOUNT & CURRENCY ================= */}
+                {currentStep === 1 && (
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    <div className="lg:col-span-3 space-y-6">
+
+                      {/* Zero Payout Account Prompt (Option A) */}
+                      {availablePayoutAccounts.length === 0 ? (
+                        <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl space-y-3 text-amber-900">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <h4 className="font-semibold text-sm">Payout Account Required</h4>
+                              <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                                You need an active payout bank account before you can request payments and receive funds.
                               </p>
                             </div>
-                            {formData.selectedPayoutAccountId === account.id && (
-                              <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                                <Check className="w-3 h-3 md:w-4 md:h-4 text-white" />
-                              </div>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-
-                      {availablePayoutAccounts.length === 0 && (
-                        <div className="text-center py-8">
-                          <Building2 className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
-                          <p className="text-muted-foreground mb-4">No payout accounts set up yet</p>
-                          <Button variant="outline" onClick={() => setLocation("/payout-accounts")}>
-                            Add Payout Account
-                          </Button>
-                        </div>
-                      )}
-
-                      {availablePayoutAccounts.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-border">
-                          <Button
-                            variant="outline"
-                            onClick={() => setLocation("/payout-accounts")}
-                            className="w-full gap-2"
-                            data-testid="button-add-new-account"
-                          >
-                            <Building2 className="w-4 h-4" />
-                            Add New Bank Account
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-
-                    {selectedPayoutAccount && (
-                      <div className="bg-muted/50 rounded-lg p-4">
-                        <p className="text-sm text-muted-foreground">
-                          <strong>Selected:</strong> {selectedPayoutAccount.bank} ({selectedPayoutAccount.currency}) - ****{selectedPayoutAccount.accountNumber.slice(-4)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {currentStep === 2 && (
-                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
-                    <div className="lg:col-span-3 space-y-4 md:space-y-6">
-                      <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 md:p-6 space-y-4 md:space-y-6">
-                        <div className="space-y-2">
-                          <Label htmlFor="receiveAmount" className="text-xs md:text-sm font-medium">
-                            I want to receive
-                          </Label>
-                          <div className="flex items-center gap-2 md:gap-3">
-                            <div className="relative flex-1">
-                              <span className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-base md:text-lg font-semibold text-muted-foreground">{receiveSymbol}</span>
-                              <Input
-                                id="receiveAmount"
-                                type="number"
-                                placeholder="0.00"
-                                value={formData.receiveAmount}
-                                onChange={(e) => handleInputChange("receiveAmount", e.target.value)}
-                                className="pl-7 md:pl-8 text-xl md:text-2xl font-bold h-12 md:h-14 bg-white"
-                                data-testid="input-receive-amount"
-                              />
-                            </div>
-                            <Select
-                              value={formData.receiveCurrency}
-                              onValueChange={(value) => handleInputChange("receiveCurrency", value)}
-                            >
-                              <SelectTrigger className="w-20 md:w-24 h-12 md:h-14 bg-white font-medium text-sm" data-testid="select-receive-currency">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="GBP">GBP</SelectItem>
-                                <SelectItem value="USD">USD</SelectItem>
-                                <SelectItem value="EUR">EUR</SelectItem>
-                                <SelectItem value="NGN">NGN</SelectItem>
-                              </SelectContent>
-                            </Select>
                           </div>
+                          <Button
+                            onClick={() => setLocation("/payout-accounts")}
+                            className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs h-9"
+                          >
+                            Add Payout Bank Account
+                          </Button>
                         </div>
+                      ) : (
+                        /* Default Payout Account Card */
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Receiving Payout Account</span>
+                              {selectedPayoutAccount?.isDefault && (
+                                <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary hover:bg-primary/10">
+                                  Default
+                                </Badge>
+                              )}
+                            </div>
+                            {availablePayoutAccounts.length > 1 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setIsChangingPayoutAccount(!isChangingPayoutAccount)}
+                                className="text-xs text-primary h-7 px-2"
+                              >
+                                {isChangingPayoutAccount ? "Done" : "Change"}
+                              </Button>
+                            )}
+                          </div>
 
-                        <div className="h-px bg-border" />
-
-                        <div className="space-y-2">
-                          <Label className="text-xs md:text-sm font-medium text-muted-foreground">
-                            Sender pays (1 {formData.receiveCurrency} = {senderSymbol}{getExchangeRate().toLocaleString()})
-                          </Label>
-                          <div className="flex items-center gap-2 md:gap-3">
-                            <div className="relative flex-1">
-                              <span className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-base md:text-lg font-semibold text-teal">{senderSymbol}</span>
-                              <div className="pl-7 md:pl-8 text-xl md:text-2xl font-bold h-12 md:h-14 bg-teal/10 rounded-lg flex items-center text-teal border border-teal/20">
-                                {senderPays}
+                          {!isChangingPayoutAccount ? (
+                            <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200">
+                              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                <Building2 className="w-5 h-5" />
                               </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-sm text-foreground truncate">{selectedPayoutAccount?.bank}</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  ****{selectedPayoutAccount?.accountNumber.slice(-4)} • {selectedPayoutAccount?.name}
+                                </p>
+                              </div>
+                              <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 font-semibold text-xs shrink-0">
+                                {payoutCurrency}
+                              </Badge>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 pt-1">
+                              {availablePayoutAccounts.map((acc) => (
+                                <button
+                                  key={acc.id}
+                                  type="button"
+                                  onClick={() => {
+                                    handleInputChange("selectedPayoutAccountId", acc.id);
+                                    setIsChangingPayoutAccount(false);
+                                  }}
+                                  className={`w-full p-2.5 rounded-lg border text-left flex items-center justify-between transition-all ${
+                                    formData.selectedPayoutAccountId === acc.id
+                                      ? "border-primary bg-primary/5"
+                                      : "border-border bg-white hover:border-primary/40"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                                    <div className="truncate text-xs">
+                                      <span className="font-semibold">{acc.bank}</span> (****{acc.accountNumber.slice(-4)})
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-xs font-bold text-slate-600">{acc.currency}</span>
+                                    {formData.selectedPayoutAccountId === acc.id && (
+                                      <Check className="w-4 h-4 text-primary" />
+                                    )}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Request Amount Input */}
+                      <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-5 space-y-4 border border-primary/10">
+                        <div className="space-y-2">
+                          <Label htmlFor="requestAmount" className="text-sm font-semibold text-slate-800">
+                            Amount to Request from Sender *
+                          </Label>
+                          <div className="flex items-center gap-3">
+                            <div className="relative flex-1">
+                              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">
+                                {senderSymbol}
+                              </span>
+                              <Input
+                                id="requestAmount"
+                                type="number"
+                                min="1"
+                                step="any"
+                                placeholder="0.00"
+                                value={formData.requestAmount}
+                                onChange={(e) => handleInputChange("requestAmount", e.target.value)}
+                                className="pl-8 text-xl md:text-2xl font-bold h-12 md:h-14 bg-white shadow-sm"
+                                data-testid="input-request-amount"
+                              />
                             </div>
                             <Select
                               value={formData.senderCurrency}
                               onValueChange={(value) => handleInputChange("senderCurrency", value)}
                             >
-                              <SelectTrigger className="w-20 md:w-24 h-12 md:h-14 bg-teal/10 border-teal/20 font-medium text-teal text-sm" data-testid="select-sender-currency">
+                              <SelectTrigger className="w-24 md:w-28 h-12 md:h-14 bg-white font-bold text-base shadow-sm" data-testid="select-sender-currency">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="NGN">NGN</SelectItem>
-                                <SelectItem value="USD">USD</SelectItem>
-                                <SelectItem value="EUR">EUR</SelectItem>
-                                <SelectItem value="GBP">GBP</SelectItem>
+                                <SelectItem value="GBP">GBP (£)</SelectItem>
+                                <SelectItem value="USD">USD ($)</SelectItem>
+                                <SelectItem value="EUR">EUR (€)</SelectItem>
+                                <SelectItem value="NGN">NGN (₦)</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
+                          <p className="text-xs text-muted-foreground">
+                            The sender will be billed in <strong>{senderCurrency}</strong>.
+                          </p>
                         </div>
                       </div>
 
+                      {/* Optional Payment Method */}
                       <div className="space-y-2">
-                        <Label htmlFor="paymentMethod">Payment Method (Optional)</Label>
+                        <Label htmlFor="paymentMethod" className="text-sm font-medium">
+                          Preferred Payment Method (Optional)
+                        </Label>
                         <Select
                           value={formData.paymentMethod}
                           onValueChange={(value) => handleInputChange("paymentMethod", value)}
                         >
-                          <SelectTrigger id="paymentMethod" data-testid="select-payment-method">
+                          <SelectTrigger id="paymentMethod" data-testid="select-payment-method" className="h-11">
                             <SelectValue placeholder="How will the sender pay?" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="sender_choice">Let the Sender Choose</SelectItem>
-                            <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                            <SelectItem value="card">Card Payment</SelectItem>
+                            <SelectItem value="card">Card Payment (Debit/Credit)</SelectItem>
+                            <SelectItem value="bank_transfer">Instant Bank Transfer</SelectItem>
                             <SelectItem value="mobile_money">Mobile Money</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
 
+                    {/* Right Column: Dynamic Fee & Payout Sidebar */}
                     <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
-                      <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown">
-                        <h3 className="font-semibold text-lg">Amount</h3>
+                      <div className="border border-border rounded-xl p-5 space-y-4 bg-white shadow-sm" data-testid="fee-breakdown">
+                        <h3 className="font-semibold text-base text-slate-900 border-b pb-2">Calculation Breakdown</h3>
 
-                        <div className="space-y-3">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">You Request</span>
-                            <span className="font-medium">
-                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
-                                ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
-                                : `0.00 ${formData.receiveCurrency}`}
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Sender Pays:</span>
+                            <span className="font-bold text-slate-800">
+                              {senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}
                             </span>
                           </div>
 
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Fee (3%)</span>
-                            <span className="font-medium">
-                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
-                                ? `${senderSymbol}${(parseFloat(formData.receiveAmount) * getExchangeRate() * 0.03).toFixed(2)} ${formData.senderCurrency}`
-                                : `0.00 ${formData.senderCurrency}`}
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Fee (3% absorbed by you):</span>
+                            <span className="font-medium text-red-600">
+                              -{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
                             </span>
                           </div>
 
-                          {formData.receiveCurrency !== formData.senderCurrency && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Exchange Rate</span>
-                              <span className="font-medium">1 {formData.receiveCurrency} = {senderSymbol}{getExchangeRate().toLocaleString()} {formData.senderCurrency}</span>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Net before FX:</span>
+                            <span>{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
+                          </div>
+
+                          {senderCurrency !== payoutCurrency && (
+                            <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                              <span className="text-muted-foreground">FX Rate:</span>
+                              <span className="font-semibold text-slate-800">
+                                1 {senderCurrency} = {payoutSymbol}{fxRate.toLocaleString()} {payoutCurrency}
+                              </span>
                             </div>
                           )}
                         </div>
 
                         <div className="h-px bg-border" />
 
-                        <div className="flex justify-between pt-1">
-                          <span className="font-medium">Sender Pays</span>
-                          <span className="font-bold text-lg text-teal">
-                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
-                              ? `${senderSymbol}${(parseFloat(formData.receiveAmount) * getExchangeRate() * 1.03).toFixed(2)} ${formData.senderCurrency}`
-                              : `0.00 ${formData.senderCurrency}`}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
-                          <span className="font-medium">You Receive</span>
-                          <span className="font-bold text-lg text-primary">
-                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
-                              ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
-                              : `0.00 ${formData.receiveCurrency}`}
-                          </span>
+                        <div className="bg-primary/5 -mx-5 px-5 py-3.5 -mb-5 rounded-b-xl border-t border-primary/15">
+                          <p className="text-xs text-muted-foreground mb-0.5">You Receive in Bank:</p>
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-xl md:text-2xl font-extrabold text-primary">
+                              {payoutSymbol}{netPayoutAmount.toFixed(2)}
+                            </span>
+                            <span className="text-xs font-bold text-primary">{payoutCurrency}</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            Deposited to {selectedPayoutAccount?.bank || "Default Account"}
+                          </p>
                         </div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {currentStep === 3 && (
-                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                    <div className="lg:col-span-3 space-y-4">
-                      <div className="space-y-2 relative">
-                        <Label>Search Existing Sender</Label>
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          <Input
-                            ref={searchInputRef}
-                            placeholder="Type name or email to search..."
-                            value={senderSearch}
-                            onChange={(e) => {
-                              setSenderSearch(e.target.value);
-                              setShowSenderSuggestions(true);
-                            }}
-                            onFocus={() => setShowSenderSuggestions(true)}
-                            onBlur={() => setTimeout(() => setShowSenderSuggestions(false), 150)}
-                            className="pl-9 bg-primary/5 border-primary/20"
-                            data-testid="input-sender-search"
-                            autoComplete="off"
-                          />
-                        </div>
-                        <AnimatePresence>
-                          {showSenderSuggestions && senderSearch && filteredSenders.length > 0 && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -10 }}
-                              className="absolute z-50 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-56 overflow-auto"
-                            >
-                              {filteredSenders.map((sender) => (
-                                <button
-                                  key={sender.email}
-                                  type="button"
-                                  className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors flex items-center gap-3 border-b last:border-b-0"
-                                  onClick={() => selectKnownSender(sender)}
-                                  data-testid={`suggestion-sender-${sender.email.replace(/[@.]/g, '-')}`}
-                                >
-                                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                                    {sender.senderType === "business" ? (
-                                      <Building2 className="w-5 h-5 text-primary" />
-                                    ) : (
-                                      <User className="w-5 h-5 text-primary" />
-                                    )}
-                                  </div>
-                                  <div>
-                                    <p className="font-medium text-sm">
-                                      {sender.senderType === "business"
-                                        ? sender.businessName
-                                        : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim()}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">{sender.email}</p>
-                                  </div>
-                                </button>
-                              ))}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                        <p className="text-xs text-muted-foreground">Select an existing sender or enter new details below</p>
-                      </div>
-
-                      <div className="h-px bg-border" />
-
-                      <div className="space-y-2">
-                        <Label>Sender Type *</Label>
-                        <div className="flex gap-4">
-                          <button
-                            type="button"
-                            onClick={() => handleInputChange("senderType", "individual")}
-                            className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${formData.senderType === "individual"
-                              ? "border-primary bg-primary/5"
-                              : "border-border hover:border-muted-foreground/30"
-                              }`}
-                            data-testid="button-sender-type-individual"
-                          >
-                            <User className={`w-5 h-5 ${formData.senderType === "individual" ? "text-primary" : "text-muted-foreground"}`} />
-                            <span className={`font-medium ${formData.senderType === "individual" ? "text-primary" : ""}`}>Individual</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleInputChange("senderType", "business")}
-                            className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${formData.senderType === "business"
-                              ? "border-primary bg-primary/5"
-                              : "border-border hover:border-muted-foreground/30"
-                              }`}
-                            data-testid="button-sender-type-business"
-                          >
-                            <Building2 className={`w-5 h-5 ${formData.senderType === "business" ? "text-primary" : "text-muted-foreground"}`} />
-                            <span className={`font-medium ${formData.senderType === "business" ? "text-primary" : ""}`}>Business</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {formData.senderType === "individual" ? (
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="space-y-2">
-                            <Label htmlFor="senderFirstName">First Name *</Label>
-                            <Input
-                              id="senderFirstName"
-                              placeholder="First name"
-                              value={formData.senderFirstName}
-                              onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
-                              data-testid="input-sender-first-name"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="senderMiddleName">Middle Name</Label>
-                            <Input
-                              id="senderMiddleName"
-                              placeholder="Middle name"
-                              value={formData.senderMiddleName}
-                              onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
-                              data-testid="input-sender-middle-name"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="senderLastName">Last Name</Label>
-                            <Input
-                              id="senderLastName"
-                              placeholder="Last name"
-                              value={formData.senderLastName}
-                              onChange={(e) => handleInputChange("senderLastName", e.target.value)}
-                              data-testid="input-sender-last-name"
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <Label htmlFor="senderBusinessName">Business Name *</Label>
-                          <Input
-                            id="senderBusinessName"
-                            placeholder="Enter business name"
-                            value={formData.senderBusinessName}
-                            onChange={(e) => handleInputChange("senderBusinessName", e.target.value)}
-                            data-testid="input-sender-business-name"
-                          />
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <Label htmlFor="senderEmail">Sender Email Address *</Label>
+                {/* ================= STEP 2: SENDER DETAILS ================= */}
+                {currentStep === 2 && (
+                  <div className="max-w-2xl mx-auto space-y-6">
+                    {/* Search Known Senders */}
+                    <div className="space-y-2 relative">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                        Search Existing Sender
+                      </Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
-                          id="senderEmail"
-                          type="email"
-                          placeholder="We'll send the payment link here"
-                          value={formData.senderEmail}
-                          onChange={(e) => handleInputChange("senderEmail", e.target.value)}
-                          data-testid="input-sender-email"
+                          ref={searchInputRef}
+                          placeholder="Search saved senders by name or email..."
+                          value={senderSearch}
+                          onChange={(e) => {
+                            setSenderSearch(e.target.value);
+                            setShowSenderSuggestions(true);
+                          }}
+                          onFocus={() => setShowSenderSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowSenderSuggestions(false), 200)}
+                          className="pl-9 bg-slate-50"
+                          data-testid="input-sender-search"
+                          autoComplete="off"
                         />
                       </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="senderPhone">Sender Mobile Number (Optional)</Label>
-                        <div className="flex gap-2">
-                          <Select
-                            value={formData.senderCountryCode}
-                            onValueChange={(value) => handleInputChange("senderCountryCode", value)}
+                      <AnimatePresence>
+                        {showSenderSuggestions && senderSearch && filteredSenders.length > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            className="absolute z-50 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-56 overflow-auto"
                           >
-                            <SelectTrigger className="w-32" data-testid="select-country-code">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {COUNTRY_CODES.map((country, index) => (
-                                <SelectItem key={`${country.code}-${index}`} value={country.code}>
-                                  {country.flag} {country.code}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Input
-                            id="senderPhone"
-                            type="tel"
-                            placeholder="Mobile number"
-                            value={formData.senderPhone}
-                            onChange={(e) => handleInputChange("senderPhone", e.target.value)}
-                            className="flex-1"
-                            data-testid="input-sender-phone"
-                          />
-                        </div>
-                      </div>
-
-                      {formData.senderType === "individual" && (
-                        <div className="space-y-2">
-                          <Label htmlFor="senderDob">Sender Date of Birth (Optional)</Label>
-                          <Input
-                            id="senderDob"
-                            type="date"
-                            value={formData.senderDob}
-                            onChange={(e) => handleInputChange("senderDob", e.target.value)}
-                            data-testid="input-sender-dob"
-                          />
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <Label htmlFor="reason">Reason for Payment (Optional)</Label>
-                        <Select
-                          value={formData.reason}
-                          onValueChange={(value) => handleInputChange("reason", value)}
-                        >
-                          <SelectTrigger id="reason" data-testid="select-reason">
-                            <SelectValue placeholder="Select a reason" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="family_support">Family Support</SelectItem>
-                            <SelectItem value="education_fees">Education Fees</SelectItem>
-                            <SelectItem value="medical_expenses">Medical Expenses</SelectItem>
-                            <SelectItem value="rent_payment">Rent Payment</SelectItem>
-                            <SelectItem value="business_payment">Business Payment</SelectItem>
-                            <SelectItem value="gift">Gift</SelectItem>
-                            <SelectItem value="loan_repayment">Loan Repayment</SelectItem>
-                            <SelectItem value="travel_expenses">Travel Expenses</SelectItem>
-                            <SelectItem value="invoice_payment">Invoice Payment</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {formData.paymentMethod === "bank_transfer" && (
-                        <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-border">
-                          <p className="text-sm font-medium text-muted-foreground">Payer's Bank Details (Optional)</p>
-                          <div className="space-y-2">
-                            <Label htmlFor="bankAccountName">Account Name</Label>
-                            <Input
-                              id="bankAccountName"
-                              placeholder="Name on account"
-                              value={formData.bankAccountName}
-                              onChange={(e) => handleInputChange("bankAccountName", e.target.value)}
-                              data-testid="input-bank-account-name"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-2">
-                              <Label htmlFor="bankSortCode">Sort Code</Label>
-                              <Input
-                                id="bankSortCode"
-                                placeholder="00-00-00"
-                                value={formData.bankSortCode}
-                                onChange={(e) => handleInputChange("bankSortCode", e.target.value)}
-                                data-testid="input-bank-sort-code"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="bankAccountNumber">Account Number</Label>
-                              <Input
-                                id="bankAccountNumber"
-                                placeholder="12345678"
-                                value={formData.bankAccountNumber}
-                                onChange={(e) => handleInputChange("bankAccountNumber", e.target.value)}
-                                data-testid="input-bank-account-number"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                            {filteredSenders.map((sender) => (
+                              <button
+                                key={sender.email}
+                                type="button"
+                                className="w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors flex items-center gap-3 border-b last:border-b-0"
+                                onClick={() => selectKnownSender(sender)}
+                                data-testid={`suggestion-sender-${sender.email.replace(/[@.]/g, '-')}`}
+                              >
+                                <div className="w-9 h-9 bg-primary/10 text-primary rounded-full flex items-center justify-center shrink-0">
+                                  {sender.senderType === "business" ? <Building2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                                </div>
+                                <div className="truncate">
+                                  <p className="font-medium text-sm text-foreground">
+                                    {sender.senderType === "business"
+                                      ? sender.businessName
+                                      : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim()}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground truncate">{sender.email}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
 
-                    <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
-                      <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown-step2">
-                        <h3 className="font-semibold text-lg">Amount</h3>
+                    <div className="h-px bg-border" />
 
-                        <div className="space-y-3">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">You Request</span>
-                            <span className="font-medium">
-                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
-                                ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
-                                : `0.00 ${formData.receiveCurrency}`}
-                            </span>
-                          </div>
+                    {/* Sender Type Toggle */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Sender Type *</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleInputChange("senderType", "individual")}
+                          className={`flex items-center justify-center gap-2.5 p-3.5 rounded-xl border-2 transition-all ${
+                            formData.senderType === "individual"
+                              ? "border-primary bg-primary/5 font-semibold text-primary"
+                              : "border-border hover:border-slate-300 text-slate-700"
+                          }`}
+                          data-testid="button-sender-type-individual"
+                        >
+                          <User className="w-4 h-4" />
+                          <span>Individual</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleInputChange("senderType", "business")}
+                          className={`flex items-center justify-center gap-2.5 p-3.5 rounded-xl border-2 transition-all ${
+                            formData.senderType === "business"
+                              ? "border-primary bg-primary/5 font-semibold text-primary"
+                              : "border-border hover:border-slate-300 text-slate-700"
+                          }`}
+                          data-testid="button-sender-type-business"
+                        >
+                          <Building2 className="w-4 h-4" />
+                          <span>Business</span>
+                        </button>
+                      </div>
+                    </div>
 
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Fee (3%)</span>
-                            <span className="font-medium">
-                              {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
-                                ? `${senderSymbol}${(parseFloat(formData.receiveAmount) * getExchangeRate() * 0.03).toFixed(2)} ${formData.senderCurrency}`
-                                : `0.00 ${formData.senderCurrency}`}
-                            </span>
-                          </div>
-
-                          {formData.senderCurrency !== formData.receiveCurrency && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Exchange Rate</span>
-                              <span className="font-medium">1 {formData.receiveCurrency} = {senderSymbol}{getExchangeRate().toLocaleString()} {formData.senderCurrency}</span>
-                            </div>
-                          )}
+                    {/* Names Form */}
+                    {formData.senderType === "individual" ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="senderFirstName" className="text-xs font-medium">First Name *</Label>
+                          <Input
+                            id="senderFirstName"
+                            placeholder="First name"
+                            value={formData.senderFirstName}
+                            onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
+                            data-testid="input-sender-first-name"
+                          />
                         </div>
-
-                        <div className="h-px bg-border" />
-
-                        <div className="flex justify-between pt-1">
-                          <span className="font-medium">Sender Pays</span>
-                          <span className="font-bold text-lg text-teal">
-                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
-                              ? `${senderSymbol}${senderPays} ${formData.senderCurrency}`
-                              : `0.00 ${formData.senderCurrency}`}
-                          </span>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="senderMiddleName" className="text-xs font-medium">Middle Name (Optional)</Label>
+                          <Input
+                            id="senderMiddleName"
+                            placeholder="Middle name"
+                            value={formData.senderMiddleName}
+                            onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
+                            data-testid="input-sender-middle-name"
+                          />
                         </div>
-
-                        <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
-                          <span className="font-medium">You Receive</span>
-                          <span className="font-bold text-lg text-primary">
-                            {formData.receiveAmount && parseFloat(formData.receiveAmount) > 0
-                              ? `${receiveSymbol}${parseFloat(formData.receiveAmount).toFixed(2)} ${formData.receiveCurrency}`
-                              : `0.00 ${formData.receiveCurrency}`}
-                          </span>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="senderLastName" className="text-xs font-medium">Last Name</Label>
+                          <Input
+                            id="senderLastName"
+                            placeholder="Last name"
+                            value={formData.senderLastName}
+                            onChange={(e) => handleInputChange("senderLastName", e.target.value)}
+                            data-testid="input-sender-last-name"
+                          />
                         </div>
                       </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="senderBusinessName" className="text-xs font-medium">Business Name *</Label>
+                        <Input
+                          id="senderBusinessName"
+                          placeholder="e.g. Acme Corp Ltd"
+                          value={formData.senderBusinessName}
+                          onChange={(e) => handleInputChange("senderBusinessName", e.target.value)}
+                          data-testid="input-sender-business-name"
+                        />
+                      </div>
+                    )}
+
+                    {/* Email */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="senderEmail" className="text-xs font-medium">Sender Email Address *</Label>
+                      <Input
+                        id="senderEmail"
+                        type="email"
+                        placeholder="sender@example.com"
+                        value={formData.senderEmail}
+                        onChange={(e) => handleInputChange("senderEmail", e.target.value)}
+                        data-testid="input-sender-email"
+                      />
+                    </div>
+
+                    {/* Phone (Optional) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="senderPhone" className="text-xs font-medium">Sender Mobile Number</Label>
+                        <span className="text-[11px] text-muted-foreground">Optional</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Select
+                          value={formData.senderCountryCode}
+                          onValueChange={(value) => handleInputChange("senderCountryCode", value)}
+                        >
+                          <SelectTrigger className="w-32" data-testid="select-country-code">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COUNTRY_CODES.map((country, index) => (
+                              <SelectItem key={`${country.code}-${index}`} value={country.code}>
+                                {country.flag} {country.code}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          id="senderPhone"
+                          type="tel"
+                          placeholder="e.g. 7123456789"
+                          value={formData.senderPhone}
+                          onChange={(e) => handleInputChange("senderPhone", e.target.value)}
+                          className="flex-1"
+                          data-testid="input-sender-phone"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Date of Birth (Optional) */}
+                    {formData.senderType === "individual" && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="senderDob" className="text-xs font-medium">Sender Date of Birth</Label>
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground font-normal">Optional</Badge>
+                        </div>
+                        <Input
+                          id="senderDob"
+                          type="date"
+                          value={formData.senderDob}
+                          onChange={(e) => handleInputChange("senderDob", e.target.value)}
+                          data-testid="input-sender-dob"
+                        />
+                      </div>
+                    )}
+
+                    {/* Reason for Payment (Optional) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="reason" className="text-xs font-medium">Reason for Payment</Label>
+                        <span className="text-[11px] text-muted-foreground">Optional</span>
+                      </div>
+                      <Select
+                        value={formData.reason}
+                        onValueChange={(value) => handleInputChange("reason", value)}
+                      >
+                        <SelectTrigger id="reason" data-testid="select-reason">
+                          <SelectValue placeholder="Select a payment category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="invoice_payment">Invoice / Services</SelectItem>
+                          <SelectItem value="business_payment">Business Payment</SelectItem>
+                          <SelectItem value="family_support">Family Support</SelectItem>
+                          <SelectItem value="education_fees">Education / Tuition</SelectItem>
+                          <SelectItem value="medical_expenses">Medical Expenses</SelectItem>
+                          <SelectItem value="rent_payment">Rent Payment</SelectItem>
+                          <SelectItem value="gift">Gift / Donation</SelectItem>
+                          <SelectItem value="loan_repayment">Loan Repayment</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 )}
 
-                {currentStep === 4 && (
-                  <>
-                    <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-6 space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
+                {/* ================= STEP 3: REVIEW & CONFIRM ================= */}
+                {currentStep === 3 && (
+                  <div className="max-w-2xl mx-auto space-y-6">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 md:p-6 space-y-5">
+                      <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-200">
                         <div>
-                          <p className="text-sm text-muted-foreground">You Receive</p>
-                          <p className="text-2xl font-bold text-primary">{receiveSymbol}{parseFloat(formData.receiveAmount || "0").toFixed(2)} {formData.receiveCurrency}</p>
+                          <p className="text-xs text-muted-foreground uppercase font-semibold">Sender Pays</p>
+                          <p className="text-2xl font-bold text-slate-900 mt-0.5">
+                            {senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Sender Pays</p>
-                          <p className="text-2xl font-bold text-teal">{senderSymbol}{senderPays} {formData.senderCurrency}</p>
+                          <p className="text-xs text-muted-foreground uppercase font-semibold">You Receive in Bank</p>
+                          <p className="text-2xl font-bold text-primary mt-0.5">
+                            {payoutSymbol}{netPayoutAmount.toFixed(2)} {payoutCurrency}
+                          </p>
                         </div>
                       </div>
-                      <div className="h-px bg-border" />
-                      <div className="space-y-2">
-                        {selectedPayoutAccount && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Payout Account</span>
-                            <span className="font-medium">{selectedPayoutAccount.bank} (****{selectedPayoutAccount.accountNumber.slice(-4)})</span>
+
+                      <div className="space-y-2.5 text-sm">
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-muted-foreground">Platform Fee (3% absorbed):</span>
+                          <span className="font-medium text-red-600">-{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
+                        </div>
+
+                        {senderCurrency !== payoutCurrency && (
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-muted-foreground">Exchange Rate:</span>
+                            <span className="font-medium">1 {senderCurrency} = {payoutSymbol}{fxRate.toLocaleString()} {payoutCurrency}</span>
                           </div>
                         )}
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Sender Name</span>
-                          <span className="font-medium">
+
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-muted-foreground">Destination Payout Account:</span>
+                          <span className="font-semibold text-slate-800">
+                            {selectedPayoutAccount?.bank} (****{selectedPayoutAccount?.accountNumber.slice(-4)})
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-muted-foreground">Sender:</span>
+                          <span className="font-medium text-slate-800">
                             {formData.senderType === "business"
                               ? formData.senderBusinessName
                               : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}
                           </span>
                         </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Sender Email</span>
-                          <span className="font-medium">{formData.senderEmail}</span>
+
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-muted-foreground">Sender Email:</span>
+                          <span className="font-medium text-slate-800">{formData.senderEmail}</span>
                         </div>
+
                         {formData.senderPhone && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Sender Phone</span>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-muted-foreground">Sender Phone:</span>
                             <span className="font-medium">{formData.senderCountryCode} {formData.senderPhone}</span>
                           </div>
                         )}
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Payment Method</span>
-                          <span className="font-medium capitalize">{formData.paymentMethod.replace("_", " ")}</span>
-                        </div>
+
+                        {formData.senderDob && (
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-muted-foreground">Sender DOB:</span>
+                            <span className="font-medium">{formData.senderDob}</span>
+                          </div>
+                        )}
+
                         {formData.reason && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Reason</span>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-muted-foreground">Reason:</span>
                             <span className="font-medium capitalize">{formData.reason.replace(/_/g, " ")}</span>
                           </div>
                         )}
+
+                        <div className="flex justify-between py-1">
+                          <span className="text-muted-foreground">Payment Method:</span>
+                          <span className="font-medium capitalize">{formData.paymentMethod.replace("_", " ")}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                       <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                      <p className="text-sm text-amber-800">
-                        <strong>Important:</strong> Kindly contact your sender to ensure this request comes from you. This helps prevent fraud and keeps your transactions secure.
+                      <p className="text-xs text-amber-800 leading-relaxed">
+                        <strong>Security Reminder:</strong> Ensure you communicate directly with your sender to verify this request.
+                        Funds will be automatically credited to your destination bank account once paid.
                       </p>
                     </div>
-                  </>
+                  </div>
                 )}
 
-                <div className="flex gap-3 pt-4">
+                {/* Step Navigation Buttons */}
+                <div className="flex gap-3 pt-4 border-t border-border/60">
                   <Button
                     variant="outline"
                     onClick={handleBack}
@@ -963,8 +963,8 @@ export default function RequestPayment() {
                     className="flex-1 bg-primary hover:bg-primary/90"
                     data-testid="button-step-next"
                   >
-                    {currentStep === 4 ? "Send Request" : "Continue"}
-                    {currentStep < 4 && <ArrowRight className="w-4 h-4 ml-2" />}
+                    {currentStep === 3 ? "Generate Payment Link" : "Continue"}
+                    {currentStep < 3 && <ArrowRight className="w-4 h-4 ml-2" />}
                   </Button>
                 </div>
               </CardContent>
