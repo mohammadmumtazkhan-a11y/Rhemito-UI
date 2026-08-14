@@ -3,13 +3,16 @@ import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
-interface AuthUser {
+export interface AuthUser {
   id: string;
   email: string;
-  accountType: string;
+  accountType: "individual" | "business" | string;
   country: string;
   firstName: string | null;
+  middleName?: string | null;
   lastName: string | null;
+  businessName?: string | null;
+  businessRegNo?: string | null;
   status: string;
 }
 
