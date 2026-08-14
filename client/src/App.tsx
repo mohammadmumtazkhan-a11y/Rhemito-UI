@@ -76,6 +76,7 @@ function Router() {
       <Route path="/senders/:email" component={SenderDetail} />
       <Route path="/payout-accounts" component={PayoutAccounts} />
       <Route path="/pay/:id" component={SenderView} />
+      <Route path="/invoice/:id" component={SenderView} />
       <Route path="/bonus-discounts" component={BonusAndDiscounts} />
       <Route path="/marketing" component={Marketing} />
       <Route path="/group-pay" component={GroupPayDashboard} />

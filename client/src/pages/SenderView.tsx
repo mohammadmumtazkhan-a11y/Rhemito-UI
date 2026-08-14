@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, CreditCard, Building2, Calendar as CalendarIcon, ShieldCheck, ArrowRight, Wallet, Loader2, Copy, Mail, Lock, KeyRound, MapPin, User, Gift, Star, Zap, X, WalletCards } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,31 @@ type AuthStep = "check_email" | "login" | "register_otp" | "register_password" |
 export default function SenderView() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const routeParams = useParams<{ id?: string }>();
+  const linkId = routeParams?.id || "ref-default";
+
+  // Check if this payment link was already completed and thus invalid
+  const [isLinkPaidAndInvalid, setIsLinkPaidAndInvalid] = useState(() => {
+    try {
+      const paidLinks = JSON.parse(localStorage.getItem("rhemito_paid_links") || "[]");
+      return Array.isArray(paidLinks) && paidLinks.includes(linkId);
+    } catch {
+      return false;
+    }
+  });
+
+  const markLinkAsPaidAndInvalid = () => {
+    try {
+      const paidLinks = JSON.parse(localStorage.getItem("rhemito_paid_links") || "[]");
+      if (Array.isArray(paidLinks) && !paidLinks.includes(linkId)) {
+        paidLinks.push(linkId);
+        localStorage.setItem("rhemito_paid_links", JSON.stringify(paidLinks));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const [authStep, setAuthStep] = useState<AuthStep>("check_email");
   const [isExistingUser, setIsExistingUser] = useState(false);
   const [email, setEmail] = useState("name@example.com");
@@ -107,6 +132,7 @@ export default function SenderView() {
   };
 
   const handlePay = () => {
+    markLinkAsPaidAndInvalid();
     setIsPaid(true);
     setPaymentStep("method");
   };
@@ -301,6 +327,78 @@ export default function SenderView() {
       </div>
     </button>
   );
+
+  if (isLinkPaidAndInvalid) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-blue-600/5 to-transparent pointer-events-none" />
+        <div className="w-full max-w-md mb-6 flex items-center justify-center relative z-20">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center">
+              <img src={logo} alt="Rhemito Logo" className="w-full h-full object-contain" />
+            </div>
+            <span className="text-lg md:text-xl font-bold text-slate-800 tracking-tight font-display">Rhemito</span>
+          </div>
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full relative z-10"
+        >
+          <Card className="border-border shadow-xl overflow-hidden bg-white">
+            <div className="bg-slate-100/80 p-6 border-b border-border text-center flex flex-col items-center">
+              <div className="w-16 h-16 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mb-3 shadow-inner">
+                <Lock className="w-8 h-8 text-slate-700" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900 font-display">Payment Link No Longer Valid</h2>
+              <p className="text-xs text-muted-foreground mt-1">This single-use payment link has already been settled.</p>
+            </div>
+
+            <CardContent className="pt-6 pb-6 space-y-4 text-left">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-emerald-900 uppercase tracking-wider">Status: Completed</span>
+                </div>
+                <p className="text-xs text-emerald-900 leading-relaxed">
+                  The payment for this request was previously received. For security reasons, payment links cannot be reused.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Beneficiary:</span>
+                  <span className="font-semibold text-slate-800">{requestDetails.requesterName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Amount:</span>
+                  <span className="font-semibold text-slate-800">£{requestDetails.amountGBP.toFixed(2)} GBP (₦{requestDetails.amountNGN.toLocaleString()})</span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-slate-200/60">
+                  <span className="text-muted-foreground">Link Reference:</span>
+                  <span className="font-mono text-slate-600">{linkId}</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                If you need to make another payment, please contact the recipient to generate a new request link.
+              </p>
+            </CardContent>
+
+            <CardFooter className="bg-slate-50/50 border-t border-border p-4">
+              <Button
+                onClick={() => setLocation("/")}
+                className="w-full bg-primary hover:bg-primary/90"
+              >
+                Go to Rhemito Home
+              </Button>
+            </CardFooter>
+          </Card>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
@@ -885,6 +983,7 @@ export default function SenderView() {
                             <Button
                               className="flex-[2] h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl"
                               onClick={() => {
+                                markLinkAsPaidAndInvalid();
                                 setWasManualTransfer(true);
                                 setPaymentStep("manual_transfer_complete");
                               }}
@@ -1302,6 +1401,7 @@ export default function SenderView() {
                     <Button
                       className="flex-1 bg-green-600 hover:bg-green-700 rounded-xl font-semibold"
                       onClick={() => {
+                        markLinkAsPaidAndInvalid();
                         setDeductionComplete(true);
                         setDeductionCountdown(10);
                         setDeductionTimerActive(true);
