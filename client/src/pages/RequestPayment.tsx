@@ -11,10 +11,8 @@ import {
   Search,
   User,
   Building2,
-  HelpCircle,
-  CreditCard,
-  ChevronDown,
-  ArrowRightLeft
+  Plus,
+  Loader2
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -23,8 +21,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog";
 import { knownSenders, type KnownSender } from "@/data/knownSenders";
-import { payoutAccounts, getDefaultPayoutAccount, type PayoutAccount } from "@/data/payoutAccounts";
+import { payoutAccounts as initialPayoutAccounts, getDefaultPayoutAccount, type PayoutAccount } from "@/data/payoutAccounts";
 
 const EXCHANGE_RATES: Record<string, Record<string, number>> = {
   GBP: { NGN: 2000, USD: 1.27, EUR: 1.17, GBP: 1 },
@@ -86,10 +92,24 @@ export default function RequestPayment() {
   const [senderSearch, setSenderSearch] = useState("");
   const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
   const [isChangingPayoutAccount, setIsChangingPayoutAccount] = useState(false);
+  const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
+  const [accountsList, setAccountsList] = useState<PayoutAccount[]>(() => initialPayoutAccounts.filter(a => a.activated));
+
+  // Add Account Modal Form State
+  const [newAccountData, setNewAccountData] = useState({
+    name: "John Doe",
+    currency: "GBP",
+    bank: "",
+    accountNumber: "",
+    routingNumber: "",
+  });
+  const [isSubmittingNewAccount, setIsSubmittingNewAccount] = useState(false);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const availablePayoutAccounts = useMemo(() => payoutAccounts.filter(a => a.activated), []);
-  const defaultAccount = useMemo(() => getDefaultPayoutAccount() || availablePayoutAccounts[0], [availablePayoutAccounts]);
+  const defaultAccount = useMemo(() => {
+    return accountsList.find(a => a.isDefault) || accountsList[0];
+  }, [accountsList]);
 
   const [formData, setFormData] = useState<FormData>({
     requestAmount: "",
@@ -108,7 +128,7 @@ export default function RequestPayment() {
     reason: "",
   });
 
-  // Ensure default payout account is selected on load
+  // Ensure selected payout account is set
   useEffect(() => {
     if (!formData.selectedPayoutAccountId && defaultAccount) {
       setFormData(prev => ({ ...prev, selectedPayoutAccountId: defaultAccount.id }));
@@ -138,8 +158,8 @@ export default function RequestPayment() {
   }, []);
 
   const selectedPayoutAccount: PayoutAccount | undefined = useMemo(() => {
-    return availablePayoutAccounts.find(a => a.id === formData.selectedPayoutAccountId) || defaultAccount;
-  }, [availablePayoutAccounts, formData.selectedPayoutAccountId, defaultAccount]);
+    return accountsList.find(a => a.id === formData.selectedPayoutAccountId) || defaultAccount;
+  }, [accountsList, formData.selectedPayoutAccountId, defaultAccount]);
 
   const payoutCurrency = selectedPayoutAccount?.currency || "GBP";
   const senderCurrency = formData.senderCurrency;
@@ -188,6 +208,40 @@ export default function RequestPayment() {
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreateNewAccount = () => {
+    if (!newAccountData.bank || !newAccountData.accountNumber) return;
+
+    setIsSubmittingNewAccount(true);
+    setTimeout(() => {
+      const newAcc: PayoutAccount = {
+        id: `acc-${Date.now()}`,
+        refNo: String(Math.floor(1000 + Math.random() * 9000)),
+        name: newAccountData.name || "John Doe",
+        currency: newAccountData.currency,
+        bank: newAccountData.bank,
+        accountNumber: newAccountData.accountNumber,
+        routingNumber: newAccountData.routingNumber || "N/A",
+        activated: true,
+        isDefault: accountsList.length === 0,
+      };
+
+      setAccountsList(prev => [...prev, newAcc]);
+      setFormData(prev => ({ ...prev, selectedPayoutAccountId: newAcc.id }));
+      setIsSubmittingNewAccount(false);
+      setIsAddAccountModalOpen(false);
+      setIsChangingPayoutAccount(false);
+
+      // Reset modal fields
+      setNewAccountData({
+        name: "John Doe",
+        currency: "GBP",
+        bank: "",
+        accountNumber: "",
+        routingNumber: "",
+      });
+    }, 600);
   };
 
   const handleNext = () => {
@@ -410,7 +464,7 @@ export default function RequestPayment() {
                     <div className="lg:col-span-3 space-y-6">
 
                       {/* Zero Payout Account Prompt (Option A) */}
-                      {availablePayoutAccounts.length === 0 ? (
+                      {accountsList.length === 0 ? (
                         <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl space-y-3 text-amber-900">
                           <div className="flex items-start gap-3">
                             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -422,9 +476,10 @@ export default function RequestPayment() {
                             </div>
                           </div>
                           <Button
-                            onClick={() => setLocation("/payout-accounts")}
-                            className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs h-9"
+                            onClick={() => setIsAddAccountModalOpen(true)}
+                            className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs h-9 gap-1.5"
                           >
+                            <Plus className="w-4 h-4" />
                             Add Payout Bank Account
                           </Button>
                         </div>
@@ -440,16 +495,29 @@ export default function RequestPayment() {
                                 </Badge>
                               )}
                             </div>
-                            {availablePayoutAccounts.length > 1 && (
+                            <div className="flex items-center gap-1.5">
                               <Button
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
-                                onClick={() => setIsChangingPayoutAccount(!isChangingPayoutAccount)}
-                                className="text-xs text-primary h-7 px-2"
+                                onClick={() => setIsAddAccountModalOpen(true)}
+                                className="text-xs h-7 px-2.5 gap-1 bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+                                data-testid="button-add-payout-modal-trigger"
                               >
-                                {isChangingPayoutAccount ? "Done" : "Change"}
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Add New</span>
                               </Button>
-                            )}
+
+                              {accountsList.length > 1 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setIsChangingPayoutAccount(!isChangingPayoutAccount)}
+                                  className="text-xs text-primary h-7 px-2"
+                                >
+                                  {isChangingPayoutAccount ? "Done" : "Change"}
+                                </Button>
+                              )}
+                            </div>
                           </div>
 
                           {!isChangingPayoutAccount ? (
@@ -469,7 +537,7 @@ export default function RequestPayment() {
                             </div>
                           ) : (
                             <div className="space-y-2 pt-1">
-                              {availablePayoutAccounts.map((acc) => (
+                              {accountsList.map((acc) => (
                                 <button
                                   key={acc.id}
                                   type="button"
@@ -497,6 +565,17 @@ export default function RequestPayment() {
                                   </div>
                                 </button>
                               ))}
+
+                              {/* Add New Bank Account inside dropdown */}
+                              <button
+                                type="button"
+                                onClick={() => setIsAddAccountModalOpen(true)}
+                                className="w-full p-2.5 rounded-lg border border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center gap-2 transition-colors mt-2"
+                                data-testid="button-add-new-payout-in-list"
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span>+ Add New Bank Account</span>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -972,6 +1051,120 @@ export default function RequestPayment() {
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Add New Payout Account Modal Dialog */}
+      <Dialog open={isAddAccountModalOpen} onOpenChange={setIsAddAccountModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Building2 className="w-5 h-5 text-primary" />
+              <span>Add Payout Bank Account</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Add a bank account to receive payouts directly from requested payments.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Account Currency *</Label>
+              <Select
+                value={newAccountData.currency}
+                onValueChange={(val) => setNewAccountData(prev => ({ ...prev, currency: val }))}
+              >
+                <SelectTrigger className="h-10 text-sm font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GBP">GBP (£) - United Kingdom</SelectItem>
+                  <SelectItem value="NGN">NGN (₦) - Nigeria</SelectItem>
+                  <SelectItem value="USD">USD ($) - United States</SelectItem>
+                  <SelectItem value="EUR">EUR (€) - Eurozone</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="modalBankName" className="text-xs font-medium">Bank Name *</Label>
+              <Input
+                id="modalBankName"
+                placeholder="e.g. Barclays, Chase, Access Bank"
+                value={newAccountData.bank}
+                onChange={(e) => setNewAccountData(prev => ({ ...prev, bank: e.target.value }))}
+                className="h-10 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="modalAccountNumber" className="text-xs font-medium">
+                {newAccountData.currency === "EUR" ? "IBAN *" : "Account Number *"}
+              </Label>
+              <Input
+                id="modalAccountNumber"
+                placeholder={newAccountData.currency === "EUR" ? "GB29BARC204567..." : "12345678"}
+                value={newAccountData.accountNumber}
+                onChange={(e) => setNewAccountData(prev => ({ ...prev, accountNumber: e.target.value }))}
+                className="h-10 text-sm font-mono"
+              />
+            </div>
+
+            {newAccountData.currency !== "NGN" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="modalRoutingNumber" className="text-xs font-medium">
+                  {newAccountData.currency === "GBP" ? "Sort Code" : newAccountData.currency === "USD" ? "Routing Number (ABA)" : "BIC / SWIFT"}
+                </Label>
+                <Input
+                  id="modalRoutingNumber"
+                  placeholder={newAccountData.currency === "GBP" ? "20-45-67" : "021000021"}
+                  value={newAccountData.routingNumber}
+                  onChange={(e) => setNewAccountData(prev => ({ ...prev, routingNumber: e.target.value }))}
+                  className="h-10 text-sm font-mono"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="modalAccountHolder" className="text-xs font-medium">Account Holder Name *</Label>
+              <Input
+                id="modalAccountHolder"
+                value={newAccountData.name}
+                onChange={(e) => setNewAccountData(prev => ({ ...prev, name: e.target.value }))}
+                className="h-10 text-sm"
+              />
+              <p className="text-[11px] text-muted-foreground">Must match your verified account or business name.</p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAddAccountModalOpen(false)}
+              disabled={isSubmittingNewAccount}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCreateNewAccount}
+              disabled={!newAccountData.bank || !newAccountData.accountNumber || isSubmittingNewAccount}
+              className="gap-1.5 bg-primary"
+            >
+              {isSubmittingNewAccount ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Adding Account...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Save & Select</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
