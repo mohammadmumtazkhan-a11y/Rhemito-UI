@@ -24,6 +24,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 
 const COUNTRY_CODES = [
@@ -62,6 +63,7 @@ interface FormData {
   invoiceAmount: string;
   currency: string;
   senderCurrency: string;
+  absorbFee: boolean;
   recipientType: "individual" | "business";
   recipientFirstName: string;
   recipientMiddleName: string;
@@ -79,6 +81,7 @@ const initialFormData: FormData = {
   invoiceAmount: "",
   currency: "GBP",
   senderCurrency: "",
+  absorbFee: false,
   recipientType: "individual",
   recipientFirstName: "",
   recipientMiddleName: "",
@@ -149,7 +152,7 @@ export default function SendInvoice() {
 
   const invoiceLink = `rhemito.com/invoice/inv${Math.random().toString(36).substring(2, 8)}`;
 
-  const handleInputChange = (field: keyof FormData, value: string) => {
+  const handleInputChange = (field: keyof FormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -462,6 +465,28 @@ export default function SendInvoice() {
                   </p>
                 </div>
 
+                {/* Fee Absorption Checkbox */}
+                <div className="flex items-start space-x-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors">
+                  <Checkbox
+                    id="absorbFee"
+                    checked={formData.absorbFee}
+                    onCheckedChange={(checked) => handleInputChange("absorbFee", checked === true)}
+                    data-testid="checkbox-absorb-fee"
+                    className="mt-0.5"
+                  />
+                  <div className="grid gap-1 leading-none cursor-pointer" onClick={() => handleInputChange("absorbFee", !formData.absorbFee)}>
+                    <Label
+                      htmlFor="absorbFee"
+                      className="text-sm font-semibold cursor-pointer text-slate-900"
+                    >
+                      Absorb the 3% transaction fee
+                    </Label>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      The client pays the exact invoice amount requested ({CURRENCY_SYMBOLS[formData.currency] || "£"}{formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0 ? parseFloat(formData.invoiceAmount).toFixed(2) : "0.00"}), and the 3% fee is deducted from your received balance.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="space-y-2 relative">
                   <Label>Search Existing Recipient</Label>
                   <div className="relative">
@@ -673,48 +698,59 @@ export default function SendInvoice() {
               </div>
 
               <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
-                <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white" data-testid="fee-breakdown">
-                  <h3 className="font-semibold text-lg">Amount</h3>
+                <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white shadow-sm" data-testid="fee-breakdown">
+                  <h3 className="font-semibold text-lg text-slate-900">Amount Summary</h3>
 
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Invoice Amount</span>
-                      <span className="font-medium">
-                        {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0
-                          ? `${CURRENCY_SYMBOLS[formData.currency]}${parseFloat(formData.invoiceAmount).toFixed(2)} ${formData.currency}`
-                          : `0.00 ${formData.currency}`}
-                      </span>
-                    </div>
+                  {(() => {
+                    const parsed = parseFloat(formData.invoiceAmount) || 0;
+                    const fee = parsed * 0.03;
+                    const clientPays = formData.absorbFee ? parsed : parsed + fee;
+                    const youReceive = formData.absorbFee ? parsed - fee : parsed;
+                    const sym = CURRENCY_SYMBOLS[formData.currency] || "£";
 
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Fee (3%)</span>
-                      <span className="font-medium">
-                        {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0
-                          ? `${CURRENCY_SYMBOLS[formData.currency]}${(parseFloat(formData.invoiceAmount) * 0.03).toFixed(2)} ${formData.currency}`
-                          : `0.00 ${formData.currency}`}
-                      </span>
-                    </div>
-                  </div>
+                    return (
+                      <>
+                        <div className="space-y-3">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Invoice Amount:</span>
+                            <span className="font-medium text-slate-800">
+                              {sym}{parsed.toFixed(2)} {formData.currency}
+                            </span>
+                          </div>
 
-                  <div className="h-px bg-border" />
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              Fee (3%{formData.absorbFee ? " absorbed by you" : " added to client"}):
+                            </span>
+                            <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
+                              {formData.absorbFee ? "-" : "+"}{sym}{fee.toFixed(2)} {formData.currency}
+                            </span>
+                          </div>
+                        </div>
 
-                  <div className="flex justify-between pt-1">
-                    <span className="font-medium">Client Pays</span>
-                    <span className="font-bold text-lg text-teal">
-                      {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0
-                        ? `${CURRENCY_SYMBOLS[formData.currency]}${(parseFloat(formData.invoiceAmount) * 1.03).toFixed(2)} ${formData.currency}`
-                        : `0.00 ${formData.currency}`}
-                    </span>
-                  </div>
+                        <div className="h-px bg-border" />
 
-                  <div className="flex justify-between bg-primary/5 -mx-5 px-5 py-3 -mb-5 rounded-b-xl border-t border-primary/10">
-                    <span className="font-medium">You Receive</span>
-                    <span className="font-bold text-lg text-primary">
-                      {formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0
-                        ? `${CURRENCY_SYMBOLS[formData.currency]}${parseFloat(formData.invoiceAmount).toFixed(2)} ${formData.currency}`
-                        : `0.00 ${formData.currency}`}
-                    </span>
-                  </div>
+                        <div className="flex justify-between pt-1 items-baseline">
+                          <span className="font-medium text-slate-800">Client Pays:</span>
+                          <span className="font-bold text-lg text-teal">
+                            {sym}{clientPays.toFixed(2)} {formData.currency}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center bg-primary/5 -mx-5 px-5 py-3.5 -mb-5 rounded-b-xl border-t border-primary/10">
+                          <div>
+                            <span className="font-medium text-slate-900">You Receive:</span>
+                            {formData.absorbFee && (
+                              <p className="text-[10px] text-muted-foreground">Fee deducted from balance</p>
+                            )}
+                          </div>
+                          <span className="font-bold text-lg text-primary">
+                            {sym}{youReceive.toFixed(2)} {formData.currency}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
