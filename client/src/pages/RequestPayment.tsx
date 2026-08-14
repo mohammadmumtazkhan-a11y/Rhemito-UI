@@ -12,7 +12,8 @@ import {
   User,
   Building2,
   Plus,
-  Loader2
+  Loader2,
+  ArrowRightLeft
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -95,6 +96,7 @@ export default function RequestPayment() {
   const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
   const [isChangingPayoutAccount, setIsChangingPayoutAccount] = useState(false);
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
+  const [showFxNoticeModal, setShowFxNoticeModal] = useState(false);
   const [accountsList, setAccountsList] = useState<PayoutAccount[]>(() => initialPayoutAccounts.filter(a => a.activated));
 
   // Add Account Modal Form State
@@ -252,11 +254,22 @@ export default function RequestPayment() {
   };
 
   const handleNext = () => {
-    if (currentStep < 3) {
+    if (currentStep === 1) {
+      if (senderCurrency !== payoutCurrency) {
+        setShowFxNoticeModal(true);
+        return;
+      }
+      setCurrentStep(2);
+    } else if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
     } else {
       setIsSuccess(true);
     }
+  };
+
+  const handleConfirmFxAndProceed = () => {
+    setShowFxNoticeModal(false);
+    setCurrentStep(2);
   };
 
   const handleBack = () => {
@@ -1162,6 +1175,67 @@ export default function RequestPayment() {
                   <span>Save & Select</span>
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* FX Conversion Notice Modal */}
+      <Dialog open={showFxNoticeModal} onOpenChange={setShowFxNoticeModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg text-slate-900">
+              <ArrowRightLeft className="w-5 h-5 text-primary" />
+              <span>FX Conversion Notice</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Cross-currency payout information
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-sm">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                  As your payout account currency (<strong>{payoutCurrency}</strong>) is different from the requested amount currency (<strong>{senderCurrency}</strong>), the FX conversion will be done on the <strong>FX Spot rates at the time of payout</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Requested Amount (Sender Pays):</span>
+                <span className="font-semibold text-slate-800">{senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Destination Payout Account:</span>
+                <span className="font-semibold text-slate-800">{selectedPayoutAccount?.bank} ({payoutCurrency})</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-slate-200/60">
+                <span className="text-muted-foreground">Estimated Spot Rate:</span>
+                <span className="font-semibold text-primary">
+                  1 {senderCurrency} = {payoutSymbol}{fxRate.toLocaleString()} {payoutCurrency}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowFxNoticeModal(false)}
+            >
+              Go Back
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmFxAndProceed}
+              className="bg-primary hover:bg-primary/90 gap-1.5"
+            >
+              <span>Continue</span>
+              <ArrowRight className="w-4 h-4" />
             </Button>
           </DialogFooter>
         </DialogContent>
