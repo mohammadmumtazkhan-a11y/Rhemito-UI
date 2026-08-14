@@ -13,7 +13,8 @@ import {
   Building2,
   Plus,
   Loader2,
-  ArrowRightLeft
+  ArrowRightLeft,
+  AlertCircle
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -31,6 +32,7 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { knownSenders, type KnownSender } from "@/data/knownSenders";
 import { payoutAccounts as initialPayoutAccounts, getDefaultPayoutAccount, type PayoutAccount } from "@/data/payoutAccounts";
 
@@ -89,6 +91,17 @@ const steps = [
 export default function RequestPayment() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const requesterName = useMemo(() => {
+    if (!user) return "John Doe";
+    if (user.accountType === "business" && user.businessName) {
+      return user.businessName;
+    }
+    const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ");
+    return fullName || "John Doe";
+  }, [user]);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [isSuccess, setIsSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -99,9 +112,16 @@ export default function RequestPayment() {
   const [showFxNoticeModal, setShowFxNoticeModal] = useState(false);
   const [accountsList, setAccountsList] = useState<PayoutAccount[]>(() => initialPayoutAccounts.filter(a => a.activated));
 
+  // Auto-open Add Account modal on mount if no payout accounts exist
+  useEffect(() => {
+    if (accountsList.length === 0) {
+      setIsAddAccountModalOpen(true);
+    }
+  }, [accountsList.length]);
+
   // Add Account Modal Form State
   const [newAccountData, setNewAccountData] = useState({
-    name: "John Doe",
+    name: requesterName,
     currency: "GBP",
     bank: "",
     accountNumber: "",
@@ -222,7 +242,7 @@ export default function RequestPayment() {
       const newAcc: PayoutAccount = {
         id: `acc-${Date.now()}`,
         refNo: String(Math.floor(1000 + Math.random() * 9000)),
-        name: newAccountData.name || "John Doe",
+        name: requesterName,
         currency: newAccountData.currency,
         bank: newAccountData.bank,
         accountNumber: newAccountData.accountNumber,
@@ -239,12 +259,12 @@ export default function RequestPayment() {
 
       toast({
         title: "Payout Account Added",
-        description: `${newAcc.bank} (${newAcc.currency}) was added and selected for this request.`,
+        description: `${newAcc.bank} (${newAcc.currency}) in name of ${requesterName} was added and selected for this request.`,
       });
 
       // Reset modal fields
       setNewAccountData({
-        name: "John Doe",
+        name: requesterName,
         currency: "GBP",
         bank: "",
         accountNumber: "",
@@ -497,24 +517,32 @@ export default function RequestPayment() {
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 space-y-6">
 
-                      {/* Zero Payout Account Prompt (Option A) */}
+                      {/* Zero Payout Account Prompt */}
                       {accountsList.length === 0 ? (
-                        <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl space-y-3 text-amber-900">
+                        <div className="p-5 bg-amber-50/90 border-2 border-amber-200 rounded-xl space-y-3.5 text-amber-900">
                           <div className="flex items-start gap-3">
-                            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                            <div>
-                              <h4 className="font-semibold text-sm">Payout Account Required</h4>
-                              <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                                You need an active payout bank account before you can request payments and receive funds.
+                            <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                              <Building2 className="w-5 h-5" />
+                            </div>
+                            <div className="space-y-1">
+                              <h4 className="font-bold text-sm text-amber-950 flex items-center gap-2">
+                                <span>Payout Account Required</span>
+                                <Badge variant="outline" className="text-[10px] border-amber-300 bg-amber-100/60 text-amber-800 font-semibold">
+                                  Mandatory
+                                </Badge>
+                              </h4>
+                              <p className="text-xs text-amber-800 leading-relaxed">
+                                You must first add a valid bank account in your name (<strong>{requesterName}</strong>) to receive payouts from your payment requests. The account holder name must match your registered name.
                               </p>
                             </div>
                           </div>
                           <Button
                             onClick={() => setIsAddAccountModalOpen(true)}
-                            className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs h-9 gap-1.5"
+                            className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs h-10 font-semibold gap-1.5 shadow-sm"
+                            data-testid="button-add-first-payout-account"
                           >
                             <Plus className="w-4 h-4" />
-                            Add Payout Bank Account
+                            Add Your Payout Bank Account
                           </Button>
                         </div>
                       ) : (
@@ -1172,14 +1200,28 @@ export default function RequestPayment() {
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="modalAccountHolder" className="text-xs font-medium">Account Holder Name *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="modalAccountHolder" className="text-xs font-semibold text-slate-900">
+                  Account Holder Name (Requester) *
+                </Label>
+                <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 gap-1 font-medium">
+                  <Check className="w-3 h-3" />
+                  Verified Name
+                </Badge>
+              </div>
               <Input
                 id="modalAccountHolder"
-                value={newAccountData.name}
-                onChange={(e) => setNewAccountData(prev => ({ ...prev, name: e.target.value }))}
-                className="h-10 text-sm"
+                value={requesterName}
+                readOnly
+                disabled
+                className="h-10 text-sm bg-slate-100 font-medium text-slate-800 cursor-not-allowed border-slate-200"
               />
-              <p className="text-[11px] text-muted-foreground">Must match your verified account or business name.</p>
+              <div className="flex items-start gap-1.5 text-[11px] text-amber-900 bg-amber-50 p-2.5 rounded-lg border border-amber-200/80">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                <span>
+                  The bank account name must strictly match your verified profile name (<strong>{requesterName}</strong>). Payouts cannot be made to third-party bank accounts.
+                </span>
+              </div>
             </div>
           </div>
 
