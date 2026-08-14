@@ -514,24 +514,14 @@ export default function RequestPayment() {
                                 </Badge>
                               )}
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setIsAddAccountModalOpen(true)}
-                                className="text-xs h-7 px-2.5 gap-1 bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
-                                data-testid="button-add-payout-modal-trigger"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Add New</span>
-                              </Button>
-
-                              {accountsList.length > 1 && (
+                            <div>
+                              {accountsList.length > 0 && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => setIsChangingPayoutAccount(!isChangingPayoutAccount)}
-                                  className="text-xs text-primary h-7 px-2"
+                                  className="text-xs text-primary h-7 px-2 font-medium"
+                                  data-testid="button-toggle-change-payout"
                                 >
                                   {isChangingPayoutAccount ? "Done" : "Change"}
                                 </Button>
@@ -585,15 +575,15 @@ export default function RequestPayment() {
                                 </button>
                               ))}
 
-                              {/* Add New Bank Account inside dropdown */}
+                              {/* Single clean Add New Bank Account button inside list */}
                               <button
                                 type="button"
                                 onClick={() => setIsAddAccountModalOpen(true)}
-                                className="w-full p-2.5 rounded-lg border border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center gap-2 transition-colors mt-2"
+                                className="w-full p-2.5 rounded-lg border border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors mt-2"
                                 data-testid="button-add-new-payout-in-list"
                               >
                                 <Plus className="w-4 h-4" />
-                                <span>+ Add New Bank Account</span>
+                                <span>Add New Bank Account</span>
                               </button>
                             </div>
                           )}
