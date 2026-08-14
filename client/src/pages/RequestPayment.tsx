@@ -323,14 +323,15 @@ export default function RequestPayment() {
               </motion.div>
 
               <div className="space-y-1.5">
-                <h2 className="text-2xl font-bold font-display text-slate-900">Payment Request Ready!</h2>
+                <h2 className="text-2xl font-bold font-display text-slate-900">Payment Request Sent!</h2>
                 <p className="text-sm text-muted-foreground">
-                  A payment link has been created for{" "}
+                  The payment link has been sent to{" "}
+                  <span className="font-semibold text-foreground">{formData.senderEmail}</span> for{" "}
                   <span className="font-semibold text-foreground">
                     {formData.senderType === "business"
                       ? formData.senderBusinessName
                       : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}
-                  </span>
+                  </span>.
                 </p>
               </div>
 
@@ -362,7 +363,7 @@ export default function RequestPayment() {
               </div>
 
               <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 space-y-3 border border-primary/10">
-                <p className="text-xs font-medium text-slate-700">Share this link directly with your sender:</p>
+                <p className="text-xs font-medium text-slate-700">You can also share this link directly with your sender:</p>
                 <div className="flex items-center gap-2">
                   <Input
                     value={`https://${paymentLink}`}
