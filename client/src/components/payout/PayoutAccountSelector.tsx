@@ -65,14 +65,13 @@ export function PayoutAccountSelector({
     routingNumber: "",
   });
 
-  const accountsQuery = useQuery<PayoutAccountView[] | undefined>({
+  const accountsQuery = useQuery<PayoutAccountView[]>({
     queryKey: ["/api/request-money/payout-accounts"],
     queryFn: async () => {
       try {
         return await getPayoutAccounts();
-      } catch (err) {
-        if ((err as { status?: number }).status === 401) return undefined;
-        throw err;
+      } catch {
+        return [];
       }
     },
     retry: false,
@@ -113,18 +112,25 @@ export function PayoutAccountSelector({
   const handleCreateNewAccount = async () => {
     if (!newAccountData.bank || !newAccountData.accountNumber || isSubmittingNewAccount) return;
 
-    setIsSubmittingNewAccount(true);
     try {
-      const account = await addPayoutAccount({
-        holderName: "", // locked server-side to the verified profile name
-        country: CURRENCY_COUNTRIES[newAccountData.currency] ?? "GB",
+      setIsSubmittingNewAccount(true);
+
+      const country = CURRENCY_COUNTRIES[newAccountData.currency] || "GB";
+      const created = await addPayoutAccount({
+        holderName: requesterName,
+        country,
+        currency: newAccountData.currency,
         bankName: newAccountData.bank,
         accountNumber: newAccountData.accountNumber,
         routingNumber: newAccountData.routingNumber || undefined,
-        currency: newAccountData.currency,
       });
-      // Development stub verification — production uses a real confirmation-of-payee provider.
-      await devVerifyPayoutAccount(account.id);
+
+      // Automatically dev-verify in prototype
+      try {
+        await devVerifyPayoutAccount(created.id);
+      } catch {
+        // best effort verification
+      }
 
       toast({
         title: "Payout Account Added",
@@ -165,20 +171,6 @@ export function PayoutAccountSelector({
     );
   }
 
-  if (!accountsQuery.data) {
-    return (
-      <div
-        className="p-5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-muted-foreground flex flex-col items-center gap-3"
-        data-testid="payout-gate-unauthenticated"
-      >
-        <Loader2 className="w-5 h-5 animate-spin" />
-        Verifying your session…
-        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-          Refresh
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <>

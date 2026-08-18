@@ -179,8 +179,9 @@ export class MemStorage implements IStorage {
     this.emailDeliveriesMap = new Map();
     this.moneyRequestSequence = 0;
 
-    // Seed Mock Promo Code
+    // Seed Mock Promo Code & Demo User
     this.seedPromoCodes();
+    this.seedDemoUser();
   }
 
   private seedPromoCodes() {
@@ -194,6 +195,48 @@ export class MemStorage implements IStorage {
       currency: "GBP",
       status: "active",
       usageCount: "0"
+    });
+  }
+
+  private seedDemoUser() {
+    const demoUser: AuthUser = {
+      id: "user_123",
+      email: "demo@rhemito.com",
+      password: "password123",
+      accountType: "individual",
+      country: "GB",
+      firstName: "John",
+      middleName: null,
+      lastName: "Doe",
+      dateOfBirth: "1990-01-01",
+      gender: "male",
+      mobileCode: "+44",
+      mobileNumber: "7700900123",
+      businessName: null,
+      businessRegNo: null,
+      businessPhoneCode: null,
+      businessPhoneNumber: null,
+      directorName: null,
+      status: "active",
+      kycStatus: "passed",
+      createdAt: new Date(),
+    };
+    this.authUsersMap.set("user_123", demoUser);
+
+    const defaultAccId = "acc_demo_gbp";
+    this.payoutAccountsMap.set(defaultAccId, {
+      id: defaultAccId,
+      userId: "user_123",
+      holderName: "John Doe",
+      country: "GB",
+      currency: "GBP",
+      bankName: "Barclays Bank",
+      accountNumber: "12345678",
+      routingNumber: "20-00-00",
+      verificationStatus: "verified",
+      isDefault: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
   }
 

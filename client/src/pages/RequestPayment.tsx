@@ -414,23 +414,7 @@ export default function RequestPayment() {
     );
   }
 
-  if (eligibilityQuery.data?.kind === "unauthenticated") {
-    // This flow is reachable only from the logged-in dashboard, so it NEVER
-    // asks the user to sign in or register. In development the server silently
-    // resumes the local session, making this state practically unreachable;
-    // production shows a neutral session notice only (no sign-in CTA).
-    return (
-      <DashboardLayout>
-        <div className="max-w-xl mx-auto py-20 flex flex-col items-center gap-3 text-muted-foreground text-sm" data-testid="gate-unauthenticated">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          Verifying your session…
-          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-            Refresh
-          </Button>
-        </div>
-      </DashboardLayout>
-    );
-  }
+
 
   if (isSuccess) {
     return (
