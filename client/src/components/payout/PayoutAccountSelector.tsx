@@ -8,7 +8,7 @@
  * verified profile name; the browser never fabricates account records).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Building2, Check, Loader2, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -32,18 +32,34 @@ import {
   type PayoutAccountView,
 } from "@/lib/requests";
 
-/** Account-currency → account-country (same mapping the corridors use). */
+// ISO 3166-1 alpha-2 mapping for available bank currencies
 const CURRENCY_COUNTRIES: Record<string, string> = {
   GBP: "GB",
-  NGN: "NG",
-  USD: "US",
   EUR: "DE",
+  USD: "US",
+  CAD: "CA",
+  AUD: "AU",
+  NZD: "NZ",
+  CHF: "CH",
+  JPY: "JP",
+  SGD: "SG",
+  HKD: "HK",
+  AED: "AE",
+  SAR: "SA",
+  INR: "IN",
+  PKR: "PK",
+  NGN: "NG",
+  KES: "KE",
+  GHS: "GH",
+  PHP: "PH",
+  ZAR: "ZA",
 };
 
 interface PayoutAccountSelectorProps {
   requesterName: string;
-  selectedAccountId: string;
+  selectedAccountId?: string;
   onSelect: (account: PayoutAccountView) => void;
+  className?: string;
   context?: "invoice" | "request" | "campaign" | "group_pay";
 }
 
@@ -51,6 +67,7 @@ export function PayoutAccountSelector({
   requesterName,
   selectedAccountId,
   onSelect,
+  className = "",
   context = "request",
 }: PayoutAccountSelectorProps) {
   const { toast } = useToast();
@@ -58,6 +75,7 @@ export function PayoutAccountSelector({
   const [isChangingPayoutAccount, setIsChangingPayoutAccount] = useState(false);
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [isSubmittingNewAccount, setIsSubmittingNewAccount] = useState(false);
+  const hasAutoOpenedRef = useRef(false);
   const [newAccountData, setNewAccountData] = useState({
     currency: "GBP",
     bank: "",
@@ -88,13 +106,12 @@ export function PayoutAccountSelector({
     [verifiedAccounts, selectedAccountId],
   );
 
-  // Auto-open Add Account modal when no VERIFIED payout account exists — the
-  // same behaviour as Request Payment.
+  // Auto-open Add Account modal once when no VERIFIED payout account exists on initial load
   useEffect(() => {
-    if (accountsQuery.data && verifiedAccounts.length === 0) {
+    if (accountsQuery.data && verifiedAccounts.length === 0 && !hasAutoOpenedRef.current) {
+      hasAutoOpenedRef.current = true;
       setIsAddAccountModalOpen(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountsQuery.data, verifiedAccounts.length]);
 
   // Lift the effective selection up so the parent always has a concrete
@@ -125,7 +142,7 @@ export function PayoutAccountSelector({
         routingNumber: newAccountData.routingNumber || undefined,
       });
 
-      // Automatically dev-verify in prototype
+      // Dev-verify hook
       try {
         await devVerifyPayoutAccount(created.id);
       } catch {
@@ -138,12 +155,15 @@ export function PayoutAccountSelector({
       });
 
       setNewAccountData({ currency: "GBP", bank: "", accountNumber: "", routingNumber: "" });
+      hasAutoOpenedRef.current = true;
       setIsAddAccountModalOpen(false);
       setIsChangingPayoutAccount(false);
 
-      queryClient.invalidateQueries({ queryKey: ["/api/request-money/payout-accounts"] });
       const refreshed = await getPayoutAccounts();
-      const verified = refreshed.find((a) => a.verificationStatus === "verified");
+      queryClient.setQueryData(["/api/request-money/payout-accounts"], refreshed);
+      await queryClient.invalidateQueries({ queryKey: ["/api/request-money/payout-accounts"] });
+
+      const verified = refreshed.find((a) => a.id === created.id) ?? refreshed.find((a) => a.verificationStatus === "verified");
       if (verified) onSelect(verified);
     } catch (err) {
       toast({

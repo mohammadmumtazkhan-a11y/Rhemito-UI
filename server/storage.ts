@@ -226,7 +226,7 @@ export class MemStorage implements IStorage {
     const defaultAccId = "acc_demo_gbp";
     this.payoutAccountsMap.set(defaultAccId, {
       id: defaultAccId,
-      userId: "user_123",
+      ownerId: "user_123",
       holderName: "John Doe",
       country: "GB",
       currency: "GBP",
@@ -236,7 +236,7 @@ export class MemStorage implements IStorage {
       verificationStatus: "verified",
       isDefault: true,
       createdAt: new Date(),
-      updatedAt: new Date(),
+      verifiedAt: new Date(),
     });
   }
 
