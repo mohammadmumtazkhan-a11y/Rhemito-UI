@@ -5,6 +5,10 @@ test.describe('Funding Campaigns', () => {
     test('Navigate to Funding Campaigns', async ({ page }) => {
         await page.goto('/');
 
+        // First expand the "Payments Received" accordion
+        await page.getByText('Payments Received').click();
+        await page.waitForTimeout(500);
+
         // Click sidebar link
         await page.getByTestId('link-funding-campaigns').click();
 
@@ -27,12 +31,23 @@ test.describe('Funding Campaigns', () => {
         // Handle Target Amount
         await page.getByLabel('How much do you want to collect?').fill('100');
 
-        // Submit
-        await page.getByRole('button', { name: 'Create Funding Campaign' }).click();
+        // If payout account dialog is open or needs bank details
+        const saveAccountBtn = page.getByTestId('button-save-account');
+        if (await saveAccountBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+            await page.getByTestId('input-account-bank').fill('Barclays');
+            await page.getByTestId('input-account-number').fill('12345678');
+            await saveAccountBtn.click();
+            await expect(saveAccountBtn).toBeHidden({ timeout: 10000 });
+        }
 
-        // Should redirect to Dashboard or Details
-        // We'll check for the presence of the campaign name in the dashboard list or details view
-        await expect(page.getByText('Test Office Party')).toBeVisible();
+        // Submit
+        const submitBtn = page.getByRole('button', { name: 'Create Funding Campaign' });
+        await expect(submitBtn).toBeEnabled({ timeout: 10000 });
+        await submitBtn.click();
+
+        // Should show success view
+        await expect(page.getByRole('heading', { name: 'Campaign Created!' })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole('button', { name: 'View Campaign' })).toBeVisible();
     });
 
     test('Search and functionality', async ({ page }) => {

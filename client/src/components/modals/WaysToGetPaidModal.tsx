@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Link2, FileText, QrCode, Users } from "lucide-react";
+import { X, Link2, FileText, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 
@@ -73,20 +73,6 @@ export function WaysToGetPaidModal({ isOpen, onClose, senderEmail }: WaysToGetPa
                   <div>
                     <p className="font-semibold text-foreground">Send invoice</p>
                     <p className="text-sm text-muted-foreground">Create and send a professional invoice</p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleOptionClick("/show-qr-code")}
-                  className="w-full p-4 rounded-xl border border-border hover:border-purple hover:bg-purple/5 transition-all flex items-center gap-4 text-left group"
-                  data-testid="option-show-qr-code"
-                >
-                  <div className="w-12 h-12 rounded-xl bg-purple/10 flex items-center justify-center group-hover:bg-purple/20 transition-colors">
-                    <QrCode className="w-6 h-6 text-purple" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground">Show QR code</p>
-                    <p className="text-sm text-muted-foreground">Display a scannable QR code for payment</p>
                   </div>
                 </button>
 

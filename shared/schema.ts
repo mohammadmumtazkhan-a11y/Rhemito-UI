@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, jsonb, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -63,6 +63,8 @@ export const authUsers = pgTable("auth_users", {
   directorName: text("director_name"),
   // Status
   status: text("status").notNull().default("pending"), // "pending" | "active" | "blocked"
+  // Mini-KYC: set to "passed" when the in-app identity steps complete.
+  kycStatus: text("kyc_status").notNull().default("pending"), // "pending" | "passed" | "failed"
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -175,6 +177,10 @@ export const NOTIFICATION_TYPES = [
   "funding_allocated_multi",
   // Story 18c — partial allocation, additional payment required
   "funding_allocated_partial",
+  // Send Invoice MVP1 — sender-facing invoice lifecycle events
+  "invoice_paid",
+  "invoice_expired",
+  "invoice_new_link_requested",
 ] as const;
 
 export type NotificationEventType = (typeof NOTIFICATION_TYPES)[number];
@@ -242,3 +248,460 @@ export const notificationDeliveryLog = pgTable("notification_delivery_log", {
 export type NotificationDeliveryLog = typeof notificationDeliveryLog.$inferSelect;
 export type InsertNotificationDeliveryLog = typeof notificationDeliveryLog.$inferInsert;
 export const insertNotificationDeliveryLogSchema = createInsertSchema(notificationDeliveryLog);
+
+// ─── Send Invoice MVP1 ────────────────────────────────────────────────────────
+
+export const INVOICE_STATUSES = [
+  "sent",
+  "overdue",
+  "payment_processing",
+  "paid",
+  "expired",
+  "cancelled",
+] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+
+/** Statuses persisted on the invoice record; "overdue" is always derived. */
+export const INVOICE_STORED_STATUSES = [
+  "sent",
+  "payment_processing",
+  "paid",
+  "expired",
+  "cancelled",
+] as const;
+export type InvoiceStoredStatus = (typeof INVOICE_STORED_STATUSES)[number];
+
+export const INVOICE_EVENT_TYPES = [
+  "invoice_generated",
+  "notification_queued",
+  "due_reminder_sent",
+  "expiry_reminder_sent",
+  "payment_initiated",
+  "payment_processing",
+  "payment_completed",
+  "payment_failed",
+  "invoice_expired",
+  "new_link_requested",
+  "invoice_cancelled",
+] as const;
+export type InvoiceEventType = (typeof INVOICE_EVENT_TYPES)[number];
+
+export const CLIENT_EMAIL_TYPES = [
+  "invoice_sent",
+  "due_reminder",
+  "expiry_reminder",
+  "cancellation",
+] as const;
+export type ClientEmailType = (typeof CLIENT_EMAIL_TYPES)[number];
+
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceNumber: text("invoice_number").notNull().unique(),
+  senderId: varchar("sender_id").notNull(),
+  senderName: text("sender_name").notNull(), // display-name snapshot shown on the public payment page
+  clientType: text("client_type").notNull(), // "individual" | "business"
+  clientFirstName: text("client_first_name"),
+  clientMiddleName: text("client_middle_name"),
+  clientLastName: text("client_last_name"),
+  clientBusinessName: text("client_business_name"),
+  clientEmail: text("client_email").notNull(),
+  clientPhoneCode: text("client_phone_code"),
+  clientPhoneNumber: text("client_phone_number"),
+  amount: text("amount").notNull(),
+  currency: text("currency").notNull(),
+  absorbFee: boolean("absorb_fee").notNull().default(false),
+  // Receiving payout account snapshot — immutable once the invoice is sent
+  payoutAccountBank: text("payout_account_bank").notNull(),
+  payoutAccountNumber: text("payout_account_number").notNull(),
+  payoutAccountName: text("payout_account_name").notNull(),
+  payoutAccountCurrency: text("payout_account_currency").notNull(),
+  // Payment in-flight tracking (simulated provider)
+  paymentInitiatedAt: timestamp("payment_initiated_at"),
+  paymentMethod: text("payment_method"), // "card" | "bank_transfer"
+  dueDate: text("due_date"), // YYYY-MM-DD, optional
+  expiresAt: timestamp("expires_at").notNull(), // exact UTC instant (11:59:59 p.m. on the expiry date in expiryTimezone)
+  expiryTimezone: text("expiry_timezone").notNull(),
+  status: text("status").notNull().default("sent"),
+  paymentRef: text("payment_ref"),
+  // Prototype keeps the raw token alongside its hash so the payment link can be
+  // reconstructed for idempotent repeats and notification resends. A production
+  // build would store only the hash and regenerate links from a cipher.
+  token: text("token").notNull(),
+  tokenHash: text("token_hash").notNull().unique(), // sha-256 of the public payment token
+  documentId: varchar("document_id"),
+  sentAt: timestamp("sent_at").defaultNow(),
+  paidAt: timestamp("paid_at"),
+  expiredAt: timestamp("expired_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancellationReason: text("cancellation_reason"),
+  cancelledBy: varchar("cancelled_by"),
+  dueReminderSentAt: timestamp("due_reminder_sent_at"),
+  expiryReminderSentAt: timestamp("expiry_reminder_sent_at"),
+  newLinkRequestedAt: timestamp("new_link_requested_at"),
+  newLinkRequestedBy: text("new_link_requested_by"),
+  idempotencyKey: text("idempotency_key"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = typeof invoices.$inferInsert;
+
+export const invoiceDocuments = pgTable("invoice_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  uploaderId: varchar("uploader_id").notNull(),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: text("size").notNull(), // bytes, text for consistency with other numeric columns
+  data: text("data").notNull(), // base64 payload (prototype storage)
+  status: text("status").notNull().default("temp"), // "temp" | "associated"
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  expiresAt: timestamp("expires_at"), // temp-upload TTL; null once associated
+});
+
+export type InvoiceDocument = typeof invoiceDocuments.$inferSelect;
+export type InsertInvoiceDocument = typeof invoiceDocuments.$inferInsert;
+
+export const invoiceEvents = pgTable("invoice_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull(),
+  type: text("type").notNull(),
+  payload: jsonb("payload"),
+  actor: varchar("actor"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type InvoiceEvent = typeof invoiceEvents.$inferSelect;
+export type InsertInvoiceEvent = typeof invoiceEvents.$inferInsert;
+
+export const clientEmails = pgTable("client_emails", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull(),
+  toEmail: text("to_email").notNull(),
+  type: text("type").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  // Invoice document attached to the email (e.g. the invoice_sent email)
+  attachmentFileName: text("attachment_file_name"),
+  attachmentMimeType: text("attachment_mime_type"),
+  attachmentSize: text("attachment_size"),
+  status: text("status").notNull().default("sent"), // "sent" | "failed"
+  attemptCount: text("attempt_count").notNull().default("1"),
+  lastAttemptAt: timestamp("last_attempt_at").defaultNow(),
+  dedupeKey: text("dedupe_key").notNull().unique(), // idempotent sends
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ClientEmail = typeof clientEmails.$inferSelect;
+export type InsertClientEmail = typeof clientEmails.$inferInsert;
+
+// ─── Invoice Zod Validation ───────────────────────────────────────────────────
+
+export const INVOICE_CURRENCIES = ["GBP", "USD", "EUR", "NGN"] as const;
+
+export const EXPIRY_PRESET_DAYS = [7, 14, 30, 60] as const;
+export type ExpiryPresetDays = (typeof EXPIRY_PRESET_DAYS)[number];
+
+export const invoiceExpirySchema = z.union([
+  z.object({
+    type: z.literal("preset"),
+    days: z.union([z.literal(7), z.literal(14), z.literal(30), z.literal(60)]),
+  }),
+  z.object({
+    type: z.literal("custom"),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Select a future Payment Link Expiry Date."),
+  }),
+]);
+export type InvoiceExpiry = z.infer<typeof invoiceExpirySchema>;
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Please enter a valid date.");
+
+/** Mandatory receiving payout account for the invoice (name must match the verified sender). */
+export const payoutAccountSchema = z.object({
+  bank: z.string().min(1, "A receiving payout account is required."),
+  accountNumber: z.string().min(4, "A receiving payout account is required."),
+  name: z.string().min(1, "A receiving payout account is required."),
+  currency: z.string().min(3, "A receiving payout account is required."),
+});
+export type PayoutAccountPayload = z.infer<typeof payoutAccountSchema>;
+
+export const sendInvoiceSchema = z
+  .object({
+    documentId: z.string().min(1, "An invoice document must be attached before sending."),
+    invoiceAmount: z
+      .string()
+      .regex(/^\d+(\.\d{1,2})?$/, "Enter a valid invoice amount.")
+      .refine((v) => parseFloat(v) > 0, "Enter a valid invoice amount."),
+    currency: z.enum(INVOICE_CURRENCIES),
+    absorbFee: z.boolean(),
+    // Server-owned verified account reference — raw bank details are never
+    // accepted from the browser (same rule as Request Money).
+    payoutAccountId: z.string().min(1, "Select a verified payout account to receive the payout."),
+    clientType: z.enum(["individual", "business"]),
+    clientFirstName: z.string().optional(),
+    clientMiddleName: z.string().optional(),
+    clientLastName: z.string().optional(),
+    clientBusinessName: z.string().optional(),
+    clientEmail: z.string().email("Please enter a valid email address."),
+    clientPhoneCode: z.string().optional(),
+    clientPhoneNumber: z.string().optional(),
+    dueDate: isoDate.optional(),
+    expiry: invoiceExpirySchema,
+    idempotencyKey: z.string().min(8),
+  })
+  .superRefine((data, ctx) => {
+    if (data.clientType === "individual" && !(data.clientFirstName ?? "").trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["clientFirstName"],
+        message: "First name is required for an individual client.",
+      });
+    }
+    if (data.clientType === "business" && !(data.clientBusinessName ?? "").trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["clientBusinessName"],
+        message: "Business name is required for a business client.",
+      });
+    }
+  });
+
+export type SendInvoicePayload = z.infer<typeof sendInvoiceSchema>;
+
+export const cancelInvoiceSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(1, "A cancellation reason is required.")
+    .max(500, "The cancellation reason must be 500 characters or fewer."),
+});
+
+export const requestNewLinkSchema = z.object({
+  requesterEmail: z.string().email().optional(),
+});
+
+// ─── Request Money (unified payment requests) ────────────────────────────────
+
+/** Public payment initiation (invoices) — the chosen method is recorded for audit. */
+export const payInvoiceSchema = z.object({
+  method: z.enum(["card", "bank_transfer"]).optional(),
+});
+
+export const PAYMENT_PURPOSES = [
+  "invoice_payment",
+  "business_payment",
+  "family_support",
+  "education_fees",
+  "medical_expenses",
+  "rent_payment",
+  "gift",
+  "loan_repayment",
+  "other",
+] as const;
+export type PaymentPurpose = (typeof PAYMENT_PURPOSES)[number];
+
+/**
+ * Rich request lifecycle. "funded" (money received into Rhemito) is strictly
+ * separate from "paid_out" (settled to the requester's bank).
+ */
+export const REQUEST_STATUSES = [
+  "active",
+  "viewed",
+  "payment_pending",
+  "funded",
+  "payout_pending",
+  "paid_out",
+  "failed",
+  "expired",
+  "cancelled",
+  "refunded",
+] as const;
+export type RequestStatus = (typeof REQUEST_STATUSES)[number];
+
+/** Statuses a requester may cancel from (payment has not begun). */
+export const CANCELLABLE_STATUSES: ReadonlyArray<RequestStatus> = ["active", "viewed"];
+
+export const PAYOUT_ACCOUNT_VERIFICATION_STATUSES = [
+  "pending",
+  "verified",
+  "failed",
+  "disabled",
+] as const;
+export type PayoutAccountVerificationStatus = (typeof PAYOUT_ACCOUNT_VERIFICATION_STATUSES)[number];
+
+// ─── Verified payout accounts (server-owned) ──────────────────────────────────
+
+export const payoutAccountsTable = pgTable("payout_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").notNull(),
+  holderName: text("holder_name").notNull(), // locked to the verified owner name
+  country: text("country").notNull(), // ISO alpha-2
+  bankName: text("bank_name").notNull(),
+  accountNumber: text("account_number").notNull(), // full value stored server-side only
+  routingNumber: text("routing_number"),
+  currency: text("currency").notNull(),
+  verificationStatus: text("verification_status").notNull().default("pending"),
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  verifiedAt: timestamp("verified_at"),
+});
+
+export type PayoutAccountRecord = typeof payoutAccountsTable.$inferSelect;
+
+// ─── Money requests (authoritative lifecycle record) ─────────────────────────
+
+export const moneyRequests = pgTable("money_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestNumber: text("request_number").notNull().unique(), // RM-YYYYMM-#####
+  requesterId: varchar("requester_id").notNull(),
+  requesterName: text("requester_name").notNull(),
+  requesterCountry: text("requester_country").notNull(),
+  // Corridor + money (integer minor units; JPY-style zero-decimal handled)
+  corridorId: text("corridor_id").notNull(),
+  senderCountry: text("sender_country").notNull(),
+  payInCurrency: text("pay_in_currency").notNull(),
+  payInAmountMinor: bigint("pay_in_amount_minor", { mode: "number" }).notNull(),
+  payoutCurrency: text("payout_currency").notNull(),
+  feeMinor: bigint("fee_minor", { mode: "number" }).notNull(),
+  payoutAmountMinor: bigint("payout_amount_minor", { mode: "number" }),
+  // FX quote snapshot (indicative unless locked at payment)
+  fxRate: text("fx_rate"),
+  fxRateIsIndicative: boolean("fx_rate_is_indicative").notNull().default(true),
+  fxMarkupApplied: text("fx_markup_applied"),
+  // Verified payout account snapshot (masked externally)
+  payoutAccountId: varchar("payout_account_id").notNull(),
+  payoutAccountMasked: text("payout_account_masked").notNull(),
+  payoutAccountBankName: text("payout_account_bank_name").notNull(),
+  payoutAccountHolderName: text("payout_account_holder_name").notNull(),
+  payoutAccountCountry: text("payout_account_country").notNull(),
+  // Sender
+  senderType: text("sender_type").notNull(),
+  senderName: text("sender_name").notNull(),
+  senderEmail: text("sender_email").notNull(),
+  senderPhone: text("sender_phone"),
+  purpose: text("purpose").notNull(),
+  reference: text("reference"),
+  // Lifecycle
+  status: text("status").notNull().default("active"),
+  token: text("token").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  expiryExtendedOnce: boolean("expiry_extended_once").notNull().default(false),
+  viewedAt: timestamp("viewed_at"),
+  paymentInitiatedAt: timestamp("payment_initiated_at"),
+  fundedAt: timestamp("funded_at"),
+  payoutSubmittedAt: timestamp("payout_submitted_at"),
+  paidOutAt: timestamp("paid_out_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  failureReason: text("failure_reason"),
+  // Provider references (pay-in intent, provider payment id, payout ref)
+  payinIntentId: text("payin_intent_id"),
+  providerPaymentRef: text("provider_payment_ref"),
+  payoutProviderRef: text("payout_provider_ref"),
+  paymentMethod: text("payment_method"),
+  idempotencyKey: text("idempotency_key"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type MoneyRequest = typeof moneyRequests.$inferSelect;
+
+// ─── Double-entry ledger ──────────────────────────────────────────────────────
+
+export const LEDGER_ENTRY_TYPES = [
+  "gross_received", // funds received from the sender
+  "rhemito_fee", // fee deducted from requester proceeds
+  "fx_conversion", // FX debit/credit pair for cross-currency payouts
+  "net_wallet_credit", // net credit to the requester's Rhemito wallet
+  "payout_debit", // debit when net funds leave the wallet to the bank
+  "refund",
+  "reversal",
+  "loss_adjustment",
+] as const;
+export type LedgerEntryType = (typeof LEDGER_ENTRY_TYPES)[number];
+
+export const ledgerEntries = pgTable("ledger_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestId: varchar("request_id").notNull(),
+  type: text("type").notNull(),
+  account: text("account").notNull(), // e.g. "wallet:<userId>", "fee:rhemito", "payout_clearing:<userId>"
+  direction: text("direction").notNull(), // "debit" | "credit"
+  amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+  currency: text("currency").notNull(),
+  providerRef: text("provider_ref"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type LedgerEntry = typeof ledgerEntries.$inferSelect;
+
+// ─── Provider webhook idempotency ─────────────────────────────────────────────
+
+export const webhookEvents = pgTable("webhook_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: text("provider").notNull(),
+  eventId: text("event_id").notNull(),
+  eventType: text("event_type").notNull(),
+  processedAt: timestamp("processed_at").defaultNow(),
+  requestNumber: text("request_number"),
+});
+
+export type WebhookEvent = typeof webhookEvents.$inferSelect;
+
+// ─── Email delivery log (Request Money) ───────────────────────────────────────
+
+export const EMAIL_DELIVERY_STATES = ["queued", "sent", "delivered", "failed", "resent"] as const;
+
+export const emailDeliveries = pgTable("email_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestId: varchar("request_id").notNull(),
+  toEmail: text("to_email").notNull(),
+  subject: text("subject").notNull(),
+  state: text("state").notNull().default("queued"),
+  attempts: text("attempts").notNull().default("0"),
+  dedupeKey: text("dedupe_key").notNull().unique(),
+  lastAttemptAt: timestamp("last_attempt_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type EmailDelivery = typeof emailDeliveries.$inferSelect;
+
+// ─── Request Money Zod validation ─────────────────────────────────────────────
+
+export const addPayoutAccountSchema = z.object({
+  // Optional from the client — the server locks the holder name to the
+  // requester's verified profile name.
+  holderName: z.string().trim().optional(),
+  country: z.string().regex(/^[A-Z]{2}$/, "Select the account country."),
+  bankName: z.string().trim().min(2, "Bank name is required."),
+  accountNumber: z.string().trim().min(4, "Account number is required.").max(34),
+  routingNumber: z.string().trim().max(34).optional(),
+  currency: z.string().min(3, "Select the account currency."),
+});
+
+export const createMoneyRequestSchema = z
+  .object({
+    corridorId: z.string().min(1, "Select a supported corridor."),
+    payoutAccountId: z.string().min(1, "Select a verified payout account."),
+    payInAmount: z
+      .string()
+      .regex(/^\d+(\.\d{1,2})?$/, "Enter a valid amount.")
+      .refine((v) => parseFloat(v) > 0, "Enter a valid amount."),
+    senderType: z.enum(["individual", "business"]),
+    senderName: z.string().trim().min(2, "Sender name is required."),
+    senderEmail: z.string().email("Please enter a valid email address."),
+    senderPhone: z.string().trim().optional(),
+    purpose: z.enum(PAYMENT_PURPOSES, {
+      errorMap: () => ({ message: "Select a purpose for this payment." }),
+    }),
+    reference: z.string().trim().max(140).optional(),
+    idempotencyKey: z.string().min(8),
+  });
+
+export type CreateMoneyRequestPayload = z.infer<typeof createMoneyRequestSchema>;
+
+export const createPayinIntentSchema = z.object({
+  method: z.enum(["pay_by_bank", "card", "bank_transfer", "wallet"]),
+});
+
+export const reportRequestSchema = z.object({
+  reason: z.string().trim().min(3, "Please tell us why you are reporting this request.").max(500),
+});

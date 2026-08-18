@@ -4,10 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDemoNotifications } from "./notificationService";
-
-// Seed demo notifications so /notifications/demo-notification-* URLs render real
-// content on a fresh boot. Idempotent — safe to call before every startup.
-seedDemoNotifications();
+import { storage } from "./storage";
 
 // Extend session to include userId
 declare module "express-session" {
@@ -16,39 +13,11 @@ declare module "express-session" {
   }
 }
 
-const app = express();
-const httpServer = createServer(app);
-
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
-
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
-
-app.use(express.urlencoded({ extended: false }));
-
-// Session middleware
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "rhemito-dev-secret-change-in-production",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: "lax",
-    },
-  })
-);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -61,33 +30,107 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+async function main() {
+  // Seed demo notifications so /notifications/demo-notification-* URLs render
+  // real content on a fresh boot. Idempotent.
+  seedDemoNotifications();
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
+  const app = express();
+  const httpServer = createServer(app);
 
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
+  app.use(
+    express.json({
+      verify: (req, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
 
-      log(logLine);
+  app.use(express.urlencoded({ extended: false }));
+
+  // Behind a proxy (Render/Replit), trust X-Forwarded-Proto so session cookies
+  // are marked Secure only when the actual connection is HTTPS.
+  app.set("trust proxy", 1);
+
+  // Session middleware — development swaps in a file-backed store so logins
+  // survive dev-server restarts; production must use a shared store (Postgres).
+  const SessionStore =
+    process.env.NODE_ENV === "production" ? undefined : new (await import("./fileSessionStore")).FileSessionStore();
+
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || "rhemito-dev-secret-change-in-production",
+      resave: false,
+      saveUninitialized: false,
+      store: SessionStore,
+      cookie: {
+        secure: "auto", // Secure over HTTPS, plain over HTTP (e.g. local runs)
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        sameSite: "lax",
+      },
+    }),
+  );
+
+  // Development only: restore registered users / pending OTPs from the dev
+  // snapshot so restarts do not silently log everyone out. Production uses
+  // real persistence infrastructure instead.
+  if (process.env.NODE_ENV !== "production") {
+    const { loadSnapshot } = await import("./devPersistence");
+    const snapshot = loadSnapshot();
+    if (snapshot) {
+      storage.hydrateForDev(
+        snapshot.authUsers as never[],
+        snapshot.otpCodes as never[],
+      );
+      log(`[devPersistence] restored ${snapshot.authUsers.length} user(s)`);
     }
+  }
+
+  // DEVELOPMENT ONLY — silent session resume. Local dev-server restarts used
+  // to invalidate cookies created before a restart, bouncing a logged-in
+  // tester to sign-in from flows reachable only after login (e.g. Request
+  // Payment). When a request arrives without a session, resume the most
+  // recent local user so the journey continues without any sign-in prompt.
+  // Production NEVER resumes sessions implicitly — it returns 401.
+  if (process.env.NODE_ENV !== "production") {
+    app.use((req, res, next) => {
+      if (req.session?.userId) return next();
+      storage.getMostRecentAuthUserIdForDev().then((userId) => {
+        if (userId) {
+          req.session.userId = userId;
+        }
+        next();
+      }).catch(() => next());
+    });
+  }
+
+  app.use((req, res, next) => {
+    const start = Date.now();
+    const path = req.path;
+    let capturedJsonResponse: Record<string, any> | undefined = undefined;
+
+    const originalResJson = res.json;
+    res.json = function (bodyJson, ...args) {
+      capturedJsonResponse = bodyJson;
+      return originalResJson.apply(res, [bodyJson, ...args]);
+    };
+
+    res.on("finish", () => {
+      const duration = Date.now() - start;
+      if (path.startsWith("/api")) {
+        let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+        if (capturedJsonResponse) {
+          logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        }
+
+        log(logLine);
+      }
+    });
+
+    next();
   });
 
-  next();
-});
-
-(async () => {
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -109,8 +152,8 @@ app.use((req, res, next) => {
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
+  // Other ports are firewalled. Default to 5000 if none is specified.
+  // This serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   // Health check endpoint
@@ -121,4 +164,6 @@ app.use((req, res, next) => {
   httpServer.listen(port, () => {
     log(`serving on port ${port}`);
   });
-})();
+}
+
+void main();

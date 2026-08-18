@@ -63,6 +63,7 @@ export default function SendMoney() {
         relationship: "family",
         nickName: "",
         reason: "family_support",
+        otherReason: "",
         // Banking fields
         bankName: "",
         accountNumber: "",
@@ -788,16 +789,33 @@ export default function SendMoney() {
                                             </div>
 
                                             <div className="space-y-2">
-                                                <Label>Reason for transfer</Label>
-                                                <Select defaultValue="family_support">
+                                                <Label>Reason for transfer <span className="text-destructive">*</span></Label>
+                                                <Select
+                                                    value={recipientDetails.reason}
+                                                    onValueChange={(val) => setRecipientDetails(prev => ({ ...prev, reason: val }))}
+                                                >
                                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="family_support">Family Support</SelectItem>
                                                         <SelectItem value="education">Education</SelectItem>
                                                         <SelectItem value="bills">Bills</SelectItem>
+                                                        <SelectItem value="medical">Medical Expenses</SelectItem>
+                                                        <SelectItem value="other">Other</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>
+
+                                            {recipientDetails.reason === "other" && (
+                                                <div className="space-y-2">
+                                                    <Label>Please specify reason <span className="text-destructive">*</span></Label>
+                                                    <Input
+                                                        placeholder="e.g. Consulting, Event sponsorship, etc."
+                                                        value={recipientDetails.otherReason}
+                                                        onChange={e => setRecipientDetails(prev => ({ ...prev, otherReason: e.target.value }))}
+                                                        required
+                                                    />
+                                                </div>
+                                            )}
 
                                             <div className="space-y-2">
                                                 <Label>Narration

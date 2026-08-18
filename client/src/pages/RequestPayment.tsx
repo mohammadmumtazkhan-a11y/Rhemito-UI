@@ -14,7 +14,12 @@ import {
   Plus,
   Loader2,
   ArrowRightLeft,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Mail,
+  QrCode,
+  Share2,
+  ShieldCheck
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -34,14 +39,20 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { knownSenders, type KnownSender } from "@/data/knownSenders";
-import { payoutAccounts as initialPayoutAccounts, getDefaultPayoutAccount, type PayoutAccount } from "@/data/payoutAccounts";
+import { PayoutAccountSelector } from "@/components/payout/PayoutAccountSelector";
+import {
+  createRequest, getCorridors, getRequests,
+  getEligibility, getQuote, resendEmail,
+  type Corridor, type PayoutAccountView, type Quote,
+} from "@/lib/requests";
+import { DIALING_CODES } from "@/data/dialing-codes";
+import { fromMinorUnits } from "@shared/money";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-const EXCHANGE_RATES: Record<string, Record<string, number>> = {
-  GBP: { NGN: 2000, USD: 1.27, EUR: 1.17, GBP: 1 },
-  USD: { NGN: 1575, GBP: 0.79, EUR: 0.92, USD: 1 },
-  EUR: { NGN: 1712, GBP: 0.85, USD: 1.09, EUR: 1 },
-  NGN: { GBP: 0.0005, USD: 0.00063, EUR: 0.00058, NGN: 1 },
-};
+/**
+ * Cross-currency requests settle at the LIVE spot rate at payment time — the
+ * server quote endpoint provides indicative figures for previews only.
+ */
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   GBP: "£",
@@ -65,22 +76,10 @@ interface FormData {
   senderPhone: string;
   senderDob: string;
   reason: string;
+  otherReason: string;
 }
 
-const COUNTRY_CODES = [
-  { code: "+234", country: "Nigeria", flag: "🇳🇬" },
-  { code: "+44", country: "UK", flag: "🇬🇧" },
-  { code: "+1", country: "USA", flag: "🇺🇸" },
-  { code: "+1", country: "Canada", flag: "🇨🇦" },
-  { code: "+233", country: "Ghana", flag: "🇬🇭" },
-  { code: "+254", country: "Kenya", flag: "🇰🇪" },
-  { code: "+27", country: "South Africa", flag: "🇿🇦" },
-  { code: "+49", country: "Germany", flag: "🇩🇪" },
-  { code: "+33", country: "France", flag: "🇫🇷" },
-  { code: "+91", country: "India", flag: "🇮🇳" },
-  { code: "+86", country: "China", flag: "🇨🇳" },
-  { code: "+971", country: "UAE", flag: "🇦🇪" },
-];
+// Country dialing codes come from @/data/dialing-codes (full ISO list).
 
 const steps = [
   { id: 1, title: "Amount & Currencies", description: "Set amount & payout destination" },
@@ -107,38 +106,55 @@ export default function RequestPayment() {
   const [copied, setCopied] = useState(false);
   const [senderSearch, setSenderSearch] = useState("");
   const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
-  const [isChangingPayoutAccount, setIsChangingPayoutAccount] = useState(false);
-  const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [showFxNoticeModal, setShowFxNoticeModal] = useState(false);
-  const [accountsList, setAccountsList] = useState<PayoutAccount[]>(() => initialPayoutAccounts.filter(a => a.activated));
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [selectedPayoutAccount, setSelectedPayoutAccount] = useState<PayoutAccountView | null>(null);
 
-  // Auto-open Add Account modal on mount if no payout accounts exist
-  useEffect(() => {
-    if (accountsList.length === 0) {
-      setIsAddAccountModalOpen(true);
-    }
-  }, [accountsList.length]);
+  const handleSelectPayoutAccount = (account: PayoutAccountView) => {
+    setSelectedPayoutAccount(account);
+    setFormData(prev => ({ ...prev, selectedPayoutAccountId: account.id }));
+  };
 
-  // Add Account Modal Form State
-  const [newAccountData, setNewAccountData] = useState({
-    name: requesterName,
-    currency: "GBP",
-    bank: "",
-    accountNumber: "",
-    routingNumber: "",
+  const queryClient = useQueryClient();
+
+  // Eligibility is server-authoritative: real session, mini-KYC passed, and a
+  // verified payout account owned by the requester.
+  const eligibilityQuery = useQuery<{ kind: "ok"; eligible: boolean; reasons: string[]; country: string } | { kind: "unauthenticated" }>({
+    queryKey: ["/api/request-money/eligibility"],
+    queryFn: async () => {
+      try {
+        const data = await getEligibility();
+        return { kind: "ok" as const, eligible: data.eligible, reasons: data.reasons, country: data.country };
+      } catch (err) {
+        if ((err as { status?: number }).status === 401) return { kind: "unauthenticated" } as const;
+        throw err;
+      }
+    },
+    retry: false,
+    refetchOnMount: "always",
   });
-  const [isSubmittingNewAccount, setIsSubmittingNewAccount] = useState(false);
+
+  const corridorsQuery = useQuery<Corridor[] | undefined>({
+    queryKey: ["/api/request-money/corridors"],
+    queryFn: async () => {
+      try {
+        return await getCorridors();
+      } catch (err) {
+        if ((err as { status?: number }).status === 401) return undefined;
+        throw err;
+      }
+    },
+    enabled: eligibilityQuery.data?.kind === "ok",
+    retry: false,
+    refetchOnMount: "always",
+  });
 
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  const defaultAccount = useMemo(() => {
-    return accountsList.find(a => a.isDefault) || accountsList[0];
-  }, [accountsList]);
 
   const [formData, setFormData] = useState<FormData>({
     requestAmount: "",
     senderCurrency: "GBP",
-    selectedPayoutAccountId: defaultAccount ? defaultAccount.id : "",
+    selectedPayoutAccountId: "",
     paymentMethod: "sender_choice",
     senderType: "individual",
     senderFirstName: "",
@@ -150,14 +166,28 @@ export default function RequestPayment() {
     senderPhone: "",
     senderDob: "",
     reason: "",
+    otherReason: "",
   });
 
-  // Ensure selected payout account is set
-  useEffect(() => {
-    if (!formData.selectedPayoutAccountId && defaultAccount) {
-      setFormData(prev => ({ ...prev, selectedPayoutAccountId: defaultAccount.id }));
+  // Sender currency options come from the requester's ENABLED corridors — the
+  // default must follow them, otherwise the selector renders blank (e.g. an
+  // NG account whose only enabled pay-in currency is NGN).
+  const enabledPayInCurrencies = useMemo(() => {
+    const corridors = corridorsQuery.data ?? [];
+    const seen: string[] = [];
+    for (const c of corridors) {
+      if (c.enabled && !seen.includes(c.payInCurrency)) seen.push(c.payInCurrency);
     }
-  }, [defaultAccount, formData.selectedPayoutAccountId]);
+    return seen;
+  }, [corridorsQuery.data]);
+
+  useEffect(() => {
+    if (enabledPayInCurrencies.length === 0) return;
+    if (!enabledPayInCurrencies.includes(formData.senderCurrency)) {
+      setFormData(prev => ({ ...prev, senderCurrency: enabledPayInCurrencies[0] }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabledPayInCurrencies.join(",")]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -180,10 +210,6 @@ export default function RequestPayment() {
       }
     }
   }, []);
-
-  const selectedPayoutAccount: PayoutAccount | undefined = useMemo(() => {
-    return accountsList.find(a => a.id === formData.selectedPayoutAccountId) || defaultAccount;
-  }, [accountsList, formData.selectedPayoutAccountId, defaultAccount]);
 
   const payoutCurrency = selectedPayoutAccount?.currency || "GBP";
   const senderCurrency = formData.senderCurrency;
@@ -213,9 +239,34 @@ export default function RequestPayment() {
     setShowSenderSuggestions(false);
   };
 
+  // Indicative quote from the server (live-first). Cross-currency previews
+  // never assume 1:1 — if no quote is available the notice stays qualitative.
+  const [indicativeQuote, setIndicativeQuote] = useState<Quote | null>(null);
+  const corridorForSelection = useMemo(() => {
+    const corridors = corridorsQuery.data ?? [];
+    return corridors.find(
+      (c) => c.enabled && c.payInCurrency === senderCurrency && c.payoutCurrency === payoutCurrency,
+    );
+  }, [corridorsQuery.data, senderCurrency, payoutCurrency]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!corridorForSelection || !formData.requestAmount || parseFloat(formData.requestAmount) <= 0) {
+      setIndicativeQuote(null);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const q = await getQuote(corridorForSelection.id, formData.requestAmount);
+        if (!cancelled) setIndicativeQuote(q);
+      } catch {
+        if (!cancelled) setIndicativeQuote(null);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [corridorForSelection?.id, formData.requestAmount]);
   const getExchangeRate = () => {
     if (senderCurrency === payoutCurrency) return 1;
-    return EXCHANGE_RATES[senderCurrency]?.[payoutCurrency] || 1;
+    return indicativeQuote?.fxRate ?? NaN; // NaN → show "Live Spot Rate at Payout" only
   };
 
   const parsedAmount = parseFloat(formData.requestAmount) || 0;
@@ -223,54 +274,55 @@ export default function RequestPayment() {
   const platformFeeAmount = parsedAmount * platformFeeRate;
   const netBeforeFx = parsedAmount - platformFeeAmount;
   const fxRate = getExchangeRate();
-  const netPayoutAmount = netBeforeFx * fxRate;
+  const netPayoutAmount = Number.isFinite(fxRate) ? netBeforeFx * fxRate : 0;
 
   const senderSymbol = CURRENCY_SYMBOLS[senderCurrency] || "";
   const payoutSymbol = CURRENCY_SYMBOLS[payoutCurrency] || "";
 
-  const paymentLink = useMemo(() => `rhemito.com/pay/ref${Math.random().toString(36).substring(2, 8)}`, []);
+  const [paymentLink, setPaymentLink] = useState("");
+  const [createdRequestId, setCreatedRequestId] = useState("");
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleCreateNewAccount = () => {
-    if (!newAccountData.bank || !newAccountData.accountNumber) return;
-
-    setIsSubmittingNewAccount(true);
-    setTimeout(() => {
-      const newAcc: PayoutAccount = {
-        id: `acc-${Date.now()}`,
-        refNo: String(Math.floor(1000 + Math.random() * 9000)),
-        name: requesterName,
-        currency: newAccountData.currency,
-        bank: newAccountData.bank,
-        accountNumber: newAccountData.accountNumber,
-        routingNumber: newAccountData.routingNumber || "N/A",
-        activated: true,
-        isDefault: accountsList.length === 0,
-      };
-
-      setAccountsList(prev => [...prev, newAcc]);
-      setFormData(prev => ({ ...prev, selectedPayoutAccountId: newAcc.id }));
-      setIsSubmittingNewAccount(false);
-      setIsAddAccountModalOpen(false);
-      setIsChangingPayoutAccount(false);
-
+  const handleSubmitRequest = async () => {
+    if (isSubmittingRequest || !corridorForSelection || !selectedPayoutAccount) return;
+    setIsSubmittingRequest(true);
+    try {
+      const preferredLabel =
+        formData.paymentMethod === "sender_choice" ? null : formData.paymentMethod.replace(/_/g, " ");
+      const result = await createRequest({
+        corridorId: corridorForSelection.id,
+        payoutAccountId: selectedPayoutAccount.id,
+        payInAmount: parsedAmount.toFixed(2),
+        senderType: formData.senderType,
+        senderName:
+          formData.senderType === "business"
+            ? formData.senderBusinessName
+            : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" "),
+        senderEmail: formData.senderEmail,
+        senderPhone: formData.senderPhone ? `${formData.senderCountryCode} ${formData.senderPhone}` : undefined,
+        purpose: formData.reason as never,
+        reference: [
+          preferredLabel ? `Preferred: ${preferredLabel}` : null,
+          formData.reason === "other" && formData.otherReason.trim() ? `Reason: ${formData.otherReason.trim()}` : null,
+        ].filter(Boolean).join(" | ") || undefined,
+        idempotencyKey: idempotencyKeyRef.current,
+      });
+      setPaymentLink(result.checkoutUrl);
+      setCreatedRequestId(result.request.id);
+      setIsSuccess(true);
+    } catch (err) {
       toast({
-        title: "Payout Account Added",
-        description: `${newAcc.bank} (${newAcc.currency}) in name of ${requesterName} was added and selected for this request.`,
+        title: "Request not generated",
+        description: err instanceof Error ? err.message : "Something went wrong. Please try again.",
+        variant: "destructive",
       });
-
-      // Reset modal fields
-      setNewAccountData({
-        name: requesterName,
-        currency: "GBP",
-        bank: "",
-        accountNumber: "",
-        routingNumber: "",
-      });
-    }, 600);
+    } finally {
+      setIsSubmittingRequest(false);
+    }
   };
 
   const handleNext = () => {
@@ -283,7 +335,7 @@ export default function RequestPayment() {
     } else if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
     } else {
-      setIsSuccess(true);
+      void handleSubmitRequest();
     }
   };
 
@@ -301,27 +353,84 @@ export default function RequestPayment() {
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(`https://${paymentLink}`);
+    navigator.clipboard.writeText(paymentLink);
     setCopied(true);
-    toast({
-      title: "Link Copied!",
-      description: "Payment link has been copied to your clipboard.",
-    });
+    toast({ title: "Link Copied!", description: "Payment link has been copied to your clipboard." });
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShareLink = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Rhemito payment request", text: "Please pay this Rhemito request", url: paymentLink });
+      } catch {
+        // user cancelled
+      }
+    } else {
+      handleCopyLink();
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (!createdRequestId) return;
+    try {
+      await resendEmail(createdRequestId);
+      toast({ title: "Email sent", description: `The payment request email was sent to ${formData.senderEmail}.` });
+    } catch (err) {
+      toast({
+        title: "Email not sent",
+        description: err instanceof Error ? err.message : "Please try again shortly.",
+        variant: "destructive",
+      });
+    }
   };
 
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return parsedAmount > 0 && !!selectedPayoutAccount;
+        return parsedAmount > 0 && !!selectedPayoutAccount && !!corridorForSelection;
       case 2:
-        return !!formData.senderEmail && (formData.senderType === "individual" ? !!formData.senderFirstName : !!formData.senderBusinessName);
+        // Purpose of payment is mandatory for cross-border compliance.
+        return (
+          !!formData.senderEmail &&
+          !!formData.reason &&
+          (formData.reason !== "other" || !!formData.otherReason.trim()) &&
+          (formData.senderType === "individual" ? !!formData.senderFirstName : !!formData.senderBusinessName)
+        );
       case 3:
-        return true;
+        return !isSubmittingRequest;
       default:
         return false;
     }
   };
+
+
+  // Server-authoritative eligibility gates
+  if (eligibilityQuery.isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-2xl mx-auto py-20 text-center text-muted-foreground text-sm">Checking your eligibility…</div>
+      </DashboardLayout>
+    );
+  }
+
+  if (eligibilityQuery.data?.kind === "unauthenticated") {
+    // This flow is reachable only from the logged-in dashboard, so it NEVER
+    // asks the user to sign in or register. In development the server silently
+    // resumes the local session, making this state practically unreachable;
+    // production shows a neutral session notice only (no sign-in CTA).
+    return (
+      <DashboardLayout>
+        <div className="max-w-xl mx-auto py-20 flex flex-col items-center gap-3 text-muted-foreground text-sm" data-testid="gate-unauthenticated">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Verifying your session…
+          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+            Refresh
+          </Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (isSuccess) {
     return (
@@ -378,15 +487,15 @@ export default function RequestPayment() {
                   </p>
                 )}
                 <div className="text-[11px] text-muted-foreground">
-                  Payout to: {selectedPayoutAccount?.bank} ({payoutCurrency})
+                  Payout to: {selectedPayoutAccount?.bankName} ({payoutCurrency})
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 space-y-3 border border-primary/10">
-                <p className="text-xs font-medium text-slate-700">You can also share this link directly with your sender:</p>
+              <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 space-y-3 border border-primary/10" data-testid="qr-panel">
+                <p className="text-xs font-medium text-slate-700">Share this request — link, email and QR code all open the same secure checkout:</p>
                 <div className="flex items-center gap-2">
                   <Input
-                    value={`https://${paymentLink}`}
+                    value={paymentLink}
                     readOnly
                     className="text-sm bg-white font-mono"
                     data-testid="input-payment-link"
@@ -401,6 +510,33 @@ export default function RequestPayment() {
                     <span>{copied ? "Copied" : "Copy"}</span>
                   </Button>
                 </div>
+                {createdRequestId && (
+                  <div className="flex flex-col sm:flex-row items-center gap-4 pt-1">
+                    <img
+                      src={`/api/request-money/requests/${createdRequestId}/qr.png`}
+                      alt={`QR code for payment request`}
+                      className="w-36 h-36 border border-border rounded-xl bg-white"
+                      data-testid="img-qr"
+                    />
+                    <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
+                      <Button variant="outline" size="sm" onClick={handleShareLink} data-testid="button-share">
+                        <Share2 className="w-3.5 h-3.5 mr-1.5" /> Share
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => window.open(`/api/request-money/requests/${createdRequestId}/qr.png`, "_blank")} data-testid="button-download-qr-png">
+                        <Download className="w-3.5 h-3.5 mr-1.5" /> QR (PNG)
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => window.open(`/api/request-money/requests/${createdRequestId}/qr.svg`, "_blank")} data-testid="button-download-qr-svg">
+                        <QrCode className="w-3.5 h-3.5 mr-1.5" /> QR (SVG)
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleResendEmail} data-testid="button-resend-email">
+                        <Mail className="w-3.5 h-3.5 mr-1.5" /> Send email
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  On mobile the link opens the checkout directly — no QR scanning needed. The QR contains only the secure payment link.
+                </p>
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -433,6 +569,9 @@ export default function RequestPayment() {
                     });
                     setCurrentStep(1);
                     setIsSuccess(false);
+                    setPaymentLink("");
+                    setCreatedRequestId("");
+                    idempotencyKeyRef.current = crypto.randomUUID();
                   }}
                   data-testid="button-new-request"
                 >
@@ -517,121 +656,13 @@ export default function RequestPayment() {
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 space-y-6">
 
-                      {/* Zero Payout Account Prompt */}
-                      {accountsList.length === 0 ? (
-                        <div className="p-5 bg-amber-50/90 border-2 border-amber-200 rounded-xl space-y-3.5 text-amber-900">
-                          <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
-                              <Building2 className="w-5 h-5" />
-                            </div>
-                            <div className="space-y-1">
-                              <h4 className="font-bold text-sm text-amber-950 flex items-center gap-2">
-                                <span>Payout Account Required</span>
-                                <Badge variant="outline" className="text-[10px] border-amber-300 bg-amber-100/60 text-amber-800 font-semibold">
-                                  Mandatory
-                                </Badge>
-                              </h4>
-                              <p className="text-xs text-amber-800 leading-relaxed">
-                                You must first add a valid bank account in your name (<strong>{requesterName}</strong>) to receive payouts from your payment requests. The account holder name must match your registered name.
-                              </p>
-                            </div>
-                          </div>
-                          <Button
-                            onClick={() => setIsAddAccountModalOpen(true)}
-                            className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs h-10 font-semibold gap-1.5 shadow-sm"
-                            data-testid="button-add-first-payout-account"
-                          >
-                            <Plus className="w-4 h-4" />
-                            Add Your Payout Bank Account
-                          </Button>
-                        </div>
-                      ) : (
-                        /* Default Payout Account Card */
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Receiving Payout Account</span>
-                              {selectedPayoutAccount?.isDefault && (
-                                <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary hover:bg-primary/10">
-                                  Default
-                                </Badge>
-                              )}
-                            </div>
-                            <div>
-                              {accountsList.length > 0 && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setIsChangingPayoutAccount(!isChangingPayoutAccount)}
-                                  className="text-xs text-primary h-7 px-2 font-medium"
-                                  data-testid="button-toggle-change-payout"
-                                >
-                                  {isChangingPayoutAccount ? "Done" : "Change"}
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-
-                          {!isChangingPayoutAccount ? (
-                            <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200">
-                              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                                <Building2 className="w-5 h-5" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-sm text-foreground truncate">{selectedPayoutAccount?.bank}</p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  ****{selectedPayoutAccount?.accountNumber.slice(-4)} • {selectedPayoutAccount?.name}
-                                </p>
-                              </div>
-                              <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 font-semibold text-xs shrink-0">
-                                {payoutCurrency}
-                              </Badge>
-                            </div>
-                          ) : (
-                            <div className="space-y-2 pt-1">
-                              {accountsList.map((acc) => (
-                                <button
-                                  key={acc.id}
-                                  type="button"
-                                  onClick={() => {
-                                    handleInputChange("selectedPayoutAccountId", acc.id);
-                                    setIsChangingPayoutAccount(false);
-                                  }}
-                                  className={`w-full p-2.5 rounded-lg border text-left flex items-center justify-between transition-all ${
-                                    formData.selectedPayoutAccountId === acc.id
-                                      ? "border-primary bg-primary/5"
-                                      : "border-border bg-white hover:border-primary/40"
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2.5 min-w-0">
-                                    <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
-                                    <div className="truncate text-xs">
-                                      <span className="font-semibold">{acc.bank}</span> (****{acc.accountNumber.slice(-4)})
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <span className="text-xs font-bold text-slate-600">{acc.currency}</span>
-                                    {formData.selectedPayoutAccountId === acc.id && (
-                                      <Check className="w-4 h-4 text-primary" />
-                                    )}
-                                  </div>
-                                </button>
-                              ))}
-
-                              {/* Single clean Add New Bank Account button inside list */}
-                              <button
-                                type="button"
-                                onClick={() => setIsAddAccountModalOpen(true)}
-                                className="w-full p-2.5 rounded-lg border border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors mt-2"
-                                data-testid="button-add-new-payout-in-list"
-                              >
-                                <Plus className="w-4 h-4" />
-                                <span>Add New Bank Account</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      {/* Receiving Payout Account */}
+                      <PayoutAccountSelector
+                        requesterName={requesterName}
+                        selectedAccountId={selectedPayoutAccount?.id ?? ""}
+                        onSelect={handleSelectPayoutAccount}
+                        context="request"
+                      />
 
                       {/* Request Amount Input */}
                       <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-5 space-y-4 border border-primary/10">
@@ -664,16 +695,26 @@ export default function RequestPayment() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="GBP">GBP (£)</SelectItem>
-                                <SelectItem value="USD">USD ($)</SelectItem>
-                                <SelectItem value="EUR">EUR (€)</SelectItem>
-                                <SelectItem value="NGN">NGN (₦)</SelectItem>
+                                {enabledPayInCurrencies.map(currency => (
+                                  <SelectItem key={currency} value={currency}>
+                                    {currency} ({CURRENCY_SYMBOLS[currency] ?? ""})
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>
                           <p className="text-xs text-muted-foreground">
                             The sender will be billed in <strong>{senderCurrency}</strong>.
                           </p>
+                          {parsedAmount > 0 && !corridorForSelection && (
+                            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5" data-testid="corridor-unavailable">
+                              This sender currency / payout account combination has no enabled corridor.{" "}
+                              {(() => {
+                                const disabled = (corridorsQuery.data ?? []).find(c => !c.enabled && c.payInCurrency === senderCurrency && c.payoutCurrency === payoutCurrency);
+                                return disabled?.unavailabilityReason ?? "Try a different currency or payout account.";
+                              })()}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -757,7 +798,7 @@ export default function RequestPayment() {
                             </div>
                           )}
                           <p className="text-[10px] text-muted-foreground mt-1.5">
-                            Deposited to {selectedPayoutAccount?.bank || "Default Account"}
+                            Deposited to {selectedPayoutAccount?.bankName || "Default Account"}
                           </p>
                         </div>
                       </div>
@@ -930,13 +971,13 @@ export default function RequestPayment() {
                           value={formData.senderCountryCode}
                           onValueChange={(value) => handleInputChange("senderCountryCode", value)}
                         >
-                          <SelectTrigger className="w-32" data-testid="select-country-code">
+                          <SelectTrigger className="w-36" data-testid="select-country-code">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
-                            {COUNTRY_CODES.map((country, index) => (
-                              <SelectItem key={`${country.code}-${index}`} value={country.code}>
-                                {country.flag} {country.code}
+                          <SelectContent className="max-h-72">
+                            {DIALING_CODES.map((country) => (
+                              <SelectItem key={country.value} value={country.value}>
+                                {country.flag} {country.code} {country.country}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -970,11 +1011,12 @@ export default function RequestPayment() {
                       </div>
                     )}
 
-                    {/* Reason for Payment (Optional) */}
+                    {/* Reason for Payment — mandatory for cross-border compliance */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="reason" className="text-xs font-medium">Reason for Payment</Label>
-                        <span className="text-[11px] text-muted-foreground">Optional</span>
+                        <Label htmlFor="reason" className="text-xs font-medium">
+                          Reason for Payment <span className="text-destructive">*</span>
+                        </Label>
                       </div>
                       <Select
                         value={formData.reason}
@@ -996,6 +1038,23 @@ export default function RequestPayment() {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {formData.reason === "other" && (
+                      <div className="space-y-1.5" data-testid="container-other-reason">
+                        <Label htmlFor="otherReason" className="text-xs font-medium">
+                          Please specify reason <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="otherReason"
+                          placeholder="e.g. Consulting services, Event sponsorship, etc."
+                          value={formData.otherReason}
+                          onChange={(e) => handleInputChange("otherReason", e.target.value)}
+                          className="h-10 text-sm"
+                          data-testid="input-other-reason"
+                          required
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1046,7 +1105,7 @@ export default function RequestPayment() {
                         <div className="flex justify-between py-1 border-b border-slate-100">
                           <span className="text-muted-foreground">Destination Payout Account:</span>
                           <span className="font-semibold text-slate-800">
-                            {selectedPayoutAccount?.bank} ({payoutCurrency})
+                            {selectedPayoutAccount?.bankName} ({payoutCurrency})
                           </span>
                         </div>
 
@@ -1081,7 +1140,11 @@ export default function RequestPayment() {
                         {formData.reason && (
                           <div className="flex justify-between py-1 border-b border-slate-100">
                             <span className="text-muted-foreground">Reason:</span>
-                            <span className="font-medium capitalize">{formData.reason.replace(/_/g, " ")}</span>
+                            <span className="font-medium">
+                              {formData.reason === "other" && formData.otherReason.trim()
+                                ? `Other (${formData.otherReason.trim()})`
+                                : formData.reason.replace(/_/g, " ")}
+                            </span>
                           </div>
                         )}
 
@@ -1128,134 +1191,6 @@ export default function RequestPayment() {
         </AnimatePresence>
       </div>
 
-      {/* Add New Payout Account Modal Dialog */}
-      <Dialog open={isAddAccountModalOpen} onOpenChange={setIsAddAccountModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <Building2 className="w-5 h-5 text-primary" />
-              <span>Add Payout Bank Account</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Add a bank account to receive payouts directly from requested payments.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Account Currency *</Label>
-              <Select
-                value={newAccountData.currency}
-                onValueChange={(val) => setNewAccountData(prev => ({ ...prev, currency: val }))}
-              >
-                <SelectTrigger className="h-10 text-sm font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="GBP">GBP (£) - United Kingdom</SelectItem>
-                  <SelectItem value="NGN">NGN (₦) - Nigeria</SelectItem>
-                  <SelectItem value="USD">USD ($) - United States</SelectItem>
-                  <SelectItem value="EUR">EUR (€) - Eurozone</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="modalBankName" className="text-xs font-medium">Bank Name *</Label>
-              <Input
-                id="modalBankName"
-                placeholder="e.g. Barclays, Chase, Access Bank"
-                value={newAccountData.bank}
-                onChange={(e) => setNewAccountData(prev => ({ ...prev, bank: e.target.value }))}
-                className="h-10 text-sm"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="modalAccountNumber" className="text-xs font-medium">
-                {newAccountData.currency === "EUR" ? "IBAN *" : "Account Number *"}
-              </Label>
-              <Input
-                id="modalAccountNumber"
-                placeholder={newAccountData.currency === "EUR" ? "GB29BARC204567..." : "12345678"}
-                value={newAccountData.accountNumber}
-                onChange={(e) => setNewAccountData(prev => ({ ...prev, accountNumber: e.target.value }))}
-                className="h-10 text-sm font-mono"
-              />
-            </div>
-
-            {newAccountData.currency !== "NGN" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="modalRoutingNumber" className="text-xs font-medium">
-                  {newAccountData.currency === "GBP" ? "Sort Code" : newAccountData.currency === "USD" ? "Routing Number (ABA)" : "BIC / SWIFT"}
-                </Label>
-                <Input
-                  id="modalRoutingNumber"
-                  placeholder={newAccountData.currency === "GBP" ? "20-45-67" : "021000021"}
-                  value={newAccountData.routingNumber}
-                  onChange={(e) => setNewAccountData(prev => ({ ...prev, routingNumber: e.target.value }))}
-                  className="h-10 text-sm font-mono"
-                />
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="modalAccountHolder" className="text-xs font-semibold text-slate-900">
-                  Account Holder Name (Requester) *
-                </Label>
-                <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 gap-1 font-medium">
-                  <Check className="w-3 h-3" />
-                  Verified Name
-                </Badge>
-              </div>
-              <Input
-                id="modalAccountHolder"
-                value={requesterName}
-                readOnly
-                disabled
-                className="h-10 text-sm bg-slate-100 font-medium text-slate-800 cursor-not-allowed border-slate-200"
-              />
-              <div className="flex items-start gap-1.5 text-[11px] text-amber-900 bg-amber-50 p-2.5 rounded-lg border border-amber-200/80">
-                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-                <span>
-                  The bank account name must strictly match your verified profile name (<strong>{requesterName}</strong>). Payouts cannot be made to third-party bank accounts.
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsAddAccountModalOpen(false)}
-              disabled={isSubmittingNewAccount}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleCreateNewAccount}
-              disabled={!newAccountData.bank || !newAccountData.accountNumber || isSubmittingNewAccount}
-              className="gap-1.5 bg-primary"
-            >
-              {isSubmittingNewAccount ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Adding Account...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>Save & Select</span>
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* FX Conversion Notice Modal */}
       <Dialog open={showFxNoticeModal} onOpenChange={setShowFxNoticeModal}>
         <DialogContent className="sm:max-w-md">
@@ -1294,7 +1229,7 @@ export default function RequestPayment() {
               </div>
               <div className="flex justify-between pt-1 border-t border-slate-200/60">
                 <span className="text-muted-foreground">Destination Payout Account:</span>
-                <span className="font-semibold text-slate-800">{selectedPayoutAccount?.bank} ({payoutCurrency})</span>
+                <span className="font-semibold text-slate-800">{selectedPayoutAccount?.bankName} ({payoutCurrency})</span>
               </div>
             </div>
           </div>

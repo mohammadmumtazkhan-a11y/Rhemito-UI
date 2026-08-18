@@ -17,7 +17,8 @@ import {
   Inbox,
   Send,
   Sparkles,
-  UsersRound
+  UsersRound,
+  FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -47,6 +48,8 @@ const moneySentItems: NavItemData[] = [
 
 const paymentsReceivedItems: NavItemData[] = [
   { icon: Wallet, label: "Received Payments", href: "/payments", enabled: true },
+  { icon: ArrowLeftRight, label: "Payment Requests", href: "/payment-requests", enabled: true },
+  { icon: FileText, label: "Sent Invoices", href: "/sent-invoices", enabled: true },
   { icon: UserCheck, label: "Senders", href: "/senders", enabled: true },
   { icon: UsersRound, label: "Funding Campaigns", href: "/group-pay", enabled: true, tooltip: "Funding campaigns", gradient: "from-blue-500 to-indigo-600" },
   { icon: Building2, label: "Collections Accounts", href: "/payout-accounts", enabled: true, tooltip: "You receive money here" },

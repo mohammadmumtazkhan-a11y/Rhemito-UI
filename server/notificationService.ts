@@ -71,6 +71,10 @@ const EVENT_CATEGORY_MAP: Record<NotificationEventType, EventCategory> = {
   funding_allocated_single: "paymentEvents",
   funding_allocated_multi: "paymentEvents",
   funding_allocated_partial: "paymentEvents",
+  // Send Invoice MVP1 — invoice lifecycle events for the sender
+  invoice_paid: "paymentEvents",
+  invoice_expired: "paymentEvents",
+  invoice_new_link_requested: "paymentEvents",
 };
 
 // ─── Refund ETA by method (AC 11.2) ─────────────────────────────────────────
@@ -114,6 +118,13 @@ export function buildNotificationContent(
   const refundAmount = String(data.refundAmount ?? amount);
   const refundMethod = String(data.refundMethod ?? "original payment method");
   const refundEta = String(data.refundEta ?? refundEtaForMethod(data.refundMethod));
+  // Send Invoice MVP1 fields
+  const invoiceNumber = String(data.invoiceNumber ?? "");
+  const clientName = String(data.clientName ?? "the client");
+  const clientEmail = String(data.clientEmail ?? "");
+  const expiredDate = String(data.expiredDate ?? "");
+  const originalExpiryDate = String(data.originalExpiryDate ?? "");
+  const requestDate = String(data.requestDate ?? "");
 
   const templates: Record<NotificationEventType, NotificationContent> = {
     payment_received: {
@@ -213,6 +224,19 @@ export function buildNotificationContent(
     funding_allocated_partial: {
       title: "Partial Allocation — Payment Required",
       body: `We have applied ${amountAllocated} ${currency} from your Rhemito balance to transaction ${txnId}, but an additional ${shortfallAmount} ${currency} is still required. Please complete payment to proceed with your transfer to ${recipient}.`,
+    },
+    // ─── Send Invoice MVP1 — invoice lifecycle events for the sender ──────
+    invoice_paid: {
+      title: "Invoice Paid",
+      body: `Payment of ${amount} ${currency} for invoice ${invoiceNumber} from ${clientName} has been completed successfully.`,
+    },
+    invoice_expired: {
+      title: "Invoice Expired",
+      body: `Invoice ${invoiceNumber} sent to ${clientName} expired without payment on ${expiredDate}.`,
+    },
+    invoice_new_link_requested: {
+      title: "New Payment Link Requested",
+      body: `${clientName} has requested a new payment link for expired invoice ${invoiceNumber}. To accept the request, create and send a new invoice.${clientEmail ? ` Client email: ${clientEmail}.` : ""}${originalExpiryDate ? ` Original expiry date: ${originalExpiryDate}.` : ""}${requestDate ? ` Requested on ${requestDate}.` : ""}`,
     },
   };
 

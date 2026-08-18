@@ -46,5 +46,8 @@ export default defineConfig({
         url: 'http://localhost:5000',
         reuseExistingServer: !process.env.CI,
         timeout: 120000,
+        // E2E journeys simulate overdue/expiry via /api/dev/invoices/* — the
+        // production server only exposes them when this flag is set.
+        env: { ...process.env, RHEMITO_DEV_HOOKS: '1' },
     },
 });

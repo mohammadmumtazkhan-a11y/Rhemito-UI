@@ -3,11 +3,14 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    // Try to extract "message" from JSON response body
+    // Try to extract a clean message from the JSON response body — both the
+    // flat { message } shape and the nested { error: { message } } shape used
+    // by the invoice and notification endpoints.
     try {
       const json = JSON.parse(text);
-      if (json.message) {
-        throw new Error(json.message);
+      const message = json?.message ?? json?.error?.message;
+      if (message) {
+        throw new Error(message);
       }
     } catch (e) {
       if (e instanceof Error && !e.message.startsWith("{")) {

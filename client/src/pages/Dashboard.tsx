@@ -127,7 +127,7 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handlePaymentOptionSelect = (option: "request" | "invoice" | "qrcode" | "funding") => {
+  const handlePaymentOptionSelect = (option: "request" | "invoice" | "funding") => {
     setShowPaymentModal(false);
     switch (option) {
       case "request":
@@ -135,9 +135,6 @@ export default function Dashboard() {
         break;
       case "invoice":
         setLocation("/send-invoice");
-        break;
-      case "qrcode":
-        setLocation("/show-qr-code");
         break;
       case "funding":
         setLocation("/group-pay/create");

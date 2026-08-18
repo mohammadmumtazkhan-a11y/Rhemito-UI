@@ -24,6 +24,12 @@ export function useAuth() {
   const { data, isLoading, error } = useQuery<{ user: AuthUser } | null>({
     queryKey: ["/api/auth/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
+    // The session can end server-side (expiry, server restart in this
+    // in-memory prototype). Revalidate on mount/focus so the header never
+    // shows a stale logged-in profile while APIs return 401.
+    staleTime: 30_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const logoutMutation = useMutation({

@@ -40,7 +40,6 @@ test.describe('Rhemito Dashboard', () => {
         // Wait for modal content to appear - use specific test ID for modal buttons
         await expect(page.getByTestId('button-request')).toBeVisible({ timeout: 5000 });
         await expect(page.getByTestId('button-invoice')).toBeVisible();
-        await expect(page.getByTestId('button-qrcode')).toBeVisible();
     });
 
     test('Recent Transactions table displays data', async ({ page }) => {
@@ -49,8 +48,8 @@ test.describe('Rhemito Dashboard', () => {
         // Verify transactions table has rows
         await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
 
-        // Verify Resend button is present
-        await expect(page.getByTestId('button-resend-22502784')).toBeVisible();
+        // Verify Resend button is present on completed transaction
+        await expect(page.getByTestId('button-resend-22502785')).toBeVisible();
     });
 
     test('Scheduled Transactions tab works', async ({ page }) => {

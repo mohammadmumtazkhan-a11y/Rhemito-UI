@@ -1,7 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Upload, FileText, X, Check, Copy, CheckCircle2, Send, Search, User, Building2, AlertCircle } from "lucide-react";
+import {
+  ArrowLeft, Upload, FileText, X, Check, Copy, CheckCircle2, Send, Search,
+  User, Building2, AlertCircle, Loader2, ShieldAlert, CalendarClock,
+} from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,31 +12,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { knownSenders, type KnownSender } from "@/data/knownSenders";
-import { ChevronsUpDown } from "lucide-react";
-import { cn } from "@/lib/utils";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-
-const COUNTRY_CODES = [
-  { code: "+234", country: "Nigeria", flag: "🇳🇬" },
-  { code: "+44", country: "UK", flag: "🇬🇧" },
-  { code: "+1", country: "USA", flag: "🇺🇸" },
-  { code: "+233", country: "Ghana", flag: "🇬🇭" },
-  { code: "+254", country: "Kenya", flag: "🇰🇪" },
-];
+import { useAuth } from "@/hooks/use-auth";
+import { PayoutAccountSelector } from "@/components/payout/PayoutAccountSelector";
+import type { PayoutAccountView } from "@/lib/requests";
+import { DIALING_CODES } from "@/data/dialing-codes";import {
+  uploadInvoiceDocument,
+  confirmAndSendInvoice,
+  type ConfirmInvoicePayload,
+} from "@/lib/invoices";
+import {
+  EXPIRY_TIMEZONE,
+  EXPIRY_TIMEZONE_LABEL,
+  computeExpiry,
+  computeInvoiceFees,
+  dateInTz,
+  formatHumanDate,
+} from "@shared/invoice-logic";
+import type { InvoiceExpiry } from "@shared/schema";
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   GBP: "£",
@@ -42,27 +39,20 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   NGN: "₦",
 };
 
-const currencies = [
-  { label: "GBP - British Pound", value: "GBP" },
-  { label: "USD - US Dollar", value: "USD" },
-  { label: "EUR - Euro", value: "EUR" },
-  { label: "NGN - Nigerian Naira", value: "NGN" },
-  { label: "CAD - Canadian Dollar", value: "CAD" },
-  { label: "AUD - Australian Dollar", value: "AUD" },
-  { label: "JPY - Japanese Yen", value: "JPY" },
-  { label: "CNY - Chinese Yuan", value: "CNY" },
-  { label: "INR - Indian Rupee", value: "INR" },
-  { label: "ZAR - South African Rand", value: "ZAR" },
-  { label: "KES - Kenyan Shilling", value: "KES" },
-  { label: "GHS - Ghanaian Cedi", value: "GHS" },
-  { label: "AED - UAE Dirham", value: "AED" },
+const EXPIRY_OPTIONS = [
+  { label: "7 days", value: "7" },
+  { label: "14 days", value: "14" },
+  { label: "30 days", value: "30" },
+  { label: "60 days", value: "60" },
+  { label: "Custom date", value: "custom" },
 ];
+
+type ExpiryPeriod = "7" | "14" | "30" | "60" | "custom";
 
 interface FormData {
   invoiceFile: File | null;
   invoiceAmount: string;
   currency: string;
-  senderCurrency: string;
   absorbFee: boolean;
   recipientType: "individual" | "business";
   recipientFirstName: string;
@@ -74,13 +64,14 @@ interface FormData {
   recipientPhone: string;
   dueDate: string;
   notes: string;
+  expiryPeriod: ExpiryPeriod;
+  customExpiryDate: string;
 }
 
 const initialFormData: FormData = {
   invoiceFile: null,
   invoiceAmount: "",
   currency: "GBP",
-  senderCurrency: "",
   absorbFee: false,
   recipientType: "individual",
   recipientFirstName: "",
@@ -92,11 +83,38 @@ const initialFormData: FormData = {
   recipientPhone: "",
   dueDate: "",
   notes: "",
+  expiryPeriod: "30",
+  customExpiryDate: "",
 };
 
+const ALLOWED_DOC_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+const MAX_DOC_BYTES = 10 * 1024 * 1024;
+
 export default function SendInvoice() {
+  const { toast } = useToast();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [formData, setFormData] = useState<FormData>(initialFormData);
+
+  // Receiving payout account — same selection rules as Request Payment:
+  // activated accounts only, default preselected, holder name locked to the
+  // verified requester name.
+  const requesterName = useMemo(() => {
+    if (!user) return "John Doe";
+    if (user.accountType === "business" && user.businessName) {
+      return user.businessName;
+    }
+    const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ");
+    return fullName || "John Doe";
+  }, [user]);
+
+  // Server-owned verified accounts (same store as Request Payment): the
+  // selector fetches them, offers the identical add-and-verify dialog when
+  // none exist, and lifts the selection up here.
+  const [selectedPayoutAccount, setSelectedPayoutAccount] = useState<PayoutAccountView | null>(null);
+  const handleSelectPayoutAccount = (account: PayoutAccountView) => setSelectedPayoutAccount(account);
+
+  const [step, setStep] = useState<"form" | "review">("form");
   const [isSuccess, setIsSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -104,6 +122,19 @@ export default function SendInvoice() {
   const [senderSearch, setSenderSearch] = useState("");
   const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Temporary document upload — associated with the invoice only after confirmation.
+  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docError, setDocError] = useState("");
+
+  const [expiryTouched, setExpiryTouched] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdInvoice, setCreatedInvoice] = useState<{ invoiceNumber: string; paymentLink: string } | null>(null);
+
+  // One idempotency key per journey — duplicate confirmations never create
+  // duplicate invoices (double-click, browser retry, repeated API call).
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -125,6 +156,29 @@ export default function SendInvoice() {
       }
     }
   }, []);
+
+  // Default expiry selection: 7 days after Due Date, or 30 days after the sent
+  // date — until the sender makes an explicit choice.
+  useEffect(() => {
+    if (!expiryTouched) {
+      setFormData(prev => ({ ...prev, expiryPeriod: prev.dueDate ? "7" : "30" }));
+    }
+  }, [formData.dueDate, expiryTouched]);
+
+  const isDirty =
+    JSON.stringify(formData) !== JSON.stringify(initialFormData) || documentId !== null;
+
+  // Unsaved-change warning for the incomplete journey (refresh / close / leave).
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!isSuccess && isDirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty, isSuccess]);
 
   const filteredSenders = knownSenders.filter(sender => {
     const displayName = sender.senderType === "business"
@@ -150,14 +204,102 @@ export default function SendInvoice() {
     setShowSenderSuggestions(false);
   };
 
-  const invoiceLink = `rhemito.com/invoice/inv${Math.random().toString(36).substring(2, 8)}`;
-
   const handleInputChange = (field: keyof FormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleFileChange = (file: File | null) => {
+  /**
+   * The Due Date and the custom expiry date can never conflict: moving the Due
+   * Date past an existing custom expiry bumps that expiry up to the Due Date,
+   * and a custom expiry entered before the Due Date is normalised up to it.
+   * (The backend still validates the rule authoritatively.)
+   */
+  const handleDueDateChange = (value: string) => {
+    setFormData((prev) => {
+      const next = { ...prev, dueDate: value };
+      if (
+        value &&
+        prev.expiryPeriod === "custom" &&
+        prev.customExpiryDate &&
+        prev.customExpiryDate < value
+      ) {
+        next.customExpiryDate = value;
+      }
+      return next;
+    });
+  };
+
+  const handleCustomExpiryChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      customExpiryDate: value && prev.dueDate && value < prev.dueDate ? prev.dueDate : value,
+    }));
+  };
+
+  const expirySelection: InvoiceExpiry = useMemo(() => {
+    if (formData.expiryPeriod === "custom") {
+      return { type: "custom", date: formData.customExpiryDate };
+    }
+    return { type: "preset", days: Number(formData.expiryPeriod) as 7 | 14 | 30 | 60 };
+  }, [formData.expiryPeriod, formData.customExpiryDate]);
+
+  const computedExpiry = useMemo(() => {
+    if (formData.expiryPeriod === "custom" && !formData.customExpiryDate) return null;
+    return computeExpiry(formData.dueDate || null, expirySelection, new Date());
+  }, [formData.dueDate, formData.expiryPeriod, formData.customExpiryDate, expirySelection]);
+
+  // Client-side mirror of the backend validation (backend is authoritative).
+  // Computed live so problems surface as the sender types, not only on submit.
+  const dateErrors = useMemo(() => {
+    const errors: { dueDate?: string; expiry?: string } = {};
+    const today = dateInTz(new Date(), EXPIRY_TIMEZONE);
+
+    if (formData.dueDate && formData.dueDate < today) {
+      errors.dueDate = "The Due Date cannot be in the past.";
+    }
+    if (!computedExpiry) {
+      errors.expiry = "Select a future Payment Link Expiry Date.";
+      return errors;
+    }
+    if (computedExpiry.expiryDate <= today) {
+      errors.expiry = "Select a future Payment Link Expiry Date.";
+    } else if (formData.dueDate && computedExpiry.expiryDate < formData.dueDate) {
+      // Defensive: the inputs above normalise the dates so this cannot normally
+      // occur — kept as a safety net before the backend's authoritative check.
+      errors.expiry = "The Payment Link Expiry Date cannot be earlier than the Due Date.";
+    }
+    return errors;
+  }, [formData.dueDate, formData.expiryPeriod, formData.customExpiryDate, computedExpiry]);
+
+  const handleFileChange = async (file: File | null) => {
+    setDocError("");
+    setDocumentId(null);
+
+    if (!file) {
+      setFormData((prev) => ({ ...prev, invoiceFile: null }));
+      return;
+    }
+
+    if (!ALLOWED_DOC_TYPES.includes(file.type)) {
+      setDocError("The invoice document must be a PDF, PNG or JPG file.");
+      return;
+    }
+    if (file.size > MAX_DOC_BYTES) {
+      setDocError("The invoice document must be 10MB or smaller.");
+      return;
+    }
+
     setFormData((prev) => ({ ...prev, invoiceFile: file }));
+    setUploadingDoc(true);
+    try {
+      const id = await uploadInvoiceDocument(file);
+      setDocumentId(id);
+    } catch (err) {
+      setDocError(err instanceof Error ? err.message : "The document could not be uploaded.");
+      setFormData((prev) => ({ ...prev, invoiceFile: null }));
+    } finally {
+      setUploadingDoc(false);
+    }
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -180,19 +322,110 @@ export default function SendInvoice() {
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(`https://${invoiceLink}`);
+    if (!createdInvoice) return;
+    navigator.clipboard.writeText(createdInvoice.paymentLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSubmit = () => {
-    setIsSuccess(true);
+  const fees = computeInvoiceFees(formData.invoiceAmount || "0", formData.absorbFee);
+  const sym = CURRENCY_SYMBOLS[formData.currency] || "£";
+  const payoutCurrencyMismatch = Boolean(
+    selectedPayoutAccount && selectedPayoutAccount.currency !== formData.currency,
+  );
+  const clientDisplayName = formData.recipientType === "business"
+    ? formData.recipientBusinessName
+    : [formData.recipientFirstName, formData.recipientMiddleName, formData.recipientLastName].filter(Boolean).join(" ");
+
+  const canReview = Boolean(
+    documentId &&
+    selectedPayoutAccount &&
+    formData.invoiceAmount &&
+    parseFloat(formData.invoiceAmount) > 0 &&
+    formData.recipientEmail &&
+    (formData.recipientType === "individual" ? formData.recipientFirstName : formData.recipientBusinessName) &&
+    Object.keys(dateErrors).length === 0
+  );
+
+  const handleReview = () => {
+    if (Object.keys(dateErrors).length > 0) return;
+    setStep("review");
   };
 
-  const canSubmit = formData.invoiceFile && formData.invoiceAmount && formData.recipientEmail &&
-    (formData.recipientType === "individual" ? formData.recipientFirstName : formData.recipientBusinessName);
+  const handleBackToEdit = () => {
+    setStep("form");
+  };
 
-  if (isSuccess) {
+  const resetJourney = () => {
+    setFormData(initialFormData);
+    setDocumentId(null);
+    setDocError("");
+    setStep("form");
+    setIsSuccess(false);
+    setCreatedInvoice(null);
+    setExpiryTouched(false);
+    idempotencyKeyRef.current = crypto.randomUUID();
+  };
+
+  const handleConfirmAndSend = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      // Revalidated end-to-end on the backend (authoritative).
+      const payload: ConfirmInvoicePayload = {
+        documentId: documentId!,
+        invoiceAmount: formData.invoiceAmount,
+        currency: formData.currency,
+        absorbFee: formData.absorbFee,
+        payoutAccountId: selectedPayoutAccount!.id,
+        clientType: formData.recipientType,
+        clientFirstName: formData.recipientFirstName || undefined,
+        clientMiddleName: formData.recipientMiddleName || undefined,
+        clientLastName: formData.recipientLastName || undefined,
+        clientBusinessName: formData.recipientBusinessName || undefined,
+        clientEmail: formData.recipientEmail,
+        clientPhoneCode: formData.countryCode,
+        clientPhoneNumber: formData.recipientPhone || undefined,
+        dueDate: formData.dueDate || undefined,
+        expiry: expirySelection,
+        idempotencyKey: idempotencyKeyRef.current,
+      };
+
+      const result = await confirmAndSendInvoice(payload);
+      setCreatedInvoice({
+        invoiceNumber: result.invoice.invoiceNumber,
+        paymentLink: result.paymentLink,
+      });
+      setIsSuccess(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      // A temp document that expired (long-open form) or was lost to a server
+      // restart must be re-attached — clear the stale "Attached" chip so the
+      // failure is obvious and fixable instead of mysterious.
+      if (/document/i.test(message)) {
+        setDocumentId(null);
+        setFormData((prev) => ({ ...prev, invoiceFile: null }));
+        setDocError(message);
+      }
+      toast({
+        title: "Invoice not sent",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /** In-app navigation away from a dirty form discards everything — confirm first. */
+  const confirmDiscard = (): boolean => {
+    if (!isDirty) return true;
+    return window.confirm("Discard this invoice? Information you have entered will be lost.");
+  };
+
+  // ─── Success screen ─────────────────────────────────────────────────────────
+
+  if (isSuccess && createdInvoice) {
     return (
       <DashboardLayout>
         <motion.div
@@ -213,14 +446,11 @@ export default function SendInvoice() {
 
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold font-display">Invoice Sent!</h2>
-                <p className="text-muted-foreground text-sm">
-                  The invoice and payment link have been emailed to{" "}
+                <p className="text-sm text-muted-foreground">
+                  Invoice <span className="font-semibold text-foreground">{createdInvoice.invoiceNumber}</span> and its
+                  payment link have been emailed to{" "}
                   <span className="font-semibold text-foreground">{formData.recipientEmail}</span> for{" "}
-                  <span className="font-semibold text-foreground">
-                    {formData.recipientType === "business"
-                      ? formData.recipientBusinessName
-                      : [formData.recipientFirstName, formData.recipientMiddleName, formData.recipientLastName].filter(Boolean).join(" ")}
-                  </span>.
+                  <span className="font-semibold text-foreground">{clientDisplayName}</span>.
                 </p>
               </div>
 
@@ -228,7 +458,7 @@ export default function SendInvoice() {
                 <p className="text-xs text-muted-foreground">You can also share this invoice link directly:</p>
                 <div className="flex items-center gap-2">
                   <Input
-                    value={`https://${invoiceLink}`}
+                    value={createdInvoice.paymentLink}
                     readOnly
                     className="text-sm bg-white"
                     data-testid="input-invoice-link"
@@ -255,10 +485,7 @@ export default function SendInvoice() {
                 </Button>
                 <Button
                   className="flex-1 bg-primary hover:bg-primary/90"
-                  onClick={() => {
-                    setFormData(initialFormData);
-                    setIsSuccess(false);
-                  }}
+                  onClick={resetJourney}
                   data-testid="button-new-invoice"
                 >
                   New Invoice
@@ -271,6 +498,172 @@ export default function SendInvoice() {
     );
   }
 
+  // ─── Review and Confirm ─────────────────────────────────────────────────────
+
+  if (step === "review") {
+    const rows: Array<{ label: string; value: React.ReactNode; testId: string }> = [
+      {
+        label: "Invoice Document",
+        value: formData.invoiceFile?.name ?? "—",
+        testId: "review-document",
+      },
+      {
+        label: "Invoice Amount",
+        value: `${sym}${fees.invoiceAmount.toFixed(2)} ${formData.currency}`,
+        testId: "review-amount",
+      },
+      ...(payoutCurrencyMismatch
+        ? [{
+            label: "FX Conversion",
+            value:
+              `Invoice in ${formData.currency}, paid out in ${selectedPayoutAccount?.currency} — ` +
+              "converted at live FX spot rates when the payment is completed",
+            testId: "review-fx-conversion",
+          }]
+        : []),
+      {
+        label: "Fee Treatment",
+        value: formData.absorbFee
+          ? "You absorb the 3% transaction fee"
+          : "3% transaction fee added to the client's payment",
+        testId: "review-fee-treatment",
+      },
+      {
+        label: "Receiving Payout Account",
+        value: selectedPayoutAccount
+          ? `${selectedPayoutAccount.bankName} (${selectedPayoutAccount.maskedNumber}) • ${selectedPayoutAccount.holderName} • ${selectedPayoutAccount.currency}`
+          : "—",
+        testId: "review-payout-account",
+      },
+      {
+        label: "Client Type",
+        value: formData.recipientType === "business" ? "Business" : "Individual",
+        testId: "review-client-type",
+      },
+      {
+        label: "Client Name",
+        value: clientDisplayName || "—",
+        testId: "review-client-name",
+      },
+      {
+        label: "Client Email",
+        value: formData.recipientEmail,
+        testId: "review-client-email",
+      },
+      {
+        label: "Client Phone",
+        value: formData.recipientPhone ? `${formData.countryCode} ${formData.recipientPhone}` : "Not provided",
+        testId: "review-client-phone",
+      },
+      {
+        label: "Due Date",
+        value: formData.dueDate ? formatHumanDate(formData.dueDate) : "No due date",
+        testId: "review-due-date",
+      },
+      {
+        label: "Payment Link Expiry Date",
+        value: `${formatHumanDate(computedExpiry!.expiryDate)} at 11:59 p.m. ${EXPIRY_TIMEZONE_LABEL} (${computedExpiry!.expiryDate})`,
+        testId: "review-expiry-date",
+      },
+      {
+        label: "Amount the Client Will Pay",
+        value: `${sym}${fees.clientPays.toFixed(2)} ${formData.currency}`,
+        testId: "review-client-pays",
+      },
+      {
+        label: "Amount You Will Receive",
+        value: `${sym}${fees.senderReceives.toFixed(2)} ${formData.currency}`,
+        testId: "review-you-receive",
+      },
+      {
+        label: "Applicable Fees (3%)",
+        value: `${sym}${fees.fee.toFixed(2)} ${formData.currency}${formData.absorbFee ? " (absorbed by you)" : " (added to client)"}`,
+        testId: "review-fees",
+      },
+    ];
+
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+            <Button
+              variant="ghost"
+              onClick={handleBackToEdit}
+              className="mb-4 -ml-2"
+              data-testid="button-review-back"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <h1 className="text-2xl font-bold font-display">Review and Confirm</h1>
+            <p className="text-muted-foreground mt-1">Check every detail before the invoice is generated</p>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="font-display">Invoice Summary</CardTitle>
+                <CardDescription>The invoice has not been created yet — nothing is saved until you confirm</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl" data-testid="alert-immutability-warning">
+                  <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-900 leading-relaxed">
+                    Please review the invoice carefully. Once sent, the invoice details, Due Date and Payment Link
+                    Expiry Date cannot be changed. If any information is incorrect after sending, you must cancel
+                    this invoice and create a new one.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border divide-y divide-border" data-testid="invoice-review-summary">
+                  {rows.map((row) => (
+                    <div key={row.testId} className="flex justify-between gap-4 px-4 py-3 text-sm">
+                      <span className="text-muted-foreground shrink-0">{row.label}:</span>
+                      <span className="font-medium text-right" data-testid={row.testId}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={handleBackToEdit}
+                    data-testid="button-back-to-edit"
+                  >
+                    Back to Edit
+                  </Button>
+                  <Button
+                    onClick={handleConfirmAndSend}
+                    disabled={isSubmitting}
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    data-testid="button-confirm-send-invoice"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Sending…
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Confirm and Send Invoice
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ─── Form ───────────────────────────────────────────────────────────────────
+
+  const today = dateInTz(new Date(), EXPIRY_TIMEZONE);
+
   return (
     <DashboardLayout>
       <div className="max-w-4xl mx-auto">
@@ -281,7 +674,7 @@ export default function SendInvoice() {
         >
           <Button
             variant="ghost"
-            onClick={() => setLocation("/")}
+            onClick={() => { if (confirmDiscard()) setLocation("/"); }}
             className="mb-4 -ml-2"
             data-testid="button-back"
           >
@@ -301,6 +694,26 @@ export default function SendInvoice() {
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
               <div className="lg:col-span-3 space-y-6">
+                {/* Receiving Payout Account (same flow as Request Payment) */}
+                <PayoutAccountSelector
+                  requesterName={requesterName}
+                  selectedAccountId={selectedPayoutAccount?.id ?? ""}
+                  onSelect={handleSelectPayoutAccount}
+                  context="invoice"
+                />
+
+                {/* Payout FX notice — same transparency as Request Payment */}
+                {payoutCurrencyMismatch && (
+                  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl" data-testid="fx-conversion-notice">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-900 leading-relaxed">
+                      Your payout account is in <strong>{selectedPayoutAccount?.currency}</strong>, but this invoice
+                      is in <strong>{formData.currency}</strong>. The payout amount will be converted to{" "}
+                      {selectedPayoutAccount?.currency} at live FX spot rates when the payment is completed.
+                    </p>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-semibold text-foreground">
@@ -332,18 +745,23 @@ export default function SendInvoice() {
                         <div className="text-left">
                           <p className="font-medium text-sm text-foreground">{formData.invoiceFile.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {(formData.invoiceFile.size / 1024).toFixed(1)} KB • Attached
+                            {(formData.invoiceFile.size / 1024).toFixed(1)} KB •{" "}
+                            {uploadingDoc ? "Uploading…" : documentId ? "Attached" : "Processing…"}
                           </p>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleFileChange(null)}
-                          data-testid="button-remove-file"
-                          className="text-muted-foreground hover:text-destructive"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
+                        {uploadingDoc ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFileChange(null)}
+                            data-testid="button-remove-file"
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -370,12 +788,17 @@ export default function SendInvoice() {
                       </>
                     )}
                   </div>
-                  {!formData.invoiceFile && (
+                  {docError ? (
+                    <p className="text-[11px] text-destructive flex items-center gap-1.5 pt-0.5">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {docError}
+                    </p>
+                  ) : !formData.invoiceFile ? (
                     <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-0.5">
                       <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       An invoice document must be attached before sending.
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -407,62 +830,6 @@ export default function SendInvoice() {
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-
-                <div className="space-y-2 flex flex-col">
-                  <Label>Sender Pays in (Optional)</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className={cn(
-                          "w-full justify-between",
-                          !formData.senderCurrency && "text-muted-foreground"
-                        )}
-                        data-testid="combobox-sender-currency"
-                      >
-                        {formData.senderCurrency
-                          ? currencies.find(
-                            (currency) => currency.value === formData.senderCurrency
-                          )?.label
-                          : "Select currency sender pays in..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0">
-                      <Command>
-                        <CommandInput placeholder="Search currency..." />
-                        <CommandList>
-                          <CommandEmpty>No currency found.</CommandEmpty>
-                          <CommandGroup>
-                            {currencies.map((currency) => (
-                              <CommandItem
-                                value={currency.label}
-                                key={currency.value}
-                                onSelect={() => {
-                                  handleInputChange("senderCurrency", currency.value);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    currency.value === formData.senderCurrency
-                                      ? "opacity-100"
-                                      : "opacity-0"
-                                  )}
-                                />
-                                {currency.label}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  <p className="text-[0.8rem] text-muted-foreground">
-                    If specified, we'll convert the invoice amount to this currency for the sender.
-                  </p>
                 </div>
 
                 {/* Fee Absorption Checkbox */}
@@ -642,13 +1009,13 @@ export default function SendInvoice() {
                       value={formData.countryCode}
                       onValueChange={(value) => handleInputChange("countryCode", value)}
                     >
-                      <SelectTrigger className="w-32" data-testid="select-country-code">
+                      <SelectTrigger className="w-36" data-testid="select-country-code">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        {COUNTRY_CODES.map((country, index) => (
-                          <SelectItem key={`${country.code}-${index}`} value={country.code}>
-                            {country.flag} {country.code}
+                      <SelectContent className="max-h-72">
+                        {DIALING_CODES.map((country) => (
+                          <SelectItem key={country.value} value={country.value}>
+                            {country.flag} {country.code} {country.country}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -665,34 +1032,94 @@ export default function SendInvoice() {
                   </div>
                 </div>
 
+                {/* Due Date */}
                 <div className="space-y-2">
                   <Label htmlFor="dueDate">Due Date (Optional)</Label>
                   <Input
                     id="dueDate"
                     type="date"
+                    min={today}
                     value={formData.dueDate}
-                    onChange={(e) => handleInputChange("dueDate", e.target.value)}
+                    onChange={(e) => handleDueDateChange(e.target.value)}
                     data-testid="input-due-date"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    The date by which you expect the client to make payment. Payment may still be made after this
+                    date until the payment link expires.
+                  </p>
+                  {dateErrors.dueDate && (
+                    <p className="text-xs text-destructive" data-testid="error-due-date">{dateErrors.dueDate}</p>
+                  )}
+                </div>
+
+                {/* Payment Link Expiry */}
+                <div className="space-y-2">
+                  <Label htmlFor="expiryPeriod">Payment Link Expiry *</Label>
+                  <Select
+                    value={formData.expiryPeriod}
+                    onValueChange={(value) => {
+                      setExpiryTouched(true);
+                      handleInputChange("expiryPeriod", value as ExpiryPeriod);
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-expiry-period">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EXPIRY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    After this date, your client will no longer be able to start a payment using this link.
+                  </p>
+
+                  {formData.expiryPeriod === "custom" && (
+                    <div className="space-y-2 pt-1">
+                      <Label htmlFor="customExpiryDate">Expiry Date</Label>
+                      <Input
+                        id="customExpiryDate"
+                        type="date"
+                        min={formData.dueDate || today}
+                        value={formData.customExpiryDate}
+                        onChange={(e) => handleCustomExpiryChange(e.target.value)}
+                        data-testid="input-custom-expiry-date"
+                      />
+                    </div>
+                  )}
+
+                  {computedExpiry && (
+                    <p className="text-xs font-medium text-primary flex items-center gap-1.5 pt-1" data-testid="text-expiry-preview">
+                      <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                      This payment link will expire on {formatHumanDate(computedExpiry.expiryDate)} at 11:59 p.m.{" "}
+                      {EXPIRY_TIMEZONE_LABEL}.
+                    </p>
+                  )}
+                  {dateErrors.expiry && (
+                    <p className="text-xs text-destructive" data-testid="error-expiry">{dateErrors.expiry}</p>
+                  )}
                 </div>
 
                 <div className="flex gap-3 pt-4">
                   <Button
                     variant="outline"
-                    onClick={() => setLocation("/")}
+                    onClick={() => { if (confirmDiscard()) setLocation("/"); }}
                     className="flex-1"
                     data-testid="button-cancel"
                   >
                     Cancel
                   </Button>
                   <Button
-                    onClick={handleSubmit}
-                    disabled={!canSubmit}
+                    onClick={handleReview}
+                    disabled={!canReview || uploadingDoc}
                     className="flex-1 bg-primary hover:bg-primary/90"
-                    data-testid="button-send-invoice"
+                    data-testid="button-review-invoice"
                   >
                     <Send className="w-4 h-4 mr-2" />
-                    Send Invoice
+                    Review Invoice
                   </Button>
                 </div>
               </div>
@@ -701,56 +1128,56 @@ export default function SendInvoice() {
                 <div className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white shadow-sm" data-testid="fee-breakdown">
                   <h3 className="font-semibold text-lg text-slate-900">Amount Summary</h3>
 
-                  {(() => {
-                    const parsed = parseFloat(formData.invoiceAmount) || 0;
-                    const fee = parsed * 0.03;
-                    const clientPays = formData.absorbFee ? parsed : parsed + fee;
-                    const youReceive = formData.absorbFee ? parsed - fee : parsed;
-                    const sym = CURRENCY_SYMBOLS[formData.currency] || "£";
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Invoice Amount:</span>
+                      <span className="font-medium text-slate-800">
+                        {sym}{fees.invoiceAmount.toFixed(2)} {formData.currency}
+                      </span>
+                    </div>
 
-                    return (
-                      <>
-                        <div className="space-y-3">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Invoice Amount:</span>
-                            <span className="font-medium text-slate-800">
-                              {sym}{parsed.toFixed(2)} {formData.currency}
-                            </span>
-                          </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Fee (3%{formData.absorbFee ? " absorbed by you" : " added to client"}):
+                      </span>
+                      <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
+                        {formData.absorbFee ? "-" : "+"}{sym}{fees.fee.toFixed(2)} {formData.currency}
+                      </span>
+                    </div>
+                  </div>
 
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">
-                              Fee (3%{formData.absorbFee ? " absorbed by you" : " added to client"}):
-                            </span>
-                            <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
-                              {formData.absorbFee ? "-" : "+"}{sym}{fee.toFixed(2)} {formData.currency}
-                            </span>
-                          </div>
-                        </div>
+                  {payoutCurrencyMismatch && (
+                    <div className="flex items-center justify-between text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900">
+                      <span className="font-medium">FX Conversion:</span>
+                      <span className="font-semibold">Live Spot Rate at Payout</span>
+                    </div>
+                  )}
 
-                        <div className="h-px bg-border" />
+                  <div className="h-px bg-border" />
 
-                        <div className="flex justify-between pt-1 items-baseline">
-                          <span className="font-medium text-slate-800">Client Pays:</span>
-                          <span className="font-bold text-lg text-teal">
-                            {sym}{clientPays.toFixed(2)} {formData.currency}
-                          </span>
-                        </div>
+                  <div className="flex justify-between pt-1 items-baseline">
+                    <span className="font-medium text-slate-800">Client Pays:</span>
+                    <span className="font-bold text-lg text-teal">
+                      {sym}{fees.clientPays.toFixed(2)} {formData.currency}
+                    </span>
+                  </div>
 
-                        <div className="flex justify-between items-center bg-primary/5 -mx-5 px-5 py-3.5 -mb-5 rounded-b-xl border-t border-primary/10">
-                          <div>
-                            <span className="font-medium text-slate-900">You Receive:</span>
-                            {formData.absorbFee && (
-                              <p className="text-[10px] text-muted-foreground">Fee deducted from balance</p>
-                            )}
-                          </div>
-                          <span className="font-bold text-lg text-primary">
-                            {sym}{youReceive.toFixed(2)} {formData.currency}
-                          </span>
-                        </div>
-                      </>
-                    );
-                  })()}
+                  <div className="flex justify-between items-center bg-primary/5 -mx-5 px-5 py-3.5 -mb-5 rounded-b-xl border-t border-primary/10">
+                    <div>
+                      <span className="font-medium text-slate-900">You Receive:</span>
+                      {formData.absorbFee && (
+                        <p className="text-[10px] text-muted-foreground">Fee deducted from balance</p>
+                      )}
+                      {selectedPayoutAccount && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Deposited to {selectedPayoutAccount.bankName} ({selectedPayoutAccount.currency})
+                        </p>
+                      )}
+                    </div>
+                    <span className="font-bold text-lg text-primary">
+                      {sym}{fees.senderReceives.toFixed(2)} {formData.currency}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

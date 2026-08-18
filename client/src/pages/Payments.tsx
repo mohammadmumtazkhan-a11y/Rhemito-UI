@@ -13,7 +13,8 @@ import {
   UserPlus,
   X,
   User,
-  Plus
+  Plus,
+  XCircle
 } from "lucide-react";
 import { knownSenders } from "@/data/knownSenders";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -24,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -46,7 +48,7 @@ interface Payment {
   senderEmail: string | null;
   amount: number;
   currency: string;
-  status: "completed" | "pending" | "failed";
+  status: "completed" | "pending" | "failed" | "cancelled";
   type: "invoice" | "payment_request" | "qr_code";
   date: string;
   reference: string;
@@ -140,6 +142,8 @@ const getStatusBadge = (status: string) => {
       return <Badge className="bg-teal/10 text-teal hover:bg-teal/20">Completed</Badge>;
     case "pending":
       return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200">Pending</Badge>;
+    case "cancelled":
+      return <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-200">Cancelled</Badge>;
     case "failed":
       return <Badge className="bg-red-100 text-red-700 hover:bg-red-200">Failed</Badge>;
     default:
@@ -175,6 +179,8 @@ const getTypeLabel = (type: string) => {
 
 export default function Payments() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [paymentsList, setPaymentsList] = useState<Payment[]>(mockPayments);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterType, setFilterType] = useState("all");
@@ -186,6 +192,12 @@ export default function Payments() {
   const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
   const [allocationSuccess, setAllocationSuccess] = useState(false);
   const [allocatedSenderInfo, setAllocatedSenderInfo] = useState<{ name: string; reference: string } | null>(null);
+  
+  // Payment Request cancellation states
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [paymentToCancel, setPaymentToCancel] = useState<Payment | null>(null);
+  const [cancelSuccessInfo, setCancelSuccessInfo] = useState<{ reference: string; senderName: string; amount: string } | null>(null);
+
   const nameInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
@@ -206,10 +218,10 @@ export default function Payments() {
     setShowEmailSuggestions(false);
   };
 
-  const untracedPayments = mockPayments.filter(p => !p.senderName && p.status === "completed");
-  const tracedPayments = mockPayments.filter(p => p.senderName);
+  const untracedPayments = paymentsList.filter(p => !p.senderName && p.status === "completed");
+  const tracedPayments = paymentsList.filter(p => p.senderName);
 
-  const filteredPayments = mockPayments.filter(payment => {
+  const filteredPayments = paymentsList.filter(payment => {
     const matchesSearch =
       payment.senderName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.senderEmail?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -221,13 +233,38 @@ export default function Payments() {
     return (searchQuery === "" || matchesSearch) && matchesStatus && matchesType;
   });
 
-  const totalReceived = mockPayments
+  const totalReceived = paymentsList
     .filter(p => p.status === "completed")
     .reduce((sum, p) => sum + p.amount, 0);
 
-  const pendingAmount = mockPayments
+  const pendingAmount = paymentsList
     .filter(p => p.status === "pending")
     .reduce((sum, p) => sum + p.amount, 0);
+
+  const handleConfirmCancel = () => {
+    if (!paymentToCancel) return;
+
+    setPaymentsList(prev =>
+      prev.map(p => (p.id === paymentToCancel.id ? { ...p, status: "cancelled" as const } : p))
+    );
+
+    const formattedAmount = `${CURRENCY_SYMBOLS[paymentToCancel.currency] || ""}${paymentToCancel.amount.toFixed(2)} ${paymentToCancel.currency}`;
+    const sender = paymentToCancel.senderName || "the recipient";
+
+    setCancelSuccessInfo({
+      reference: paymentToCancel.reference,
+      senderName: sender,
+      amount: formattedAmount,
+    });
+
+    toast({
+      title: "Payment Request Cancelled",
+      description: `Payment request ${paymentToCancel.reference} has been successfully cancelled.`,
+    });
+
+    setCancelDialogOpen(false);
+    setPaymentToCancel(null);
+  };
 
   const handleAllocateSender = () => {
     setAllocatedSenderInfo({
@@ -264,6 +301,37 @@ export default function Payments() {
         </motion.div>
 
         <AnimatePresence>
+          {cancelSuccessInfo && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              className="mb-6 bg-slate-900 text-white rounded-xl p-4 flex items-center justify-between gap-4 shadow-lg border border-slate-800"
+              data-testid="success-cancel-banner"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-white">Payment Request Cancelled</p>
+                  <p className="text-sm text-slate-300">
+                    Payment request <span className="font-mono text-white">{cancelSuccessInfo.reference}</span> for <span className="font-medium text-white">{cancelSuccessInfo.amount}</span> has been successfully cancelled.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCancelSuccessInfo(null)}
+                className="text-slate-400 hover:text-white hover:bg-slate-800"
+                data-testid="button-dismiss-cancel-banner"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </motion.div>
+          )}
+
           {allocationSuccess && allocatedSenderInfo && (
             <motion.div
               initial={{ opacity: 0, y: -20, scale: 0.95 }}
@@ -436,6 +504,21 @@ export default function Payments() {
                           <p className="text-[10px] md:text-sm text-muted-foreground">{payment.currency}</p>
                         </div>
                         <div className="hidden sm:block">{getStatusBadge(payment.status)}</div>
+                        {payment.status === "pending" && payment.type === "payment_request" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setPaymentToCancel(payment);
+                              setCancelDialogOpen(true);
+                            }}
+                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 h-8 px-2.5"
+                            data-testid={`button-cancel-payment-${payment.id}`}
+                          >
+                            <XCircle className="w-3.5 h-3.5 mr-1" />
+                            Cancel
+                          </Button>
+                        )}
                       </div>
                     </motion.div>
                   ))}
@@ -671,6 +754,62 @@ export default function Payments() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Cancel Payment Request Confirmation Dialog */}
+        <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+          <DialogContent className="max-w-md" data-testid="dialog-cancel-payment-request">
+            <DialogHeader>
+              <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-2">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <DialogTitle className="font-display text-lg">Cancel Payment Request?</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to cancel this payment request? The sender will no longer be able to make a payment using this request link.
+              </DialogDescription>
+            </DialogHeader>
+
+            {paymentToCancel && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Sender:</span>
+                  <span className="font-medium text-slate-800">{paymentToCancel.senderName || "Unknown"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Amount:</span>
+                  <span className="font-semibold text-slate-900">
+                    {CURRENCY_SYMBOLS[paymentToCancel.currency] || ""}{paymentToCancel.amount.toFixed(2)} {paymentToCancel.currency}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Reference:</span>
+                  <span className="font-mono text-xs text-slate-700">{paymentToCancel.reference}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCancelDialogOpen(false);
+                  setPaymentToCancel(null);
+                }}
+                data-testid="button-cancel-dialog-keep"
+              >
+                Keep Request
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleConfirmCancel}
+                data-testid="button-cancel-dialog-confirm"
+              >
+                Yes, Cancel Request
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

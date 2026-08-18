@@ -10,3 +10,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+.dev-state/
+.claude/
+.zcode/
+.zcode*

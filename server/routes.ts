@@ -4,6 +4,8 @@ import { storage } from "./storage";
 import { validatePromoCode, promoStorage, type PromoValidationRequest } from "./promocode";
 import { bonusService } from "./bonus";
 import { registerAuthRoutes } from "./auth";
+import { registerInvoiceRoutes } from "./invoiceRoutes";
+import { registerRequestMoneyRoutes } from "./requestRoutes";
 import {
   dispatchNotification,
   markNotificationRead,
@@ -107,6 +109,10 @@ export async function registerRoutes(
 ): Promise<Server> {
   // Auth routes
   registerAuthRoutes(app);
+  // Send Invoice MVP1 routes (also starts the invoice reminder/expiry sweep)
+  registerInvoiceRoutes(app);
+  // Request Money routes (strict auth, corridors, webhooks, QR, sweeps)
+  registerRequestMoneyRoutes(app);
   // Promo Code Validation Endpoint
   app.post("/api/promocodes/validate", (req, res) => {
     try {

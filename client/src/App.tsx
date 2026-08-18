@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,9 +7,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { NotificationContextProvider } from "@/contexts/NotificationContext";
 import Dashboard from "@/pages/Dashboard";
 import RequestPayment from "@/pages/RequestPayment";
+import RequestCheckout from "@/pages/RequestCheckout";
+import PaymentRequests from "@/pages/PaymentRequests";
 import SendInvoice from "@/pages/SendInvoice";
-import ShowQRCode from "@/pages/ShowQRCode";
-import SenderView from "@/pages/SenderView";
+import SentInvoices from "@/pages/SentInvoices";
+import SentInvoiceDetails from "@/pages/SentInvoiceDetails";
+import InvoiceView from "@/pages/InvoiceView";
 import Payments from "@/pages/Payments";
 import Senders from "@/pages/Senders";
 import SenderDetail from "@/pages/SenderDetail";
@@ -68,15 +71,18 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/request-payment" component={RequestPayment} />
+      <Route path="/payment-requests" component={PaymentRequests} />
       <Route path="/send-invoice" component={SendInvoice} />
-      <Route path="/show-qr-code" component={ShowQRCode} />
+      <Route path="/sent-invoices" component={SentInvoices} />
+      <Route path="/sent-invoices/:id" component={SentInvoiceDetails} />
+      <Route path="/show-qr-code"><Redirect to="/request-payment" /></Route>
       <Route path="/payments" component={Payments} />
       <Route path="/send-money" component={SendMoney} />
       <Route path="/senders" component={Senders} />
       <Route path="/senders/:email" component={SenderDetail} />
       <Route path="/payout-accounts" component={PayoutAccounts} />
-      <Route path="/pay/:id" component={SenderView} />
-      <Route path="/invoice/:id" component={SenderView} />
+      <Route path="/pay/:id" component={RequestCheckout} />
+      <Route path="/invoice/:id" component={InvoiceView} />
       <Route path="/bonus-discounts" component={BonusAndDiscounts} />
       <Route path="/marketing" component={Marketing} />
       <Route path="/group-pay" component={GroupPayDashboard} />

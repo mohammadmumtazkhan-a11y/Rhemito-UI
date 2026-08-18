@@ -10,17 +10,36 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { createCampaign, mockBankAccounts, FEE_CONFIG } from "./mockData";
+import { createCampaign, FEE_CONFIG } from "./mockData";
 import { Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { PayoutAccountSelector } from "@/components/payout/PayoutAccountSelector";
+import type { PayoutAccountView } from "@/lib/requests";
 
 const CURRENCIES = ["GBP", "USD", "EUR", "NGN"];
 
 export default function CreateCampaign() {
     const [, setLocation] = useLocation();
+    const { user } = useAuth();
+    const requesterName = useMemo(() => {
+        if (!user) return "John Doe";
+        if (user.accountType === "business" && user.businessName) {
+            return user.businessName;
+        }
+        const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ");
+        return fullName || "John Doe";
+    }, [user]);
+
     const [step, setStep] = useState<'form' | 'success'>('form');
     const [copied, setCopied] = useState(false);
     const [createdCampaignLink, setCreatedCampaignLink] = useState("");
     const [createdCampaignId, setCreatedCampaignId] = useState("");
+    const [selectedPayoutAccount, setSelectedPayoutAccount] = useState<PayoutAccountView | null>(null);
+
+    const handleSelectPayoutAccount = (account: PayoutAccountView) => {
+        setSelectedPayoutAccount(account);
+        setFormData(prev => ({ ...prev, bankAccountId: account.id }));
+    };
 
     const [formData, setFormData] = useState({
         name: "",
@@ -31,8 +50,6 @@ export default function CreateCampaign() {
         useFixedAmount: false,
         fixedContributionAmount: "", // Net amount per contributor (what you want per person)
     });
-
-    const selectedBank = mockBankAccounts.find(b => b.id === formData.bankAccountId);
 
     // Fee calculations for Target Amount
     const targetFeeBreakdown = useMemo(() => {
@@ -96,8 +113,8 @@ export default function CreateCampaign() {
             targetAmount: targetFeeBreakdown.grossAmount, // Store gross amount as target
             currency: formData.currency,
             description: formData.description,
-            bankAccountId: formData.bankAccountId,
-            bankAccountName: selectedBank ? `${selectedBank.name} - ${selectedBank.bank}` : "",
+            bankAccountId: selectedPayoutAccount?.id || formData.bankAccountId,
+            bankAccountName: selectedPayoutAccount ? `${selectedPayoutAccount.bankName} - ${selectedPayoutAccount.maskedNumber}` : "",
             fixedContributionAmount: formData.useFixedAmount && formData.fixedContributionAmount
                 ? fixedFeeBreakdown.grossPerContributor // Store gross amount per contributor
                 : undefined,
@@ -114,7 +131,7 @@ export default function CreateCampaign() {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const isFormValid = formData.name && formData.targetAmount && formData.bankAccountId && formData.description &&
+    const isFormValid = formData.name && formData.targetAmount && !!selectedPayoutAccount && formData.description &&
         (!formData.useFixedAmount || (formData.useFixedAmount && formData.fixedContributionAmount && !fixedAmountError));
 
     return (
@@ -144,6 +161,14 @@ export default function CreateCampaign() {
                             <Card>
                                 <CardContent className="p-6">
                                     <form onSubmit={handleSubmit} className="space-y-6">
+                                        {/* Receiving Payout Account */}
+                                        <PayoutAccountSelector
+                                            requesterName={requesterName}
+                                            selectedAccountId={selectedPayoutAccount?.id ?? ""}
+                                            onSelect={handleSelectPayoutAccount}
+                                            context="campaign"
+                                        />
+
                                         {/* Campaign Name */}
                                         <div className="space-y-2">
                                             <Label htmlFor="name">Campaign Name *</Label>
@@ -328,33 +353,6 @@ export default function CreateCampaign() {
                                                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                                                 required
                                             />
-                                        </div>
-
-                                        {/* Bank Account Selection */}
-                                        <div className="space-y-2">
-                                            <Label>Receive Funds To *</Label>
-                                            <Select
-                                                value={formData.bankAccountId}
-                                                onValueChange={(value) => setFormData(prev => ({ ...prev, bankAccountId: value }))}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select a bank account" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {mockBankAccounts.map(account => (
-                                                        <SelectItem key={account.id} value={account.id}>
-                                                            <div className="flex items-center gap-2">
-                                                                <Building2 className="w-4 h-4 text-muted-foreground" />
-                                                                <span>{account.bank} - ****{account.accountNumber.slice(-4)}</span>
-                                                                <span className="text-xs text-muted-foreground">({account.currency})</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <p className="text-xs text-muted-foreground">
-                                                Collected funds will be deposited to this account
-                                            </p>
                                         </div>
 
                                         {/* Submit */}
