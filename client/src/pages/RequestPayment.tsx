@@ -320,9 +320,17 @@ export default function RequestPayment() {
       setCreatedRequestId(result.request.id);
       setIsSuccess(true);
     } catch (err) {
+      // Surface the real reason for every failure shape — server error JSON,
+      // network TypeErrors and any stray non-Error throwable — so the user is
+      // never left with a dead-end message.
+      const description =
+        (err instanceof Error ? err.message : undefined) ??
+        (typeof err === "string" ? err : undefined) ??
+        (typeof (err as { message?: unknown })?.message === "string" ? (err as { message: string }).message : undefined) ??
+        "Something went wrong. Please try again.";
       toast({
         title: "Request not generated",
-        description: err instanceof Error ? err.message : "Something went wrong. Please try again.",
+        description,
         variant: "destructive",
       });
     } finally {
