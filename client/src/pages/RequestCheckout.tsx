@@ -1012,7 +1012,7 @@ export default function RequestCheckout() {
   if (step === "session_active") {
     return (
       <Shell>
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
           <Card className="shadow-xl overflow-hidden border-border/80">
             {/* Header with Timer */}
             <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 space-y-3">
@@ -1140,7 +1140,7 @@ export default function RequestCheckout() {
 
   return (
     <Shell>
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
         <Card className="shadow-xl overflow-hidden border-border/80">
           {/* Header Summary */}
           <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 space-y-3" data-testid="checkout-summary">
@@ -1582,7 +1582,7 @@ export default function RequestCheckout() {
 
                         {regAccountType === "individual" ? (
                           <>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div className="space-y-1">
                                 <Label htmlFor="regFirstName" className="text-xs font-medium">
                                   First name <span className="text-destructive">*</span>
@@ -1611,7 +1611,7 @@ export default function RequestCheckout() {
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div className="space-y-1">
                                 <Label htmlFor="regMiddleName" className="text-xs font-medium">
                                   Middle name <span className="text-muted-foreground font-normal">(optional)</span>
@@ -1639,25 +1639,26 @@ export default function RequestCheckout() {
                               </div>
                             </div>
 
-                            <div className="space-y-1">
-                              <Label className="text-xs font-medium">
-                                Gender <span className="text-destructive">*</span>
-                              </Label>
-                              <Select value={regGender} onValueChange={setRegGender}>
-                                <SelectTrigger data-testid="select-reg-gender" className="bg-white">
-                                  <SelectValue placeholder="Select gender" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {genderOptions.map((g) => (
-                                    <SelectItem key={g.value} value={g.value}>
-                                      {g.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs font-medium">
+                                  Gender <span className="text-destructive">*</span>
+                                </Label>
+                                <Select value={regGender} onValueChange={setRegGender}>
+                                  <SelectTrigger data-testid="select-reg-gender" className="bg-white">
+                                    <SelectValue placeholder="Select gender" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {genderOptions.map((g) => (
+                                      <SelectItem key={g.value} value={g.value}>
+                                        {g.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              {regCountrySelect}
                             </div>
-
-                            {regCountrySelect}
 
                             <PhoneInput
                               codeValue={regPhoneCode}
@@ -1690,31 +1691,33 @@ export default function RequestCheckout() {
                           </>
                         ) : (
                           <>
-                            <div className="space-y-1">
-                              <Label htmlFor="bizName" className="text-xs font-medium">
-                                Business Name <span className="text-destructive">*</span>
-                              </Label>
-                              <Input
-                                id="bizName"
-                                placeholder="Business name"
-                                value={bizName}
-                                onChange={(e) => setBizName(e.target.value)}
-                                data-testid="input-reg-business-name"
-                                required
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="bizRegNo" className="text-xs font-medium">
-                                Business Registration Number <span className="text-destructive">*</span>
-                              </Label>
-                              <Input
-                                id="bizRegNo"
-                                placeholder="e.g. 123456789"
-                                value={bizRegNo}
-                                onChange={(e) => setBizRegNo(e.target.value)}
-                                data-testid="input-reg-business-regno"
-                                required
-                              />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label htmlFor="bizName" className="text-xs font-medium">
+                                  Business Name <span className="text-destructive">*</span>
+                                </Label>
+                                <Input
+                                  id="bizName"
+                                  placeholder="Business name"
+                                  value={bizName}
+                                  onChange={(e) => setBizName(e.target.value)}
+                                  data-testid="input-reg-business-name"
+                                  required
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="bizRegNo" className="text-xs font-medium">
+                                  Registration No. <span className="text-destructive">*</span>
+                                </Label>
+                                <Input
+                                  id="bizRegNo"
+                                  placeholder="e.g. 123456789"
+                                  value={bizRegNo}
+                                  onChange={(e) => setBizRegNo(e.target.value)}
+                                  data-testid="input-reg-business-regno"
+                                  required
+                                />
+                              </div>
                             </div>
                             {regCountrySelect}
 
@@ -1772,7 +1775,7 @@ export default function RequestCheckout() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 sm:p-8">
-      <div className="w-full max-w-md mb-5 flex items-center gap-2.5">
+      <div className="w-full max-w-xl mb-5 flex items-center gap-2.5">
         <img src={logo} alt="Rhemito Logo" className="w-9 h-9 object-contain" />
         <span className="text-lg font-bold text-slate-800 font-display">Rhemito</span>
       </div>
@@ -1783,7 +1786,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function StatusCard(props: { icon: React.ReactNode; title: string; testId: string; children?: React.ReactNode }) {
   return (
-    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md">
+    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-xl">
       <Card className="shadow-xl" data-testid={props.testId}>
         <div className="bg-slate-100/80 p-5 border-b border-border flex flex-col items-center text-center gap-2">
           <div className="w-14 h-14 rounded-full bg-white border border-slate-200 flex items-center justify-center">
