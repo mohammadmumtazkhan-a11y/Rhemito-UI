@@ -78,7 +78,7 @@ export default function Senders() {
       email: newSender.email,
       countryCode: newSender.countryCode,
       phone: newSender.phone,
-      dob: newSender.dob,
+      dob: newSender.senderType === "individual" ? newSender.dob : "",
       country: newSender.country,
       currency: newSender.country === "Nigeria" ? "NGN" : newSender.country === "United Kingdom" ? "GBP" : "USD",
       relationship: "Personal",
@@ -327,7 +327,7 @@ export default function Senders() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setNewSender(prev => ({ ...prev, senderType: "business" }))}
+                          onClick={() => setNewSender(prev => ({ ...prev, senderType: "business", dob: "" }))}
                           className={`flex-1 flex items-center gap-2 p-3 rounded-lg border-2 transition-colors ${
                             newSender.senderType === "business"
                               ? "border-primary bg-primary/5"
@@ -425,8 +425,8 @@ export default function Senders() {
                     <div className="space-y-2">
                       <Label>Country *</Label>
                       <Select 
-                        value={newSender.country} 
-                        onValueChange={(value) => setNewSender(prev => ({ ...prev, country: value }))}
+                          value={newSender.country} 
+                          onValueChange={(value) => setNewSender(prev => ({ ...prev, country: value }))}
                       >
                         <SelectTrigger data-testid="select-new-country">
                           <SelectValue />
@@ -439,15 +439,17 @@ export default function Senders() {
                       </Select>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Date of Birth</Label>
-                      <Input
-                        type="date"
-                        value={newSender.dob}
-                        onChange={(e) => setNewSender(prev => ({ ...prev, dob: e.target.value }))}
-                        data-testid="input-new-dob"
-                      />
-                    </div>
+                    {newSender.senderType === "individual" && (
+                      <div className="space-y-2">
+                        <Label>Date of Birth</Label>
+                        <Input
+                          type="date"
+                          value={newSender.dob}
+                          onChange={(e) => setNewSender(prev => ({ ...prev, dob: e.target.value }))}
+                          data-testid="input-new-dob"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex gap-3 mt-6">
