@@ -146,6 +146,56 @@ test.describe('Request Money E2E', () => {
     void link;
   });
 
+  test('Absorb fee checkbox appears after amount entry; unchecking passes the 3% fee to the sender end-to-end', async ({ page, request }) => {
+    const user = await registerAndActivate(request);
+    const pageRequest = page.context().request;
+    await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
+    user.accountId = await addVerifiedAccount(pageRequest, 'GB', 'GBP');
+
+    await page.goto('/request-payment');
+
+    // The absorb-fee option only appears once an amount is entered
+    await expect(page.getByTestId('absorb-fee-section')).toHaveCount(0);
+    await page.getByTestId('input-request-amount').fill('250');
+    await expect(page.getByTestId('absorb-fee-section')).toBeVisible();
+    await expect(page.getByTestId('checkbox-absorb-fee')).toBeChecked();
+
+    // Absorbed (default): sender pays the exact requested amount
+    await expect(page.getByTestId('breakdown-sender-pays')).toHaveText('£250.00 GBP');
+    await expect(page.getByText('-£7.50 GBP')).toBeVisible();
+
+    // Uncheck → the 3% fee is added to the sender's payment
+    await page.getByTestId('checkbox-absorb-fee').click();
+    await expect(page.getByTestId('breakdown-sender-pays')).toHaveText('£257.50 GBP');
+    await expect(page.getByText('+£7.50 GBP')).toBeVisible();
+    await page.getByTestId('button-step-next').click();
+
+    // Step 2: sender + purpose
+    await page.getByTestId('input-sender-first-name').fill('Grace');
+    await page.getByTestId('input-sender-last-name').fill('Hopper');
+    await page.getByTestId('input-sender-email').fill(`grace-${unique()}@example.com`);
+    await page.getByTestId('select-reason').click();
+    await page.getByRole('option', { name: /invoice \/ services/i }).click();
+    await page.getByTestId('button-step-next').click();
+
+    // Step 3: review reflects the sender-pays-total and fee-added-to-sender
+    await expect(page.getByTestId('review-sender-pays')).toHaveText('£257.50 GBP');
+    await expect(page.getByText('+£7.50 GBP')).toBeVisible();
+    await page.getByTestId('button-step-next').click();
+
+    // Success screen
+    await expect(page.getByText('Payment Request Sent!')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Sender Pays:').locator('..')).toContainText('£257.50');
+
+    // The public checkout charges the sender the total incl. fee, with a clear fee note
+    const link = await page.getByTestId('input-payment-link').inputValue();
+    const token = link.split('/pay/')[1];
+    await page.goto(`/pay/${token}`);
+    await expect(page.getByTestId('checkout-amount')).toContainText('£257.50');
+    await expect(page.getByTestId('checkout-fee-note')).toContainText('£7.50');
+    await expect(page.getByTestId('checkout-disclosures')).toContainText('3% Rhemito fee');
+  });
+
   test('Guest payer pays on mobile-width checkout; funding only via webhook; link dies after payout', async ({ page, request }) => {
     const user = await registerAndActivate(request);
     const created = await createRequestViaApi(request, user);

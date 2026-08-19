@@ -146,13 +146,15 @@ export default function PaymentRequests() {
                             <div className="text-xs text-muted-foreground">{req.senderEmail}</div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap font-medium">
-                            {paySymbol}{req.payInAmount} {req.payInCurrency}
+                            {paySymbol}{req.senderPaysAmount} {req.payInCurrency}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <span className="font-medium text-primary">
                               {payoutSymbol}{req.payoutAmount ?? req.payInAmount} {req.payoutCurrency}
                             </span>
-                            <div className="text-xs text-muted-foreground">after {req.feeAmount} fee</div>
+                            <div className="text-xs text-muted-foreground">
+                              {req.absorbFee ? `after ${req.feeAmount} fee` : `${req.feeAmount} fee charged to sender`}
+                            </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-xs">
                             {req.payoutAccount.bankName}

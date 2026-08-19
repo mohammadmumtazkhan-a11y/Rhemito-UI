@@ -562,6 +562,10 @@ export const moneyRequests = pgTable("money_requests", {
   payInAmountMinor: bigint("pay_in_amount_minor", { mode: "number" }).notNull(),
   payoutCurrency: text("payout_currency").notNull(),
   feeMinor: bigint("fee_minor", { mode: "number" }).notNull(),
+  // Fee is 3% of the requested amount; when true the requester absorbs it
+  // (sender pays exactly the requested amount), when false it is added to
+  // the sender's payment.
+  absorbFee: boolean("absorb_fee").notNull().default(true),
   payoutAmountMinor: bigint("payout_amount_minor", { mode: "number" }),
   // FX quote snapshot (indicative unless locked at payment)
   fxRate: text("fx_rate"),
@@ -693,6 +697,8 @@ export const createMoneyRequestSchema = z
       errorMap: () => ({ message: "Select a purpose for this payment." }),
     }),
     reference: z.string().trim().max(140).optional(),
+    // Absent callers keep the historical behavior: requester absorbs the fee.
+    absorbFee: z.boolean().optional().default(true),
     idempotencyKey: z.string().min(8),
   });
 

@@ -130,7 +130,8 @@ export function registerRequestMoneyRoutes(app: Express): void {
       } catch {
         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Enter a valid amount." } });
       }
-      const quote = await computeQuote(corridor, amountMinor);
+      const absorbFee = String(req.query.absorbFee ?? "true") !== "false";
+      const quote = await computeQuote(corridor, amountMinor, absorbFee);
       res.json({
         data: {
           feeRate: serverConfig.feeRate,

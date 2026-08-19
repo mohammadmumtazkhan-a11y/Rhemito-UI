@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -66,6 +67,7 @@ interface FormData {
   senderCurrency: string;
   selectedPayoutAccountId: string;
   paymentMethod: string;
+  absorbFee: boolean;
   senderType: "individual" | "business";
   senderFirstName: string;
   senderMiddleName: string;
@@ -156,6 +158,7 @@ export default function RequestPayment() {
     senderCurrency: "GBP",
     selectedPayoutAccountId: "",
     paymentMethod: "sender_choice",
+    absorbFee: true,
     senderType: "individual",
     senderFirstName: "",
     senderMiddleName: "",
@@ -256,23 +259,24 @@ export default function RequestPayment() {
     }
     const t = setTimeout(async () => {
       try {
-        const q = await getQuote(corridorForSelection.id, formData.requestAmount);
+        const q = await getQuote(corridorForSelection.id, formData.requestAmount, formData.absorbFee);
         if (!cancelled) setIndicativeQuote(q);
       } catch {
         if (!cancelled) setIndicativeQuote(null);
       }
     }, 350);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [corridorForSelection?.id, formData.requestAmount]);
+  }, [corridorForSelection?.id, formData.requestAmount, formData.absorbFee]);
   const getExchangeRate = () => {
     if (senderCurrency === payoutCurrency) return 1;
     return indicativeQuote?.fxRate ?? NaN; // NaN → show "Live Spot Rate at Payout" only
   };
 
   const parsedAmount = parseFloat(formData.requestAmount) || 0;
-  const platformFeeRate = 0.03; // 3% fee absorbed by requester
+  const platformFeeRate = 0.03; // 3% fee — absorbed by the requester or added to the sender's payment
   const platformFeeAmount = parsedAmount * platformFeeRate;
-  const netBeforeFx = parsedAmount - platformFeeAmount;
+  const senderPaysAmount = formData.absorbFee ? parsedAmount : parsedAmount + platformFeeAmount;
+  const netBeforeFx = formData.absorbFee ? parsedAmount - platformFeeAmount : parsedAmount;
   const fxRate = getExchangeRate();
   const netPayoutAmount = Number.isFinite(fxRate) ? netBeforeFx * fxRate : 0;
 
@@ -283,7 +287,7 @@ export default function RequestPayment() {
   const [createdRequestId, setCreatedRequestId] = useState("");
   const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
-  const handleInputChange = (field: keyof FormData, value: string) => {
+  const handleInputChange = (field: keyof FormData, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -309,6 +313,7 @@ export default function RequestPayment() {
           preferredLabel ? `Preferred: ${preferredLabel}` : null,
           formData.reason === "other" && formData.otherReason.trim() ? `Reason: ${formData.otherReason.trim()}` : null,
         ].filter(Boolean).join(" | ") || undefined,
+        absorbFee: formData.absorbFee,
         idempotencyKey: idempotencyKeyRef.current,
       });
       setPaymentLink(result.checkoutUrl);
@@ -450,12 +455,16 @@ export default function RequestPayment() {
 
               <div className="p-4 bg-muted/40 rounded-xl space-y-2 text-left border border-border">
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Requested Amount (Sender Pays):</span>
+                  <span>Requested Amount:</span>
                   <span className="font-medium text-foreground">{senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}</span>
                 </div>
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Fee Absorbed (3%):</span>
-                  <span className="font-medium text-foreground">-{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
+                  <span>Sender Pays:</span>
+                  <span className="font-medium text-foreground">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
+                  <span className="font-medium text-foreground">{formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
                 </div>
                 <div className="flex justify-between text-xs font-semibold pt-1 border-t border-border/60">
                   <span className="text-primary">You Receive in Bank:</span>
@@ -538,8 +547,9 @@ export default function RequestPayment() {
                     setFormData({
                       requestAmount: "",
                       senderCurrency: "GBP",
-                      selectedPayoutAccountId: defaultAccount ? defaultAccount.id : "",
+                      selectedPayoutAccountId: "",
                       paymentMethod: "sender_choice",
+                      absorbFee: true,
                       senderType: "individual",
                       senderFirstName: "",
                       senderMiddleName: "",
@@ -550,7 +560,9 @@ export default function RequestPayment() {
                       senderPhone: "",
                       senderDob: "",
                       reason: "",
+                      otherReason: "",
                     });
+                    setSelectedPayoutAccount(null);
                     setCurrentStep(1);
                     setIsSuccess(false);
                     setPaymentLink("");
@@ -702,6 +714,32 @@ export default function RequestPayment() {
                         </div>
                       </div>
 
+                      {/* Fee Absorption Checkbox */}
+                      {parsedAmount > 0 && (
+                        <div className="flex items-start space-x-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors" data-testid="absorb-fee-section">
+                          <Checkbox
+                            id="absorbFee"
+                            checked={formData.absorbFee}
+                            onCheckedChange={(checked) => handleInputChange("absorbFee", checked === true)}
+                            data-testid="checkbox-absorb-fee"
+                            className="mt-0.5"
+                          />
+                          <div className="grid gap-1 leading-none cursor-pointer" onClick={() => handleInputChange("absorbFee", !formData.absorbFee)}>
+                            <Label
+                              htmlFor="absorbFee"
+                              className="text-sm font-semibold cursor-pointer text-slate-900"
+                            >
+                              Absorb the 3% transaction fee
+                            </Label>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              {formData.absorbFee
+                                ? `The sender pays the exact amount you requested (${senderSymbol}${parsedAmount.toFixed(2)} ${senderCurrency}), and the 3% fee is deducted from the amount you receive.`
+                                : `The 3% fee (${senderSymbol}${platformFeeAmount.toFixed(2)} ${senderCurrency}) is added to the sender's payment (${senderSymbol}${senderPaysAmount.toFixed(2)} ${senderCurrency} total), and you receive the full requested amount.`}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Optional Payment Method */}
                       <div className="space-y-2">
                         <Label htmlFor="paymentMethod" className="text-sm font-medium">
@@ -732,15 +770,15 @@ export default function RequestPayment() {
                         <div className="space-y-3 text-sm">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Sender Pays:</span>
-                            <span className="font-bold text-slate-800">
-                              {senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}
+                            <span className="font-bold text-slate-800" data-testid="breakdown-sender-pays">
+                              {senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}
                             </span>
                           </div>
 
                           <div className="flex justify-between text-muted-foreground">
-                            <span>Fee (3% absorbed by you):</span>
-                            <span className="font-medium text-red-600">
-                              -{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
+                            <span>Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
+                            <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
+                              {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
                             </span>
                           </div>
 
@@ -1049,8 +1087,8 @@ export default function RequestPayment() {
                       <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-200">
                         <div>
                           <p className="text-xs text-muted-foreground uppercase font-semibold">Sender Pays</p>
-                          <p className="text-2xl font-bold text-slate-900 mt-0.5">
-                            {senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}
+                          <p className="text-2xl font-bold text-slate-900 mt-0.5" data-testid="review-sender-pays">
+                            {senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}
                           </p>
                         </div>
                         <div>
@@ -1070,8 +1108,10 @@ export default function RequestPayment() {
 
                       <div className="space-y-2.5 text-sm">
                         <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-muted-foreground">Platform Fee (3% absorbed):</span>
-                          <span className="font-medium text-red-600">-{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
+                          <span className="text-muted-foreground">Platform Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
+                          <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
+                            {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
+                          </span>
                         </div>
 
                         <div className="flex justify-between py-1 border-b border-slate-100">
@@ -1201,11 +1241,13 @@ export default function RequestPayment() {
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Requested Amount (Sender Pays):</span>
-                <span className="font-semibold text-slate-800">{senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}</span>
+                <span className="font-semibold text-slate-800">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Fee Absorbed (3%):</span>
-                <span className="font-medium text-red-600">-{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
+                <span className="text-muted-foreground">Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
+                <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
+                  {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Net Payout Amount:</span>

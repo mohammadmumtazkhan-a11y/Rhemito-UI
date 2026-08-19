@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  toMinorUnits, fromMinorUnits, feeMinorOf, applyFxMarkup, convertMinor, maskAccountNumber, minorUnitFactor,
+  toMinorUnits, fromMinorUnits, feeMinorOf, senderPaysMinorOf, netMinorOf, applyFxMarkup, convertMinor, maskAccountNumber, minorUnitFactor,
 } from "../../../shared/money";
 import { validateCorridor, findCorridor, CORRIDORS } from "../../../server/corridors";
 import { signWebhookPayload, verifyWebhookSignature } from "../../../server/providers";
@@ -33,6 +33,20 @@ describe("money (integer minor units)", () => {
     const fee = feeMinorOf(gross, 0.03);
     expect(fee).toBe(300);
     expect(fromMinorUnits(gross - fee, "GBP")).toBe("97.00");
+  });
+
+  it("absorbed fee: sender pays the requested amount, fee comes from requester proceeds", () => {
+    const requested = toMinorUnits("250.00", "GBP");
+    const fee = feeMinorOf(requested, 0.03); // 750
+    expect(senderPaysMinorOf(requested, fee, true)).toBe(25000);
+    expect(fromMinorUnits(netMinorOf(requested, fee, true), "GBP")).toBe("242.50");
+  });
+
+  it("fee passed to sender: sender pays requested + fee, requester receives the full amount", () => {
+    const requested = toMinorUnits("250.00", "GBP");
+    const fee = feeMinorOf(requested, 0.03); // 750
+    expect(fromMinorUnits(senderPaysMinorOf(requested, fee, false), "GBP")).toBe("257.50");
+    expect(netMinorOf(requested, fee, false)).toBe(25000);
   });
 
   it("applies FX markup by reducing the offered rate and rounds converted minor units", () => {

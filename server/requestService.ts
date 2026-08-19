@@ -29,6 +29,8 @@ import {
   toMinorUnits,
   fromMinorUnits,
   feeMinorOf,
+  senderPaysMinorOf,
+  netMinorOf,
   applyFxMarkup,
   convertMinor,
   maskAccountNumber,
@@ -116,6 +118,7 @@ async function displayNameOf(userId: string): Promise<string> {
 
 export interface QuoteSnapshot {
   feeMinor: number;
+  senderPaysMinor: number;
   payoutAmountMinor: number | null;
   fxRate: number | null;
   fxRateIsIndicative: boolean;
@@ -126,18 +129,27 @@ export interface QuoteSnapshot {
 export async function computeQuote(
   corridor: CorridorConfig,
   payInAmountMinor: number,
+  absorbFee = true,
 ): Promise<QuoteSnapshot> {
   const feeMinor = feeMinorOf(payInAmountMinor, serverConfig.feeRate);
-  const netMinor = payInAmountMinor - feeMinor;
+  const netMinor = netMinorOf(payInAmountMinor, feeMinor, absorbFee);
 
   if (corridor.payInCurrency === corridor.payoutCurrency) {
-    return { feeMinor, payoutAmountMinor: netMinor, fxRate: null, fxRateIsIndicative: true, fxMarkupApplied: 0 };
+    return {
+      feeMinor,
+      senderPaysMinor: senderPaysMinorOf(payInAmountMinor, feeMinor, absorbFee),
+      payoutAmountMinor: netMinor,
+      fxRate: null,
+      fxRateIsIndicative: true,
+      fxMarkupApplied: 0,
+    };
   }
 
   const midRate = await getFxRate(corridor.payInCurrency, corridor.payoutCurrency);
   const customerRate = applyFxMarkup(midRate, serverConfig.fxMarkup);
   return {
     feeMinor,
+    senderPaysMinor: senderPaysMinorOf(payInAmountMinor, feeMinor, absorbFee),
     payoutAmountMinor: convertMinor(netMinor, customerRate),
     fxRate: customerRate,
     fxRateIsIndicative: true,
@@ -194,7 +206,7 @@ export async function createMoneyRequest(params: {
     throw new RequestError(400, "CORRIDOR_UNAVAILABLE", corridorCheck.reason ?? "Corridor unavailable.");
   }
 
-  const quote = await computeQuote(corridor, payInAmountMinor);
+  const quote = await computeQuote(corridor, payInAmountMinor, payload.absorbFee);
   const now = new Date();
   const sequence = await storage.nextMoneyRequestSequence();
   const yearMonth = dateInTz(now, EXPIRY_TIMEZONE).slice(0, 7);
@@ -214,6 +226,7 @@ export async function createMoneyRequest(params: {
     payInAmountMinor,
     payoutCurrency: corridor.payoutCurrency,
     feeMinor: quote.feeMinor,
+    absorbFee: payload.absorbFee,
     payoutAmountMinor: quote.payoutAmountMinor,
     fxRate: quote.fxRate !== null ? String(quote.fxRate) : null,
     fxRateIsIndicative: quote.fxRateIsIndicative,
@@ -266,7 +279,12 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
 
   const corridor = findCorridor(request.corridorId);
   const checkoutUrl = buildCheckoutUrl(request.token);
-  const amountText = `${fromMinorUnits(request.payInAmountMinor, request.payInCurrency)} ${request.payInCurrency}`;
+  // The sender is told the total they pay — requested amount plus fee when the
+  // requester does not absorb it.
+  const amountText = `${fromMinorUnits(
+    senderPaysMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee),
+    request.payInCurrency,
+  )} ${request.payInCurrency}`;
 
   const message = {
     to: request.senderEmail,
@@ -353,12 +371,15 @@ export function effectiveStatus(request: MoneyRequest, now = new Date()): Reques
 export function toPublicRequestJSON(request: MoneyRequest) {
   const corridor = findCorridor(request.corridorId);
   const now = new Date();
+  const senderPaysMinor = senderPaysMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee);
   return {
     requestNumber: request.requestNumber,
     requesterName: request.requesterName,
     // Accurate identity description — never "verified" just because it arrived by email.
     requesterIdentity: "Rhemito customer",
-    amount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
+    amount: fromMinorUnits(senderPaysMinor, request.payInCurrency),
+    requestedAmount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
+    feeAmount: fromMinorUnits(request.feeMinor, request.payInCurrency),
     currency: request.payInCurrency,
     purpose: request.purpose,
     reference: request.reference ?? null,
@@ -366,7 +387,9 @@ export function toPublicRequestJSON(request: MoneyRequest) {
     expiryDate: dateInTz(request.expiresAt, EXPIRY_TIMEZONE),
     methods: corridor?.methods ?? [],
     estimatedDeliveryTime: corridor?.estimatedDeliveryTime ?? "",
-    senderFeeNote: "No Rhemito fee is charged to you — the requester covers the fee.",
+    senderFeeNote: request.absorbFee
+      ? "No Rhemito fee is charged to you — the requester covers the fee."
+      : `A 3% Rhemito fee of ${fromMinorUnits(request.feeMinor, request.payInCurrency)} ${request.payInCurrency} is included in the total.`,
     status: effectiveStatus(request, now),
     legalEntity: serverConfig.legalEntity,
   };
@@ -417,7 +440,7 @@ export async function createPayinIntent(token: string, method: string): Promise<
 
   const intent = await devPayinProvider.createIntent({
     requestNumber: request.requestNumber,
-    amountMinor: request.payInAmountMinor,
+    amountMinor: senderPaysMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee),
     currency: request.payInCurrency,
     method,
     checkoutUrl: buildCheckoutUrl(request.token),
@@ -464,7 +487,8 @@ export async function processPayinWebhook(rawBody: Buffer, signature: string): P
   if (event.type === "payment.succeeded") {
     // Validate the webhook against the request before funding anything.
     if (request.payinIntentId !== event.intentId) return { accepted: true };
-    if (event.amountMinor !== request.payInAmountMinor || event.currency !== request.payInCurrency) {
+    const senderPaysMinor = senderPaysMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee);
+    if (event.amountMinor !== senderPaysMinor || event.currency !== request.payInCurrency) {
       console.error(`[requestService] webhook amount mismatch for ${request.requestNumber} — ignored`);
       return { accepted: true };
     }
@@ -480,7 +504,8 @@ export async function processPayinWebhook(rawBody: Buffer, signature: string): P
     // Payout eligibility passed (single-tier prototype): submit to the payout provider.
     const payout = await devPayoutProvider.submitPayout({
       requestNumber: request.requestNumber,
-      amountMinor: request.payoutAmountMinor ?? request.payInAmountMinor - request.feeMinor,
+      amountMinor:
+        request.payoutAmountMinor ?? netMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee),
       currency: request.payoutCurrency,
       maskedAccount: request.payoutAccountMasked,
     });
@@ -616,7 +641,12 @@ export function toRequestJSON(request: MoneyRequest) {
     senderCountry: request.senderCountry,
     payInAmount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
     payInCurrency: request.payInCurrency,
+    senderPaysAmount: fromMinorUnits(
+      senderPaysMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee),
+      request.payInCurrency,
+    ),
     feeAmount: fromMinorUnits(request.feeMinor, request.payInCurrency),
+    absorbFee: request.absorbFee,
     payoutAmount:
       request.payoutAmountMinor !== null
         ? fromMinorUnits(request.payoutAmountMinor, request.payoutCurrency)

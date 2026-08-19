@@ -253,6 +253,11 @@ export default function RequestCheckout() {
             <p className="text-4xl font-bold tracking-tight" data-testid="checkout-amount">
               {symbol}{request.amount} <span className="text-lg text-white/70">{request.currency}</span>
             </p>
+            {request.amount !== request.requestedAmount && (
+              <p className="text-xs text-white/70" data-testid="checkout-fee-note">
+                Requested amount {symbol}{request.requestedAmount} {request.currency} + {symbol}{request.feeAmount} {request.currency} Rhemito fee (3%)
+              </p>
+            )}
             <div className="space-y-1 text-sm border-t border-white/10 pt-3">
               <div className="flex justify-between"><span className="text-white/60">Requested by</span><span className="font-medium">{request.requesterName}</span></div>
               <div className="flex justify-between"><span className="text-white/60">Identity</span><span className="text-white/80 text-xs">{request.requesterIdentity}</span></div>

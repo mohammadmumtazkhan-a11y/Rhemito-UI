@@ -34,11 +34,22 @@ export function fromMinorUnits(minor: number, currency: string): string {
 }
 
 /**
- * Rhemito fee deducted from the requester's proceeds. The sender always pays
- * exactly the requested amount — never 103%.
+ * Rhemito fee — always 3% of the requested (base) amount in both modes:
+ * absorbed by the requester (sender pays exactly the requested amount) or
+ * added to the sender's payment (requester receives the full requested amount).
  */
 export function feeMinorOf(grossMinor: number, feeRate: number): number {
   return Math.round(grossMinor * feeRate);
+}
+
+/** Amount the sender is charged: the requested amount, plus the fee when the requester does not absorb it. */
+export function senderPaysMinorOf(requestedMinor: number, feeMinor: number, absorbFee: boolean): number {
+  return absorbFee ? requestedMinor : requestedMinor + feeMinor;
+}
+
+/** Requester proceeds: requested amount minus the fee when absorbed, otherwise the full requested amount. */
+export function netMinorOf(requestedMinor: number, feeMinor: number, absorbFee: boolean): number {
+  return absorbFee ? requestedMinor - feeMinor : requestedMinor;
 }
 
 /**

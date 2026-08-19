@@ -42,6 +42,7 @@ export interface PayoutAccountView {
 
 export interface Quote {
   feeMinor: number;
+  senderPaysMinor: number;
   payoutAmountMinor: number | null;
   fxRate: number | null;
   fxRateIsIndicative: boolean;
@@ -59,7 +60,9 @@ export interface MoneyRequestView {
   senderEmail: string;
   payInAmount: string;
   payInCurrency: string;
+  senderPaysAmount: string;
   feeAmount: string;
+  absorbFee: boolean;
   payoutAmount: string | null;
   payoutCurrency: string;
   fxRate: number | null;
@@ -83,7 +86,10 @@ export interface PublicRequestView {
   requestNumber: string;
   requesterName: string;
   requesterIdentity: string;
+  /** Total charged to the sender: requested amount, plus the fee when the requester does not absorb it. */
   amount: string;
+  requestedAmount: string;
+  feeAmount: string;
   currency: string;
   purpose: string;
   reference: string | null;
@@ -112,6 +118,8 @@ export interface CreateRequestInput {
   senderPhone?: string;
   purpose: PaymentPurpose;
   reference?: string;
+  /** Default true — requester absorbs the 3% fee. */
+  absorbFee?: boolean;
   idempotencyKey: string;
 }
 
@@ -128,8 +136,10 @@ export const getEligibility = () => getJSON<Eligibility>("/api/request-money/eli
 export const getCorridors = () => getJSON<Corridor[]>("/api/request-money/corridors");
 export const getPayoutAccounts = () => getJSON<PayoutAccountView[]>("/api/request-money/payout-accounts");
 
-export function getQuote(corridorId: string, amount: string): Promise<Quote> {
-  return getJSON<Quote>(`/api/request-money/quote?corridorId=${encodeURIComponent(corridorId)}&amount=${encodeURIComponent(amount)}`);
+export function getQuote(corridorId: string, amount: string, absorbFee = true): Promise<Quote> {
+  return getJSON<Quote>(
+    `/api/request-money/quote?corridorId=${encodeURIComponent(corridorId)}&amount=${encodeURIComponent(amount)}&absorbFee=${absorbFee}`,
+  );
 }
 
 export async function addPayoutAccount(input: {

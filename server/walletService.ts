@@ -8,6 +8,7 @@
 
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
+import { senderPaysMinorOf, netMinorOf } from "@shared/money";
 import type { LedgerEntry, MoneyRequest } from "@shared/schema";
 
 type Direction = "debit" | "credit";
@@ -47,19 +48,22 @@ export interface FundingLedgerResult {
 /**
  * Post the funding side of a paid request:
  *
- *   gross_received   credit  wallet:<user>              gross (pay-in ccy)
- *   rhemito_fee      debit   wallet:<user>              fee
- *   rhemito_fee      credit  fee:rhemito                fee
- *   net_wallet_credit debit/credit pair keeps the wallet at net
+ *   gross_received   credit  wallet:<user>   amount charged to the sender (pay-in ccy)
+ *   rhemito_fee      debit   wallet:<user>   fee
+ *   rhemito_fee      credit  fee:rhemito     fee
+ *
+ * The wallet nets to the requester's proceeds: requested − fee when the
+ * requester absorbs the fee, or the full requested amount when the fee is
+ * charged to the sender (gross then includes the fee).
  *
  * For cross-currency payouts an fx_conversion pair moves net pay-in funds into
  * the payout currency at the quoted rate before the payout debit.
  */
 export async function postFundingEntries(request: MoneyRequest, providerPaymentRef: string): Promise<FundingLedgerResult> {
   const wallet = `wallet:${request.requesterId}`;
-  const gross = request.payInAmountMinor;
+  const gross = senderPaysMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee);
   const fee = request.feeMinor;
-  const net = gross - fee;
+  const net = netMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee);
 
   await post({
     requestId: request.id,
@@ -133,7 +137,8 @@ export async function postPayoutEntry(request: MoneyRequest, payoutRef: string):
     type: "payout_debit",
     account,
     direction: "debit",
-    amountMinor: request.payoutAmountMinor ?? request.payInAmountMinor - request.feeMinor,
+    amountMinor:
+      request.payoutAmountMinor ?? netMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee),
     currency: request.payoutCurrency,
     idempotencyKey: `${request.id}:payout_debit`,
     providerRef: payoutRef,
