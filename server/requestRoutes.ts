@@ -7,7 +7,7 @@
  */
 
 import type { Express, Request, Response } from "express";
-import { randomUUID } from "crypto";
+import { randomInt, randomUUID } from "crypto";
 import QRCode from "qrcode";
 import { storage } from "./storage";
 import { serverConfig } from "./config";
@@ -23,8 +23,12 @@ import {
   extendExpiry,
   resendRequestEmail,
   getRequestByToken,
+  getRequestByTokenOrEmailToken,
   toPublicRequestJSON,
   markViewed,
+  effectiveStatus,
+  startPayerSession,
+  requestNewPaymentLink,
   processPayinWebhook,
   processPayoutWebhook,
   startRequestSweep,
@@ -32,17 +36,27 @@ import {
 } from "./requestService";
 import { getFxRate } from "./fxService";
 import { FxError } from "./fxService";
-import { toMinorUnits, maskAccountNumber } from "@shared/money";
+import { toMinorUnits, fromMinorUnits, maskAccountNumber } from "@shared/money";
 import {
   addPayoutAccountSchema,
   createMoneyRequestSchema,
   createPayinIntentSchema,
   reportRequestSchema,
+  emailCheckSchema,
 } from "@shared/schema";
 
 function requireStrictAuth(req: Request): string {
-  const userId = req.session?.userId ?? "user_123";
-  return userId;
+  const userId = req.session?.userId;
+  if (userId) return userId;
+  // Dashboard demo experience: outside real production the seeded demo
+  // requester stands in for an anonymous dashboard visitor, so payout-account
+  // and request flows work without a sign-in prompt. The public payer
+  // endpoints (payment session, pay-intent) check the session directly and
+  // stay strictly authenticated.
+  if (process.env.NODE_ENV !== "production" || process.env.RHEMITO_DEV_HOOKS === "1") {
+    return "user_123";
+  }
+  throw new RequestError(401, "UNAUTHENTICATED", "Please sign in to continue.");
 }
 
 function handleError(res: Response, err: unknown): void {
@@ -230,6 +244,7 @@ export function registerRequestMoneyRoutes(app: Express): void {
         data: {
           request: toRequestJSON(result.request),
           checkoutUrl: result.checkoutUrl,
+          emailCheckoutUrl: result.emailCheckoutUrl,
           qrUrl: `/api/request-money/requests/${result.request.id}/qr.png`,
           alreadyExisted: result.alreadyExisted,
         },
@@ -364,43 +379,227 @@ export function registerRequestMoneyRoutes(app: Express): void {
 
   // ─── Public payer APIs (rate-limited, minimal data) ─────────────────────────
 
+  // 1. Copyable link lookup
   app.get("/api/public/requests/:token", async (req, res) => {
     try {
       if (!enforceRateLimit(req, res, "publicLookup")) return;
-      const request = await getRequestByToken(req.params.token);
+      const request = await getRequestByTokenOrEmailToken(req.params.token, false);
       if (!request) {
-        // Anti-enumeration: identical shape as any other invalid token.
         return res.status(404).json({ error: { code: "NOT_FOUND", message: "This payment link is not valid." } });
       }
       markViewed(request);
-      return res.json({ data: toPublicRequestJSON(request) });
+      const currentUserId = req.session?.userId;
+      return res.json({ data: toPublicRequestJSON(request, false, currentUserId) });
     } catch (err) {
       return handleError(res, err);
     }
   });
 
-  app.post("/api/public/requests/:token/intent", async (req, res) => {
+  // 2. Email-notification link lookup (displays masked recipient email)
+  app.get("/api/public/requests/e/:emailToken", async (req, res) => {
+    try {
+      if (!enforceRateLimit(req, res, "publicLookup")) return;
+      const request = await getRequestByTokenOrEmailToken(req.params.emailToken, true);
+      if (!request) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "This payment link is not valid." } });
+      }
+      markViewed(request);
+      const currentUserId = req.session?.userId;
+      return res.json({ data: toPublicRequestJSON(request, true, currentUserId) });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  });
+
+  app.get("/api/request-money/requests/:id/payment-attempts", async (req, res) => {
+    try {
+      const userId = requireStrictAuth(req);
+      const request = await storage.getMoneyRequestById(req.params.id);
+      if (!request || request.requesterId !== userId) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "Request not found." } });
+      }
+      const submitted = (await storage.listPaymentAttempts(request.id))
+        .filter((attempt) => !!attempt.authorisationStartedAt)
+        .map((attempt) => ({
+          payerName: attempt.payerName,
+          payerEmailMasked: attempt.payerEmailMasked,
+          status: attempt.status,
+          requestedAmount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
+          requestedCurrency: request.payInCurrency,
+          payerPaymentCurrency: attempt.payCurrency,
+          payerPaymentAmount: fromMinorUnits(attempt.payAmountMinor, attempt.payCurrency),
+          feeAmount: fromMinorUnits(attempt.feeMinor, attempt.payCurrency),
+          feeAbsorbedBy: attempt.absorbFee ? "requester" : "payer",
+          fxRate: attempt.fxRate ? Number(attempt.fxRate) : null,
+          paymentReference: attempt.paymentReference,
+          submittedAt: attempt.authorisationStartedAt?.toISOString() ?? null,
+          finalStatusAt: attempt.completedAt?.toISOString() ?? null,
+        }));
+      return res.json({ data: submitted });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  });
+
+  // An unregistered payer must prove control of the entered email before an
+  // account can be created. Opening either link never verifies the address.
+  const handleSendPayerPin = async (req: Request, res: Response, isEmailLink: boolean) => {
+    try {
+      if (!enforceRateLimit(req, res, "paymentIntent")) return;
+      const parsed = emailCheckSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Enter a valid email address." } });
+      }
+      const token = req.params.token || req.params.emailToken || String(req.body?.token ?? "");
+      const request = await getRequestByTokenOrEmailToken(token, isEmailLink);
+      if (!request) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "This payment link is not valid." } });
+      }
+      if (!["active", "viewed"].includes(effectiveStatus(request))) {
+        return res.status(409).json({ error: { code: "INVALID_STATE", message: "This request cannot accept a new payment." } });
+      }
+      const email = parsed.data.email.toLowerCase();
+      if (await storage.getAuthUserByEmail(email)) {
+        return res.status(409).json({ error: { code: "EMAIL_REGISTERED", message: "This email already has a Rhemito account. Please sign in." } });
+      }
+      const previous = req.session.paymentRequestVerification;
+      if (previous?.email === email && Date.now() - previous.lastSentAt < 60_000) {
+        res.setHeader("Retry-After", Math.ceil((60_000 - (Date.now() - previous.lastSentAt)) / 1000));
+        return res.status(429).json({ error: { code: "PIN_COOLDOWN", message: "Please wait before requesting another PIN." } });
+      }
+      await storage.invalidateOtps(email);
+      const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+      await storage.createOtp(email, code, new Date(Date.now() + 10 * 60_000));
+      req.session.paymentRequestVerification = {
+        email, token, isEmailLink, verified: false, failedAttempts: 0, lastSentAt: Date.now(),
+      };
+      return res.json({ data: {
+        sent: true,
+        expiresInSeconds: 600,
+        resendAfterSeconds: 60,
+        ...(process.env.NODE_ENV !== "production" || process.env.RHEMITO_DEV_HOOKS === "1" ? { devPin: code } : {}),
+      } });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  };
+
+  const handleVerifyPayerPin = async (req: Request, res: Response, isEmailLink: boolean) => {
+    try {
+      if (!enforceRateLimit(req, res, "paymentIntent")) return;
+      const token = req.params.token || req.params.emailToken || String(req.body?.token ?? "");
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+      const code = String(req.body?.code ?? "").trim();
+      const verification = req.session.paymentRequestVerification;
+      if (!verification || verification.token !== token || verification.isEmailLink !== isEmailLink || verification.email !== email) {
+        return res.status(400).json({ error: { code: "PIN_NOT_SENT", message: "Request a new PIN for this email address." } });
+      }
+      if (verification.failedAttempts >= 5) {
+        return res.status(429).json({ error: { code: "PIN_LOCKED", message: "Too many incorrect attempts. Request a new PIN later." } });
+      }
+      const otp = code.length === 6 ? await storage.getValidOtp(email, code) : undefined;
+      if (!otp) {
+        verification.failedAttempts += 1;
+        return res.status(400).json({ error: { code: "INVALID_PIN", message: "The PIN is invalid or has expired." } });
+      }
+      await storage.markOtpUsed(otp.id);
+      verification.verified = true;
+      return res.json({ data: { verified: true } });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  };
+
+  app.post("/api/public/requests/:token/verification/send", (req, res) => handleSendPayerPin(req, res, false));
+  app.post("/api/public/requests/e/:emailToken/verification/send", (req, res) => handleSendPayerPin(req, res, true));
+  app.post("/api/public/requests/:token/verification/verify", (req, res) => handleVerifyPayerPin(req, res, false));
+  app.post("/api/public/requests/e/:emailToken/verification/verify", (req, res) => handleVerifyPayerPin(req, res, true));
+  app.post("/api/public/request-verifications/:token/send", (req, res) => handleSendPayerPin(req, res, false));
+  app.post("/api/public/request-verifications/e/:emailToken/send", (req, res) => handleSendPayerPin(req, res, true));
+  app.post("/api/public/request-verifications/:token/verify", (req, res) => handleVerifyPayerPin(req, res, false));
+  app.post("/api/public/request-verifications/e/:emailToken/verify", (req, res) => handleVerifyPayerPin(req, res, true));
+  app.post("/api/public/request-verifications/send", (req, res) => handleSendPayerPin(req, res, Boolean(req.body?.isEmailLink)));
+  app.post("/api/public/request-verifications/verify", (req, res) => handleVerifyPayerPin(req, res, Boolean(req.body?.isEmailLink)));
+
+  // 3. Start Payer 10-Minute Session
+  const handleStartSession = async (req: Request, res: Response, isEmailLink: boolean) => {
+    try {
+      if (!enforceRateLimit(req, res, "paymentIntent")) return;
+      const token = req.params.token || req.params.emailToken;
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: { code: "UNAUTHENTICATED", message: "Please sign in to continue." } });
+      }
+      const session = await startPayerSession({
+        token,
+        isEmailLink,
+        userId,
+      });
+      return res.json({ data: session });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  };
+
+  app.post("/api/public/requests/:token/session", (req, res) => handleStartSession(req, res, false));
+  app.post("/api/public/requests/e/:emailToken/session", (req, res) => handleStartSession(req, res, true));
+
+  // 4. Pay Intent / Submission (Atomic lock)
+  const handlePayIntent = async (req: Request, res: Response, isEmailLink: boolean) => {
     try {
       if (!enforceRateLimit(req, res, "paymentIntent")) return;
       const parsed = createPayinIntentSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Select a payment method." } });
       }
-      const intent = await createPayinIntent(req.params.token, parsed.data.method);
+      const token = req.params.token || req.params.emailToken;
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: { code: "UNAUTHENTICATED", message: "Please sign in to continue." } });
+      }
+      const intent = await createPayinIntent({
+        token,
+        isEmailLink,
+        method: parsed.data.method,
+        userId,
+        sessionId: String(req.body?.sessionId ?? ""),
+      });
       return res.json({ data: intent });
     } catch (err) {
       return handleError(res, err);
     }
-  });
+  };
 
-  app.post("/api/public/requests/:token/report", async (req, res) => {
+  app.post("/api/public/requests/:token/pay-intent", (req, res) => handlePayIntent(req, res, false));
+  app.post("/api/public/requests/e/:emailToken/pay-intent", (req, res) => handlePayIntent(req, res, true));
+  app.post("/api/public/requests/:token/intent", (req, res) => handlePayIntent(req, res, false));
+
+  // 5. Request New Payment Link (Expired request renewal)
+  const handleRequestNewLink = async (req: Request, res: Response, isEmailLink: boolean) => {
+    try {
+      if (!enforceRateLimit(req, res, "reportRequest")) return;
+      const token = req.params.token || req.params.emailToken;
+      const payerEmail = req.body?.payerEmail as string | undefined;
+      const result = await requestNewPaymentLink(token, isEmailLink, payerEmail);
+      return res.json({ data: result });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  };
+
+  app.post("/api/public/requests/:token/request-new-link", (req, res) => handleRequestNewLink(req, res, false));
+  app.post("/api/public/requests/e/:emailToken/request-new-link", (req, res) => handleRequestNewLink(req, res, true));
+
+  // 6. Report request
+  const handleReport = async (req: Request, res: Response, isEmailLink: boolean) => {
     try {
       if (!enforceRateLimit(req, res, "reportRequest")) return;
       const parsed = reportRequestSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: parsed.error.issues[0]?.message ?? "Invalid report." } });
       }
-      const request = await getRequestByToken(req.params.token);
+      const token = req.params.token || req.params.emailToken;
+      const request = await getRequestByTokenOrEmailToken(token, isEmailLink);
       if (!request) {
         return res.status(404).json({ error: { code: "NOT_FOUND", message: "This payment link is not valid." } });
       }
@@ -409,7 +608,10 @@ export function registerRequestMoneyRoutes(app: Express): void {
     } catch (err) {
       return handleError(res, err);
     }
-  });
+  };
+
+  app.post("/api/public/requests/:token/report", (req, res) => handleReport(req, res, false));
+  app.post("/api/public/requests/e/:emailToken/report", (req, res) => handleReport(req, res, true));
 
   // ─── Provider webhooks (signed, idempotent) ────────────────────────────────
 

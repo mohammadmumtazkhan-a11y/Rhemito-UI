@@ -34,12 +34,23 @@ export const serverConfig = {
   /** Maximum number of days an active request expiry can be extended by, once. */
   maxExpiryExtensionDays: 30,
 
-  /** Public endpoint rate limits (per IP). */
-  rateLimits: {
-    publicLookup: { limit: 30, windowMs: 60_000 },
-    paymentIntent: { limit: 10, windowMs: 60_000 },
-    reportRequest: { limit: 5, windowMs: 60_000 },
-  },
+  /**
+   * Public endpoint rate limits (per IP). Relaxed outside production so the
+   * local e2e suite (all traffic from one IP) doesn't trip the limiter;
+   * production keeps the strict per-IP values.
+   */
+  rateLimits:
+    process.env.NODE_ENV === "production"
+      ? {
+          publicLookup: { limit: 30, windowMs: 60_000 },
+          paymentIntent: { limit: 10, windowMs: 60_000 },
+          reportRequest: { limit: 5, windowMs: 60_000 },
+        }
+      : {
+          publicLookup: { limit: 300, windowMs: 60_000 },
+          paymentIntent: { limit: 100, windowMs: 60_000 },
+          reportRequest: { limit: 50, windowMs: 60_000 },
+        },
 
   /** Email resend cooldown per request. */
   emailResendCooldownMs: 60_000,
@@ -66,3 +77,8 @@ export const serverConfig = {
 export function buildCheckoutUrl(token: string): string {
   return `${serverConfig.publicBaseUrl.replace(/\/$/, "")}${serverConfig.checkoutPath}${token}`;
 }
+
+export function buildEmailCheckoutUrl(emailToken: string): string {
+  return `${serverConfig.publicBaseUrl.replace(/\/$/, "")}/pay/e/${emailToken}`;
+}
+

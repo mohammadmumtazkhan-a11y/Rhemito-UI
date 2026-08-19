@@ -1,12 +1,20 @@
 import type { Express, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
-import { emailCheckSchema, loginSchema, otpVerifySchema } from "@shared/schema";
+import { emailCheckSchema, loginSchema, otpVerifySchema, PROTOTYPE_MASTER_PASSWORD } from "@shared/schema";
 import { log } from "./index";
 
 function generateOtp(): string {
   // PROTOTYPE: always use 123456 for easy testing
   return "123456";
+}
+
+/** Prototype-only master password (any account) — never honoured in real production. */
+function isPrototypeMasterPassword(password: string): boolean {
+  return (
+    (process.env.NODE_ENV !== "production" || process.env.RHEMITO_DEV_HOOKS === "1")
+    && password === PROTOTYPE_MASTER_PASSWORD
+  );
 }
 
 export function registerAuthRoutes(app: Express) {
@@ -51,7 +59,7 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const isMatch = await bcrypt.compare(parsed.data.password, user.password);
-      if (!isMatch) {
+      if (!isMatch && !isPrototypeMasterPassword(parsed.data.password)) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
@@ -69,7 +77,17 @@ export function registerAuthRoutes(app: Express) {
   // ─── Register ───────────────────────────────────────────────────
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const { confirmPassword, ...userData } = req.body;
+      const { confirmPassword, paymentRequestToken, isEmailLink, ...userData } = req.body;
+      const payerVerification = req.session.paymentRequestVerification;
+      const isVerifiedPayerRegistration = Boolean(paymentRequestToken);
+      if (isVerifiedPayerRegistration && (
+        !payerVerification?.verified
+        || payerVerification.email !== String(userData.email ?? "").toLowerCase()
+        || payerVerification.token !== paymentRequestToken
+        || payerVerification.isEmailLink !== Boolean(isEmailLink)
+      )) {
+        return res.status(403).json({ message: "Verify this email from the payment request before registering." });
+      }
 
       // Check if email already exists
       const existing = await storage.getAuthUserByEmail(userData.email);
@@ -86,6 +104,15 @@ export function registerAuthRoutes(app: Express) {
         password: hashedPassword,
         status: "pending",
       });
+
+      if (isVerifiedPayerRegistration) {
+        await storage.activateUser(userData.email);
+        req.session.userId = user.id;
+        delete req.session.paymentRequestVerification;
+        const activated = await storage.getAuthUserById(user.id);
+        const { password: _, ...safeUser } = activated ?? user;
+        return res.json({ success: true, message: "Registration complete.", user: { ...safeUser, status: "active" } });
+      }
 
       // Generate & store OTP (valid for 1 hour)
       const otpCode = generateOtp();
@@ -181,11 +208,9 @@ export function registerAuthRoutes(app: Express) {
   // ─── Get Current User ──────────────────────────────────────────
   app.get("/api/auth/me", async (req: Request, res: Response) => {
     try {
-      const userId = req.session.userId ?? "user_123";
-      let user = await storage.getAuthUserById(userId);
-      if (!user) {
-        user = await storage.getAuthUserById("user_123");
-      }
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getAuthUserById(userId);
       if (!user) {
         return res.status(401).json({ message: "User not found" });
       }

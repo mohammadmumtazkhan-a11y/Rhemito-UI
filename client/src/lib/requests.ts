@@ -56,12 +56,13 @@ export interface MoneyRequestView {
   id: string;
   requestNumber: string;
   status: string;
+  failureReason?: string | null;
   senderName: string;
   senderEmail: string;
   payInAmount: string;
   payInCurrency: string;
   senderPaysAmount: string;
-  feeAmount: string;
+  feeAmount: string | null;
   absorbFee: boolean;
   payoutAmount: string | null;
   payoutCurrency: string;
@@ -74,6 +75,9 @@ export interface MoneyRequestView {
   corridorId: string;
   paymentMethod: string | null;
   checkoutUrl: string;
+  emailCheckoutUrl?: string;
+  payerName?: string | null;
+  payerEmailMasked?: string | null;
   expiresAt: string;
   expiryExtendedOnce: boolean;
   failureReason: string | null;
@@ -83,7 +87,7 @@ export interface MoneyRequestView {
 }
 
 export interface PublicRequestView {
-  requestNumber: string;
+  requestNumber: string | null;
   requesterName: string;
   requesterIdentity: string;
   /** Total charged to the sender: requested amount, plus the fee when the requester does not absorb it. */
@@ -91,7 +95,9 @@ export interface PublicRequestView {
   requestedAmount: string;
   feeAmount: string;
   currency: string;
-  purpose: string;
+  payoutCurrency?: string | null;
+  absorbFee?: boolean | null;
+  purpose: string | null;
   reference: string | null;
   expiresAt: string;
   expiryDate: string;
@@ -99,6 +105,11 @@ export interface PublicRequestView {
   estimatedDeliveryTime: string;
   senderFeeNote: string;
   status: string;
+  isEmailLink?: boolean;
+  recipientEmailMasked?: string;
+  activeSessionId?: string | null;
+  sessionExpiresAt?: string | null;
+  isReservedByOther?: boolean;
   legalEntity: {
     displayName: string;
     legalName: string;
@@ -106,6 +117,8 @@ export interface PublicRequestView {
     safeguardingStatement: string;
     supportUrl: string;
   };
+  /** Prototype-only: the sender email the requester provided (registered demo payer). */
+  demoPayerEmail?: string;
 }
 
 export interface CreateRequestInput {
@@ -163,10 +176,11 @@ export async function devVerifyPayoutAccount(id: string): Promise<void> {
 export async function createRequest(input: CreateRequestInput): Promise<{
   request: MoneyRequestView;
   checkoutUrl: string;
+  emailCheckoutUrl?: string;
   qrUrl: string;
 }> {
   const res = await apiRequest("POST", "/api/request-money/requests", input);
-  const json = (await res.json()) as { data: { request: MoneyRequestView; checkoutUrl: string; qrUrl: string } };
+  const json = (await res.json()) as { data: { request: MoneyRequestView; checkoutUrl: string; emailCheckoutUrl?: string; qrUrl: string } };
   return json.data;
 }
 
@@ -192,23 +206,117 @@ export async function resendEmail(id: string): Promise<void> {
 
 // ─── Public checkout APIs ─────────────────────────────────────────────────────
 
-export function getPublicRequest(token: string): Promise<PublicRequestView> {
-  return getJSON<PublicRequestView>(`/api/public/requests/${encodeURIComponent(token)}`);
+export function getPublicRequest(token: string, isEmailLink = false): Promise<PublicRequestView> {
+  const prefix = isEmailLink ? "/api/public/requests/e/" : "/api/public/requests/";
+  return getJSON<PublicRequestView>(`${prefix}${encodeURIComponent(token)}`);
 }
 
-export async function createIntent(token: string, method: string): Promise<{
-  intentId: string;
-  authorizationUrl: string;
-  requestNumber: string;
+export async function startPayerSession(params: {
+  token: string;
+  isEmailLink?: boolean;
+}): Promise<{
+  sessionId: string;
+  sessionExpiresAt: string;
+  quote: Quote;
+  payerName: string;
+  payerEmail: string;
 }> {
-  const res = await fetch(`/api/public/requests/${encodeURIComponent(token)}/intent`, {
+  const { token, isEmailLink = false } = params;
+  const prefix = isEmailLink ? "/api/public/requests/e/" : "/api/public/requests/";
+  const res = await fetch(`${prefix}${encodeURIComponent(token)}/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ method }),
+    credentials: "include",
+    body: JSON.stringify({}),
   });
   const json = await res.json().catch(() => null);
   if (!res.ok) {
-    throw Object.assign(new Error(json?.error?.message ?? "The payment could not be started."), { status: res.status });
+    throw Object.assign(new Error(json?.error?.message ?? "Session could not be started."), {
+      status: res.status,
+      code: json?.error?.code,
+    });
+  }
+  return json.data;
+}
+
+/** Check whether an email already belongs to a Rhemito account (identifier-first auth). */
+export async function checkEmailRegistered(email: string): Promise<{ registered: boolean; status: string | null }> {
+  const res = await fetch("/api/auth/check-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw Object.assign(new Error(json?.message ?? "Could not check this email address."), { status: res.status });
+  return { registered: !!json?.registered, status: json?.status ?? null };
+}
+
+export async function sendPayerVerificationPin(token: string, email: string, isEmailLink = false): Promise<{
+  sent: boolean;
+  expiresInSeconds: number;
+  resendAfterSeconds: number;
+  devPin?: string;
+}> {
+  const res = await fetch("/api/public/request-verifications/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ token, email, isEmailLink }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? "The PIN could not be sent."), { code: json?.error?.code, status: res.status });
+  return json.data;
+}
+
+export async function verifyPayerVerificationPin(token: string, email: string, code: string, isEmailLink = false): Promise<void> {
+  const res = await fetch("/api/public/request-verifications/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ token, email, code, isEmailLink }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? "The PIN could not be verified."), { code: json?.error?.code, status: res.status });
+}
+
+export async function createIntent(token: string, method: string, sessionId: string, isEmailLink = false): Promise<{
+  intentId: string;
+  authorizationUrl: string;
+  paymentReference: string;
+  requestNumber: string;
+}> {
+  const prefix = isEmailLink ? "/api/public/requests/e/" : "/api/public/requests/";
+  const res = await fetch(`${prefix}${encodeURIComponent(token)}/pay-intent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ method, sessionId }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw Object.assign(new Error(json?.error?.message ?? "The payment could not be started."), {
+      status: res.status,
+      code: json?.error?.code,
+    });
+  }
+  return json.data;
+}
+
+export async function requestNewLink(token: string, isEmailLink = false, payerEmail?: string): Promise<{ success: boolean; message: string }> {
+  const prefix = isEmailLink ? "/api/public/requests/e/" : "/api/public/requests/";
+  const res = await fetch(`${prefix}${encodeURIComponent(token)}/request-new-link`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ payerEmail }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw Object.assign(new Error(json?.error?.message ?? "Failed to request a new payment link."), {
+      status: res.status,
+      code: json?.error?.code,
+    });
   }
   return json.data;
 }
@@ -226,8 +334,9 @@ export async function devAuthorizeIntent(intentId: string): Promise<void> {
   }
 }
 
-export async function reportRequest(token: string, reason: string): Promise<void> {
-  await fetch(`/api/public/requests/${encodeURIComponent(token)}/report`, {
+export async function reportRequest(token: string, reason: string, isEmailLink = false): Promise<void> {
+  const prefix = isEmailLink ? "/api/public/requests/e/" : "/api/public/requests/";
+  await fetch(`${prefix}${encodeURIComponent(token)}/report`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reason }),

@@ -81,6 +81,7 @@ function Router() {
       <Route path="/senders" component={Senders} />
       <Route path="/senders/:email" component={SenderDetail} />
       <Route path="/payout-accounts" component={PayoutAccounts} />
+      <Route path="/pay/e/:id" component={RequestCheckout} />
       <Route path="/pay/:id" component={RequestCheckout} />
       <Route path="/invoice/:id" component={InvoiceView} />
       <Route path="/bonus-discounts" component={BonusAndDiscounts} />

@@ -10,6 +10,14 @@ import { storage } from "./storage";
 declare module "express-session" {
   interface SessionData {
     userId: string;
+    paymentRequestVerification?: {
+      email: string;
+      token: string;
+      isEmailLink: boolean;
+      verified: boolean;
+      failedAttempts: number;
+      lastSentAt: number;
+    };
   }
 }
 
@@ -87,24 +95,8 @@ async function main() {
     }
   }
 
-  // DEVELOPMENT ONLY — silent session resume. Local dev-server restarts used
-  // to invalidate cookies created before a restart, bouncing a logged-in
-  // tester to sign-in from flows reachable only after login (e.g. Request
-  // Payment). When a request arrives without a session, resume the most
-  // recent local user so the journey continues without any sign-in prompt.
-  // Production NEVER resumes sessions implicitly — it returns 401.
-  if (process.env.NODE_ENV !== "production") {
-    app.use((req, res, next) => {
-      if (req.session?.userId) return next();
-      storage.getMostRecentAuthUserIdForDev().then((userId) => {
-        if (userId) {
-          req.session.userId = userId;
-        }
-        next();
-      }).catch(() => next());
-    });
-  }
-
+  // Authentication always comes from an explicit login/registration session;
+  // development must exercise the same payer identity boundary as production.
   app.use((req, res, next) => {
     const start = Date.now();
     const path = req.path;

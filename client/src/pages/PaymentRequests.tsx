@@ -29,6 +29,8 @@ import {
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-blue-50 text-blue-700 border-blue-200",
   viewed: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  authorisation_in_progress: "bg-amber-50 text-amber-700 border-amber-200",
+  payment_processing: "bg-purple-50 text-purple-700 border-purple-200",
   payment_pending: "bg-purple-50 text-purple-700 border-purple-200",
   funded: "bg-teal-50 text-teal-700 border-teal-200",
   payout_pending: "bg-teal-50 text-teal-700 border-teal-200",
@@ -41,6 +43,8 @@ const STATUS_STYLES: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   active: "Sent",
   viewed: "Viewed",
+  authorisation_in_progress: "Authorisation in Progress",
+  payment_processing: "Payment Processing",
   payment_pending: "Payment Pending",
   funded: "Funded",
   payout_pending: "Paying Out",
@@ -63,7 +67,7 @@ export default function PaymentRequests() {
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
     refetchInterval: (query) =>
-      (query.state.data ?? []).some((r) => ["payment_pending", "funded", "payout_pending"].includes(r.status))
+      (query.state.data ?? []).some((r) => ["authorisation_in_progress", "payment_processing", "payment_pending", "funded", "payout_pending"].includes(r.status))
         ? 3000
         : false,
   });

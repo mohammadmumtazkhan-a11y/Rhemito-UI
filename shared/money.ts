@@ -69,3 +69,13 @@ export function maskAccountNumber(accountNumber: string): string {
   const tail = accountNumber.slice(-4);
   return `****${tail}`;
 }
+
+/** Mask an email address for privacy (e.g. "mu***@example.com"). */
+export function maskEmail(email: string): string {
+  if (!email || !email.includes("@")) return email;
+  const [local, domain] = email.split("@");
+  if (!local) return email;
+  const prefix = local.length > 2 ? local.slice(0, 2) : local.slice(0, 1);
+  return `${prefix}***@${domain}`;
+}
+

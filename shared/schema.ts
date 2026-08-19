@@ -500,12 +500,31 @@ export const PAYMENT_PURPOSES = [
 export type PaymentPurpose = (typeof PAYMENT_PURPOSES)[number];
 
 /**
+ * Prototype-only demo payer seeded on every boot and displayed on the public
+ * checkout identification screen so the registered-user (password) path can be
+ * demonstrated. Any other email follows the PIN + registration flow.
+ */
+export const DEMO_PAYER_CREDENTIALS = {
+  email: "payer@rhemito.com",
+  password: "Demo1234!x",
+} as const;
+
+/**
+ * Prototype-only master password accepted for ANY account at password
+ * verification (login + checkout step-up). Only honoured in dev/demo mode —
+ * real production (no dev hooks) always rejects it.
+ */
+export const PROTOTYPE_MASTER_PASSWORD = "Master1234!x";
+
+/**
  * Rich request lifecycle. "funded" (money received into Rhemito) is strictly
  * separate from "paid_out" (settled to the requester's bank).
  */
 export const REQUEST_STATUSES = [
   "active",
   "viewed",
+  "authorisation_in_progress",
+  "payment_processing",
   "payment_pending",
   "funded",
   "payout_pending",
@@ -584,10 +603,23 @@ export const moneyRequests = pgTable("money_requests", {
   senderPhone: text("sender_phone"),
   purpose: text("purpose").notNull(),
   reference: text("reference"),
-  // Lifecycle
-  status: text("status").notNull().default("active"),
+  // Dual secure link tokens
   token: text("token").notNull(),
   tokenHash: text("token_hash").notNull().unique(),
+  emailToken: text("email_token"),
+  emailTokenHash: text("email_token_hash"),
+  recipientEmailMasked: text("recipient_email_masked"),
+  // Authenticated Payer (once identified)
+  payerUserId: varchar("payer_user_id"),
+  payerName: text("payer_name"),
+  payerEmail: text("payer_email"),
+  payerEmailMasked: text("payer_email_masked"),
+  // 10-minute server-controlled payment session
+  activeSessionId: text("active_session_id"),
+  sessionExpiresAt: timestamp("session_expires_at"),
+  reservedAttemptId: text("reserved_attempt_id"),
+  // Lifecycle
+  status: text("status").notNull().default("active"),
   expiresAt: timestamp("expires_at").notNull(),
   expiryExtendedOnce: boolean("expiry_extended_once").notNull().default(false),
   viewedAt: timestamp("viewed_at"),
@@ -607,6 +639,44 @@ export const moneyRequests = pgTable("money_requests", {
 });
 
 export type MoneyRequest = typeof moneyRequests.$inferSelect;
+
+export const paymentAttempts = pgTable("payment_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestId: varchar("request_id").notNull(),
+  requestNumber: text("request_number").notNull(),
+  payerId: varchar("payer_id"),
+  payerEmail: text("payer_email").notNull(),
+  payerName: text("payer_name").notNull(),
+  payerEmailMasked: text("payer_email_masked").notNull(),
+  paymentMethod: text("payment_method").notNull(),
+  payCurrency: text("pay_currency").notNull(),
+  payAmountMinor: bigint("pay_amount_minor", { mode: "number" }).notNull(),
+  feeMinor: bigint("fee_minor", { mode: "number" }).notNull(),
+  absorbFee: boolean("absorb_fee").notNull(),
+  fxRate: text("fx_rate"),
+  status: text("status").notNull().default("session_open"),
+  paymentReference: text("payment_reference").notNull(),
+  providerIntentId: text("provider_intent_id"),
+  providerPaymentRef: text("provider_payment_ref"),
+  failureReason: text("failure_reason"),
+  sessionStartedAt: timestamp("session_started_at").defaultNow(),
+  sessionExpiresAt: timestamp("session_expires_at"),
+  authorisationStartedAt: timestamp("authorisation_started_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export type PaymentAttempt = typeof paymentAttempts.$inferSelect;
+
+export const requestRenewalRequests = pgTable("request_renewal_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestId: varchar("request_id").notNull(),
+  requestNumber: text("request_number").notNull(),
+  requesterId: varchar("requester_id").notNull(),
+  payerEmail: text("payer_email"),
+  requestedAt: timestamp("requested_at").defaultNow(),
+});
+
+export type RequestRenewalRequest = typeof requestRenewalRequests.$inferSelect;
 
 // ─── Double-entry ledger ──────────────────────────────────────────────────────
 

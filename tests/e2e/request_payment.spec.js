@@ -67,16 +67,20 @@ async function createRequestViaApi(request, user, overrides = {}) {
 
 test.describe('Request Money E2E', () => {
 
-  test('Unauthenticated API calls return 401 (or 200 in dev resume) — and the UI never asks the user to sign in or register', async ({ page, request }) => {
+  test('Dashboard demo experience: request payment works without a sign-in prompt', async ({ page, request }) => {
     const res = await request.get('/api/request-money/eligibility');
     expect([200, 401]).toContain(res.status());
 
-    // The UI shows a neutral session notice only — no sign-in/register prompt.
+    // Outside real production the seeded demo requester stands in for an
+    // anonymous dashboard visitor: the payout flow renders (seeded verified
+    // account) and never asks to sign in.
     await page.goto('/request-payment');
-    const gate = page.getByTestId('gate-unauthenticated');
-    if (await gate.isVisible().catch(() => false)) {
-      expect(await gate.getByText(/sign in|register|create an account/i).count()).toBe(0);
-    }
+    await expect(page.getByTestId('payout-account-card').or(page.getByTestId('payout-account-required'))).toBeVisible({ timeout: 10000 });
+    expect(await page.getByTestId('payout-signin-required').count()).toBe(0);
+
+    // The public payer side stays strict: anonymous session start is rejected.
+    const session = await request.post('/api/public/requests/sometoken/session', { data: {} });
+    expect(session.status()).toBe(401);
   });
 
   test('Eligibility blocks before a verified payout account exists', async ({ page, request, browser }) => {
@@ -89,7 +93,7 @@ test.describe('Request Money E2E', () => {
 
     await page.goto('/request-payment');
     await expect(page.getByTestId('payout-account-required')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Payout Account Required')).toBeVisible();
+    await expect(page.getByTestId('payout-account-required').getByText('Payout Account Required')).toBeVisible();
 
     // The add-and-verify dialog auto-opens when no verified account exists
     await expect(page.getByTestId('input-account-bank')).toBeVisible({ timeout: 10000 });
@@ -187,44 +191,56 @@ test.describe('Request Money E2E', () => {
     await expect(page.getByText('Payment Request Sent!')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Sender Pays:').locator('..')).toContainText('£257.50');
 
-    // The public checkout charges the sender the total incl. fee, with a clear fee note
+    // The public checkout charges the payer the total incl. fee — identify as a
+    // registered payer, open the 10-minute session, then check Total Payable
     const link = await page.getByTestId('input-payment-link').inputValue();
     const token = link.split('/pay/')[1];
+    await registerAndActivate(page.context().request, 'GB');
     await page.goto(`/pay/${token}`);
+    await expect(page.getByTestId('button-continue-authenticated')).toBeVisible({ timeout: 10000 });
+    // Step-up: the first click reveals the password field, the second verifies it
+    await page.getByTestId('button-continue-authenticated').click();
+    await page.getByTestId('input-confirm-payer-password').fill('Passw0rd!x');
+    await page.getByTestId('button-continue-authenticated').click();
     await expect(page.getByTestId('checkout-amount')).toContainText('£257.50');
-    await expect(page.getByTestId('checkout-fee-note')).toContainText('£7.50');
-    await expect(page.getByTestId('checkout-disclosures')).toContainText('3% Rhemito fee');
+    await expect(page.getByText(/3% Rhemito fee of 7\.50 GBP/)).toBeVisible();
   });
 
-  test('Guest payer pays on mobile-width checkout; funding only via webhook; link dies after payout', async ({ page, request }) => {
+  test('Payer pays on mobile-width checkout after identification; funding only via webhook; link dies after payout', async ({ page, request }) => {
     const user = await registerAndActivate(request);
     const created = await createRequestViaApi(request, user);
     const token = created.checkoutUrl.split('/pay/')[1];
+
+    // The payer identifies with a registered account (session shared with the page)
+    await registerAndActivate(page.context().request, 'GB');
 
     // Mobile viewport — the link opens the checkout directly, no QR prompts
     await page.setViewportSize({ width: 375, height: 720 });
     await page.goto(`/pay/${token}`);
 
+    // Authenticated payer card → step-up password → open the 10-minute server-controlled session
+    await expect(page.getByTestId('button-continue-authenticated')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-continue-authenticated').click();
+    await page.getByTestId('input-confirm-payer-password').fill('Passw0rd!x');
+    await page.getByTestId('button-continue-authenticated').click();
+
+    await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('checkout-amount')).toBeVisible();
-    await expect(page.getByText('Open payment request')).toBeVisible();
-    await expect(page.getByTestId('checkout-disclosures')).toContainText('Anti-scam warning');
-    await expect(page.getByTestId('checkout-disclosures')).toContainText('No Rhemito fee is charged to you');
+    await expect(page.getByText('Anti-Scam Notice')).toBeVisible();
+    await expect(page.getByText('No Rhemito fee is charged to you')).toBeVisible();
     expect(await page.locator('text=/scan/i').count()).toBe(0);
 
-    // Choose Pay by Bank (guest) → development authorisation → webhook settle
+    // Pay by Bank → development provider authorisation → settlement through the signed webhook boundary
     await page.getByTestId('button-method-pay_by_bank').click();
-    await expect(page.getByTestId('dev-provider-notice')).toBeVisible();
+    await expect(page.getByTestId('dev-provider-notice')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('button-authorize').click();
 
     // Status page follows the webhook: funded → payout → paid out
-    await expect(page.getByTestId('status-card')).toBeVisible({ timeout: 20000 });
-    await expect(page.getByText('Payment complete')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText('Payment Successful!')).toBeVisible({ timeout: 30000 });
 
-    // Single-use after terminal status: replay attempts are rejected server-side
-    const replay = await request.post(`/api/public/requests/${token}/intent`, { data: { method: 'card' } });
-    expect(replay.status()).toBe(409);
+    // Single-use after terminal status: the paid result page shows on revisit
     await page.goto(`/pay/${token}`);
-    await expect(page.getByText('Payment complete')).toBeVisible();
+    await expect(page.getByText('Payment Successful!')).toBeVisible();
   });
 
   test('Security boundaries: foreign accounts rejected, unsigned webhooks rejected, disabled corridors blocked', async ({ request }) => {

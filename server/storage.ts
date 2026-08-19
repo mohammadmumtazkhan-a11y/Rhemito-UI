@@ -12,10 +12,14 @@ import {
   type ClientEmail,
   type PayoutAccountRecord,
   type MoneyRequest,
+  type PaymentAttempt,
+  type RequestRenewalRequest,
   type LedgerEntry,
   type WebhookEvent,
   type EmailDelivery,
+  DEMO_PAYER_CREDENTIALS,
 } from "@shared/schema";
+import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { deriveInvoiceStatus, clientDisplayName } from "@shared/invoice-logic";
 
@@ -94,11 +98,28 @@ export interface IStorage {
   createMoneyRequest(request: MoneyRequest): Promise<MoneyRequest>;
   getMoneyRequestById(id: string): Promise<MoneyRequest | undefined>;
   getMoneyRequestByTokenHash(tokenHash: string): Promise<MoneyRequest | undefined>;
+  getMoneyRequestByEmailTokenHash(emailTokenHash: string): Promise<MoneyRequest | undefined>;
   getMoneyRequestByIdempotencyKey(requesterId: string, idempotencyKey: string): Promise<MoneyRequest | undefined>;
   updateMoneyRequest(id: string, patch: Partial<MoneyRequest>): Promise<MoneyRequest | undefined>;
+  compareAndUpdateMoneyRequest(
+    id: string,
+    expectedStatuses: string[],
+    patch: Partial<MoneyRequest>,
+  ): Promise<MoneyRequest | undefined>;
   listMoneyRequests(requesterId: string): Promise<MoneyRequest[]>;
   listAllMoneyRequestsRaw(): Promise<MoneyRequest[]>;
   nextMoneyRequestSequence(): Promise<number>;
+
+  // Payment Attempts & Session Tracking
+  addPaymentAttempt(attempt: PaymentAttempt): Promise<PaymentAttempt>;
+  getPaymentAttemptById(id: string): Promise<PaymentAttempt | undefined>;
+  getPaymentAttemptByReference(ref: string): Promise<PaymentAttempt | undefined>;
+  updatePaymentAttempt(id: string, patch: Partial<PaymentAttempt>): Promise<PaymentAttempt | undefined>;
+  listPaymentAttempts(requestId: string): Promise<PaymentAttempt[]>;
+
+  // Renewal Requests (for expired requests)
+  addRenewalRequest(req: RequestRenewalRequest): Promise<RequestRenewalRequest>;
+  listRenewalRequests(requestId: string): Promise<RequestRenewalRequest[]>;
 
   addLedgerEntry(entry: LedgerEntry): Promise<LedgerEntry>;
   listLedgerEntries(requestId: string): Promise<LedgerEntry[]>;
@@ -120,7 +141,13 @@ export class MemStorage implements IStorage {
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   hydrateForDev(users: any[], otps: any[]): void {
-    for (const u of users) this.authUsersMap.set(u.id, u as AuthUser);
+    // Demo seeds are re-created at boot with current credentials — never let a
+    // stale dev snapshot resurrect old demo accounts over them.
+    const demoEmails = new Set(["demo@rhemito.com", DEMO_PAYER_CREDENTIALS.email]);
+    for (const u of users) {
+      if (u?.id === "user_123" || u?.id === "user_demo_payer" || demoEmails.has(String(u?.email ?? "").toLowerCase())) continue;
+      this.authUsersMap.set(u.id, u as AuthUser);
+    }
     for (const o of otps) this.otpCodesMap.set(o.id, o as OtpCode);
   }
 
@@ -152,7 +179,10 @@ export class MemStorage implements IStorage {
   private payoutAccountsMap: Map<string, PayoutAccountRecord>;
   private moneyRequestsMap: Map<string, MoneyRequest>;
   private moneyRequestsByTokenHash: Map<string, string>;
+  private moneyRequestsByEmailTokenHash: Map<string, string>;
   private moneyRequestsByIdempotency: Map<string, string>;
+  private paymentAttemptsMap: Map<string, PaymentAttempt>;
+  private renewalRequestsMap: Map<string, RequestRenewalRequest>;
   private ledgerEntriesMap: Map<string, LedgerEntry>;
   private webhookEventsMap: Map<string, WebhookEvent>;
   private emailDeliveriesMap: Map<string, EmailDelivery>;
@@ -173,7 +203,10 @@ export class MemStorage implements IStorage {
     this.payoutAccountsMap = new Map();
     this.moneyRequestsMap = new Map();
     this.moneyRequestsByTokenHash = new Map();
+    this.moneyRequestsByEmailTokenHash = new Map();
     this.moneyRequestsByIdempotency = new Map();
+    this.paymentAttemptsMap = new Map();
+    this.renewalRequestsMap = new Map();
     this.ledgerEntriesMap = new Map();
     this.webhookEventsMap = new Map();
     this.emailDeliveriesMap = new Map();
@@ -202,7 +235,9 @@ export class MemStorage implements IStorage {
     const demoUser: AuthUser = {
       id: "user_123",
       email: "demo@rhemito.com",
-      password: "password123",
+      // Real bcrypt hash so the demo account can pass password verification
+      // (e.g. the checkout step-up) with the shared demo password.
+      password: bcrypt.hashSync(DEMO_PAYER_CREDENTIALS.password, 12),
       accountType: "individual",
       country: "GB",
       firstName: "John",
@@ -237,6 +272,18 @@ export class MemStorage implements IStorage {
       isDefault: true,
       createdAt: new Date(),
       verifiedAt: new Date(),
+    });
+
+    // Registered demo payer for the public checkout identification flow — the
+    // credentials are displayed on the checkout screen (prototype only). The
+    // password is stored as a real bcrypt hash so /api/auth/login accepts it.
+    this.authUsersMap.set("user_demo_payer", {
+      ...demoUser,
+      id: "user_demo_payer",
+      email: DEMO_PAYER_CREDENTIALS.email,
+      password: bcrypt.hashSync(DEMO_PAYER_CREDENTIALS.password, 12),
+      firstName: "Demo",
+      lastName: "Payer",
     });
   }
 
@@ -376,7 +423,7 @@ export class MemStorage implements IStorage {
   }
 
   async invalidateOtps(email: string): Promise<void> {
-    for (const [id, otp] of this.otpCodesMap.entries()) {
+    for (const [id, otp] of Array.from(this.otpCodesMap.entries())) {
       if (otp.email.toLowerCase() === email.toLowerCase() && !otp.used) {
         this.otpCodesMap.set(id, { ...otp, used: true });
       }
@@ -567,6 +614,9 @@ export class MemStorage implements IStorage {
   async createMoneyRequest(request: MoneyRequest): Promise<MoneyRequest> {
     this.moneyRequestsMap.set(request.id, request);
     this.moneyRequestsByTokenHash.set(request.tokenHash, request.id);
+    if (request.emailTokenHash) {
+      this.moneyRequestsByEmailTokenHash.set(request.emailTokenHash, request.id);
+    }
     if (request.idempotencyKey) {
       this.moneyRequestsByIdempotency.set(`${request.requesterId}:${request.idempotencyKey}`, request.id);
     }
@@ -579,6 +629,11 @@ export class MemStorage implements IStorage {
 
   async getMoneyRequestByTokenHash(tokenHash: string): Promise<MoneyRequest | undefined> {
     const id = this.moneyRequestsByTokenHash.get(tokenHash);
+    return id ? this.moneyRequestsMap.get(id) : undefined;
+  }
+
+  async getMoneyRequestByEmailTokenHash(emailTokenHash: string): Promise<MoneyRequest | undefined> {
+    const id = this.moneyRequestsByEmailTokenHash.get(emailTokenHash);
     return id ? this.moneyRequestsMap.get(id) : undefined;
   }
 
@@ -598,6 +653,23 @@ export class MemStorage implements IStorage {
     if (patch.tokenHash) {
       this.moneyRequestsByTokenHash.set(patch.tokenHash, id);
     }
+    if (patch.emailTokenHash) {
+      this.moneyRequestsByEmailTokenHash.set(patch.emailTokenHash, id);
+    }
+    return updated;
+  }
+
+  async compareAndUpdateMoneyRequest(
+    id: string,
+    expectedStatuses: string[],
+    patch: Partial<MoneyRequest>,
+  ): Promise<MoneyRequest | undefined> {
+    // Keep the check and write in one synchronous critical section. A database
+    // implementation must provide the same semantics with a conditional update.
+    const existing = this.moneyRequestsMap.get(id);
+    if (!existing || !expectedStatuses.includes(existing.status)) return undefined;
+    const updated = { ...existing, ...patch };
+    this.moneyRequestsMap.set(id, updated);
     return updated;
   }
 
@@ -614,6 +686,48 @@ export class MemStorage implements IStorage {
   async nextMoneyRequestSequence(): Promise<number> {
     this.moneyRequestSequence += 1;
     return this.moneyRequestSequence;
+  }
+
+  // ─── Payment Attempts & Session Tracking ────────────────────────
+
+  async addPaymentAttempt(attempt: PaymentAttempt): Promise<PaymentAttempt> {
+    this.paymentAttemptsMap.set(attempt.id, attempt);
+    return attempt;
+  }
+
+  async getPaymentAttemptById(id: string): Promise<PaymentAttempt | undefined> {
+    return this.paymentAttemptsMap.get(id);
+  }
+
+  async getPaymentAttemptByReference(ref: string): Promise<PaymentAttempt | undefined> {
+    return Array.from(this.paymentAttemptsMap.values()).find((a) => a.paymentReference === ref);
+  }
+
+  async updatePaymentAttempt(id: string, patch: Partial<PaymentAttempt>): Promise<PaymentAttempt | undefined> {
+    const existing = this.paymentAttemptsMap.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...patch, id };
+    this.paymentAttemptsMap.set(id, updated);
+    return updated;
+  }
+
+  async listPaymentAttempts(requestId: string): Promise<PaymentAttempt[]> {
+    return Array.from(this.paymentAttemptsMap.values())
+      .filter((a) => a.requestId === requestId)
+      .sort((a, b) => (b.sessionStartedAt?.getTime() ?? 0) - (a.sessionStartedAt?.getTime() ?? 0));
+  }
+
+  // ─── Renewal Requests ───────────────────────────────────────────
+
+  async addRenewalRequest(req: RequestRenewalRequest): Promise<RequestRenewalRequest> {
+    this.renewalRequestsMap.set(req.id, req);
+    return req;
+  }
+
+  async listRenewalRequests(requestId: string): Promise<RequestRenewalRequest[]> {
+    return Array.from(this.renewalRequestsMap.values())
+      .filter((r) => r.requestId === requestId)
+      .sort((a, b) => (b.requestedAt?.getTime() ?? 0) - (a.requestedAt?.getTime() ?? 0));
   }
 
   // ─── Request Money: ledger ───────────────────────────────────────

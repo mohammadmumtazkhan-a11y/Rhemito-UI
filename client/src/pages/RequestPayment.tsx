@@ -106,6 +106,10 @@ export default function RequestPayment() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSuccess, setIsSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [paymentLink, setPaymentLink] = useState("");
+  const [emailPaymentLink, setEmailPaymentLink] = useState("");
+  const [createdRequestId, setCreatedRequestId] = useState("");
   const [senderSearch, setSenderSearch] = useState("");
   const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
   const [showFxNoticeModal, setShowFxNoticeModal] = useState(false);
@@ -283,8 +287,6 @@ export default function RequestPayment() {
   const senderSymbol = CURRENCY_SYMBOLS[senderCurrency] || "";
   const payoutSymbol = CURRENCY_SYMBOLS[payoutCurrency] || "";
 
-  const [paymentLink, setPaymentLink] = useState("");
-  const [createdRequestId, setCreatedRequestId] = useState("");
   const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
   const handleInputChange = (field: keyof FormData, value: string | boolean) => {
@@ -317,6 +319,7 @@ export default function RequestPayment() {
         idempotencyKey: idempotencyKeyRef.current,
       });
       setPaymentLink(result.checkoutUrl);
+      setEmailPaymentLink(result.emailCheckoutUrl || result.checkoutUrl);
       setCreatedRequestId(result.request.id);
       setIsSuccess(true);
     } catch (err) {
@@ -340,6 +343,30 @@ export default function RequestPayment() {
 
   const handleNext = () => {
     if (currentStep === 1) {
+      if (!selectedPayoutAccount || selectedPayoutAccount.verificationStatus !== "verified") {
+        toast({
+          title: "Active Payout Account Required",
+          description: "Please add or select a verified destination payout account before proceeding.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (parsedAmount <= 0) {
+        toast({
+          title: "Amount Required",
+          description: "Please enter an amount to request.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!corridorForSelection) {
+        toast({
+          title: "Corridor Unavailable",
+          description: "This currency route is currently unavailable for your account.",
+          variant: "destructive",
+        });
+        return;
+      }
       if (senderCurrency !== payoutCurrency) {
         setShowFxNoticeModal(true);
         return;
@@ -401,7 +428,12 @@ export default function RequestPayment() {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return parsedAmount > 0 && !!selectedPayoutAccount && !!corridorForSelection;
+        return (
+          parsedAmount > 0 &&
+          !!selectedPayoutAccount &&
+          selectedPayoutAccount.verificationStatus === "verified" &&
+          !!corridorForSelection
+        );
       case 2:
         // Purpose of payment is mandatory for cross-border compliance.
         return (
@@ -492,25 +524,64 @@ export default function RequestPayment() {
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 space-y-3 border border-primary/10" data-testid="qr-panel">
-                <p className="text-xs font-medium text-slate-700">Share this request — link, email and QR code all open the same secure checkout:</p>
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={paymentLink}
-                    readOnly
-                    className="text-sm bg-white font-mono"
-                    data-testid="input-payment-link"
-                  />
-                  <Button
-                    onClick={handleCopyLink}
-                    variant="outline"
-                    className="shrink-0 gap-1.5"
-                    data-testid="button-copy-link"
-                  >
-                    {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                    <span>{copied ? "Copied" : "Copy"}</span>
-                  </Button>
+              <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 space-y-4 border border-primary/10" data-testid="qr-panel">
+                {/* 1. Copyable Link */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-slate-800">Copyable Payment Link (Share with anyone)</p>
+                    <span className="text-[10px] text-muted-foreground">General Payer</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={paymentLink}
+                      readOnly
+                      className="text-sm bg-white font-mono"
+                      data-testid="input-payment-link"
+                    />
+                    <Button
+                      onClick={handleCopyLink}
+                      variant="outline"
+                      className="shrink-0 gap-1.5"
+                      data-testid="button-copy-link"
+                    >
+                      {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                      <span>{copied ? "Copied" : "Copy"}</span>
+                    </Button>
+                  </div>
                 </div>
+
+                {/* 2. Email-Notification Link */}
+                {emailPaymentLink && (
+                  <div className="space-y-1.5 pt-2 border-t border-slate-200/60">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-800">Email Notification Link (Pre-linked to recipient)</p>
+                      <span className="text-[10px] text-teal-700 font-mono">Masked recipient</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={emailPaymentLink}
+                        readOnly
+                        className="text-sm bg-white font-mono text-xs"
+                        data-testid="input-email-payment-link"
+                      />
+                      <Button
+                        onClick={() => {
+                          navigator.clipboard.writeText(emailPaymentLink);
+                          setCopiedEmail(true);
+                          toast({ title: "Email Link Copied!", description: "Recipient notification link copied to clipboard." });
+                          setTimeout(() => setCopiedEmail(false), 2000);
+                        }}
+                        variant="outline"
+                        className="shrink-0 gap-1.5"
+                        data-testid="button-copy-email-link"
+                      >
+                        {copiedEmail ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                        <span>{copiedEmail ? "Copied" : "Copy"}</span>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {createdRequestId && (
                   <div className="flex flex-col sm:flex-row items-center gap-4 pt-1">
                     <img
@@ -667,6 +738,18 @@ export default function RequestPayment() {
                         onSelect={handleSelectPayoutAccount}
                         context="request"
                       />
+
+                      {(!selectedPayoutAccount || selectedPayoutAccount.verificationStatus !== "verified") && (
+                        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 font-medium" data-testid="alert-payout-account-required">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-semibold text-amber-950">Active Destination Payout Account Required</p>
+                            <p className="text-[11px] text-amber-900/80 mt-0.5">
+                              You cannot proceed with a payment request without an active, verified destination payout account. Please select or add an account above.
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Request Amount Input */}
                       <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-5 space-y-4 border border-primary/10">

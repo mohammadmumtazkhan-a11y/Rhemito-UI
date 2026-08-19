@@ -32,6 +32,9 @@ export interface SignedWebhook {
 export type WebhookEventType =
   | "payment.succeeded"
   | "payment.failed"
+  | "payment.cancelled"
+  | "payment.pending"
+  | "payment.unknown"
   | "payout.succeeded"
   | "payout.failed";
 

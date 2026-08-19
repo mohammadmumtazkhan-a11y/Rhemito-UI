@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Building2, Check, Loader2, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +72,7 @@ export function PayoutAccountSelector({
   context = "request",
 }: PayoutAccountSelectorProps) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [isChangingPayoutAccount, setIsChangingPayoutAccount] = useState(false);
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
@@ -88,7 +90,11 @@ export function PayoutAccountSelector({
     queryFn: async () => {
       try {
         return await getPayoutAccounts();
-      } catch {
+      } catch (err) {
+        // An unauthenticated session must not look like "no accounts" —
+        // surface the 401 so the sign-in state renders instead of the
+        // add-account dead end.
+        if ((err as { status?: number }).status === 401) throw err;
         return [];
       }
     },
@@ -166,9 +172,17 @@ export function PayoutAccountSelector({
       const verified = refreshed.find((a) => a.id === created.id) ?? refreshed.find((a) => a.verificationStatus === "verified");
       if (verified) onSelect(verified);
     } catch (err) {
+      // Distinguish a lost connection (server restarting / down) from a real
+      // server rejection so the user knows a retry will likely succeed.
+      const isNetworkError =
+        err instanceof TypeError || (err instanceof Error && /failed to fetch|networkerror|load failed/i.test(err.message));
       toast({
         title: "Could not add account",
-        description: err instanceof Error ? err.message : "Please try again.",
+        description: isNetworkError
+          ? "Connection lost — the server may be restarting. Please try again in a moment."
+          : err instanceof Error
+            ? err.message
+            : "Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -187,6 +201,37 @@ export function PayoutAccountSelector({
       >
         <Loader2 className="w-4 h-4 animate-spin" />
         Checking your payout accounts…
+      </div>
+    );
+  }
+
+  // Unauthenticated: adding an account can never succeed — ask for sign-in
+  // instead of showing the add-account dead end.
+  if ((accountsQuery.error as { status?: number } | null)?.status === 401) {
+    return (
+      <div
+        className="p-5 bg-amber-50/90 border-2 border-amber-200 rounded-xl space-y-3.5 text-amber-900"
+        data-testid="payout-signin-required"
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+            <AlertCircle className="w-5 h-5" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="font-bold text-sm text-amber-950">Sign in required</h4>
+            <p className="text-xs text-amber-800 leading-relaxed">
+              You must be signed in to add or select a payout bank account. Sign in or register to continue with your{" "}
+              {context === "invoice" ? "invoice" : context === "campaign" || context === "group_pay" ? "funding campaign" : "payment request"}.
+            </p>
+          </div>
+        </div>
+        <Button
+          onClick={() => setLocation("/sign-in-sign-up")}
+          className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs h-10 font-semibold gap-1.5 shadow-sm"
+          data-testid="button-goto-signin"
+        >
+          Sign in to continue
+        </Button>
       </div>
     );
   }
