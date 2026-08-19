@@ -916,7 +916,10 @@ export default function RequestPayment() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleInputChange("senderType", "business")}
+                          onClick={() => {
+                            handleInputChange("senderType", "business");
+                            handleInputChange("senderDob", "");
+                          }}
                           className={`flex items-center justify-center gap-2.5 p-3.5 rounded-xl border-2 transition-all ${
                             formData.senderType === "business"
                               ? "border-primary bg-primary/5 font-semibold text-primary"
@@ -1162,7 +1165,7 @@ export default function RequestPayment() {
                           </div>
                         )}
 
-                        {formData.senderDob && (
+                        {formData.senderType === "individual" && formData.senderDob && (
                           <div className="flex justify-between py-1 border-b border-slate-100">
                             <span className="text-muted-foreground">Sender DOB:</span>
                             <span className="font-medium">{formData.senderDob}</span>

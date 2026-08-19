@@ -284,6 +284,30 @@ test.describe('Request Money E2E', () => {
     await expect(page).toHaveURL(/\/request-payment/);
   });
 
+  test('Date of Birth only appears for individual senders and is cleared when switching to Business', async ({ page, request }) => {
+    const user = await registerAndActivate(request);
+    const pageRequest = page.context().request;
+    await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
+    await addVerifiedAccount(pageRequest, 'GB', 'GBP');
+
+    await page.goto('/request-payment');
+    await page.getByTestId('input-request-amount').fill('150');
+    await page.getByTestId('button-step-next').click();
+
+    // Individual: DOB is shown (optional)
+    await expect(page.getByTestId('input-sender-dob')).toBeVisible();
+    await page.getByTestId('input-sender-dob').fill('1990-05-05');
+
+    // Business: DOB disappears and any entered value is cleared
+    await page.getByTestId('button-sender-type-business').click();
+    await expect(page.getByTestId('input-sender-dob')).toHaveCount(0);
+    await expect(page.getByTestId('input-sender-business-name')).toBeVisible();
+
+    // Switching back does not resurrect the stale DOB value
+    await page.getByTestId('button-sender-type-individual').click();
+    await expect(page.getByTestId('input-sender-dob')).toHaveValue('');
+  });
+
   test('Reason for Payment "Other" dynamically requires a specific reason before continuing', async ({ page, request }) => {
     const user = await registerAndActivate(request);
     const pageRequest = page.context().request;
