@@ -6,6 +6,14 @@
  * configuration. Nothing in this file claims regulatory approval.
  */
 
+/**
+ * Prototype demo affordances — seeded demo users, no-login dashboard requester,
+ * demo payer, master password, demo credential hints. ON by default (this is a
+ * prototype); a hardened production deployment sets RHEMITO_DEMO_MODE=off to
+ * disable all of them at once.
+ */
+export const demoModeEnabled: boolean = process.env.RHEMITO_DEMO_MODE !== "off";
+
 export const serverConfig = {
   /**
    * Trusted public base URL used to build payment links, QR codes and emails.
@@ -35,22 +43,21 @@ export const serverConfig = {
   maxExpiryExtensionDays: 30,
 
   /**
-   * Public endpoint rate limits (per IP). Relaxed outside production so the
-   * local e2e suite (all traffic from one IP) doesn't trip the limiter;
-   * production keeps the strict per-IP values.
+   * Public endpoint rate limits (per IP). Relaxed in prototype demo mode so
+   * the e2e suite and demo testing (all traffic from one IP) don't trip the
+   * limiter; hardened mode (RHEMITO_DEMO_MODE=off) keeps strict per-IP values.
    */
-  rateLimits:
-    process.env.NODE_ENV === "production"
-      ? {
-          publicLookup: { limit: 30, windowMs: 60_000 },
-          paymentIntent: { limit: 10, windowMs: 60_000 },
-          reportRequest: { limit: 5, windowMs: 60_000 },
-        }
-      : {
-          publicLookup: { limit: 300, windowMs: 60_000 },
-          paymentIntent: { limit: 100, windowMs: 60_000 },
-          reportRequest: { limit: 50, windowMs: 60_000 },
-        },
+  rateLimits: demoModeEnabled
+    ? {
+        publicLookup: { limit: 300, windowMs: 60_000 },
+        paymentIntent: { limit: 100, windowMs: 60_000 },
+        reportRequest: { limit: 50, windowMs: 60_000 },
+      }
+    : {
+        publicLookup: { limit: 30, windowMs: 60_000 },
+        paymentIntent: { limit: 10, windowMs: 60_000 },
+        reportRequest: { limit: 5, windowMs: 60_000 },
+      },
 
   /** Email resend cooldown per request. */
   emailResendCooldownMs: 60_000,

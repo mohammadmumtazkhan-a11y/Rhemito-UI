@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
+import { demoModeEnabled } from "./config";
 import { emailCheckSchema, loginSchema, otpVerifySchema, PROTOTYPE_MASTER_PASSWORD } from "@shared/schema";
 import { log } from "./index";
 
@@ -11,10 +12,7 @@ function generateOtp(): string {
 
 /** Prototype-only master password (any account) — never honoured in real production. */
 function isPrototypeMasterPassword(password: string): boolean {
-  return (
-    (process.env.NODE_ENV !== "production" || process.env.RHEMITO_DEV_HOOKS === "1")
-    && password === PROTOTYPE_MASTER_PASSWORD
-  );
+  return demoModeEnabled && password === PROTOTYPE_MASTER_PASSWORD;
 }
 
 export function registerAuthRoutes(app: Express) {

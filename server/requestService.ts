@@ -13,7 +13,7 @@
 
 import { randomUUID, randomBytes, createHash } from "crypto";
 import { storage } from "./storage";
-import { serverConfig, buildCheckoutUrl, buildEmailCheckoutUrl } from "./config";
+import { serverConfig, demoModeEnabled, buildCheckoutUrl, buildEmailCheckoutUrl } from "./config";
 import { getFxRate } from "./fxService";
 import {
   devPayinProvider,
@@ -309,7 +309,7 @@ export async function createMoneyRequest(params: {
  * and real production (no dev hooks) never creates these accounts.
  */
 async function ensureDemoPayerForRequest(request: MoneyRequest): Promise<void> {
-  if (process.env.NODE_ENV === "production" && process.env.RHEMITO_DEV_HOOKS !== "1") return;
+  if (!demoModeEnabled) return;
   const email = request.senderEmail;
   if (await storage.getAuthUserByEmail(email)) return;
   const [firstName, ...rest] = request.senderName.split(" ");
@@ -508,10 +508,7 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
     // Prototype-only demo aid: the sender email the requester provided is the
     // registered demo payer shown on the identification screen. Hidden in real
     // production (no dev hooks) so the payer email is never disclosed pre-auth.
-    demoPayerEmail:
-      process.env.NODE_ENV !== "production" || process.env.RHEMITO_DEV_HOOKS === "1"
-        ? request.senderEmail
-        : undefined,
+    demoPayerEmail: demoModeEnabled ? request.senderEmail : undefined,
     activeSessionId: currentUserId && !sessionExpired ? request.activeSessionId : null,
     sessionExpiresAt: currentUserId && !sessionExpired && request.sessionExpiresAt ? request.sessionExpiresAt.toISOString() : null,
     isReservedByOther: ["authorisation_in_progress", "payment_processing", "payment_pending"].includes(request.status)

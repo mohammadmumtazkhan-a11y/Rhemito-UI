@@ -10,7 +10,7 @@ import type { Express, Request, Response } from "express";
 import { randomInt, randomUUID } from "crypto";
 import QRCode from "qrcode";
 import { storage } from "./storage";
-import { serverConfig } from "./config";
+import { serverConfig, demoModeEnabled } from "./config";
 import { rateLimit, clientIpOf } from "./rateLimit";
 import { CORRIDORS, corridorsForRequester, findCorridor } from "./corridors";
 import { computeQuote, toRequestJSON } from "./requestService";
@@ -48,12 +48,12 @@ import {
 function requireStrictAuth(req: Request): string {
   const userId = req.session?.userId;
   if (userId) return userId;
-  // Dashboard demo experience: outside real production the seeded demo
+  // Dashboard demo experience: in prototype demo mode the seeded demo
   // requester stands in for an anonymous dashboard visitor, so payout-account
   // and request flows work without a sign-in prompt. The public payer
   // endpoints (payment session, pay-intent) check the session directly and
   // stay strictly authenticated.
-  if (process.env.NODE_ENV !== "production" || process.env.RHEMITO_DEV_HOOKS === "1") {
+  if (demoModeEnabled) {
     return "user_123";
   }
   throw new RequestError(401, "UNAUTHENTICATED", "Please sign in to continue.");
@@ -477,7 +477,7 @@ export function registerRequestMoneyRoutes(app: Express): void {
         sent: true,
         expiresInSeconds: 600,
         resendAfterSeconds: 60,
-        ...(process.env.NODE_ENV !== "production" || process.env.RHEMITO_DEV_HOOKS === "1" ? { devPin: code } : {}),
+        ...(demoModeEnabled ? { devPin: code } : {}),
       } });
     } catch (err) {
       return handleError(res, err);
