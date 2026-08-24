@@ -89,6 +89,11 @@ export interface PublicInvoice {
   currency: string;
   fees: InvoiceFees;
   hasDocument: boolean;
+  clientType: "individual" | "business";
+  clientFirstName: string | null;
+  clientMiddleName: string | null;
+  clientLastName: string | null;
+  clientBusinessName: string | null;
   dueDate: string | null;
   expiryDate: string;
   expiryTimezone: string;
@@ -222,6 +227,44 @@ export async function getPublicInvoice(token: string): Promise<PublicInvoice> {
 
 export function publicInvoiceDocumentUrl(token: string): string {
   return `/api/public/invoices/${encodeURIComponent(token)}/document`;
+}
+
+/** Payer identification: send a 6-digit PIN to an unregistered email (demo mode echoes devPin). */
+export async function sendInvoiceClientPin(
+  token: string,
+  email: string
+): Promise<{ sent: boolean; expiresInSeconds: number; resendAfterSeconds: number; devPin?: string }> {
+  const res = await fetch(`/api/public/invoices/${encodeURIComponent(token)}/verification/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw Object.assign(new Error(json?.error?.message ?? "The PIN could not be sent."), {
+      status: res.status,
+      code: json?.error?.code,
+    });
+  }
+  return json.data;
+}
+
+/** Payer identification: verify the 6-digit PIN for the email. */
+export async function verifyInvoiceClientPin(token: string, email: string, code: string): Promise<void> {
+  const res = await fetch(`/api/public/invoices/${encodeURIComponent(token)}/verification/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, code }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw Object.assign(new Error(json?.error?.message ?? "The PIN could not be verified."), {
+      status: res.status,
+      code: json?.error?.code,
+    });
+  }
 }
 
 export async function initiateInvoicePayment(

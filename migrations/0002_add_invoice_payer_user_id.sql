@@ -1,0 +1,1 @@
+ALTER TABLE "invoices" ADD COLUMN "payer_user_id" text;

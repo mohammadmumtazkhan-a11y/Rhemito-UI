@@ -334,6 +334,7 @@ export const invoices = pgTable("invoices", {
   // Payment in-flight tracking (simulated provider)
   paymentInitiatedAt: timestamp("payment_initiated_at"),
   paymentMethod: text("payment_method"), // "card" | "bank_transfer"
+  payerUserId: text("payer_user_id"), // auth user who identified to pay (set at payment initiation)
   dueDate: text("due_date"), // YYYY-MM-DD, optional
   expiresAt: timestamp("expires_at").notNull(), // exact UTC instant (11:59:59 p.m. on the expiry date in expiryTimezone)
   expiryTimezone: text("expiry_timezone").notNull(),
