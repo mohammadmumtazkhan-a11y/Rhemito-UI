@@ -47,8 +47,49 @@ export const FEE_CONFIG = {
     FIXED_FEE: 0.30,   // Fixed amount (e.g. 0.30 currency units)
 };
 
-// In-memory campaign storage
-let campaigns: Campaign[] = [
+// Campaign storage — created campaigns and contributions persist to
+// localStorage so shared contribution links keep working after a page
+// reload or in a new tab (same browser). Once written, the stored state is
+// the source of truth; without it the seeded demo campaigns are used.
+const STORAGE_KEY = 'rhemito:group-pay:state:v1';
+
+interface PersistedState {
+    campaigns: Campaign[];
+    contributors: Contributor[];
+}
+
+function reviveCampaign(c: Campaign): Campaign {
+    return { ...c, createdAt: new Date(c.createdAt) };
+}
+
+function reviveContributor(c: Contributor): Contributor {
+    return { ...c, paymentDate: new Date(c.paymentDate) };
+}
+
+function loadPersistedState(): PersistedState | null {
+    try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as PersistedState;
+        if (!Array.isArray(parsed.campaigns) || !Array.isArray(parsed.contributors)) return null;
+        return {
+            campaigns: parsed.campaigns.map(reviveCampaign),
+            contributors: parsed.contributors.map(reviveContributor),
+        };
+    } catch {
+        return null;
+    }
+}
+
+function persistState(): void {
+    try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ campaigns, contributors }));
+    } catch {
+        // Storage unavailable (quota/private mode) — in-memory behaviour still works.
+    }
+}
+
+const seedCampaigns: Campaign[] = [
     {
         id: 'demo-campaign-1',
         name: 'Office Birthday Collection',
@@ -77,12 +118,22 @@ let campaigns: Campaign[] = [
     },
 ];
 
-// In-memory contributors storage
-let contributors: Contributor[] = [
+const seedContributors: Contributor[] = [
     { id: 'c1', campaignId: 'demo-campaign-1', name: 'Alice Smith', email: 'alice@example.com', amount: 50, paymentDate: new Date('2026-01-21T10:30:00'), status: 'completed' },
     { id: 'c2', campaignId: 'demo-campaign-1', name: 'Bob Johnson', email: 'bob@example.com', amount: 75, paymentDate: new Date('2026-01-22T14:15:00'), status: 'completed' },
     { id: 'c3', campaignId: 'demo-campaign-2', name: 'Charlie Brown', email: 'charlie@example.com', amount: 100, paymentDate: new Date('2026-01-18T09:00:00'), status: 'completed' },
 ];
+
+let campaigns: Campaign[] = seedCampaigns;
+let contributors: Contributor[] = seedContributors;
+
+{
+    const stored = loadPersistedState();
+    if (stored) {
+        campaigns = stored.campaigns;
+        contributors = stored.contributors;
+    }
+}
 
 // CRUD Operations
 
@@ -104,6 +155,7 @@ export const createCampaign = (campaignData: Omit<Campaign, 'id' | 'createdAt' |
         uniqueLink: generateCampaignLink(id),
     };
     campaigns = [...campaigns, newCampaign];
+    persistState();
     return newCampaign;
 };
 
@@ -119,6 +171,7 @@ export const addContributor = (contributorData: Omit<Contributor, 'id' | 'paymen
         status: 'completed',
     };
     contributors = [...contributors, newContributor];
+    persistState();
     return newContributor;
 };
 
@@ -131,6 +184,7 @@ export const toggleCampaignStatus = (id: string): Campaign | undefined => {
         } else if (campaign.status === 'paused') {
             campaign.status = 'active';
         }
+        persistState();
     }
     return campaign;
 };
@@ -138,6 +192,7 @@ export const toggleCampaignStatus = (id: string): Campaign | undefined => {
 export const deleteCampaign = (id: string): boolean => {
     const initialLength = campaigns.length;
     campaigns = campaigns.filter(c => c.id !== id);
+    if (campaigns.length < initialLength) persistState();
     return campaigns.length < initialLength;
 };
 
@@ -145,6 +200,7 @@ export const updateCampaign = (id: string, updates: Partial<Omit<Campaign, 'id' 
     const index = campaigns.findIndex(c => c.id === id);
     if (index !== -1) {
         campaigns[index] = { ...campaigns[index], ...updates };
+        persistState();
         return campaigns[index];
     }
     return undefined;

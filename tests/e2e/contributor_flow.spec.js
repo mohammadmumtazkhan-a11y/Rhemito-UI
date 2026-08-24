@@ -17,50 +17,67 @@ test.describe('Contributor Flow', () => {
 
         await page.getByRole('button', { name: 'Continue' }).click();
 
-        // 3. OTP Verification
+        // 3. Unregistered email → real 6-digit PIN (devPin surfaced in demo mode)
         await expect(page.getByText('Verify your email')).toBeVisible();
-        await page.getByLabel('Verification Code').fill('123456');
-        await page.getByRole('button', { name: 'Verify Code' }).click();
+        const tip = page.getByTestId('dev-pin-hint');
+        await expect(tip).toBeVisible({ timeout: 10000 });
+        const pin = (await tip.innerText()).match(/\d{6}/)[0];
+        await page.getByTestId('input-pin-code').fill(pin);
+        await page.getByRole('button', { name: 'Verify & Continue' }).click();
 
-        // Toast check - might be flaky
-        // await expect(page.getByText('Email Verified')).toBeVisible();
-
-        // 4. Password Creation
-        await expect(page.getByText('Secure Your Account')).toBeVisible();
-        await page.getByLabel('Create Password').fill('Password123!');
-        await page.getByLabel('Confirm Password').fill('Password123!');
-        await page.getByRole('button', { name: 'Set Password & Continue' }).click();
-
-        // 5. Personal Details (Mini KYC)
-        await expect(page.getByText('A Few More Details')).toBeVisible();
-        await page.getByLabel('First Name').fill('John');
-        await page.getByLabel('Last Name').fill('Doe');
-
-        // New Fields
-        await page.getByLabel('Address Line 1').fill('123 Test St');
-        await page.getByLabel('City').fill('Test City');
-        await page.getByLabel('Post Code').fill('TE5 7PC');
-
-        // Date of Birth (Must be 18+)
+        // 4. Registration — real account creation with instant activation
+        await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible({ timeout: 10000 });
+        await page.getByTestId('input-reg-first-name').fill('John');
+        await page.getByTestId('input-reg-last-name').fill('Doe');
+        await page.getByTestId('select-register-country').click();
+        await page.getByRole('option', { name: /United Kingdom/ }).click();
         await page.getByRole('button', { name: 'Pick a date' }).click();
-
-        // Select Year 2000
-        // Year selector is the second combobox (Month is first)
         await page.getByRole('combobox').nth(1).click();
         await page.getByRole('option', { name: '2000' }).click();
-
-        // Select Day 15
         await page.getByRole('gridcell', { name: '15' }).first().click();
+        await page.getByTestId('select-register-gender').click();
+        await page.getByRole('option', { name: 'Male', exact: true }).click();
+        await page.getByPlaceholder('Contact number').fill('7700900123');
+        await page.getByTestId('input-reg-password').fill('Password123!');
+        await page.getByTestId('input-reg-confirm-password').fill('Password123!');
+        await page.getByTestId('button-register-pay').click();
 
-        // Submit Details
-        await page.getByRole('button', { name: 'Save and Continue' }).click();
-
-        // Toast check - Details Saved - might be flaky
-        // await expect(page.getByText('Details Saved', { exact: true })).toBeVisible();
-
-        // 6. Verify Payment Screen Reached
-        // After KYC processing, it should land on payment method selection
+        // 5. Verify Payment Screen Reached
+        // After registration (instant activation + sign-in), it lands on payment method selection
         await expect(page.getByText('How would you like to pay?')).toBeVisible({ timeout: 10000 });
 
+    });
+
+    test('Shared contribution link opens a persisted campaign after a fresh page load', async ({ page }) => {
+        // Simulate a campaign created in another tab: mockData persists to
+        // localStorage, so the shared link must resolve on a fresh load.
+        const campaignId = 'persist-campaign-1';
+        await page.addInitScript((id) => {
+            window.localStorage.setItem('rhemito:group-pay:state:v1', JSON.stringify({
+                campaigns: [{
+                    id,
+                    name: 'Persisted Relief Fund',
+                    targetAmount: 900,
+                    currency: 'GBP',
+                    description: 'Campaign persisted across page loads.',
+                    bankAccountId: '2',
+                    bankAccountName: 'John Doe - Barclays',
+                    status: 'active',
+                    createdAt: new Date().toISOString(),
+                    uniqueLink: `${window.location.origin}/contribute/${id}`,
+                    creatorName: 'John Doe',
+                }],
+                contributors: [],
+            }));
+        }, campaignId);
+
+        await page.goto(`/contribute/${campaignId}`);
+        await expect(page.getByText('Persisted Relief Fund')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole('heading', { name: 'Make a Contribution' })).toBeVisible();
+
+        // Unknown links show a clear not-found state instead of a blank page
+        await page.goto('/contribute/does-not-exist');
+        await expect(page.getByTestId('campaign-not-found')).toBeVisible();
+        await expect(page.getByText('Campaign not found')).toBeVisible();
     });
 });
