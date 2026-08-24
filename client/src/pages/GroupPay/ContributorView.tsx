@@ -13,10 +13,14 @@ import { getCampaignById, getCampaignSummary, addContributor, SUPPORTED_CURRENCI
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Campaign } from "./types";
 import { useToast } from "@/hooks/use-toast";
+import { countries, genderOptions } from "@/data/countries";
+import PhoneInput from "@/pages/Auth/components/PhoneInput";
+import { checkEmailRegistered, sendCampaignContributorPin, verifyCampaignContributorPin } from "@/lib/requests";
+import { DEMO_PAYER_CREDENTIALS } from "@shared/schema";
 // @ts-ignore
 import logo from "../../assets/rhemito-logo-blue.png";
 
-type AuthStep = "check_email" | "login" | "register_otp" | "register_password" | "register_address" | "mini_kyc_processing" | "payment" | "marketing";
+type AuthStep = "check_email" | "login" | "pin" | "register" | "payment" | "marketing";
 
 export default function ContributorView() {
     const { toast } = useToast();
@@ -30,17 +34,23 @@ export default function ContributorView() {
     const [authStep, setAuthStep] = useState<AuthStep>("check_email");
     // Forgot-password reset flow (replaces the login step while active)
     const [showForgotPassword, setShowForgotPassword] = useState(false);
-    const [isExistingUser, setIsExistingUser] = useState(false);
     const [email, setEmail] = useState("");
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
-    const [address, setAddress] = useState("");
-    const [city, setCity] = useState("");
-    const [postCode, setPostCode] = useState("");
-    const [dob, setDob] = useState<Date | undefined>(undefined);
-    const [dobError, setDobError] = useState("");
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    // Identifier-first auth state (real API, in sync with Send Invoice / Request Payment)
+    const [pinCode, setPinCode] = useState("");
+    const [devPin, setDevPin] = useState("");
+    const [pinCooldown, setPinCooldown] = useState(0);
+    const [authBusy, setAuthBusy] = useState(false);
+    const [authError, setAuthError] = useState("");
+    // Registration details (dob doubles as the mini-KYC birthdate check)
+    const [dob, setDob] = useState<Date | undefined>(undefined);
+    const [regCountry, setRegCountry] = useState("");
+    const [regGender, setRegGender] = useState("");
+    const [regPhoneCode, setRegPhoneCode] = useState("");
+    const [regPhoneNumber, setRegPhoneNumber] = useState("");
     const [isPaid, setIsPaid] = useState(false);
     const [wasManualTransfer, setWasManualTransfer] = useState(false);
     const [paymentStep, setPaymentStep] = useState<"method" | "card_details" | "processing_instant" | "manual_transfer" | "manual_transfer_complete">("method");
@@ -66,15 +76,11 @@ export default function ContributorView() {
         }
     }, [campaignId]);
 
+    // PIN resend cooldown ticker
     useEffect(() => {
-        let timer: NodeJS.Timeout;
-        if (authStep === "mini_kyc_processing") {
-            timer = setTimeout(() => {
-                setAuthStep("payment");
-            }, 500);
-        }
-        return () => clearTimeout(timer);
-    }, [authStep]);
+        const timer = setInterval(() => setPinCooldown((prev) => (prev > 0 ? prev - 1 : 0)), 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     useEffect(() => {
         let timer: NodeJS.Timeout;
@@ -128,83 +134,178 @@ export default function ContributorView() {
 
     const progress = campaign ? (summary.totalRaised / campaign.targetAmount) * 100 : 0;
 
-    // Mock Scenarios
-    const SCENARIOS = {
-        EXISTING: "user@example.com",
-        NEW_VERIFIED: "verified@example.com",
-    };
+    // ─── Identifier-first auth (real API, in sync with Send Invoice / Request Payment) ──
 
-    const checkEmail = (e: React.FormEvent) => {
-        e.preventDefault();
-        const namePart = email.split('@')[0];
+    const deriveNamesFromEmail = (value: string) => {
+        const namePart = value.split('@')[0];
         const parts = namePart.split(/[._]/);
         if (parts.length >= 2) {
             setFirstName(parts[0].charAt(0).toUpperCase() + parts[0].slice(1));
             setLastName(parts[1].charAt(0).toUpperCase() + parts[1].slice(1));
         } else {
             setFirstName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
-        }
-
-        if (email === SCENARIOS.EXISTING) {
-            setAuthStep("login");
-            setIsExistingUser(true);
-        } else if (email === SCENARIOS.NEW_VERIFIED) {
-            setIsExistingUser(false);
-            setFirstName("");
             setLastName("");
-            setDob(undefined);
-            setAuthStep("register_password");
-        } else {
-            setIsExistingUser(false);
-            setAuthStep("register_otp");
         }
     };
 
-    const handleLogin = (e: React.FormEvent) => {
-        e.preventDefault();
-        setAuthStep("payment");
-    };
-
-    const handleVerifyOTP = (e: React.FormEvent) => {
-        e.preventDefault();
-        toast({
-            title: "Email Verified",
-            description: "Your email has been successfully verified.",
-            duration: 3000,
-        });
-        setAuthStep("register_password");
-    };
-
-    const handlePasswordSubmit = () => {
-        if (password) {
+    const requestPin = async (isResend: boolean) => {
+        setAuthBusy(true);
+        setAuthError("");
+        try {
+            const result = await sendCampaignContributorPin(campaignId, email.trim().toLowerCase());
+            setDevPin(result.devPin ?? "");
+            setPinCooldown(result.resendAfterSeconds ?? 60);
+            setPinCode("");
+            setAuthStep("pin");
             toast({
-                title: "Password Created",
-                description: "Your account is now secure.",
-                duration: 3000,
+                title: isResend ? "New PIN Sent" : "Verification PIN Sent",
+                description: `A 6-digit PIN has been sent to ${email}. It expires in 10 minutes.`,
             });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "The PIN could not be sent.";
+            setAuthError(message);
+            toast({ title: "PIN Not Sent", description: message, variant: "destructive" });
+        } finally {
+            setAuthBusy(false);
         }
-        setAuthStep("register_address");
     };
 
-    const handleAddressSubmit = (e: React.FormEvent) => {
+    const checkEmail = async (e: React.FormEvent) => {
         e.preventDefault();
-        setDobError("");
-        if (!dob) {
-            setDobError("Date of birth is required");
+        if (authBusy) return;
+        const normalized = email.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+            setAuthError("Please enter a valid email address.");
             return;
         }
+        setEmail(normalized);
+        deriveNamesFromEmail(normalized);
+        setAuthBusy(true);
+        setAuthError("");
+        try {
+            const result = await checkEmailRegistered(normalized);
+            if (result.registered) {
+                setAuthStep("login");
+            } else {
+                await requestPin(false);
+            }
+        } catch (err) {
+            setAuthError(err instanceof Error ? err.message : "Could not check this email address.");
+        } finally {
+            setAuthBusy(false);
+        }
+    };
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (authBusy || !password) return;
+        setAuthBusy(true);
+        setAuthError("");
+        try {
+            const res = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ email, password }),
+            });
+            const json = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(json?.message ?? "Invalid email or password");
+            // Use the signed-in profile for the contributor record
+            try {
+                const me = await fetch("/api/auth/me", { credentials: "include" });
+                const meJson = await me.json().catch(() => null);
+                if (meJson?.user) {
+                    setFirstName(meJson.user.firstName || firstName);
+                    setLastName(meJson.user.lastName || lastName);
+                }
+            } catch { /* profile lookup is best-effort */ }
+            toast({ title: "Signed In", description: "You are verified. Please continue with your contribution." });
+            setAuthStep("payment");
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Sign in failed.";
+            setAuthError(message);
+            toast({ title: "Sign In Failed", description: message, variant: "destructive" });
+        } finally {
+            setAuthBusy(false);
+        }
+    };
+
+    const handlePinVerify = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (authBusy || pinCode.length !== 6) return;
+        setAuthBusy(true);
+        setAuthError("");
+        try {
+            await verifyCampaignContributorPin(campaignId, email, pinCode);
+            toast({ title: "Email Verified", description: "Create your account to continue with the contribution." });
+            setRegCountry("");
+            setRegGender("");
+            setRegPhoneCode("");
+            setRegPhoneNumber("");
+            setPassword("");
+            setConfirmPassword("");
+            setAuthStep("register");
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "The PIN could not be verified.";
+            setAuthError(message);
+            toast({ title: "Verification Failed", description: message, variant: "destructive" });
+        } finally {
+            setAuthBusy(false);
+        }
+    };
+
+    const handleRegisterSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (authBusy) return;
+        if (!firstName.trim() || !lastName.trim()) { setAuthError("First name and last name are required."); return; }
+        if (!regCountry) { setAuthError("Country is required."); return; }
+        if (!dob) { setAuthError("Date of birth is required."); return; }
         const today = new Date();
         const adultDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
-        if (dob > adultDate) {
-            setDobError("You must be at least 18 years old to use Mito.Money");
+        if (dob > adultDate) { setAuthError("You must be at least 18 years old to use Rhemito."); return; }
+        if (!regGender) { setAuthError("Gender is required."); return; }
+        if (!regPhoneCode || regPhoneNumber.trim().length < 7) { setAuthError("A valid mobile number is required."); return; }
+        if (!/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password)) {
+            setAuthError("Password must be at least 8 characters with 1 uppercase letter, 1 number and 1 special character.");
             return;
         }
-        toast({
-            title: "Details Saved",
-            description: "Your verification was successful.",
-            duration: 3000,
-        });
-        setAuthStep("mini_kyc_processing");
+        if (password !== confirmPassword) { setAuthError("Passwords do not match."); return; }
+        setAuthBusy(true);
+        setAuthError("");
+        try {
+            const res = await fetch("/api/auth/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    accountType: "individual",
+                    email,
+                    password,
+                    confirmPassword,
+                    firstName: firstName.trim(),
+                    lastName: lastName.trim(),
+                    country: regCountry,
+                    dateOfBirth: dob.toISOString().slice(0, 10),
+                    gender: regGender,
+                    mobileCode: regPhoneCode,
+                    mobileNumber: regPhoneNumber.trim(),
+                    // Verified-payer registration: the campaign PIN session
+                    // activates the account and signs the contributor in.
+                    paymentRequestToken: campaignId,
+                    isEmailLink: false,
+                }),
+            });
+            const json = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(json?.message ?? "Registration failed");
+            toast({ title: "Account Created", description: "You are signed in. Please continue with your contribution." });
+            setAuthStep("payment");
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Registration failed.";
+            setAuthError(message);
+            toast({ title: "Registration Failed", description: message, variant: "destructive" });
+        } finally {
+            setAuthBusy(false);
+        }
     };
 
     const handlePay = () => {
@@ -289,10 +390,25 @@ export default function ContributorView() {
 
     if (!campaign) {
         return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-                <Card className="max-w-md w-full">
-                    <CardContent className="py-12 text-center">
-                        <p className="text-muted-foreground mb-4">Campaign not found or has ended</p>
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+                <div className="w-full max-w-5xl mb-4 flex items-center justify-center relative z-20">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center">
+                            <img src={logo} alt="Mito Logo" className="w-full h-full object-contain" />
+                        </div>
+                        <span className="text-lg md:text-xl font-bold text-slate-800 tracking-tight font-display">Mito.Money</span>
+                    </div>
+                </div>
+                <Card className="max-w-md w-full" data-testid="campaign-not-found">
+                    <CardContent className="py-12 text-center space-y-2">
+                        <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-2">
+                            <Target className="w-7 h-7 text-slate-400" />
+                        </div>
+                        <p className="text-base font-semibold text-slate-800">Campaign not found</p>
+                        <p className="text-sm text-muted-foreground leading-6">
+                            This contribution link is not valid or the campaign has ended. Please check the link you
+                            received or contact the campaign creator.
+                        </p>
                     </CardContent>
                 </Card>
             </div>
@@ -516,12 +632,13 @@ export default function ContributorView() {
                                                     </Button>
                                                 </form>
 
-                                                <div className="text-[10px] text-center text-slate-400 p-3 border border-dashed rounded-xl bg-slate-50/50">
-                                                    <p className="font-bold uppercase tracking-wider mb-2">Demo Scenarios</p>
-                                                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
-                                                        <p><span className="font-mono text-blue-600">user@example.com</span>: Existing User</p>
-                                                        <p><span className="font-mono text-blue-600">verified@example.com</span>: Verified New User</p>
-                                                    </div>
+                                                {/* Prototype affordance: which email logs in vs registers */}
+                                                <div className="text-[11px] text-center text-slate-500 p-3 border border-dashed rounded-xl bg-slate-50/50" data-testid="demo-login-hint">
+                                                    <p className="font-bold uppercase tracking-wider mb-1.5 text-slate-400 text-[10px]">Prototype tip</p>
+                                                    Registered demo email —{" "}
+                                                    <span className="font-mono text-blue-600">{DEMO_PAYER_CREDENTIALS.email}</span> (password{" "}
+                                                    <span className="font-mono text-blue-600">{DEMO_PAYER_CREDENTIALS.password}</span>) logs straight in.
+                                                    Any other email verifies a PIN and registers a new contributor.
                                                 </div>
                                             </motion.div>
                                         )}
@@ -557,10 +674,14 @@ export default function ContributorView() {
                                                         </div>
                                                         <div className="relative">
                                                             <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                                                            <PasswordInput id="password" placeholder="••••••••" className="pl-10 h-11" required />
+                                                            <PasswordInput id="password" placeholder="••••••••" className="pl-10 h-11" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus data-testid="input-payer-password" />
                                                         </div>
                                                     </div>
-                                                    <Button type="submit" className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg">Log in and Continue</Button>
+                                                    {authError && <p className="text-xs text-red-500 font-medium" data-testid="error-auth">{authError}</p>}
+                                                    <Button type="submit" disabled={authBusy || !password} className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg">
+                                                        {authBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                                        Log in and Continue
+                                                    </Button>
                                                 </form>
                                             </motion.div>
                                         )}
@@ -590,120 +711,157 @@ export default function ContributorView() {
                                             </motion.div>
                                         )}
 
-                                        {authStep === 'register_otp' && (
+                                        {authStep === 'pin' && (
                                             <motion.div
-                                                key="register_otp"
+                                                key="pin"
                                                 initial={{ opacity: 0, x: 20 }}
                                                 animate={{ opacity: 1, x: 0 }}
                                                 exit={{ opacity: 0, x: -20 }}
                                                 className="space-y-6"
+                                                data-testid="payer-auth-pin"
                                             >
                                                 <div className="space-y-2">
                                                     <h2 className="text-2xl font-bold text-slate-900">Verify your email</h2>
-                                                    <p className="text-slate-500">We've sent a code to <span className="font-semibold text-slate-900">{email}</span> <button type="button" className="text-blue-600 font-medium hover:underline text-sm ml-1" onClick={() => setAuthStep('check_email')}>Change email</button></p>
+                                                    <p className="text-slate-500">We've sent a 6-digit PIN to <span className="font-semibold text-slate-900">{email}</span> <button type="button" className="text-blue-600 font-medium hover:underline text-sm ml-1" onClick={() => setAuthStep('check_email')}>Change email</button></p>
                                                 </div>
 
-                                                <form onSubmit={handleVerifyOTP} className="space-y-6">
+                                                {devPin && (
+                                                    <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2" data-testid="dev-pin-hint">
+                                                        <p className="text-xs text-amber-700">
+                                                            <span className="font-semibold">Prototype tip:</span> Use PIN{" "}
+                                                            <span className="font-mono font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded">{devPin}</span>
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                <form onSubmit={handlePinVerify} className="space-y-4">
                                                     <div className="space-y-2">
-                                                        <Label htmlFor="otp">Verification Code</Label>
+                                                        <Label htmlFor="pin-code">6-digit PIN</Label>
                                                         <div className="relative">
                                                             <KeyRound className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                                                            <Input id="otp" type="text" placeholder="123456" className="pl-10 h-11 tracking-widest text-lg font-bold" required />
+                                                            <Input
+                                                                id="pin-code"
+                                                                type="text"
+                                                                maxLength={6}
+                                                                inputMode="numeric"
+                                                                placeholder="000000"
+                                                                className="pl-10 h-11 tracking-widest text-lg font-bold"
+                                                                value={pinCode}
+                                                                onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ""))}
+                                                                required
+                                                                autoFocus
+                                                                data-testid="input-pin-code"
+                                                            />
                                                         </div>
                                                     </div>
-                                                    <Button type="submit" className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg">Verify Code</Button>
+                                                    {authError && <p className="text-xs text-red-500 font-medium" data-testid="error-auth">{authError}</p>}
+                                                    <Button type="submit" disabled={authBusy || pinCode.length !== 6} className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg">
+                                                        {authBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                                        Verify & Continue
+                                                    </Button>
                                                 </form>
                                                 <p className="text-sm text-center text-slate-500">
-                                                    Didn't receive code? <button type="button" className="text-blue-600 font-bold hover:underline">Resend</button>
+                                                    {pinCooldown > 0 ? (
+                                                        <>Didn't receive the PIN? Resend available in <span className="font-mono font-medium">{pinCooldown}s</span></>
+                                                    ) : (
+                                                        <>Didn't receive the PIN? <button type="button" className="text-blue-600 font-bold hover:underline" onClick={() => requestPin(true)} disabled={authBusy} data-testid="button-resend-pin">{authBusy ? "Sending…" : "Resend"}</button></>
+                                                    )}
                                                 </p>
                                             </motion.div>
                                         )}
 
-                                        {authStep === 'register_password' && (
+                                        {authStep === 'register' && (
                                             <motion.div
-                                                key="register_password"
+                                                key="register"
                                                 initial={{ opacity: 0, x: 20 }}
                                                 animate={{ opacity: 1, x: 0 }}
                                                 exit={{ opacity: 0, x: -20 }}
                                                 className="space-y-6"
+                                                data-testid="payer-auth-register"
                                             >
                                                 <div className="space-y-2">
-                                                    <h2 className="text-2xl font-bold text-slate-900">Secure Your Account</h2>
-                                                    <p className="text-slate-500">Create a password to easily track your contributions.</p>
+                                                    <h2 className="text-2xl font-bold text-slate-900">Create your account</h2>
+                                                    <p className="text-slate-500">Your email is verified. Complete your details to continue with the contribution.</p>
                                                 </div>
 
-                                                <form className="space-y-4">
+                                                <div className="p-3.5 bg-emerald-50 rounded-2xl flex items-center gap-3 border border-emerald-100/50">
+                                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-emerald-600 font-bold border border-emerald-100 overflow-hidden shadow-sm">
+                                                        <CheckCircle2 className="w-5 h-5" />
+                                                    </div>
+                                                    <p className="text-sm font-medium text-slate-900 truncate" data-testid="payer-email-chip">{email}</p>
+                                                </div>
+
+                                                <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="firstName">First Name</Label>
+                                                            <Input id="firstName" placeholder="Jane" className="h-11" required value={firstName} onChange={(e) => setFirstName(e.target.value)} data-testid="input-reg-first-name" />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="lastName">Last Name</Label>
+                                                            <Input id="lastName" placeholder="Doe" className="h-11" required value={lastName} onChange={(e) => setLastName(e.target.value)} data-testid="input-reg-last-name" />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <Label>Country</Label>
+                                                            <Select value={regCountry} onValueChange={(code) => {
+                                                                setRegCountry(code);
+                                                                const match = countries.find((c) => c.code === code);
+                                                                if (match) setRegPhoneCode(match.dialCode);
+                                                            }}>
+                                                                <SelectTrigger data-testid="select-register-country" className="h-11 bg-white"><SelectValue placeholder="Select country" /></SelectTrigger>
+                                                                <SelectContent className="max-h-64">
+                                                                    {countries.map((c) => (
+                                                                        <SelectItem key={c.code} value={c.code}>{c.flag} {c.name}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="space-y-2 flex flex-col">
+                                                            <Label>Date of Birth</Label>
+                                                            <PremiumDatePicker date={dob} setDate={setDob} />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <Label>Gender</Label>
+                                                            <Select value={regGender} onValueChange={setRegGender}>
+                                                                <SelectTrigger data-testid="select-register-gender" className="h-11 bg-white"><SelectValue placeholder="Select gender" /></SelectTrigger>
+                                                                <SelectContent>
+                                                                    {genderOptions.map((g) => (
+                                                                        <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label>Mobile Number</Label>
+                                                            <PhoneInput
+                                                                codeValue={regPhoneCode}
+                                                                numberValue={regPhoneNumber}
+                                                                onCodeChange={setRegPhoneCode}
+                                                                onNumberChange={setRegPhoneNumber}
+                                                            />
+                                                        </div>
+                                                    </div>
+
                                                     <div className="space-y-2">
                                                         <Label htmlFor="new-password">Create Password</Label>
                                                         <div className="relative">
                                                             <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                                                            <PasswordInput id="new-password" placeholder="Min. 8 characters" className="pl-10 h-11" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                                            <PasswordInput id="new-password" placeholder="Min. 8 characters" className="pl-10 h-11" value={password} onChange={(e) => setPassword(e.target.value)} required data-testid="input-reg-password" />
                                                         </div>
+                                                        <p className="text-[11px] text-slate-400">At least 8 characters with 1 uppercase letter, 1 number and 1 special character.</p>
                                                     </div>
                                                     <div className="space-y-2">
                                                         <Label htmlFor="confirm-password">Confirm Password</Label>
                                                         <div className="relative">
                                                             <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                                                            <PasswordInput id="confirm-password" placeholder="Re-enter password" className="pl-10 h-11" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                                                            <PasswordInput id="confirm-password" placeholder="Re-enter password" className="pl-10 h-11" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required data-testid="input-reg-confirm-password" />
                                                         </div>
-                                                    </div>
-
-                                                    <div className="pt-2 space-y-3">
-                                                        <Button type="button" className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg" onClick={handlePasswordSubmit}>
-                                                            {password ? "Set Password & Continue" : "Continue"}
-                                                        </Button>
-                                                        <Button type="button" variant="ghost" className="w-full text-slate-500 font-medium" onClick={() => setAuthStep("register_address")}>
-                                                            Skip for now
-                                                        </Button>
-                                                    </div>
-                                                </form>
-                                            </motion.div>
-                                        )}
-
-                                        {authStep === 'register_address' && (
-                                            <motion.div
-                                                key="register_address"
-                                                initial={{ opacity: 0, x: 20 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                exit={{ opacity: 0, x: -20 }}
-                                                className="space-y-6"
-                                            >
-                                                <div className="space-y-2">
-                                                    <h2 className="text-2xl font-bold text-slate-900">A Few More Details</h2>
-                                                    <p className="text-slate-500">For secure processing, please provide your legal name and DOB.</p>
-                                                </div>
-
-                                                <form onSubmit={handleAddressSubmit} className="space-y-4">
-                                                    <div className="grid grid-cols-2 gap-4">
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="firstName">First Name</Label>
-                                                            <Input id="firstName" placeholder="Jane" className="h-11" required value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-                                                        </div>
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="lastName">Last Name</Label>
-                                                            <Input id="lastName" placeholder="Doe" className="h-11" required value={lastName} onChange={(e) => setLastName(e.target.value)} />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="address">Address Line 1</Label>
-                                                        <Input id="address" placeholder="123 Main St" className="h-11" required value={address} onChange={(e) => setAddress(e.target.value)} />
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-4">
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="city">City</Label>
-                                                            <Input id="city" placeholder="London" className="h-11" required value={city} onChange={(e) => setCity(e.target.value)} />
-                                                        </div>
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="postCode">Post Code</Label>
-                                                            <Input id="postCode" placeholder="SW1A 1AA" className="h-11" required value={postCode} onChange={(e) => setPostCode(e.target.value)} />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="space-y-2 flex flex-col">
-                                                        <Label htmlFor="dob">Date of Birth</Label>
-                                                        <PremiumDatePicker date={dob} setDate={setDob} />
-                                                        {dobError && <p className="text-xs text-red-500 font-bold">{dobError}</p>}
                                                     </div>
 
                                                     <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 flex gap-3">
@@ -711,26 +869,12 @@ export default function ContributorView() {
                                                         <p className="text-xs text-blue-700 leading-relaxed font-medium">Your data is encrypted and used only for regulatory compliance. We never share your personal info.</p>
                                                     </div>
 
-                                                    <Button type="submit" className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg">Save and Continue</Button>
+                                                    {authError && <p className="text-xs text-red-500 font-bold" data-testid="error-auth">{authError}</p>}
+                                                    <Button type="submit" disabled={authBusy} className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg" data-testid="button-register-pay">
+                                                        {authBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                                        Create Account & Continue
+                                                    </Button>
                                                 </form>
-                                            </motion.div>
-                                        )}
-
-                                        {authStep === 'mini_kyc_processing' && (
-                                            <motion.div
-                                                key="kyc_processing"
-                                                initial={{ opacity: 0, scale: 0.9 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                className="flex flex-col items-center justify-center py-12 space-y-6 text-center"
-                                            >
-                                                <div className="relative">
-                                                    <div className="w-20 h-20 rounded-full border-4 border-slate-100" />
-                                                    <Loader2 className="w-20 h-20 text-blue-600 animate-spin absolute top-0 left-0" />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <h3 className="text-xl font-bold text-slate-900">Verifying Details</h3>
-                                                    <p className="text-slate-500 max-w-xs mx-auto">Connecting with our secure partners for instant verification...</p>
-                                                </div>
                                             </motion.div>
                                         )}
 

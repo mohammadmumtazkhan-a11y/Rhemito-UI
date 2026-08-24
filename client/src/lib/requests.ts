@@ -318,6 +318,34 @@ export async function verifyPayerVerificationPin(token: string, email: string, c
   if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? "The PIN could not be verified."), { code: json?.error?.code, status: res.status });
 }
 
+/** GroupPay contributor identification: send a 6-digit PIN to an unregistered email (demo mode echoes devPin). */
+export async function sendCampaignContributorPin(
+  campaignId: string,
+  email: string
+): Promise<{ sent: boolean; expiresInSeconds: number; resendAfterSeconds: number; devPin?: string }> {
+  const res = await fetch("/api/public/campaign-verifications/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ campaignId, email }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? "The PIN could not be sent."), { code: json?.error?.code, status: res.status });
+  return json.data;
+}
+
+/** GroupPay contributor identification: verify the 6-digit PIN for the email. */
+export async function verifyCampaignContributorPin(campaignId: string, email: string, code: string): Promise<void> {
+  const res = await fetch("/api/public/campaign-verifications/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ campaignId, email, code }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? "The PIN could not be verified."), { code: json?.error?.code, status: res.status });
+}
+
 export async function createIntent(token: string, method: string, sessionId: string, isEmailLink = false): Promise<{
   intentId: string;
   authorizationUrl: string;

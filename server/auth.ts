@@ -24,7 +24,7 @@ const RESET_PIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 const resetPinSentAt = new Map<string, number>();
 const resetPinFailures = new Map<string, { count: number; windowStart: number }>();
 
-function enforceAuthRateLimit(req: Request, res: Response, name: "passwordResetSend" | "passwordResetVerify"): boolean {
+function enforceAuthRateLimit(req: Request, res: Response, name: keyof typeof serverConfig.rateLimits): boolean {
   const { limit, windowMs } = serverConfig.rateLimits[name];
   const result = rateLimit(`auth:${name}:${clientIpOf(req)}`, limit, windowMs);
   if (!result.allowed) {
@@ -349,6 +349,83 @@ export function registerAuthRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Reset password error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ─── Campaign contributor identification (GroupPay share links) ──────────
+  // Mirrors the request-money/invoice payer PIN flow. Campaigns live in
+  // client-side mock storage, so there is no server resource to validate —
+  // the campaignId is an opaque session-bound token whose only role is tying
+  // the verified email to this contribution context for registration.
+  app.post("/api/public/campaign-verifications/send", async (req: Request, res: Response) => {
+    try {
+      if (!enforceAuthRateLimit(req, res, "paymentIntent")) return;
+      const parsed = emailCheckSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Enter a valid email address." } });
+      }
+      const campaignId = String(req.body?.campaignId ?? "").trim();
+      if (!campaignId) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "A campaign context is required." } });
+      }
+      const email = parsed.data.email.toLowerCase();
+      if (await storage.getAuthUserByEmail(email)) {
+        return res.status(409).json({ error: { code: "EMAIL_REGISTERED", message: "This email already has a Rhemito account. Please sign in." } });
+      }
+      const previous = req.session.paymentRequestVerification;
+      if (previous?.email === email && Date.now() - previous.lastSentAt < 60_000) {
+        res.setHeader("Retry-After", Math.ceil((60_000 - (Date.now() - previous.lastSentAt)) / 1000));
+        return res.status(429).json({ error: { code: "PIN_COOLDOWN", message: "Please wait before requesting another PIN." } });
+      }
+      await storage.invalidateOtps(email);
+      const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+      await storage.createOtp(email, code, new Date(Date.now() + 10 * 60_000));
+      req.session.paymentRequestVerification = {
+        email,
+        token: campaignId,
+        isEmailLink: false,
+        verified: false,
+        failedAttempts: 0,
+        lastSentAt: Date.now(),
+      };
+      return res.json({
+        data: {
+          sent: true,
+          expiresInSeconds: 600,
+          resendAfterSeconds: 60,
+          ...(demoModeEnabled ? { devPin: code } : {}),
+        },
+      });
+    } catch (error) {
+      console.error("Campaign verification send error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/public/campaign-verifications/verify", async (req: Request, res: Response) => {
+    try {
+      if (!enforceAuthRateLimit(req, res, "paymentIntent")) return;
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+      const campaignId = String(req.body?.campaignId ?? "").trim();
+      const code = String(req.body?.code ?? "").trim();
+      const verification = req.session.paymentRequestVerification;
+      if (!verification || verification.token !== campaignId || verification.isEmailLink !== false || verification.email !== email) {
+        return res.status(400).json({ error: { code: "PIN_NOT_SENT", message: "Request a new PIN for this email address." } });
+      }
+      if (verification.failedAttempts >= 5) {
+        return res.status(429).json({ error: { code: "PIN_LOCKED", message: "Too many incorrect attempts. Request a new PIN later." } });
+      }
+      const otp = code.length === 6 ? await storage.getValidOtp(email, code) : undefined;
+      if (!otp) {
+        verification.failedAttempts += 1;
+        return res.status(400).json({ error: { code: "INVALID_PIN", message: "The PIN is invalid or has expired." } });
+      }
+      await storage.markOtpUsed(otp.id);
+      verification.verified = true;
+      return res.json({ data: { verified: true } });
+    } catch (error) {
+      console.error("Campaign verification verify error:", error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
