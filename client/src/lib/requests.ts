@@ -3,7 +3,7 @@
  */
 
 import { apiRequest } from "@/lib/queryClient";
-import type { PaymentPurpose } from "@shared/schema";
+import type { InvoiceExpiry, PaymentPurpose } from "@shared/schema";
 
 export interface Eligibility {
   authenticated: true;
@@ -56,7 +56,6 @@ export interface MoneyRequestView {
   id: string;
   requestNumber: string;
   status: string;
-  failureReason?: string | null;
   senderName: string;
   senderEmail: string;
   payInAmount: string;
@@ -78,6 +77,7 @@ export interface MoneyRequestView {
   emailCheckoutUrl?: string;
   payerName?: string | null;
   payerEmailMasked?: string | null;
+  dueDate: string | null;
   expiresAt: string;
   expiryExtendedOnce: boolean;
   failureReason: string | null;
@@ -99,12 +99,14 @@ export interface PublicRequestView {
   absorbFee?: boolean | null;
   purpose: string | null;
   reference: string | null;
+  dueDate: string | null;
   expiresAt: string;
   expiryDate: string;
   methods: string[];
   estimatedDeliveryTime: string;
   senderFeeNote: string;
   status: string;
+  failureReason: string | null;
   isEmailLink?: boolean;
   recipientEmailMasked?: string;
   activeSessionId?: string | null;
@@ -133,6 +135,10 @@ export interface CreateRequestInput {
   reference?: string;
   /** Default true — requester absorbs the 3% fee. */
   absorbFee?: boolean;
+  /** Optional date (YYYY-MM-DD) the requester expects payment by. */
+  dueDate?: string;
+  /** Payment link expiry — preset day count or an explicit custom date. */
+  expiry: InvoiceExpiry;
   idempotencyKey: string;
 }
 
@@ -190,11 +196,6 @@ export async function cancelRequest(id: string): Promise<void> {
   await apiRequest("POST", `/api/request-money/requests/${id}/cancel`, {});
 }
 
-export async function rotateToken(id: string): Promise<{ token: string; checkoutUrl: string }> {
-  const res = await apiRequest("POST", `/api/request-money/requests/${id}/rotate-token`, {});
-  return ((await res.json()) as { data: { token: string; checkoutUrl: string } }).data;
-}
-
 export async function extendExpiry(id: string): Promise<string> {
   const res = await apiRequest("POST", `/api/request-money/requests/${id}/extend-expiry`, {});
   return ((await res.json()) as { data: { expiresAt: string } }).data.expiresAt;
@@ -250,6 +251,43 @@ export async function checkEmailRegistered(email: string): Promise<{ registered:
   const json = await res.json().catch(() => null);
   if (!res.ok) throw Object.assign(new Error(json?.message ?? "Could not check this email address."), { status: res.status });
   return { registered: !!json?.registered, status: json?.status ?? null };
+}
+
+/** Forgot-password: send a 6-digit reset PIN to the email's registered account (demo mode echoes devPin). */
+export async function requestPasswordResetPin(email: string): Promise<{
+  success: boolean;
+  message: string;
+  expiresInSeconds: number;
+  resendAfterSeconds: number;
+  devPin?: string;
+}> {
+  const res = await fetch("/api/auth/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json) throw Object.assign(new Error(json?.message ?? "The reset PIN could not be sent."), { status: res.status });
+  return json;
+}
+
+/** Forgot-password: verify the 6-digit PIN, set the new password and sign in. */
+export async function resetPasswordWithPin(
+  email: string,
+  code: string,
+  password: string,
+  confirmPassword: string
+): Promise<{ success: boolean; message: string }> {
+  const res = await fetch("/api/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, code, password, confirmPassword }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json) throw Object.assign(new Error(json?.message ?? "The password could not be reset."), { status: res.status });
+  return json;
 }
 
 export async function sendPayerVerificationPin(token: string, email: string, isEmailLink = false): Promise<{
@@ -332,15 +370,6 @@ export async function devAuthorizeIntent(intentId: string): Promise<void> {
     const json = await res.json().catch(() => null);
     throw new Error(json?.error?.message ?? "Authorisation simulation failed.");
   }
-}
-
-export async function reportRequest(token: string, reason: string, isEmailLink = false): Promise<void> {
-  const prefix = isEmailLink ? "/api/public/requests/e/" : "/api/public/requests/";
-  await fetch(`${prefix}${encodeURIComponent(token)}/report`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ reason }),
-  });
 }
 
 export const METHOD_LABELS: Record<string, string> = {

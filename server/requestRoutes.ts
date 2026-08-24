@@ -19,7 +19,6 @@ import {
   createMoneyRequest,
   createPayinIntent,
   cancelRequest,
-  rotateToken,
   extendExpiry,
   resendRequestEmail,
   getRequestByToken,
@@ -41,7 +40,6 @@ import {
   addPayoutAccountSchema,
   createMoneyRequestSchema,
   createPayinIntentSchema,
-  reportRequestSchema,
   emailCheckSchema,
 } from "@shared/schema";
 
@@ -299,16 +297,6 @@ export function registerRequestMoneyRoutes(app: Express): void {
       const userId = requireStrictAuth(req);
       await cancelRequest(userId, req.params.id);
       res.json({ success: true });
-    } catch (err) {
-      return handleError(res, err);
-    }
-  });
-
-  app.post("/api/request-money/requests/:id/rotate-token", async (req, res) => {
-    try {
-      const userId = requireStrictAuth(req);
-      const result = await rotateToken(userId, req.params.id);
-      res.json({ data: result });
     } catch (err) {
       return handleError(res, err);
     }
@@ -589,29 +577,6 @@ export function registerRequestMoneyRoutes(app: Express): void {
 
   app.post("/api/public/requests/:token/request-new-link", (req, res) => handleRequestNewLink(req, res, false));
   app.post("/api/public/requests/e/:emailToken/request-new-link", (req, res) => handleRequestNewLink(req, res, true));
-
-  // 6. Report request
-  const handleReport = async (req: Request, res: Response, isEmailLink: boolean) => {
-    try {
-      if (!enforceRateLimit(req, res, "reportRequest")) return;
-      const parsed = reportRequestSchema.safeParse(req.body ?? {});
-      if (!parsed.success) {
-        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: parsed.error.issues[0]?.message ?? "Invalid report." } });
-      }
-      const token = req.params.token || req.params.emailToken;
-      const request = await getRequestByTokenOrEmailToken(token, isEmailLink);
-      if (!request) {
-        return res.status(404).json({ error: { code: "NOT_FOUND", message: "This payment link is not valid." } });
-      }
-      console.warn(`[FRAUD REPORT] Request ${request.requestNumber}: ${parsed.data.reason}`);
-      return res.json({ data: { received: true, message: "Thank you. Our team will review this request." } });
-    } catch (err) {
-      return handleError(res, err);
-    }
-  };
-
-  app.post("/api/public/requests/:token/report", (req, res) => handleReport(req, res, false));
-  app.post("/api/public/requests/e/:emailToken/report", (req, res) => handleReport(req, res, true));
 
   // ─── Provider webhooks (signed, idempotent) ────────────────────────────────
 

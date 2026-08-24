@@ -1,9 +1,39 @@
 import type { Express, Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import { randomInt } from "crypto";
 import { storage } from "./storage";
-import { demoModeEnabled } from "./config";
-import { emailCheckSchema, loginSchema, otpVerifySchema, PROTOTYPE_MASTER_PASSWORD } from "@shared/schema";
+import { demoModeEnabled, serverConfig } from "./config";
+import { rateLimit, clientIpOf } from "./rateLimit";
+import { devEmailProvider } from "./providers";
+import {
+  emailCheckSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  otpVerifySchema,
+  resetPasswordSchema,
+  PROTOTYPE_MASTER_PASSWORD,
+} from "@shared/schema";
 import { log } from "./index";
+
+const RESET_PIN_TTL_MS = 10 * 60 * 1000;
+const RESET_PIN_RESEND_COOLDOWN_MS = 60_000;
+const RESET_PIN_MAX_ATTEMPTS = 5;
+const RESET_PIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+
+/** Per-email resend cooldown and failed-attempt tracking (single-process prototype). */
+const resetPinSentAt = new Map<string, number>();
+const resetPinFailures = new Map<string, { count: number; windowStart: number }>();
+
+function enforceAuthRateLimit(req: Request, res: Response, name: "passwordResetSend" | "passwordResetVerify"): boolean {
+  const { limit, windowMs } = serverConfig.rateLimits[name];
+  const result = rateLimit(`auth:${name}:${clientIpOf(req)}`, limit, windowMs);
+  if (!result.allowed) {
+    res.setHeader("Retry-After", Math.ceil(result.retryAfterMs / 1000));
+    res.status(429).json({ message: "Too many attempts. Please try again shortly." });
+    return false;
+  }
+  return true;
+}
 
 function generateOtp(): string {
   // PROTOTYPE: always use 123456 for easy testing
@@ -199,6 +229,126 @@ export function registerAuthRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Resend OTP error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ─── Forgot Password (send 6-digit PIN to registered email) ────
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      if (!enforceAuthRateLimit(req, res, "passwordResetSend")) return;
+
+      const parsed = forgotPasswordSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
+      }
+
+      const email = parsed.data.email.trim().toLowerCase();
+      const user = await storage.getAuthUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: "No Rhemito account is registered with this email." });
+      }
+      if (user.status === "blocked") {
+        return res.status(403).json({ message: "Your account has been blocked. Please contact support at admin@rhemito.com" });
+      }
+
+      const now = Date.now();
+      const lastSentAt = resetPinSentAt.get(email) ?? 0;
+      if (now - lastSentAt < RESET_PIN_RESEND_COOLDOWN_MS) {
+        const retryAfterMs = RESET_PIN_RESEND_COOLDOWN_MS - (now - lastSentAt);
+        res.setHeader("Retry-After", Math.ceil(retryAfterMs / 1000));
+        return res.status(429).json({ message: `A PIN was already sent. Please wait ${Math.ceil(retryAfterMs / 1000)}s before requesting another.` });
+      }
+
+      const pin = String(randomInt(0, 1_000_000)).padStart(6, "0");
+      await storage.invalidateOtps(email);
+      await storage.createOtp(email, pin, new Date(now + RESET_PIN_TTL_MS));
+      resetPinSentAt.set(email, now);
+      resetPinFailures.delete(email);
+
+      await devEmailProvider.send({
+        to: user.email,
+        subject: "Your Rhemito password reset PIN",
+        text:
+          `Hello,\n\n` +
+          `Use this 6-digit PIN to reset your Rhemito password:\n\n${pin}\n\n` +
+          `This PIN expires in 10 minutes.\n\n` +
+          `⚠ Rhemito will never ask for your password, full card number or one-time codes by email or phone. ` +
+          `If you did not request a password reset, ignore this email — your password remains unchanged.\n\n` +
+          `— Rhemito`,
+      });
+      log(`🔑 Password-reset PIN for ${email}: ${pin} (expires in 10 minutes)`, "auth");
+
+      return res.json({
+        success: true,
+        message: "A 6-digit PIN has been sent to your registered email address.",
+        expiresInSeconds: RESET_PIN_TTL_MS / 1000,
+        resendAfterSeconds: RESET_PIN_RESEND_COOLDOWN_MS / 1000,
+        ...(demoModeEnabled ? { devPin: pin } : {}), // PROTOTYPE ONLY — remove in production
+      });
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ─── Reset Password (verify PIN, set new password, sign in) ─────
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      if (!enforceAuthRateLimit(req, res, "passwordResetVerify")) return;
+
+      const parsed = resetPasswordSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
+      }
+
+      const email = parsed.data.email.trim().toLowerCase();
+      const user = await storage.getAuthUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: "No Rhemito account is registered with this email." });
+      }
+      if (user.status === "blocked") {
+        return res.status(403).json({ message: "Your account has been blocked. Please contact support at admin@rhemito.com" });
+      }
+
+      const now = Date.now();
+      const failures = resetPinFailures.get(email);
+      if (failures && failures.count >= RESET_PIN_MAX_ATTEMPTS && now - failures.windowStart < RESET_PIN_ATTEMPT_WINDOW_MS) {
+        return res.status(429).json({ message: "Too many incorrect PIN attempts. Please request a new PIN." });
+      }
+
+      const otp = await storage.getValidOtp(email, parsed.data.code);
+      if (!otp) {
+        const inWindow = failures && now - failures.windowStart < RESET_PIN_ATTEMPT_WINDOW_MS;
+        const count = inWindow ? failures!.count + 1 : 1;
+        resetPinFailures.set(email, { count, windowStart: inWindow ? failures!.windowStart : now });
+        const remaining = Math.max(0, RESET_PIN_MAX_ATTEMPTS - count);
+        return res.status(400).json({
+          message:
+            remaining > 0
+              ? `Incorrect PIN. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
+              : "Incorrect PIN. Please request a new PIN.",
+        });
+      }
+
+      await storage.markOtpUsed(otp.id);
+      await storage.invalidateOtps(email);
+      const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
+      await storage.updateAuthUserPassword(email, hashedPassword);
+      resetPinFailures.delete(email);
+
+      // Verifying the email PIN proves account control — sign the user in so
+      // they can continue their journey (e.g. an open payment request checkout).
+      req.session.userId = user.id;
+
+      const { password: _, ...safeUser } = user;
+      return res.json({
+        success: true,
+        message: "Password successfully reset.",
+        user: safeUser,
+      });
+    } catch (error) {
+      console.error("Reset password error:", error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });

@@ -18,7 +18,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
   CheckCircle2,
-  Flag,
   LifeBuoy,
   Loader2,
   Lock,
@@ -53,7 +52,6 @@ import {
   createIntent,
   devAuthorizeIntent,
   requestNewLink,
-  reportRequest,
   METHOD_LABELS,
   type PublicRequestView,
   type Quote,
@@ -61,6 +59,8 @@ import {
 import { countries, genderOptions } from "@/data/countries";
 import PhoneInput from "@/pages/Auth/components/PhoneInput";
 import PasswordInput from "@/pages/Auth/components/PasswordInput";
+import ForgotPassword from "@/pages/Auth/components/ForgotPassword";
+import { PasswordInput as PasswordInputWithToggle } from "@/components/ui/password-input";
 
 // Mock directors list — in production this would come from a company lookup API
 // (same list as the /sign-in-sign-up business registration flow).
@@ -76,7 +76,7 @@ import { CURRENCY_SYMBOLS } from "@shared/currencies";
 import { formatHumanDate } from "@shared/invoice-logic";
 import { DEMO_PAYER_CREDENTIALS, PROTOTYPE_MASTER_PASSWORD } from "@shared/schema";
 
-type FlowStep = "pre_auth" | "session_active" | "session_expired" | "authorizing" | "status" | "report";
+type FlowStep = "pre_auth" | "session_active" | "session_expired" | "authorizing" | "status";
 
 export default function RequestCheckout() {
   const params = useParams<{ id: string }>();
@@ -91,6 +91,8 @@ export default function RequestCheckout() {
   // Identifier-first payer auth: email → (registered? password : PIN → registration)
   const [authStep, setAuthStep] = useState<"email" | "password" | "pin" | "register">("email");
   const [useOtherAccount, setUseOtherAccount] = useState(false);
+  // Forgot-password reset flow (replaces the payer auth card while active)
+  const [forgotPassword, setForgotPassword] = useState<{ email: string } | null>(null);
 
   // Identification State
   const [payerEmail, setPayerEmail] = useState("");
@@ -145,9 +147,7 @@ export default function RequestCheckout() {
   const [errorMessage, setErrorMessage] = useState("");
   const [complianceNotice, setComplianceNotice] = useState<string | null>(null);
 
-  // Renewal / Report State
-  const [reportReason, setReportReason] = useState("");
-  const [reportSent, setReportSent] = useState(false);
+  // Renewal State
   const [renewalRequested, setRenewalRequested] = useState(false);
   const [renewalMessage, setRenewalMessage] = useState("");
 
@@ -170,12 +170,14 @@ export default function RequestCheckout() {
     retry: false,
   });
 
-  // Pre-fill email from auth or masked recipient
+  // Pre-fill email from auth or masked recipient — only on personally
+  // addressed email links. A copyable "share with anyone" link never
+  // presumes who is paying: the payer always identifies with their own email.
   useEffect(() => {
-    if (authUser?.email) {
+    if (isEmailLink && authUser?.email) {
       setPayerEmail(authUser.email);
     }
-  }, [authUser]);
+  }, [authUser, isEmailLink]);
 
   // Handle session timer countdown
   useEffect(() => {
@@ -426,6 +428,16 @@ export default function RequestCheckout() {
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * Forgot-password completion: the reset endpoint signs the payer in, so the
+   * payment journey resumes immediately with a fresh payment session.
+   */
+  const handleForgotResetComplete = async () => {
+    setForgotPassword(null);
+    setErrorMessage("");
+    await handleStartPayerFlow();
   };
 
   /**
@@ -721,19 +733,6 @@ export default function RequestCheckout() {
     }
   };
 
-  const handleReportSubmit = async () => {
-    if (!reportReason.trim()) return;
-    setBusy(true);
-    try {
-      await reportRequest(token!, reportReason.trim(), isEmailLink);
-      setReportSent(true);
-    } catch {
-      setErrorMessage("Report could not be submitted. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   // ─── 1. STATUS & RESULT PAGES ──────────────────────────────────────────────
 
   if (step === "session_expired") {
@@ -883,58 +882,6 @@ export default function RequestCheckout() {
           </div>
           <p className="text-xs text-center text-muted-foreground">Returning home in {redirectCountdown}s. This page updates automatically.</p>
           <Button variant="outline" className="w-full" onClick={() => setLocation("/")}>Go to Home Page Now</Button>
-        </StatusCard>
-      </Shell>
-    );
-  }
-
-  // ─── 2. REPORT FLOW ────────────────────────────────────────────────────────
-
-  if (step === "report") {
-    return (
-      <Shell>
-        <StatusCard icon={<Flag className="w-8 h-8 text-red-600" />} title="Report This Request" testId="report-card">
-          {reportSent ? (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-900 space-y-2">
-              <p className="font-semibold flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-emerald-600" /> Report Submitted
-              </p>
-              <p className="text-xs leading-relaxed">
-                Thank you for notifying us. Our trust and compliance team will review this request. Do not send money if you have any doubts.
-              </p>
-              <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => setStep("pre_auth")}>
-                Return to Checkout
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                If you suspect fraud, impersonation, or an unsolicited request, please report it immediately.
-              </p>
-              <textarea
-                className="w-full rounded-xl border border-border p-3 text-sm min-h-24 bg-white focus:outline-primary"
-                placeholder="Describe why you are reporting this request (e.g. suspicious activity, unauthorized demand)..."
-                value={reportReason}
-                onChange={(e) => setReportReason(e.target.value)}
-                data-testid="input-report-reason"
-              />
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setStep("pre_auth")}>
-                  Back
-                </Button>
-                <Button
-                  variant="destructive"
-                  className="flex-1"
-                  disabled={!reportReason.trim() || busy}
-                  onClick={handleReportSubmit}
-                  data-testid="button-submit-report"
-                >
-                  {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
-                  Submit Report
-                </Button>
-              </div>
-            </div>
-          )}
         </StatusCard>
       </Shell>
     );
@@ -1116,15 +1063,7 @@ export default function RequestCheckout() {
                 <p className="text-muted-foreground">{request.legalEntity.displayName} — {request.legalEntity.safeguardingStatement}</p>
               </div>
 
-              <div className="flex items-center justify-between text-xs pt-1">
-                <button
-                  type="button"
-                  className="text-red-600 font-medium hover:underline flex items-center gap-1"
-                  onClick={() => setStep("report")}
-                  data-testid="button-report"
-                >
-                  <Flag className="w-3.5 h-3.5" /> Report request
-                </button>
+              <div className="flex items-center justify-end text-xs pt-1">
                 <span className="text-muted-foreground flex items-center gap-1">
                   <LifeBuoy className="w-3.5 h-3.5" /> Support: {request.legalEntity.supportUrl}
                 </span>
@@ -1171,6 +1110,12 @@ export default function RequestCheckout() {
                   <span className="font-medium">{request.reference}</span>
                 </div>
               )}
+              {request.dueDate && (
+                <div className="flex justify-between">
+                  <span className="text-white/60">Due Date</span>
+                  <span className="font-medium">{formatHumanDate(request.dueDate)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-white/60">Valid Until</span>
                 <span className="font-medium">{formatHumanDate(request.expiryDate)}</span>
@@ -1197,8 +1142,23 @@ export default function RequestCheckout() {
               </div>
             )}
 
-            {/* Authenticated user quick proceed vs Switch Account */}
-            {isAuthenticated && authUser && !useOtherAccount ? (
+            {/* Authenticated user quick proceed vs Switch Account — email
+                links only; a copyable "share with anyone" link never
+                auto-selects the payer's identity (identifier-first instead). */}
+            {forgotPassword ? (
+              <div data-testid="payer-auth-forgot">
+                <ForgotPassword
+                  initialEmail={forgotPassword.email}
+                  onCancel={() => setForgotPassword(null)}
+                  onResetComplete={handleForgotResetComplete}
+                  cancelLabel="Back to payment"
+                  successToast={{
+                    title: "Password Successfully Reset",
+                    description: "Please continue your payment journey.",
+                  }}
+                />
+              </div>
+            ) : isAuthenticated && authUser && !useOtherAccount && isEmailLink ? (
               <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
@@ -1226,9 +1186,8 @@ export default function RequestCheckout() {
                       <Label htmlFor="confirmPayerPassword" className="text-xs font-medium">
                         Confirm your password <span className="text-destructive">*</span>
                       </Label>
-                      <Input
+                      <PasswordInputWithToggle
                         id="confirmPayerPassword"
-                        type="password"
                         placeholder="Enter your password"
                         value={confirmPayerPassword}
                         onChange={(e) => setConfirmPayerPassword(e.target.value)}
@@ -1238,6 +1197,16 @@ export default function RequestCheckout() {
                       />
                       {isDemoPayerAccount(authUser.email) && demoPasswordHint}
                       {masterPasswordHint}
+                      <div className="text-right">
+                        <button
+                          type="button"
+                          className="text-xs text-primary font-medium hover:underline"
+                          onClick={() => setForgotPassword({ email: authUser.email })}
+                          data-testid="button-forgot-password-stepup"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
                     </div>
                   )}
                   <Button
@@ -1355,9 +1324,8 @@ export default function RequestCheckout() {
                       <Label htmlFor="loginPassword" className="text-xs font-medium">
                         Password <span className="text-destructive">*</span>
                       </Label>
-                      <Input
+                      <PasswordInputWithToggle
                         id="loginPassword"
-                        type="password"
                         placeholder="Enter your password"
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
@@ -1367,6 +1335,16 @@ export default function RequestCheckout() {
                       />
                       {isDemoPayerAccount(payerEmail) && demoPasswordHint}
                       {masterPasswordHint}
+                      <div className="text-right">
+                        <button
+                          type="button"
+                          className="text-xs text-primary font-medium hover:underline"
+                          onClick={() => setForgotPassword({ email: payerEmail })}
+                          data-testid="button-forgot-password"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
                     </div>
                     <Button
                       type="submit"
@@ -1671,9 +1649,8 @@ export default function RequestCheckout() {
                               <Label htmlFor="regPassword" className="text-xs font-medium">
                                 Password <span className="text-destructive">*</span>
                               </Label>
-                              <Input
+                              <PasswordInputWithToggle
                                 id="regPassword"
-                                type="password"
                                 placeholder="Create password"
                                 value={regPassword}
                                 onChange={(e) => setRegPassword(e.target.value)}
@@ -1749,16 +1726,8 @@ export default function RequestCheckout() {
 
             {errorMessage && <p className="text-xs text-destructive" data-testid="error-auth">{errorMessage}</p>}
 
-            {/* Footer Notice & Report */}
-            <div className="pt-2 border-t border-border flex items-center justify-between text-xs">
-              <button
-                type="button"
-                className="text-red-600 font-medium hover:underline flex items-center gap-1"
-                onClick={() => setStep("report")}
-                data-testid="button-report"
-              >
-                <Flag className="w-3.5 h-3.5" /> Report this request
-              </button>
+            {/* Footer Notice */}
+            <div className="pt-2 border-t border-border flex items-center justify-end text-xs">
               <span className="text-muted-foreground flex items-center gap-1">
                 <LifeBuoy className="w-3.5 h-3.5" /> {request.legalEntity.supportUrl}
               </span>

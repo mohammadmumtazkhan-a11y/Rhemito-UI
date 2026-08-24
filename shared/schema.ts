@@ -147,6 +147,22 @@ export const otpVerifySchema = z.object({
   code: z.string().length(6, "OTP must be 6 digits"),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    email: z.string().email("Please enter a valid email address"),
+    code: z.string().regex(/^\d{6}$/, "PIN must be 6 digits"),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
 // ─── Notification Event Types ────────────────────────────────────────────────
 export const NOTIFICATION_TYPES = [
   "payment_received",
@@ -620,6 +636,9 @@ export const moneyRequests = pgTable("money_requests", {
   reservedAttemptId: text("reserved_attempt_id"),
   // Lifecycle
   status: text("status").notNull().default("active"),
+  // Optional date (YYYY-MM-DD) the requester expects payment by — the link
+  // stays payable until expiresAt regardless (same semantics as invoices).
+  dueDate: text("due_date"),
   expiresAt: timestamp("expires_at").notNull(),
   expiryExtendedOnce: boolean("expiry_extended_once").notNull().default(false),
   viewedAt: timestamp("viewed_at"),
@@ -769,6 +788,10 @@ export const createMoneyRequestSchema = z
     reference: z.string().trim().max(140).optional(),
     // Absent callers keep the historical behavior: requester absorbs the fee.
     absorbFee: z.boolean().optional().default(true),
+    dueDate: isoDate.optional(),
+    // Same link-expiry contract as invoices; absent callers keep the
+    // historical 30-day preset (the UI always sends an explicit choice).
+    expiry: invoiceExpirySchema.optional().default({ type: "preset", days: 30 }),
     idempotencyKey: z.string().min(8),
   });
 
@@ -776,8 +799,4 @@ export type CreateMoneyRequestPayload = z.infer<typeof createMoneyRequestSchema>
 
 export const createPayinIntentSchema = z.object({
   method: z.enum(["pay_by_bank", "card", "bank_transfer", "wallet"]),
-});
-
-export const reportRequestSchema = z.object({
-  reason: z.string().trim().min(3, "Please tell us why you are reporting this request.").max(500),
 });

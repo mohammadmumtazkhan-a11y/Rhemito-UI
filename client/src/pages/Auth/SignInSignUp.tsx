@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import AuthLayout from "./components/AuthLayout";
 import EmailStep from "./components/EmailStep";
@@ -6,8 +7,9 @@ import SignInStep from "./components/SignInStep";
 import SignUpForm, { type BusinessStep1Data } from "./components/SignUpForm";
 import BusinessStep2 from "./components/BusinessStep2";
 import OtpStep from "./components/OtpStep";
+import ForgotPassword from "./components/ForgotPassword";
 
-type AuthStep = "email" | "signIn" | "signUp" | "businessStep2" | "otp";
+type AuthStep = "email" | "signIn" | "signUp" | "businessStep2" | "otp" | "forgotPassword";
 
 const headings: Record<AuthStep, string> = {
   email: "Enter your email address",
@@ -15,6 +17,7 @@ const headings: Record<AuthStep, string> = {
   signUp: "Get started for free",
   businessStep2: "Get started for free",
   otp: "Verify your email",
+  forgotPassword: "Reset your password",
 };
 
 const slideVariants = {
@@ -38,6 +41,7 @@ export default function SignInSignUp() {
   const [direction, setDirection] = useState(1);
   const [businessStep1Data, setBusinessStep1Data] = useState<BusinessStep1Data | null>(null);
   const [devOtp, setDevOtp] = useState<string | undefined>();
+  const [, setLocation] = useLocation();
 
   const goTo = (newStep: AuthStep, dir: number = 1) => {
     setDirection(dir);
@@ -84,6 +88,11 @@ export default function SignInSignUp() {
     goTo("email", -1);
   };
 
+  const handleForgotComplete = () => {
+    // reset-password signs the user in automatically — go straight home.
+    setLocation("/");
+  };
+
   return (
     <AuthLayout heading={headings[step]}>
       <AnimatePresence mode="wait" custom={direction}>
@@ -101,7 +110,7 @@ export default function SignInSignUp() {
           )}
 
           {step === "signIn" && (
-            <SignInStep email={email} onBack={handleBackToEmail} />
+            <SignInStep email={email} onBack={handleBackToEmail} onForgotPassword={() => goTo("forgotPassword")} />
           )}
 
           {step === "signUp" && (
@@ -123,6 +132,19 @@ export default function SignInSignUp() {
 
           {step === "otp" && (
             <OtpStep email={email} onChangeEmail={handleChangeEmailFromOtp} devOtp={devOtp} />
+          )}
+
+          {step === "forgotPassword" && (
+            <ForgotPassword
+              initialEmail={email}
+              onCancel={() => goTo("signIn", -1)}
+              onResetComplete={handleForgotComplete}
+              cancelLabel="Back to sign in"
+              successToast={{
+                title: "Password Successfully Reset",
+                description: "Welcome back! You are now signed in.",
+              }}
+            />
           )}
         </motion.div>
       </AnimatePresence>

@@ -9,9 +9,10 @@ import PasswordInput from "./PasswordInput";
 interface SignInStepProps {
   email: string;
   onBack: () => void;
+  onForgotPassword: () => void;
 }
 
-export default function SignInStep({ email, onBack }: SignInStepProps) {
+export default function SignInStep({ email, onBack, onForgotPassword }: SignInStepProps) {
   const [password, setPassword] = useState("");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -98,12 +99,8 @@ export default function SignInStep({ email, onBack }: SignInStepProps) {
             <button
               type="button"
               className="text-sm text-blue-600 font-medium hover:underline"
-              onClick={() => {
-                toast({
-                  title: "Forgot Password",
-                  description: "Password reset functionality will be available soon.",
-                });
-              }}
+              onClick={onForgotPassword}
+              data-testid="button-forgot-password"
             >
               Forgot password?
             </button>

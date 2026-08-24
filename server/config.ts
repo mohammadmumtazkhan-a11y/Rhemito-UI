@@ -36,9 +36,6 @@ export const serverConfig = {
   /** FX margin included in the rate offered to customers (disclosed). */
   fxMarkup: 0.005,
 
-  /** Default request expiry window. */
-  requestExpiryDays: 30,
-
   /** Maximum number of days an active request expiry can be extended by, once. */
   maxExpiryExtensionDays: 30,
 
@@ -52,11 +49,15 @@ export const serverConfig = {
         publicLookup: { limit: 300, windowMs: 60_000 },
         paymentIntent: { limit: 100, windowMs: 60_000 },
         reportRequest: { limit: 50, windowMs: 60_000 },
+        passwordResetSend: { limit: 20, windowMs: 60_000 },
+        passwordResetVerify: { limit: 60, windowMs: 60_000 },
       }
     : {
         publicLookup: { limit: 30, windowMs: 60_000 },
         paymentIntent: { limit: 10, windowMs: 60_000 },
         reportRequest: { limit: 5, windowMs: 60_000 },
+        passwordResetSend: { limit: 5, windowMs: 60_000 },
+        passwordResetVerify: { limit: 10, windowMs: 60_000 },
       },
 
   /** Email resend cooldown per request. */

@@ -191,8 +191,8 @@ npx.cmd playwright test --ui                      # Debug UI mode
 ### Unit Tests (Vitest)
 
 ```bash
-cd client && npx vitest run    # Single run
-cd client && npx vitest        # Watch mode
+npx vitest run    # Single run (config: vitest.config.ts)
+npx vitest        # Watch mode
 ```
 
 ### Pre-commit — always run before git commit

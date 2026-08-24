@@ -37,7 +37,7 @@ export default defineConfig(async () => {
     },
     server: {
       host: "0.0.0.0",
-      allowedHosts: true,
+      allowedHosts: true as const,
       fs: {
         strict: true,
         allow: [

@@ -11,6 +11,14 @@ import { test, expect } from '@playwright/test';
 
 const unique = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+const isoDaysFromNow = (days) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const humanDate = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+};
+
 /** Registers a user, activates via OTP (starts a session + mini-KYC passed). */
 async function registerAndActivate(request, country = "GB") {
   const email = `rm-${unique()}@example.com`;
@@ -120,15 +128,25 @@ test.describe('Request Money E2E', () => {
     // Step 2: sender + mandatory purpose (classic first/last name fields)
     await page.getByTestId('input-sender-first-name').fill('Ada');
     await page.getByTestId('input-sender-last-name').fill('Lovelace');
-    await page.getByTestId('input-sender-email').fill(`ada-${unique()}@example.com`);
+    const senderEmail = `ada-${unique()}@example.com`;
+    await page.getByTestId('input-sender-email').fill(senderEmail);
     await expect(page.getByTestId('button-step-next')).toBeDisabled();
     await page.getByTestId('select-reason').click();
     await page.getByRole('option', { name: /invoice \/ services/i }).click();
+
+    // Due Date defaults the expiry preset to 7 days after it (30 days without)
+    const dueDate = isoDaysFromNow(3);
+    const expiryIso = isoDaysFromNow(10); // 7-day preset counts from the Due Date
+    await page.getByTestId('input-due-date').fill(dueDate);
+    await expect(page.getByTestId('select-expiry-period')).toContainText('7 days');
+    await expect(page.getByTestId('text-expiry-preview')).toContainText('This payment link will expire on');
     await page.getByTestId('button-step-next').click();
 
     // Step 3: review disclosures then create (classic review & confirm)
     await expect(page.getByText('£250.00 GBP')).toBeVisible();
     await expect(page.getByText('-£7.50 GBP')).toBeVisible();
+    await expect(page.getByTestId('review-due-date')).toHaveText(humanDate(dueDate));
+    await expect(page.getByTestId('review-expiry-date')).toContainText(`(${expiryIso})`);
     await expect(page.getByRole('button', { name: 'Generate Payment Link' })).toBeVisible();
     await page.getByTestId('button-step-next').click();
 
@@ -148,6 +166,13 @@ test.describe('Request Money E2E', () => {
     expect(qr.ok()).toBeTruthy();
     expect((await qr.headers())['content-type']).toBe('image/png');
     void link;
+
+    // The server stored the chosen Due Date and computes the link expiry at the
+    // end of the day (11:59:59 p.m. UK) of the 7-days-after-Due-Date preset
+    const list = await (await pageRequest.get('/api/request-money/requests')).json();
+    const stored = list.data.find((r) => r.senderEmail === senderEmail);
+    expect(stored.dueDate).toBe(dueDate);
+    expect(new Date(stored.expiresAt).toISOString().slice(0, 10)).toBe(expiryIso);
   });
 
   test('Absorb fee checkbox appears after amount entry; unchecking passes the 3% fee to the sender end-to-end', async ({ page, request }) => {
@@ -195,13 +220,14 @@ test.describe('Request Money E2E', () => {
     // registered payer, open the 10-minute session, then check Total Payable
     const link = await page.getByTestId('input-payment-link').inputValue();
     const token = link.split('/pay/')[1];
-    await registerAndActivate(page.context().request, 'GB');
+    const payer = await registerAndActivate(page.context().request, 'GB');
     await page.goto(`/pay/${token}`);
-    await expect(page.getByTestId('button-continue-authenticated')).toBeVisible({ timeout: 10000 });
-    // Step-up: the first click reveals the password field, the second verifies it
-    await page.getByTestId('button-continue-authenticated').click();
-    await page.getByTestId('input-confirm-payer-password').fill('Passw0rd!x');
-    await page.getByTestId('button-continue-authenticated').click();
+    // Copyable link: no pre-selected payer — identify with the payer's own email first
+    await page.getByTestId('input-payer-email').fill(payer.email);
+    await page.getByTestId('button-check-email').click();
+    await expect(page.getByTestId('input-payer-password')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('input-payer-password').fill('Passw0rd!x');
+    await page.getByTestId('button-signin-pay').click();
     await expect(page.getByTestId('checkout-amount')).toContainText('£257.50');
     await expect(page.getByText(/3% Rhemito fee of 7\.50 GBP/)).toBeVisible();
   });
@@ -212,17 +238,19 @@ test.describe('Request Money E2E', () => {
     const token = created.checkoutUrl.split('/pay/')[1];
 
     // The payer identifies with a registered account (session shared with the page)
-    await registerAndActivate(page.context().request, 'GB');
+    const payer = await registerAndActivate(page.context().request, 'GB');
 
     // Mobile viewport — the link opens the checkout directly, no QR prompts
     await page.setViewportSize({ width: 375, height: 720 });
     await page.goto(`/pay/${token}`);
 
-    // Authenticated payer card → step-up password → open the 10-minute server-controlled session
-    await expect(page.getByTestId('button-continue-authenticated')).toBeVisible({ timeout: 10000 });
-    await page.getByTestId('button-continue-authenticated').click();
-    await page.getByTestId('input-confirm-payer-password').fill('Passw0rd!x');
-    await page.getByTestId('button-continue-authenticated').click();
+    // Copyable link: no pre-selected payer — identify with the payer's own
+    // email, then sign in to open the 10-minute server-controlled session
+    await page.getByTestId('input-payer-email').fill(payer.email);
+    await page.getByTestId('button-check-email').click();
+    await expect(page.getByTestId('input-payer-password')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('input-payer-password').fill('Passw0rd!x');
+    await page.getByTestId('button-signin-pay').click();
 
     await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('checkout-amount')).toBeVisible();
@@ -358,6 +386,155 @@ test.describe('Request Money E2E', () => {
     await expect(page.getByText('Other (Consulting services for project)')).toBeVisible();
   });
 
+  test('Due Date and Payment Link Expiry: past dates rejected, custom expiry never before Due Date', async ({ page, request }) => {
+    const user = await registerAndActivate(request);
+    const pageRequest = page.context().request;
+    await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
+    await addVerifiedAccount(pageRequest, 'GB', 'GBP');
+
+    await page.goto('/request-payment');
+
+    // Step 1: amount
+    await page.getByTestId('input-request-amount').fill('150');
+    await page.getByTestId('button-step-next').click();
+
+    // Step 2: complete the mandatory sender fields first
+    await page.getByTestId('input-sender-first-name').fill('Dana');
+    await page.getByTestId('input-sender-last-name').fill('Due');
+    await page.getByTestId('input-sender-email').fill(`dana-${unique()}@example.com`);
+    await page.getByTestId('select-reason').click();
+    await page.getByRole('option', { name: /invoice \/ services/i }).click();
+    await expect(page.getByTestId('button-step-next')).toBeEnabled();
+
+    // Past Due Date is rejected inline and blocks Continue
+    await page.getByTestId('input-due-date').fill(isoDaysFromNow(-1));
+    await expect(page.getByTestId('error-due-date')).toHaveText('The Due Date cannot be in the past.');
+    await expect(page.getByTestId('button-step-next')).toBeDisabled();
+
+    // Past custom expiry (no due date conflict) is still rejected
+    await page.getByTestId('input-due-date').fill('');
+    await page.getByTestId('select-expiry-period').click();
+    await page.getByRole('option', { name: 'Custom date' }).click();
+    await page.getByTestId('input-custom-expiry-date').fill(isoDaysFromNow(-1));
+    await expect(page.getByTestId('error-expiry')).toHaveText('Select a future Payment Link Expiry Date.');
+    await expect(page.getByTestId('button-step-next')).toBeDisabled();
+
+    // Setting a Due Date past the custom expiry bumps the expiry up to the Due
+    // Date automatically — the two fields can never conflict
+    const dueDate = isoDaysFromNow(10);
+    await page.getByTestId('input-due-date').fill(dueDate);
+    await expect(page.getByTestId('input-custom-expiry-date')).toHaveValue(dueDate);
+    await expect(page.getByTestId('error-expiry')).toHaveCount(0);
+    await expect(page.getByTestId('button-step-next')).toBeEnabled();
+
+    // Entering a custom expiry before the Due Date is normalised up to it
+    await page.getByTestId('input-custom-expiry-date').fill(isoDaysFromNow(5));
+    await expect(page.getByTestId('input-custom-expiry-date')).toHaveValue(dueDate);
+    await expect(page.getByTestId('button-step-next')).toBeEnabled();
+
+    // Review shows both dates
+    await page.getByTestId('button-step-next').click();
+    await expect(page.getByTestId('review-due-date')).toHaveText(humanDate(dueDate));
+    await expect(page.getByTestId('review-expiry-date')).toContainText(`(${dueDate})`);
+  });
+
+  test('Non-GB requester: common currencies incl. African list, home-currency corridor works end-to-end', async ({ page, request }) => {
+    const user = await registerAndActivate(request, 'KE');
+    const pageRequest = page.context().request;
+    await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
+
+    // Server generates same-currency demo corridors for every common currency
+    // the requester's country has no reviewed corridor for
+    const corridors = await (await pageRequest.get('/api/request-money/corridors')).json();
+    expect(corridors.data.some((c) => c.id === 'DEMO-KE-KES' && c.enabled)).toBeTruthy();
+    expect(corridors.data.some((c) => c.id === 'DEMO-KE-NGN' && c.enabled)).toBeTruthy();
+
+    await page.goto('/request-payment');
+
+    // The add-and-verify dialog auto-opens (no verified account yet) — add a
+    // KES account (country derives to KE)
+    await expect(page.getByTestId('input-account-bank')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('select-account-currency').click();
+    await page.getByRole('option', { name: /KES \(KSh\) - Kenya/i }).click();
+    await page.getByTestId('input-account-bank').fill('Equity Bank');
+    await page.getByTestId('input-account-number').fill('12345678');
+    await page.getByTestId('button-save-account').click();
+    await expect(page.getByTestId('payout-account-required')).toBeHidden({ timeout: 10000 });
+
+    // The currency dropdown lists the common set for every requester — majors
+    // plus African currencies
+    await page.getByTestId('select-sender-currency').click();
+    for (const code of ['GBP', 'USD', 'EUR', 'NGN', 'KES', 'GHS', 'ZAR', 'EGP', 'TZS', 'UGX', 'XOF', 'RWF']) {
+      await expect(page.getByRole('option', { name: new RegExp(`^${code} \\(`) })).toBeVisible();
+    }
+    await page.keyboard.press('Escape');
+
+    // With a KES payout account the default aligns to KES (the GBP default has
+    // no corridor for this account) and the corridor warning never appears
+    await expect(page.getByTestId('select-sender-currency')).toContainText('KES');
+    await page.getByTestId('input-request-amount').fill('5000');
+    await expect(page.getByTestId('corridor-unavailable')).toHaveCount(0);
+    await expect(page.getByTestId('button-step-next')).toBeEnabled();
+    await page.getByTestId('button-step-next').click();
+
+    // Complete the journey: sender → review → create
+    await page.getByTestId('input-sender-first-name').fill('Amina');
+    await page.getByTestId('input-sender-last-name').fill('Osei');
+    await page.getByTestId('input-sender-email').fill(`amina-${unique()}@example.com`);
+    await page.getByTestId('select-reason').click();
+    await page.getByRole('option', { name: /invoice \/ services/i }).click();
+    await page.getByTestId('button-step-next').click();
+    await expect(page.getByText('KSh5000.00 KES')).toBeVisible();
+    await page.getByTestId('button-step-next').click();
+    await expect(page.getByText('Payment Request Sent!')).toBeVisible({ timeout: 15000 });
+  });
+
+  test('Password fields expose a show/hide visibility toggle (eye icon)', async ({ page, request }) => {
+    const user = await registerAndActivate(request);
+    const created = await createRequestViaApi(request, user);
+    const token = created.checkoutUrl.split('/pay/')[1];
+    const payer = await registerAndActivate(page.context().request, 'GB');
+
+    await page.goto(`/pay/${token}`);
+    // Copyable link: identify with the payer's own email, then the sign-in password
+    await page.getByTestId('input-payer-email').fill(payer.email);
+    await page.getByTestId('button-check-email').click();
+
+    // Sign-in password: masked by default, revealed by the eye, re-masked on click
+    const passwordInput = page.getByTestId('input-payer-password');
+    await expect(passwordInput).toBeVisible({ timeout: 10000 });
+    await passwordInput.fill('Passw0rd!x');
+    await expect(passwordInput).toHaveAttribute('type', 'password');
+    await page.getByRole('button', { name: 'Show password' }).click();
+    await expect(passwordInput).toHaveAttribute('type', 'text');
+    await expect(passwordInput).toHaveValue('Passw0rd!x');
+    await page.getByRole('button', { name: 'Hide password' }).click();
+    await expect(passwordInput).toHaveAttribute('type', 'password');
+  });
+
+  test('Email link checkout keeps the signed-in quick-proceed card (contrast to copyable links)', async ({ page, request }) => {
+    const user = await registerAndActivate(request);
+    const created = await createRequestViaApi(request, user);
+    const emailToken = (created.emailCheckoutUrl ?? created.request.emailCheckoutUrl).split('/pay/e/')[1];
+
+    // A signed-in payer opens the personally addressed email link.
+    const payer = await registerAndActivate(page.context().request, 'GB');
+    await page.goto(`/pay/e/${emailToken}`);
+
+    // The quick-proceed step-up card is still offered on email links — only
+    // copyable "share with anyone" links drop the pre-selected payer identity.
+    const quickProceed = page.getByTestId('button-continue-authenticated');
+    await expect(quickProceed).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Paying as').first()).toBeVisible();
+    await expect(page.getByText(payer.email).first()).toBeVisible();
+
+    // Step-up confirms the password and opens the payment session.
+    await quickProceed.click();
+    await page.getByTestId('input-confirm-payer-password').fill('Passw0rd!x');
+    await quickProceed.click();
+    await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
+  });
+
   test('Cancellation flow on /payments takes confirmation before cancelling and displays confirmation post-cancellation', async ({ page }) => {
     await page.goto('/payments');
 
@@ -410,6 +587,55 @@ test.describe('Request Money E2E', () => {
     await dialog.getByTestId('button-dialog-confirm-cancel').click();
     await expect(dialog).toBeHidden();
     await expect(page.getByTestId(`request-status-cancelled`)).toBeVisible({ timeout: 10000 });
+  });
+
+  test('Copy link action copies the checkout URL to the clipboard (replaces Rotate Link)', async ({ page, request }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    const user = await registerAndActivate(request);
+    const pageRequest = page.context().request;
+    await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
+    const created = await createRequestViaApi(pageRequest, user);
+
+    await page.goto('/payment-requests');
+    const copyBtn = page.getByTestId(`button-copy-link-${created.request.requestNumber}`);
+    await expect(copyBtn).toBeVisible();
+
+    // The old Rotate Link action is gone.
+    await expect(page.getByTestId(`button-rotate-${created.request.requestNumber}`)).toHaveCount(0);
+
+    await copyBtn.click();
+    await expect(page.getByText('Link Copied!', { exact: true })).toBeVisible();
+
+    // The clipboard now holds the request's shareable checkout URL.
+    const clipped = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipped).toContain(created.request.checkoutUrl);
+
+    // Once the payment is received, Copy Link must disappear from the table.
+    const token = created.checkoutUrl.split('/pay/')[1];
+
+    // Switch the browser session to a fresh payer account and pay the request.
+    await pageRequest.post('/api/auth/logout', { data: {} });
+    const payer = await registerAndActivate(pageRequest, 'GB');
+    await page.goto(`/pay/${token}`);
+    // Copyable link: no pre-selected payer — identify with the payer's own email first
+    await page.getByTestId('input-payer-email').fill(payer.email);
+    await page.getByTestId('button-check-email').click();
+    await expect(page.getByTestId('input-payer-password')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('input-payer-password').fill('Passw0rd!x');
+    await page.getByTestId('button-signin-pay').click();
+    await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-method-pay_by_bank').click();
+    await expect(page.getByTestId('dev-provider-notice')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-authorize').click();
+    await expect(page.getByText('Payment Successful!')).toBeVisible({ timeout: 30000 });
+
+    // Back as the requester: the settled row no longer offers Copy Link.
+    await pageRequest.post('/api/auth/logout', { data: {} });
+    await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
+    await page.goto('/payment-requests');
+    await expect(page.getByTestId(`request-row-${created.request.requestNumber}`)).toBeVisible();
+    await expect(page.getByTestId('request-status-paid_out')).toBeVisible({ timeout: 15000 });
+    await expect(copyBtn).toHaveCount(0);
   });
 
 });

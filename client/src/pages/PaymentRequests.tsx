@@ -1,21 +1,21 @@
 /**
  * Payment Requests dashboard — Request Money.
  * Server-backed statuses across the full lifecycle; requester actions
- * (cancel, rotate link, resend email) honour server-side state rules.
+ * (cancel, copy link, resend email) honour server-side state rules.
  */
 
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Inbox, ArrowLeftRight, RefreshCw, Mail, XCircle, AlertCircle } from "lucide-react";
+import { Inbox, ArrowLeftRight, Copy, Mail, XCircle, AlertCircle } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { cancelRequest, getRequests, resendEmail, rotateToken, type MoneyRequestView } from "@/lib/requests";
+import { cancelRequest, getRequests, resendEmail, type MoneyRequestView } from "@/lib/requests";
 import { formatShortDate } from "@shared/invoice-logic";
 import { CURRENCY_SYMBOLS } from "@shared/currencies";
 import {
@@ -142,6 +142,9 @@ export default function PaymentRequests() {
                       const paySymbol = CURRENCY_SYMBOLS[req.payInCurrency] ?? "";
                       const payoutSymbol = CURRENCY_SYMBOLS[req.payoutCurrency] ?? "";
                       const awaiting = req.status === "active" || req.status === "viewed";
+                      // Shareable until the payment is received (funded/paying out/paid out)
+                      // or the request is cancelled/expired — a dead link must not be shared.
+                      const linkShareable = ["active", "viewed", "authorisation_in_progress", "payment_processing", "payment_pending", "failed"].includes(req.status);
                       return (
                         <tr key={req.id} className="hover:bg-muted/30" data-testid={`request-row-${req.requestNumber}`}>
                           <td className="px-4 py-3 font-medium">{req.requestNumber}</td>
@@ -175,27 +178,40 @@ export default function PaymentRequests() {
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
                               {awaiting && (
-                                <>
-                                  <Button variant="ghost" size="sm" title="Resend email" onClick={() => run("Resend", () => resendEmail(req.id), "Email resent.")} data-testid={`button-resend-${req.requestNumber}`}>
-                                    <Mail className="w-4 h-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="sm" title="Rotate link (old link stops working)" onClick={() => run("Rotate", () => rotateToken(req.id), "New link generated — the old link no longer works.")} data-testid={`button-rotate-${req.requestNumber}`}>
-                                    <RefreshCw className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-red-600 hover:bg-red-50"
-                                    title="Cancel request"
-                                    onClick={() => {
-                                      setRequestToCancel(req);
-                                      setCancelModalOpen(true);
-                                    }}
-                                    data-testid={`button-cancel-${req.requestNumber}`}
-                                  >
-                                    <XCircle className="w-4 h-4" />
-                                  </Button>
-                                </>
+                                <Button variant="ghost" size="sm" title="Resend email" onClick={() => run("Resend", () => resendEmail(req.id), "Email resent.")} data-testid={`button-resend-${req.requestNumber}`}>
+                                  <Mail className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {linkShareable && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Copy payment link"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(req.checkoutUrl).then(
+                                      () => toast({ title: "Link Copied!", description: "Payment link copied to clipboard — share it whenever you want." }),
+                                      () => toast({ title: "Copy Failed", description: "Could not copy the link. Please try again.", variant: "destructive" })
+                                    );
+                                  }}
+                                  data-testid={`button-copy-link-${req.requestNumber}`}
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {awaiting && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600 hover:bg-red-50"
+                                  title="Cancel request"
+                                  onClick={() => {
+                                    setRequestToCancel(req);
+                                    setCancelModalOpen(true);
+                                  }}
+                                  data-testid={`button-cancel-${req.requestNumber}`}
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </Button>
                               )}
                             </div>
                           </td>

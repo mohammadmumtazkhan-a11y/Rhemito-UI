@@ -141,7 +141,7 @@ export default function NotificationArchive(): React.JSX.Element {
     staleTime: 30_000,
   });
 
-  const allNotifications = data?.notifications ?? [];
+  const allNotifications = data?.data ?? [];
 
   const filtered = useMemo(() => {
     return allNotifications.filter((n) => {

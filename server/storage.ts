@@ -54,6 +54,7 @@ export interface IStorage {
   getAuthUserById(id: string): Promise<AuthUser | undefined>;
   createAuthUser(user: InsertAuthUser): Promise<AuthUser>;
   activateUser(email: string): Promise<void>;
+  updateAuthUserPassword(email: string, hashedPassword: string): Promise<AuthUser | undefined>;
 
   // OTP
   createOtp(email: string, code: string, expiresAt: Date): Promise<OtpCode>;
@@ -371,6 +372,14 @@ export class MemStorage implements IStorage {
       this.authUsersMap.set(user.id, { ...user, status: "active", kycStatus: "passed" });
       this.persistAuthSnapshot();
     }
+  }
+
+  async updateAuthUserPassword(email: string, hashedPassword: string): Promise<AuthUser | undefined> {
+    const user = await this.getAuthUserByEmail(email);
+    if (!user) return undefined;
+    this.authUsersMap.set(user.id, { ...user, password: hashedPassword });
+    this.persistAuthSnapshot();
+    return this.authUsersMap.get(user.id);
   }
 
   async getMostRecentAuthUserIdForDev(): Promise<string | null> {

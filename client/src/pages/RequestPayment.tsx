@@ -19,7 +19,8 @@ import {
   Mail,
   QrCode,
   Share2,
-  ShieldCheck
+  ShieldCheck,
+  CalendarClock
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -48,6 +49,14 @@ import {
 } from "@/lib/requests";
 import { DIALING_CODES } from "@/data/dialing-codes";
 import { fromMinorUnits } from "@shared/money";
+import {
+  computeExpiry,
+  dateInTz,
+  formatHumanDate,
+  EXPIRY_TIMEZONE,
+  EXPIRY_TIMEZONE_LABEL,
+} from "@shared/invoice-logic";
+import type { InvoiceExpiry } from "@shared/schema";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 /**
@@ -60,7 +69,36 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: "$",
   EUR: "€",
   NGN: "₦",
+  KES: "KSh",
+  GHS: "GH₵",
+  ZAR: "R",
+  EGP: "E£",
+  TZS: "TSh",
+  UGX: "USh",
+  XOF: "CFA",
+  RWF: "FRw",
 };
+
+/**
+ * Common currencies offered to EVERY requester — majors plus the African
+ * currencies Rhemito targets. The server generates demo corridors for any of
+ * these lacking a reviewed corridor for the requester's country; currencies
+ * from the requester's enabled corridors are unioned in as extra options.
+ */
+const COMMON_CURRENCIES = [
+  "GBP", "USD", "EUR",
+  "NGN", "KES", "GHS", "ZAR", "EGP", "TZS", "UGX", "XOF", "RWF",
+];
+
+const EXPIRY_OPTIONS = [
+  { label: "7 days", value: "7" },
+  { label: "14 days", value: "14" },
+  { label: "30 days", value: "30" },
+  { label: "60 days", value: "60" },
+  { label: "Custom date", value: "custom" },
+];
+
+type ExpiryPeriod = "7" | "14" | "30" | "60" | "custom";
 
 interface FormData {
   requestAmount: string;
@@ -79,6 +117,9 @@ interface FormData {
   senderDob: string;
   reason: string;
   otherReason: string;
+  dueDate: string;
+  expiryPeriod: ExpiryPeriod;
+  customExpiryDate: string;
 }
 
 // Country dialing codes come from @/data/dialing-codes (full ISO list).
@@ -174,11 +215,23 @@ export default function RequestPayment() {
     senderDob: "",
     reason: "",
     otherReason: "",
+    dueDate: "",
+    expiryPeriod: "30",
+    customExpiryDate: "",
   });
 
-  // Sender currency options come from the requester's ENABLED corridors — the
-  // default must follow them, otherwise the selector renders blank (e.g. an
-  // NG account whose only enabled pay-in currency is NGN).
+  // Default expiry selection: 7 days after Due Date, or 30 days after the
+  // request date — until the requester makes an explicit choice.
+  const [expiryTouched, setExpiryTouched] = useState(false);
+  useEffect(() => {
+    if (!expiryTouched) {
+      setFormData(prev => ({ ...prev, expiryPeriod: prev.dueDate ? "7" : "30" }));
+    }
+  }, [formData.dueDate, expiryTouched]);
+
+  // Sender currency options: the common list (majors + African currencies) for
+  // every requester, unioned with any extra currencies the requester's enabled
+  // corridors support.
   const enabledPayInCurrencies = useMemo(() => {
     const corridors = corridorsQuery.data ?? [];
     const seen: string[] = [];
@@ -188,13 +241,13 @@ export default function RequestPayment() {
     return seen;
   }, [corridorsQuery.data]);
 
-  useEffect(() => {
-    if (enabledPayInCurrencies.length === 0) return;
-    if (!enabledPayInCurrencies.includes(formData.senderCurrency)) {
-      setFormData(prev => ({ ...prev, senderCurrency: enabledPayInCurrencies[0] }));
+  const currencyOptions = useMemo(() => {
+    const options = [...COMMON_CURRENCIES];
+    for (const currency of enabledPayInCurrencies) {
+      if (!options.includes(currency)) options.push(currency);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabledPayInCurrencies.join(",")]);
+    return options;
+  }, [enabledPayInCurrencies]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -255,6 +308,22 @@ export default function RequestPayment() {
       (c) => c.enabled && c.payInCurrency === senderCurrency && c.payoutCurrency === payoutCurrency,
     );
   }, [corridorsQuery.data, senderCurrency, payoutCurrency]);
+
+  // One-shot alignment once corridors AND a payout account are known: when the
+  // default currency has no enabled corridor for the selected payout account,
+  // prefer the account's currency (e.g. a Kenyan requester with a KES account
+  // lands on KES instead of dead-ending on the GBP default). Afterwards the
+  // user's explicit choice always wins — the corridor notice informs instead.
+  const currencyAlignedRef = useRef(false);
+  useEffect(() => {
+    if (currencyAlignedRef.current || enabledPayInCurrencies.length === 0 || !selectedPayoutAccount) return;
+    currencyAlignedRef.current = true;
+    if (corridorForSelection) return;
+    const accountCurrency = selectedPayoutAccount.currency;
+    const preferred = currencyOptions.includes(accountCurrency) ? accountCurrency : currencyOptions[0];
+    setFormData(prev => ({ ...prev, senderCurrency: preferred }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabledPayInCurrencies.join(","), selectedPayoutAccount, corridorForSelection]);
   useEffect(() => {
     let cancelled = false;
     if (!corridorForSelection || !formData.requestAmount || parseFloat(formData.requestAmount) <= 0) {
@@ -293,6 +362,71 @@ export default function RequestPayment() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  /**
+   * The Due Date and the custom expiry date can never conflict: moving the Due
+   * Date past an existing custom expiry bumps that expiry up to the Due Date,
+   * and a custom expiry entered before the Due Date is normalised up to it.
+   * (The backend still validates the rule authoritatively.)
+   */
+  const handleDueDateChange = (value: string) => {
+    setFormData((prev) => {
+      const next = { ...prev, dueDate: value };
+      if (
+        value &&
+        prev.expiryPeriod === "custom" &&
+        prev.customExpiryDate &&
+        prev.customExpiryDate < value
+      ) {
+        next.customExpiryDate = value;
+      }
+      return next;
+    });
+  };
+
+  const handleCustomExpiryChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      customExpiryDate: value && prev.dueDate && value < prev.dueDate ? prev.dueDate : value,
+    }));
+  };
+
+  const expirySelection: InvoiceExpiry = useMemo(() => {
+    if (formData.expiryPeriod === "custom") {
+      return { type: "custom", date: formData.customExpiryDate };
+    }
+    return { type: "preset", days: Number(formData.expiryPeriod) as 7 | 14 | 30 | 60 };
+  }, [formData.expiryPeriod, formData.customExpiryDate]);
+
+  const computedExpiry = useMemo(() => {
+    if (formData.expiryPeriod === "custom" && !formData.customExpiryDate) return null;
+    return computeExpiry(formData.dueDate || null, expirySelection, new Date());
+  }, [formData.dueDate, formData.expiryPeriod, formData.customExpiryDate, expirySelection]);
+
+  // Client-side mirror of the backend validation (backend is authoritative).
+  // Computed live so problems surface as the requester types, not only on submit.
+  const dateErrors = useMemo(() => {
+    const errors: { dueDate?: string; expiry?: string } = {};
+    const today = dateInTz(new Date(), EXPIRY_TIMEZONE);
+
+    if (formData.dueDate && formData.dueDate < today) {
+      errors.dueDate = "The Due Date cannot be in the past.";
+    }
+    if (!computedExpiry) {
+      errors.expiry = "Select a future Payment Link Expiry Date.";
+      return errors;
+    }
+    if (computedExpiry.expiryDate <= today) {
+      errors.expiry = "Select a future Payment Link Expiry Date.";
+    } else if (formData.dueDate && computedExpiry.expiryDate < formData.dueDate) {
+      // Defensive: the inputs above normalise the dates so this cannot normally
+      // occur — kept as a safety net before the backend's authoritative check.
+      errors.expiry = "The Payment Link Expiry Date cannot be earlier than the Due Date.";
+    }
+    return errors;
+  }, [formData.dueDate, formData.expiryPeriod, formData.customExpiryDate, computedExpiry]);
+
+  const today = useMemo(() => dateInTz(new Date(), EXPIRY_TIMEZONE), []);
+
   const handleSubmitRequest = async () => {
     if (isSubmittingRequest || !corridorForSelection || !selectedPayoutAccount) return;
     setIsSubmittingRequest(true);
@@ -316,6 +450,8 @@ export default function RequestPayment() {
           formData.reason === "other" && formData.otherReason.trim() ? `Reason: ${formData.otherReason.trim()}` : null,
         ].filter(Boolean).join(" | ") || undefined,
         absorbFee: formData.absorbFee,
+        dueDate: formData.dueDate || undefined,
+        expiry: expirySelection,
         idempotencyKey: idempotencyKeyRef.current,
       });
       setPaymentLink(result.checkoutUrl);
@@ -440,7 +576,8 @@ export default function RequestPayment() {
           !!formData.senderEmail &&
           !!formData.reason &&
           (formData.reason !== "other" || !!formData.otherReason.trim()) &&
-          (formData.senderType === "individual" ? !!formData.senderFirstName : !!formData.senderBusinessName)
+          (formData.senderType === "individual" ? !!formData.senderFirstName : !!formData.senderBusinessName) &&
+          Object.keys(dateErrors).length === 0
         );
       case 3:
         return !isSubmittingRequest;
@@ -640,12 +777,17 @@ export default function RequestPayment() {
                       senderDob: "",
                       reason: "",
                       otherReason: "",
+                      dueDate: "",
+                      expiryPeriod: "30",
+                      customExpiryDate: "",
                     });
                     setSelectedPayoutAccount(null);
                     setCurrentStep(1);
                     setIsSuccess(false);
                     setPaymentLink("");
                     setCreatedRequestId("");
+                    setExpiryTouched(false);
+                    currencyAlignedRef.current = false;
                     idempotencyKeyRef.current = crypto.randomUUID();
                   }}
                   data-testid="button-new-request"
@@ -758,22 +900,22 @@ export default function RequestPayment() {
                             Amount to Request from Sender *
                           </Label>
                           <div className="flex items-center gap-3">
-                            <div className="relative flex-1">
-                              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">
-                                {senderSymbol}
-                              </span>
-                              <Input
-                                id="requestAmount"
-                                type="number"
-                                min="1"
-                                step="any"
-                                placeholder="0.00"
-                                value={formData.requestAmount}
-                                onChange={(e) => handleInputChange("requestAmount", e.target.value)}
-                                className="pl-8 text-xl md:text-2xl font-bold h-12 md:h-14 bg-white shadow-sm"
-                                data-testid="input-request-amount"
-                              />
-                            </div>
+                          <div className="relative flex-1">
+                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">
+                              {senderSymbol}
+                            </span>
+                            <Input
+                              id="requestAmount"
+                              type="number"
+                              min="1"
+                              step="any"
+                              placeholder="0.00"
+                              value={formData.requestAmount}
+                              onChange={(e) => handleInputChange("requestAmount", e.target.value)}
+                              className={`${senderSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl md:text-2xl font-bold h-12 md:h-14 bg-white shadow-sm`}
+                              data-testid="input-request-amount"
+                            />
+                          </div>
                             <Select
                               value={formData.senderCurrency}
                               onValueChange={(value) => handleInputChange("senderCurrency", value)}
@@ -782,7 +924,7 @@ export default function RequestPayment() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {enabledPayInCurrencies.map(currency => (
+                                {currencyOptions.map(currency => (
                                   <SelectItem key={currency} value={currency}>
                                     {currency} ({CURRENCY_SYMBOLS[currency] ?? ""})
                                   </SelectItem>
@@ -1171,6 +1313,81 @@ export default function RequestPayment() {
                         />
                       </div>
                     )}
+
+                    <div className="h-px bg-border" />
+
+                    {/* Due Date (Optional) */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="dueDate" className="text-xs font-medium">Due Date (Optional)</Label>
+                      <Input
+                        id="dueDate"
+                        type="date"
+                        min={today}
+                        value={formData.dueDate}
+                        onChange={(e) => handleDueDateChange(e.target.value)}
+                        data-testid="input-due-date"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        The date by which you expect the sender to make payment. Payment may still be made after this
+                        date until the payment link expires.
+                      </p>
+                      {dateErrors.dueDate && (
+                        <p className="text-xs text-destructive" data-testid="error-due-date">{dateErrors.dueDate}</p>
+                      )}
+                    </div>
+
+                    {/* Payment Link Expiry (required) */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="expiryPeriod" className="text-xs font-medium">
+                        Payment Link Expiry <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={formData.expiryPeriod}
+                        onValueChange={(value) => {
+                          setExpiryTouched(true);
+                          handleInputChange("expiryPeriod", value as ExpiryPeriod);
+                        }}
+                      >
+                        <SelectTrigger id="expiryPeriod" data-testid="select-expiry-period">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {EXPIRY_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        After this date, the sender will no longer be able to start a payment using this link.
+                      </p>
+
+                      {formData.expiryPeriod === "custom" && (
+                        <div className="space-y-1.5 pt-1">
+                          <Label htmlFor="customExpiryDate" className="text-xs font-medium">Expiry Date</Label>
+                          <Input
+                            id="customExpiryDate"
+                            type="date"
+                            min={formData.dueDate || today}
+                            value={formData.customExpiryDate}
+                            onChange={(e) => handleCustomExpiryChange(e.target.value)}
+                            data-testid="input-custom-expiry-date"
+                          />
+                        </div>
+                      )}
+
+                      {computedExpiry && (
+                        <p className="text-xs font-medium text-primary flex items-center gap-1.5 pt-1" data-testid="text-expiry-preview">
+                          <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                          This payment link will expire on {formatHumanDate(computedExpiry.expiryDate)} at 11:59 p.m.{" "}
+                          {EXPIRY_TIMEZONE_LABEL}.
+                        </p>
+                      )}
+                      {dateErrors.expiry && (
+                        <p className="text-xs text-destructive" data-testid="error-expiry">{dateErrors.expiry}</p>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -1265,6 +1482,22 @@ export default function RequestPayment() {
                             </span>
                           </div>
                         )}
+
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-muted-foreground">Due Date:</span>
+                          <span className="font-medium" data-testid="review-due-date">
+                            {formData.dueDate ? formatHumanDate(formData.dueDate) : "No due date"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-muted-foreground">Payment Link Expiry Date:</span>
+                          <span className="font-medium" data-testid="review-expiry-date">
+                            {computedExpiry
+                              ? `${formatHumanDate(computedExpiry.expiryDate)} at 11:59 p.m. ${EXPIRY_TIMEZONE_LABEL} (${computedExpiry.expiryDate})`
+                              : "—"}
+                          </span>
+                        </div>
 
                         <div className="flex justify-between py-1">
                           <span className="text-muted-foreground">Payment Method:</span>
