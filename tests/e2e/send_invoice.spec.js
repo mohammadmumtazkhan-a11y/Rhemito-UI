@@ -34,7 +34,7 @@ async function setupSender(page) {
   expect(register.ok()).toBeTruthy();
   const verify = await request.post('/api/auth/verify-otp', { data: { email, code: '123456' } });
   expect(verify.ok()).toBeTruthy();
-  return request;
+  return { request, email };
 }
 
 /** Adds and (dev-stub) verifies a Barclays GBP payout account owned by the session user. */
@@ -94,7 +94,7 @@ async function createInvoiceViaApi(request, overrides = {}) {
 test.describe('Send Invoice MVP1 E2E', () => {
 
   test('Account creation appears in Send Invoice when no verified payout account exists', async ({ page }) => {
-    const request = await setupSender(page);
+    const { request, email: senderEmail } = await setupSender(page);
 
     await page.goto('/send-invoice');
     // CSS locator: the auto-opening dialog sets aria-hidden on the app root,
@@ -128,7 +128,7 @@ test.describe('Send Invoice MVP1 E2E', () => {
   });
 
   test('Complete journey: form → review → back to edit → review → confirm and send', async ({ page }) => {
-    const request = await setupSender(page);
+    const { request, email: senderEmail } = await setupSender(page);
     await addVerifiedAccount(request);
     const suffix = uniqueSuffix();
     const clientEmail = `journey-${suffix}@example.com`;
@@ -229,7 +229,7 @@ test.describe('Send Invoice MVP1 E2E', () => {
   });
 
   test('Date validation: past dates are rejected and the expiry never precedes the Due Date', async ({ page }) => {
-    const request = await setupSender(page);
+    const { request, email: senderEmail } = await setupSender(page);
     await addVerifiedAccount(request);
 
     await page.goto('/send-invoice');
@@ -281,9 +281,28 @@ test.describe('Send Invoice MVP1 E2E', () => {
     await expect(page.getByTestId('button-review-invoice')).toBeEnabled();
   });
 
-  test('Client pays an active invoice through the public payment page', async ({ page }) => {
-    const request = await setupSender(page);
+  test('Client pays an active invoice through the public payment page', async ({ page, request: api }) => {
+    const { request, email: senderEmail } = await setupSender(page);
     const { invoice, token } = await createInvoiceViaApi(request, { invoiceAmount: '120.00' });
+
+    // A registered Rhemito account for the paying client (isolated API context)
+    const payerEmail = `inv-payer-${uniqueSuffix()}@example.com`;
+    await api.post('/api/auth/register', {
+      data: {
+        email: payerEmail,
+        accountType: 'individual',
+        country: 'GB',
+        firstName: 'Ella',
+        lastName: 'Client',
+        dateOfBirth: '1990-02-02',
+        gender: 'female',
+        mobileCode: '+44',
+        mobileNumber: '7700900123',
+        password: 'Passw0rd!x',
+        confirmPassword: 'Passw0rd!x',
+      },
+    });
+    await api.post('/api/auth/verify-otp', { data: { email: payerEmail, code: '123456' } });
 
     await page.goto(`/invoice/${token}`);
 
@@ -293,12 +312,26 @@ test.describe('Send Invoice MVP1 E2E', () => {
     await expect(page.getByTestId('public-client-pays')).toContainText('£123.60'); // 3% fee
     await expect(page.getByTestId('public-invoice-status')).toContainText(/sent/i);
 
-    // The client can view the invoice document behind the same token
-    await expect(page.getByTestId('button-view-invoice-document')).toBeVisible();
+    // The invoice document is NOT exposed before identification
+    await expect(page.getByTestId('button-view-invoice-document')).toHaveCount(0);
+
+    // Prototype tip surfaces the registered demo login email
+    await expect(page.getByTestId('demo-login-hint')).toContainText('payer@rhemito.com');
+
+    // Identify as the payer first (registered email → password sign-in)
+    await page.getByTestId('input-payer-email').fill(payerEmail);
+    await page.getByTestId('button-check-email').click();
+    await expect(page.getByTestId('input-payer-password')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('input-payer-password').fill('Passw0rd!x');
+    await page.getByTestId('button-signin-pay').click();
+
+    // Now identified, the client can view the invoice document behind the same token
+    await expect(page.getByTestId('button-view-invoice-document')).toBeVisible({ timeout: 10000 });
     const docResponse = await request.get(`/api/public/invoices/${token}/document`);
     expect(docResponse.ok()).toBeTruthy();
 
     // Pay → choose method → processing → completed
+    await expect(page.getByTestId('button-pay-invoice')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('button-pay-invoice').click();
     await page.getByTestId('button-pay-card').click();
     await expect(page.getByTestId('processing-card')).toBeVisible();
@@ -311,15 +344,70 @@ test.describe('Send Invoice MVP1 E2E', () => {
     await expect(page.getByTestId('text-paid')).toContainText('already been paid');
     await expect(page.getByTestId('button-pay-invoice')).toHaveCount(0);
 
-    // Dashboard reflects the paid status
+    // Dashboard reflects the paid status — switch the browser session back to the sender
+    const pageRequest = page.context().request;
+    await pageRequest.post('/api/auth/logout', { data: {} });
+    await pageRequest.post('/api/auth/login', { data: { email: senderEmail, password: 'Passw0rd!x' } });
     await page.goto('/sent-invoices');
     const row = page.getByTestId(`invoice-row-${invoice.invoiceNumber}`);
     await expect(row).toBeVisible();
     await expect(row.getByTestId('status-badge-paid')).toBeVisible();
   });
 
+  test('Unregistered client verifies a PIN, registers (prefilled) and pays the invoice', async ({ page }) => {
+    const { request } = await setupSender(page);
+    const { invoice, token } = await createInvoiceViaApi(request);
+    const clientEmail = `new-client-${uniqueSuffix()}@example.com`;
+
+    await page.goto(`/invoice/${token}`);
+
+    // Unknown email → 6-digit PIN verification (devPin surfaced in demo mode)
+    await page.getByTestId('input-payer-email').fill(clientEmail);
+    await page.getByTestId('button-check-email').click();
+    const tip = page.getByTestId('dev-pin-hint');
+    await expect(tip).toBeVisible({ timeout: 10000 });
+    const pin = (await tip.innerText()).match(/\d{6}/)[0];
+    await page.getByTestId('input-pin-code').fill(pin);
+    await page.getByTestId('button-verify-pin').click();
+
+    // Compact registration prefilled from the invoice client snapshot
+    await expect(page.getByTestId('input-reg-first-name')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('input-reg-first-name')).toHaveValue('Ella');
+    await expect(page.getByTestId('input-reg-last-name')).toHaveValue(/Testee-/);
+    await page.getByTestId('select-register-country').click();
+    await page.getByRole('option', { name: /United Kingdom/ }).click();
+    await page.getByTestId('input-reg-dob').fill('1990-02-02');
+    await page.getByTestId('select-register-gender').click();
+    await page.getByRole('option', { name: 'Female' }).click();
+    await page.getByPlaceholder('Contact number').fill('7700900456');
+    await page.getByTestId('input-reg-password').fill('Passw0rd!x');
+    await page.getByTestId('input-reg-confirm-password').fill('Passw0rd!x');
+    await page.getByTestId('button-register-pay').click();
+
+    // Identified (account activated + signed in) → pay through the normal journey
+    await expect(page.getByTestId('button-pay-invoice')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-pay-invoice').click();
+    await page.getByTestId('button-pay-card').click();
+    await expect(page.getByTestId('paid-card')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByTestId('text-paid')).toContainText(invoice.invoiceNumber);
+  });
+
+  test('Invoice payment requires an identified payer (anonymous API pay returns 401)', async ({ page }) => {
+    const { request } = await setupSender(page);
+    const { token } = await createInvoiceViaApi(request);
+
+    // A pristine context with no session must not be able to start a payment
+    // or view the invoice document
+    const anonymous = await page.context().browser().newContext();
+    const res = await anonymous.request.post(`/api/public/invoices/${token}/pay`, { data: { method: 'card' } });
+    expect(res.status()).toBe(401);
+    const docRes = await anonymous.request.get(`/api/public/invoices/${token}/document`);
+    expect(docRes.status()).toBe(401);
+    await anonymous.close();
+  });
+
   test('Sender cancels an active invoice; client is informed and payment is blocked', async ({ page }) => {
-    const request = await setupSender(page);
+    const { request, email: senderEmail } = await setupSender(page);
     const { invoice, token } = await createInvoiceViaApi(request);
 
     await page.goto('/sent-invoices');
@@ -360,7 +448,7 @@ test.describe('Send Invoice MVP1 E2E', () => {
   });
 
   test('Expired invoice blocks payment and supports Request New Payment Link', async ({ page }) => {
-    const request = await setupSender(page);
+    const { request, email: senderEmail } = await setupSender(page);
     const { invoice, token } = await createInvoiceViaApi(request);
 
     // Simulate the expiry passing (dev-only hook enabled for the e2e server)
@@ -401,7 +489,7 @@ test.describe('Send Invoice MVP1 E2E', () => {
   });
 
   test('Overdue invoice remains payable until expiry and can be cancelled', async ({ page }) => {
-    const request = await setupSender(page);
+    const { request, email: senderEmail } = await setupSender(page);
     const dueTomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const { invoice, token } = await createInvoiceViaApi(request, { dueDate: dueTomorrow });
 
@@ -409,10 +497,18 @@ test.describe('Send Invoice MVP1 E2E', () => {
     await request.post(`/api/dev/invoices/${invoice.id}/simulate-overdue`);
 
     await page.goto(`/invoice/${token}`);
+
+    // Identify (the registered sender account of this page session) to reach the payment area
+    await page.getByTestId('input-payer-email').fill(senderEmail);
+    await page.getByTestId('button-check-email').click();
+    await expect(page.getByTestId('input-payer-password')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('input-payer-password').fill('Passw0rd!x');
+    await page.getByTestId('button-signin-pay').click();
+
     await expect(page.getByTestId('overdue-banner')).toContainText(
       'This invoice is overdue, but you can still make payment until',
     );
-    await expect(page.getByTestId('button-pay-invoice')).toBeVisible();
+    await expect(page.getByTestId('button-pay-invoice')).toBeVisible({ timeout: 10000 });
 
     // Dashboard shows Overdue with the cancel action still available
     await page.goto('/sent-invoices');
@@ -422,7 +518,7 @@ test.describe('Send Invoice MVP1 E2E', () => {
   });
 
   test('Dashboard search, status filtering and ownership of list data', async ({ page }) => {
-    const request = await setupSender(page);
+    const { request, email: senderEmail } = await setupSender(page);
     const emailA = `search-a-${uniqueSuffix()}@example.com`;
     const emailB = `search-b-${uniqueSuffix()}@example.com`;
 

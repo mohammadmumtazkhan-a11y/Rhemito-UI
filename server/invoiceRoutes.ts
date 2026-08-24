@@ -8,8 +8,11 @@
 
 import type { Express, Request, Response } from "express";
 import express from "express";
+import { randomInt } from "crypto";
 import { storage } from "./storage";
-import { sendInvoiceSchema, cancelInvoiceSchema, requestNewLinkSchema, payInvoiceSchema } from "@shared/schema";
+import { demoModeEnabled, serverConfig } from "./config";
+import { rateLimit, clientIpOf } from "./rateLimit";
+import { sendInvoiceSchema, cancelInvoiceSchema, requestNewLinkSchema, payInvoiceSchema, emailCheckSchema } from "@shared/schema";
 import { clientDisplayName } from "@shared/invoice-logic";
 import {
   InvoiceError,
@@ -30,6 +33,18 @@ import {
 /** Same prototype guard pattern as routes.ts — falls back to the demo user. */
 function requireAuth(req: Request): string {
   return req.session?.userId ?? "user_123";
+}
+
+/** Public invoice endpoint rate limiting (mirrors requestRoutes' pattern). */
+function enforceInvoiceRateLimit(req: Request, res: Response, name: keyof typeof serverConfig.rateLimits): boolean {
+  const { limit, windowMs } = serverConfig.rateLimits[name];
+  const result = rateLimit(`invoice:${name}:${clientIpOf(req)}`, limit, windowMs);
+  if (!result.allowed) {
+    res.setHeader("Retry-After", Math.ceil(result.retryAfterMs / 1000));
+    res.status(429).json({ error: { code: "RATE_LIMITED", message: "Too many attempts. Please try again shortly." } });
+    return false;
+  }
+  return true;
 }
 
 function baseUrlFrom(req: Request): string {
@@ -280,9 +295,14 @@ export function registerInvoiceRoutes(app: Express): void {
     }
   });
 
-  // ─── Public: invoice document (token-scoped, like the payment itself) ───────
+  // ─── Public: invoice document (token-scoped; viewing requires an identified payer) ──
   app.get("/api/public/invoices/:token/document", async (req: Request, res: Response) => {
     try {
+      const userId = req.session?.userId;
+      const user = userId ? await storage.getAuthUserById(userId) : undefined;
+      if (!userId || !user) {
+        return res.status(401).json({ error: { code: "UNAUTHENTICATED", message: "Please identify yourself to view this invoice document." } });
+      }
       const inv = await getInvoiceByToken(req.params.token);
       if (!inv) {
         return res.status(404).json({ error: { code: "NOT_FOUND", message: "This payment link is not valid." } });
@@ -303,14 +323,109 @@ export function registerInvoiceRoutes(app: Express): void {
     }
   });
 
-  // ─── Public: payment initiation ─────────────────────────────────────────────
+  // ─── Public: payer identification (mirrors the request-money payer PIN) ────
+  // An unregistered payer must prove control of the entered email before an
+  // account can be created; the session verification block is shared with the
+  // request-money flow so /api/auth/register's verified-payer branch (instant
+  // activation + sign-in) works unchanged for invoices too.
+  app.post("/api/public/invoices/:token/verification/send", async (req: Request, res: Response) => {
+    try {
+      if (!enforceInvoiceRateLimit(req, res, "paymentIntent")) return;
+      const parsed = emailCheckSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Enter a valid email address." } });
+      }
+      const inv = await getInvoiceByToken(req.params.token);
+      if (!inv) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "This payment link is not valid." } });
+      }
+      if (inv.status !== "sent") {
+        return res.status(409).json({ error: { code: "INVALID_STATE", message: "This invoice cannot accept a new payment." } });
+      }
+      const email = parsed.data.email.toLowerCase();
+      if (await storage.getAuthUserByEmail(email)) {
+        return res.status(409).json({ error: { code: "EMAIL_REGISTERED", message: "This email already has a Rhemito account. Please sign in." } });
+      }
+      const previous = req.session.paymentRequestVerification;
+      if (previous?.email === email && Date.now() - previous.lastSentAt < 60_000) {
+        res.setHeader("Retry-After", Math.ceil((60_000 - (Date.now() - previous.lastSentAt)) / 1000));
+        return res.status(429).json({ error: { code: "PIN_COOLDOWN", message: "Please wait before requesting another PIN." } });
+      }
+      await storage.invalidateOtps(email);
+      const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+      await storage.createOtp(email, code, new Date(Date.now() + 10 * 60_000));
+      req.session.paymentRequestVerification = {
+        email,
+        token: req.params.token,
+        isEmailLink: false,
+        verified: false,
+        failedAttempts: 0,
+        lastSentAt: Date.now(),
+      };
+      return res.json({
+        data: {
+          sent: true,
+          expiresInSeconds: 600,
+          resendAfterSeconds: 60,
+          ...(demoModeEnabled ? { devPin: code } : {}),
+        },
+      });
+    } catch (err) {
+      return handleInvoiceError(res, err);
+    }
+  });
+
+  app.post("/api/public/invoices/:token/verification/verify", async (req: Request, res: Response) => {
+    try {
+      if (!enforceInvoiceRateLimit(req, res, "paymentIntent")) return;
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+      const code = String(req.body?.code ?? "").trim();
+      const verification = req.session.paymentRequestVerification;
+      if (!verification || verification.token !== req.params.token || verification.isEmailLink !== false || verification.email !== email) {
+        return res.status(400).json({ error: { code: "PIN_NOT_SENT", message: "Request a new PIN for this email address." } });
+      }
+      if (verification.failedAttempts >= 5) {
+        return res.status(429).json({ error: { code: "PIN_LOCKED", message: "Too many incorrect attempts. Request a new PIN later." } });
+      }
+      const otp = code.length === 6 ? await storage.getValidOtp(email, code) : undefined;
+      if (!otp) {
+        verification.failedAttempts += 1;
+        return res.status(400).json({ error: { code: "INVALID_PIN", message: "The PIN is invalid or has expired." } });
+      }
+      await storage.markOtpUsed(otp.id);
+      verification.verified = true;
+      return res.json({ data: { verified: true } });
+    } catch (err) {
+      return handleInvoiceError(res, err);
+    }
+  });
+
+  // ─── Public: payment initiation (requires an identified, eligible payer) ────
   app.post("/api/public/invoices/:token/pay", async (req: Request, res: Response) => {
     try {
+      if (!enforceInvoiceRateLimit(req, res, "paymentIntent")) return;
       const parsed = payInvoiceSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: firstZodMessage(parsed.error) } });
       }
-      const result = await initiatePaymentByToken(req.params.token, parsed.data.method);
+      const userId = req.session?.userId;
+      const user = userId ? await storage.getAuthUserById(userId) : undefined;
+      if (!userId || !user) {
+        return res.status(401).json({ error: { code: "UNAUTHENTICATED", message: "Please identify yourself before paying this invoice." } });
+      }
+      if (user.status === "blocked") {
+        return res.status(403).json({ error: { code: "BLOCKED", message: "Your account is blocked. Please contact support." } });
+      }
+      if (user.status === "pending") {
+        return res.status(403).json({ error: { code: "ACCOUNT_UNVERIFIED", message: "Please verify your account OTP first." } });
+      }
+      if (user.kycStatus === "pending") {
+        return res.status(403).json({ error: { code: "KYC_PENDING", message: "Your identity verification is in progress. Please try again shortly." } });
+      }
+      if (user.kycStatus === "failed" || user.kycStatus === "rejected") {
+        return res.status(403).json({ error: { code: "KYC_FAILED", message: "Your account cannot complete this payment due to compliance restrictions. Please contact support." } });
+      }
+      const result = await initiatePaymentByToken(req.params.token, parsed.data.method, { userId: user.id, email: user.email });
       return res.json({ data: result });
     } catch (err) {
       return handleInvoiceError(res, err);

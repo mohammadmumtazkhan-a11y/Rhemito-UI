@@ -309,6 +309,14 @@ export function toPublicInvoiceJSON(inv: Invoice) {
     currency: inv.currency,
     fees: computeInvoiceFees(inv.amount, inv.absorbFee),
     hasDocument: Boolean(inv.documentId),
+    // Client snapshot powers the prefilled registration on the payment page.
+    // The client's email is intentionally NOT exposed — the payer enters
+    // their own email during identification.
+    clientType: inv.clientType,
+    clientFirstName: inv.clientFirstName ?? null,
+    clientMiddleName: inv.clientMiddleName ?? null,
+    clientLastName: inv.clientLastName ?? null,
+    clientBusinessName: inv.clientBusinessName ?? null,
     dueDate: inv.dueDate ?? null,
     expiryDate: invoiceExpiryDate(inv),
     expiryTimezone: inv.expiryTimezone,
@@ -449,6 +457,7 @@ export async function confirmAndSendInvoice(params: {
     payoutAccountCurrency: payoutAccount.currency,
     paymentInitiatedAt: null,
     paymentMethod: null,
+    payerUserId: null,
     dueDate: payload.dueDate ?? null,
     expiresAt: computation.expiresAt,
     expiryTimezone: EXPIRY_TIMEZONE,
@@ -584,6 +593,7 @@ export async function getInvoiceByToken(token: string): Promise<Invoice | undefi
 export async function initiatePaymentByToken(
   token: string,
   method?: "card" | "bank_transfer",
+  payer?: { userId: string; email: string },
 ): Promise<{
   status: string;
   paymentRef: string;
@@ -619,10 +629,12 @@ export async function initiatePaymentByToken(
     paymentRef,
     paymentInitiatedAt: now,
     paymentMethod: method ?? null,
+    payerUserId: payer?.userId ?? null,
   });
 
-  await storage.addInvoiceEvent(invoiceEvent(inv.id, "payment_initiated", { paymentRef, method: method ?? null }, "client"));
-  await storage.addInvoiceEvent(invoiceEvent(inv.id, "payment_processing", { paymentRef, method: method ?? null }, "client"));
+  const payerActor = payer ? `payer:${payer.email}` : "client";
+  await storage.addInvoiceEvent(invoiceEvent(inv.id, "payment_initiated", { paymentRef, method: method ?? null, payerUserId: payer?.userId ?? null }, payerActor));
+  await storage.addInvoiceEvent(invoiceEvent(inv.id, "payment_processing", { paymentRef, method: method ?? null }, payerActor));
 
   clearInvoiceTimers(inv.id);
 
