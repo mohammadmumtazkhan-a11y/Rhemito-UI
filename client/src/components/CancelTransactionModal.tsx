@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import {
@@ -28,7 +28,7 @@ export function CancelTransactionModal({
   transaction,
   onConfirm,
   onCancel,
-}: CancelTransactionModalProps): JSX.Element | null {
+}: CancelTransactionModalProps): ReactElement | null {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

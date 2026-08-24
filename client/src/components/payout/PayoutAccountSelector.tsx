@@ -54,7 +54,29 @@ const CURRENCY_COUNTRIES: Record<string, string> = {
   GHS: "GH",
   PHP: "PH",
   ZAR: "ZA",
+  EGP: "EG",
+  TZS: "TZ",
+  UGX: "UG",
+  XOF: "CI",
+  RWF: "RW",
 };
+
+/** Currencies offered when adding a payout account — same common list (majors +
+ * African currencies) as the Request Payment sender-currency dropdown. */
+const ACCOUNT_CURRENCY_OPTIONS = [
+  { code: "GBP", label: "GBP (£) - United Kingdom" },
+  { code: "USD", label: "USD ($) - United States" },
+  { code: "EUR", label: "EUR (€) - Eurozone" },
+  { code: "NGN", label: "NGN (₦) - Nigeria" },
+  { code: "KES", label: "KES (KSh) - Kenya" },
+  { code: "GHS", label: "GHS (GH₵) - Ghana" },
+  { code: "ZAR", label: "ZAR (R) - South Africa" },
+  { code: "EGP", label: "EGP (E£) - Egypt" },
+  { code: "TZS", label: "TZS (TSh) - Tanzania" },
+  { code: "UGX", label: "UGX (USh) - Uganda" },
+  { code: "XOF", label: "XOF (CFA) - West Africa" },
+  { code: "RWF", label: "RWF (FRw) - Rwanda" },
+];
 
 interface PayoutAccountSelectorProps {
   requesterName: string;
@@ -372,14 +394,15 @@ export function PayoutAccountSelector({
                 value={newAccountData.currency}
                 onValueChange={(val) => setNewAccountData(prev => ({ ...prev, currency: val }))}
               >
-                <SelectTrigger className="h-10 text-sm font-medium">
+                <SelectTrigger className="h-10 text-sm font-medium" data-testid="select-account-currency">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="GBP">GBP (£) - United Kingdom</SelectItem>
-                  <SelectItem value="NGN">NGN (₦) - Nigeria</SelectItem>
-                  <SelectItem value="USD">USD ($) - United States</SelectItem>
-                  <SelectItem value="EUR">EUR (€) - Eurozone</SelectItem>
+                  {ACCOUNT_CURRENCY_OPTIONS.map((option) => (
+                    <SelectItem key={option.code} value={option.code}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

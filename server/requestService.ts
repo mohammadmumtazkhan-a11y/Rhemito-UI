@@ -41,6 +41,7 @@ import {
   dateInTz,
   EXPIRY_TIMEZONE,
   formatHumanDate,
+  validateInvoiceDates,
 } from "@shared/invoice-logic";
 import { DEMO_PAYER_CREDENTIALS } from "@shared/schema";
 import type {
@@ -220,6 +221,16 @@ export async function createMoneyRequest(params: {
 
   const quote = await computeQuote(corridor, payInAmountMinor, payload.absorbFee);
   const now = new Date();
+
+  // Due Date / Payment Link Expiry follow the invoice contract: the link
+  // expires at the end (11:59:59 p.m. UK) of the chosen day, and preset
+  // periods count from the Due Date when one is set. Client validation is
+  // mirrored for UX only — this check is authoritative.
+  const dateCheck = validateInvoiceDates(payload.dueDate, payload.expiry, now);
+  if (dateCheck.errors.length > 0) {
+    throw new RequestError(400, "VALIDATION_ERROR", dateCheck.errors[0]);
+  }
+
   const sequence = await storage.nextMoneyRequestSequence();
   const yearMonth = dateInTz(now, EXPIRY_TIMEZONE).slice(0, 7);
 
@@ -272,7 +283,8 @@ export async function createMoneyRequest(params: {
     activeSessionId: null,
     sessionExpiresAt: null,
     reservedAttemptId: null,
-    expiresAt: new Date(now.getTime() + serverConfig.requestExpiryDays * 24 * 60 * 60 * 1000),
+    dueDate: payload.dueDate ?? null,
+    expiresAt: dateCheck.computation.expiresAt,
     expiryExtendedOnce: false,
     viewedAt: null,
     paymentInitiatedAt: null,
@@ -367,7 +379,7 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
       `This request expires on ${formatHumanDate(dateInTz(request.expiresAt, EXPIRY_TIMEZONE))}.\n\n` +
       `Review and pay securely:\n${emailCheckoutUrl}\n\n` +
       `⚠ Anti-fraud warning: Rhemito will never ask for your password, full card number or one-time codes by ` +
-      `email or phone. If anything looks wrong, use "Report this request" on the payment page.\n\n` +
+      `email or phone. If anything looks wrong, do not proceed with payment and contact Rhemito support.\n\n` +
       `Need help? Contact Rhemito support: ${serverConfig.legalEntity.supportUrl}\n\n` +
       `— Rhemito (${serverConfig.legalEntity.displayName})`,
   };
@@ -492,6 +504,7 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
     absorbFee: currentUserId ? request.absorbFee : null,
     purpose: currentUserId ? request.purpose : null,
     reference: currentUserId ? (request.reference ?? null) : null,
+    dueDate: request.dueDate ?? null,
     expiresAt: request.expiresAt.toISOString(),
     expiryDate: dateInTz(request.expiresAt, EXPIRY_TIMEZONE),
     methods: currentUserId ? (corridor?.methods ?? []) : [],
@@ -1001,17 +1014,6 @@ export async function cancelRequest(userId: string, requestId: string): Promise<
   )));
 }
 
-export async function rotateToken(userId: string, requestId: string): Promise<{ token: string; checkoutUrl: string }> {
-  const request = await getOwnRequest(userId, requestId);
-  const status = effectiveStatus(request);
-  if (status !== "active" && status !== "viewed") {
-    throw new RequestError(409, "INVALID_STATE", "The link can only be rotated while awaiting payment.");
-  }
-  const token = randomBytes(24).toString("hex");
-  await storage.updateMoneyRequest(request.id, { token, tokenHash: hashToken(token) });
-  return { token, checkoutUrl: buildCheckoutUrl(token) };
-}
-
 export async function extendExpiry(userId: string, requestId: string): Promise<Date> {
   const request = await getOwnRequest(userId, requestId);
   const status = effectiveStatus(request);
@@ -1070,6 +1072,7 @@ export function toRequestJSON(request: MoneyRequest) {
     emailCheckoutUrl: buildEmailCheckoutUrl(request.emailToken || request.token),
     payerName: request.payerName ?? null,
     payerEmailMasked: request.payerEmailMasked ?? null,
+    dueDate: request.dueDate ?? null,
     expiresAt: request.expiresAt.toISOString(),
     expiryExtendedOnce: request.expiryExtendedOnce,
     viewedAt: request.viewedAt?.toISOString() ?? null,

@@ -5,6 +5,8 @@ import { Users, Target, CheckCircle2, Mail, User, CreditCard, ArrowRight, ArrowL
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
+import ForgotPassword from "@/pages/Auth/components/ForgotPassword";
 import { Label } from "@/components/ui/label";
 import { PremiumDatePicker } from "@/components/ui/premium-date-picker";
 import { getCampaignById, getCampaignSummary, addContributor, SUPPORTED_CURRENCIES, MOCK_FX_RATES, MITO_FEE_CONFIG, CURRENCY_SYMBOLS } from "./mockData";
@@ -26,6 +28,8 @@ export default function ContributorView() {
     const [isLoading, setIsLoading] = useState(true);
     const [isRightSectionLoading, setIsRightSectionLoading] = useState(true);
     const [authStep, setAuthStep] = useState<AuthStep>("check_email");
+    // Forgot-password reset flow (replaces the login step while active)
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
     const [isExistingUser, setIsExistingUser] = useState(false);
     const [email, setEmail] = useState("");
     const [firstName, setFirstName] = useState("");
@@ -522,7 +526,7 @@ export default function ContributorView() {
                                             </motion.div>
                                         )}
 
-                                        {authStep === 'login' && (
+                                        {authStep === 'login' && !showForgotPassword && (
                                             <motion.div
                                                 key="login"
                                                 initial={{ opacity: 0, x: 20 }}
@@ -549,15 +553,40 @@ export default function ContributorView() {
                                                     <div className="space-y-2">
                                                         <div className="flex items-center justify-between">
                                                             <Label htmlFor="password">Password</Label>
-                                                            <button type="button" className="text-sm font-semibold text-blue-600 hover:underline">Forgot password?</button>
+                                                            <button type="button" className="text-sm font-semibold text-blue-600 hover:underline" onClick={() => setShowForgotPassword(true)} data-testid="button-forgot-password">Forgot password?</button>
                                                         </div>
                                                         <div className="relative">
                                                             <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                                                            <Input id="password" type="password" placeholder="••••••••" className="pl-10 h-11" required />
+                                                            <PasswordInput id="password" placeholder="••••••••" className="pl-10 h-11" required />
                                                         </div>
                                                     </div>
                                                     <Button type="submit" className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-lg">Log in and Continue</Button>
                                                 </form>
+                                            </motion.div>
+                                        )}
+
+                                        {authStep === 'login' && showForgotPassword && (
+                                            <motion.div
+                                                key="forgot_password"
+                                                initial={{ opacity: 0, x: 20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: -20 }}
+                                                className="space-y-4"
+                                                data-testid="contributor-forgot-password"
+                                            >
+                                                <ForgotPassword
+                                                    initialEmail={email}
+                                                    onCancel={() => setShowForgotPassword(false)}
+                                                    onResetComplete={() => {
+                                                        setShowForgotPassword(false);
+                                                        setAuthStep("payment");
+                                                    }}
+                                                    cancelLabel="Back to login"
+                                                    successToast={{
+                                                        title: "Password Successfully Reset",
+                                                        description: "Please continue your payment journey.",
+                                                    }}
+                                                />
                                             </motion.div>
                                         )}
 
@@ -608,14 +637,14 @@ export default function ContributorView() {
                                                         <Label htmlFor="new-password">Create Password</Label>
                                                         <div className="relative">
                                                             <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                                                            <Input id="new-password" type="password" placeholder="Min. 8 characters" className="pl-10 h-11" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                                            <PasswordInput id="new-password" placeholder="Min. 8 characters" className="pl-10 h-11" value={password} onChange={(e) => setPassword(e.target.value)} />
                                                         </div>
                                                     </div>
                                                     <div className="space-y-2">
                                                         <Label htmlFor="confirm-password">Confirm Password</Label>
                                                         <div className="relative">
                                                             <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                                                            <Input id="confirm-password" type="password" placeholder="Re-enter password" className="pl-10 h-11" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                                                            <PasswordInput id="confirm-password" placeholder="Re-enter password" className="pl-10 h-11" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
                                                         </div>
                                                     </div>
 

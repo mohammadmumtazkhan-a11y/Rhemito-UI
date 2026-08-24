@@ -201,6 +201,9 @@ export default function Payments() {
   const nameInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
+  const senderDisplayName = (sender: (typeof knownSenders)[0]) =>
+    sender.senderType === "business" ? sender.businessName : `${sender.firstName} ${sender.lastName}`;
+
   const filteredNameSuggestions = knownSenders.filter(sender => {
     const displayName = sender.senderType === "business" ? sender.businessName : `${sender.firstName} ${sender.lastName}`;
     return displayName.toLowerCase().includes(allocateSenderName.toLowerCase());
@@ -664,7 +667,7 @@ export default function Payments() {
                               type="button"
                               className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors flex items-center gap-3 border-b last:border-b-0"
                               onClick={() => selectSender(sender)}
-                              data-testid={`suggestion-name-${sender.name.replace(/\s+/g, '-').toLowerCase()}`}
+                              data-testid={`suggestion-name-${senderDisplayName(sender).replace(/\s+/g, '-').toLowerCase()}`}
                             >
                               <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                                 <User className="w-4 h-4 text-primary" />
@@ -723,7 +726,7 @@ export default function Payments() {
                               </div>
                               <div>
                                 <p className="font-medium text-sm">{sender.email}</p>
-                                <p className="text-xs text-muted-foreground">{sender.name}</p>
+                                <p className="text-xs text-muted-foreground">{senderDisplayName(sender)}</p>
                               </div>
                             </button>
                           ))}

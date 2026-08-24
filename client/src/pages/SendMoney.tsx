@@ -1242,7 +1242,7 @@ export default function SendMoney() {
                             >
                                 {/* Back Button */}
                                 <button
-                                    onClick={() => { setShowBankTransferPage(false); setPaymentTimerActive(false); setBalancePaymentChoice(null); }}
+                                    onClick={() => { setShowBankTransferPage(false); setPaymentTimerActive(false); }}
                                     className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors group"
                                 >
                                     <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />

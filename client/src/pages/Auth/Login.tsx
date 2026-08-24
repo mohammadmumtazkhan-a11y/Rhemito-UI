@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { KeyRound, Lock, User, Mail, Phone, MapPin, CheckCircle2, Check } from "lucide-react";
 import { useLocation } from "wouter";
+import { PasswordInput } from "@/components/ui/password-input";
 
 // Simulating the UI state for the OBO Flow
 type AuthStep = "email" | "pin" | "password" | "review";
@@ -223,11 +224,10 @@ export default function Login() {
                                 <div className="space-y-4 mb-5">
                                     <div>
                                         <label className="block text-sm text-slate-500 mb-1">New Password<span className="text-red-400">*</span></label>
-                                        <input
-                                            type="password"
+                                        <PasswordInput
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
-                                            className="block w-full px-3 py-2.5 border border-slate-200 rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700"
+                                            className="h-11 w-full px-3 py-2.5 border border-slate-200 rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700"
                                             placeholder="Min. 8 characters"
                                             required
                                         />
@@ -235,14 +235,13 @@ export default function Login() {
 
                                     <div>
                                         <label className="block text-sm text-slate-500 mb-1">Confirm Password<span className="text-red-400">*</span></label>
-                                        <input
-                                            type="password"
+                                        <PasswordInput
                                             value={confirmPassword}
                                             onChange={(e) => {
                                                 setConfirmPassword(e.target.value);
                                                 setPasswordError(""); // Clear error when typing
                                             }}
-                                            className={`block w-full px-3 py-2.5 border rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700 ${passwordError ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-200'}`}
+                                            className={`h-11 w-full px-3 py-2.5 border rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700 ${passwordError ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-200'}`}
                                             placeholder="Re-enter password"
                                             required
                                         />

@@ -30,6 +30,12 @@ export interface CorridorConfig {
   enabled: boolean;
   /** User-facing reason shown when disabled. */
   unavailabilityReason?: string;
+  /**
+   * Prototype demo affordance: generated same-currency corridor for the common
+   * currency list. Matches any verified payout account in the payout currency
+   * (the strict domestic-account rule applies only to reviewed corridors).
+   */
+  demoCatchAll?: boolean;
 }
 
 export const CORRIDORS: CorridorConfig[] = [
@@ -166,7 +172,69 @@ export const CORRIDORS: CorridorConfig[] = [
 ];
 
 export function findCorridor(id: string): CorridorConfig | undefined {
-  return CORRIDORS.find((c) => c.id === id);
+  const configured = CORRIDORS.find((c) => c.id === id);
+  if (configured) return configured;
+  // Generated demo catch-all corridor ids: DEMO-<requesterCountry>-<currency>
+  // ("XX" is the placeholder for an empty country). Regenerated with the same
+  // coverage rule as corridorsForRequester so reviewed configuration stays
+  // authoritative for the currencies it enables.
+  const match = /^DEMO-([A-Z]{2}|XX)-([A-Z]{3})$/.exec(id);
+  if (match) {
+    const [, requesterCountry, code] = match;
+    const common = COMMON_PAYIN_CURRENCIES.find((c) => c.code === code);
+    if (!common) return undefined;
+    const country = requesterCountry === "XX" ? "" : requesterCountry;
+    const covered = CORRIDORS.some(
+      (c) => c.requesterCountry === country && c.enabled && c.payInCurrency === code,
+    );
+    if (covered) return undefined;
+    return demoCatchAllCorridor(code, common.homeCountry, country);
+  }
+  return undefined;
+}
+
+// ─── Common currency list (demo catch-all corridors) ─────────────────────────
+//
+// Every requester sees these currencies in the Request Payment dropdown —
+// majors plus the African currencies Rhemito targets. Reviewed per-corridor
+// configuration stays authoritative: where an enabled configured corridor
+// already covers a currency for the requester's country it wins, and the
+// remaining currencies get a generated same-currency demo corridor.
+
+export const COMMON_PAYIN_CURRENCIES: ReadonlyArray<{ code: string; homeCountry: string }> = [
+  { code: "GBP", homeCountry: "GB" },
+  { code: "USD", homeCountry: "US" },
+  { code: "EUR", homeCountry: "DE" },
+  { code: "NGN", homeCountry: "NG" },
+  { code: "KES", homeCountry: "KE" },
+  { code: "GHS", homeCountry: "GH" },
+  { code: "ZAR", homeCountry: "ZA" },
+  { code: "EGP", homeCountry: "EG" },
+  { code: "TZS", homeCountry: "TZ" },
+  { code: "UGX", homeCountry: "UG" },
+  { code: "XOF", homeCountry: "CI" },
+  { code: "RWF", homeCountry: "RW" },
+];
+
+/** Generated same-currency demo corridor covering `code` for `requesterCountry`. */
+function demoCatchAllCorridor(code: string, homeCountry: string, requesterCountry: string): CorridorConfig {
+  return {
+    id: `DEMO-${requesterCountry || "XX"}-${code}`,
+    senderCountry: homeCountry,
+    requesterCountry,
+    payInCurrency: code,
+    payoutCurrency: code,
+    methods: ["card", "bank_transfer", "wallet"],
+    minAmountMinor: 100,
+    maxAmountMinor: 500_000_000,
+    requiredKycTier: "mini_kyc",
+    payinProvider: "dev:payin-uk",
+    fxProvider: "dev:fx",
+    payoutProvider: "dev:payin-uk",
+    estimatedDeliveryTime: "Typically within minutes",
+    enabled: true,
+    demoCatchAll: true,
+  };
 }
 
 export interface CorridorValidation {
@@ -194,7 +262,16 @@ export function validateCorridor(params: {
   if (requesterCountry !== corridor.requesterCountry) {
     return { ok: false, reason: "Your account country is not supported for this corridor." };
   }
-  if (payoutAccountCountry !== corridor.requesterCountry || payoutAccountCurrency !== corridor.payoutCurrency) {
+  if (corridor.demoCatchAll) {
+    // Prototype demo corridor: any verified account in the payout currency is
+    // accepted — the strict domestic-account rule applies to reviewed corridors.
+    if (payoutAccountCurrency !== corridor.payoutCurrency) {
+      return {
+        ok: false,
+        reason: `This corridor pays out in ${corridor.payoutCurrency}. Select a matching verified payout account.`,
+      };
+    }
+  } else if (payoutAccountCountry !== corridor.requesterCountry || payoutAccountCurrency !== corridor.payoutCurrency) {
     return {
       ok: false,
       reason: `This corridor pays out in ${corridor.payoutCurrency} to a ${corridor.requesterCountry} bank account. Select a matching verified payout account.`,
@@ -209,7 +286,17 @@ export function validateCorridor(params: {
   return { ok: true };
 }
 
-/** Corridors available to a given requester country (enabled AND disabled, with reasons). */
+/**
+ * Corridors available to a given requester country (enabled AND disabled, with
+ * reasons). Currencies without an enabled reviewed corridor for the country get
+ * a generated same-currency demo corridor so every requester can use the common
+ * currency list (majors + African currencies).
+ */
 export function corridorsForRequester(requesterCountry: string): CorridorConfig[] {
-  return CORRIDORS.filter((c) => c.requesterCountry === requesterCountry);
+  const configured = CORRIDORS.filter((c) => c.requesterCountry === requesterCountry);
+  const covered = new Set(configured.filter((c) => c.enabled).map((c) => c.payInCurrency));
+  const generated = COMMON_PAYIN_CURRENCIES
+    .filter(({ code }) => !covered.has(code))
+    .map(({ code, homeCountry }) => demoCatchAllCorridor(code, homeCountry, requesterCountry));
+  return [...configured, ...generated];
 }

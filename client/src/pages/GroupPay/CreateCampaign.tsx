@@ -110,6 +110,7 @@ export default function CreateCampaign() {
 
         const newCampaign = createCampaign({
             name: formData.name,
+            creatorName: requesterName,
             targetAmount: targetFeeBreakdown.grossAmount, // Store gross amount as target
             currency: formData.currency,
             description: formData.description,
