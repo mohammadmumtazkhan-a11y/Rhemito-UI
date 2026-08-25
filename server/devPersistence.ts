@@ -19,6 +19,8 @@ const SNAPSHOT_FILE = path.join(SNAPSHOT_DIR, "auth-snapshot.json");
 export interface DevSnapshot {
   authUsers: Array<Record<string, unknown>>;
   otpCodes: Array<Record<string, unknown>>;
+  groupPayCampaigns: Array<Record<string, unknown>>;
+  groupPayContributions: Array<Record<string, unknown>>;
   sessions: Record<string, Record<string, unknown>>;
 }
 
@@ -26,6 +28,8 @@ export interface DevSnapshot {
 const DATE_FIELDS: Record<string, string[]> = {
   authUsers: ["createdAt"],
   otpCodes: ["expiresAt", "createdAt"],
+  groupPayCampaigns: ["createdAt"],
+  groupPayContributions: ["paymentDate"],
 };
 
 function revive(collection: string, row: Record<string, unknown>): Record<string, unknown> {
@@ -43,10 +47,12 @@ function revive(collection: string, row: Record<string, unknown>): Record<string
 export function loadSnapshot(): DevSnapshot | null {
   try {
     if (!fs.existsSync(SNAPSHOT_FILE)) return null;
-    const raw = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, "utf-8")) as DevSnapshot;
+    const raw = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, "utf-8")) as Partial<DevSnapshot>;
     return {
       authUsers: (raw.authUsers ?? []).map((r) => revive("authUsers", r)),
       otpCodes: (raw.otpCodes ?? []).map((r) => revive("otpCodes", r)),
+      groupPayCampaigns: (raw.groupPayCampaigns ?? []).map((r) => revive("groupPayCampaigns", r)),
+      groupPayContributions: (raw.groupPayContributions ?? []).map((r) => revive("groupPayContributions", r)),
       sessions: raw.sessions ?? {},
     };
   } catch (err) {

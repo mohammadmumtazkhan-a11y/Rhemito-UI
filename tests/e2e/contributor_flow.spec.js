@@ -48,30 +48,24 @@ test.describe('Contributor Flow', () => {
 
     });
 
-    test('Shared contribution link opens a persisted campaign after a fresh page load', async ({ page }) => {
-        // Simulate a campaign created in another tab: mockData persists to
-        // localStorage, so the shared link must resolve on a fresh load.
-        const campaignId = 'persist-campaign-1';
-        await page.addInitScript((id) => {
-            window.localStorage.setItem('rhemito:group-pay:state:v1', JSON.stringify({
-                campaigns: [{
-                    id,
-                    name: 'Persisted Relief Fund',
-                    targetAmount: 900,
-                    currency: 'GBP',
-                    description: 'Campaign persisted across page loads.',
-                    bankAccountId: '2',
-                    bankAccountName: 'John Doe - Barclays',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    uniqueLink: `${window.location.origin}/contribute/${id}`,
-                    creatorName: 'John Doe',
-                }],
-                contributors: [],
-            }));
-        }, campaignId);
+    test('Shared contribution link opens a server-persisted campaign after a fresh page load', async ({ page }) => {
+        // Campaigns now live server-side: create one via the API, then open
+        // the share link — it must resolve without any browser-local seeding.
+        const res = await page.request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Persisted Relief Fund',
+                creatorName: 'John Doe',
+                targetAmount: 900,
+                currency: 'GBP',
+                description: 'Campaign persisted server-side.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(res.ok()).toBeTruthy();
+        const { data: campaign } = await res.json();
 
-        await page.goto(`/contribute/${campaignId}`);
+        await page.goto(`/contribute/${campaign.id}`);
         await expect(page.getByText('Persisted Relief Fund')).toBeVisible({ timeout: 10000 });
         await expect(page.getByRole('heading', { name: 'Make a Contribution' })).toBeVisible();
 
@@ -79,5 +73,34 @@ test.describe('Contributor Flow', () => {
         await page.goto('/contribute/does-not-exist');
         await expect(page.getByTestId('campaign-not-found')).toBeVisible();
         await expect(page.getByText('Campaign not found')).toBeVisible();
+    });
+
+    test('Campaign link created in one browser opens in a different browser', async ({ browser, page }) => {
+        // Regression test: campaigns used to live in localStorage, so share
+        // links showed "Campaign not found" in any other browser.
+        const res = await page.request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Cross Browser Fund',
+                creatorName: 'John Doe',
+                targetAmount: 250,
+                currency: 'GBP',
+                description: 'Created in browser A, opened in browser B.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(res.ok()).toBeTruthy();
+        const { data: campaign } = await res.json();
+
+        // A fresh context has completely separate storage — a different "browser"
+        const otherContext = await browser.newContext();
+        const otherPage = await otherContext.newPage();
+        try {
+            await otherPage.goto(`/contribute/${campaign.id}`);
+            await expect(otherPage.getByText('Cross Browser Fund')).toBeVisible({ timeout: 10000 });
+            await expect(otherPage.getByRole('heading', { name: 'Make a Contribution' })).toBeVisible();
+        } finally {
+            await otherContext.close();
+        }
     });
 });

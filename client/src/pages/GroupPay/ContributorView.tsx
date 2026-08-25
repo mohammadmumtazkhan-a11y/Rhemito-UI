@@ -9,7 +9,8 @@ import { PasswordInput } from "@/components/ui/password-input";
 import ForgotPassword from "@/pages/Auth/components/ForgotPassword";
 import { Label } from "@/components/ui/label";
 import { PremiumDatePicker } from "@/components/ui/premium-date-picker";
-import { getCampaignById, getCampaignSummary, addContributor, SUPPORTED_CURRENCIES, MOCK_FX_RATES, MITO_FEE_CONFIG, CURRENCY_SYMBOLS } from "./mockData";
+import { SUPPORTED_CURRENCIES, MOCK_FX_RATES, MITO_FEE_CONFIG, CURRENCY_SYMBOLS } from "./mockData";
+import { fetchPublicCampaign, addContribution } from "@/lib/groupPay";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Campaign } from "./types";
 import { useToast } from "@/hooks/use-toast";
@@ -59,21 +60,30 @@ export default function ContributorView() {
     const [selectedCurrency, setSelectedCurrency] = useState<string>("");
 
     useEffect(() => {
-        try {
-            const camp = getCampaignById(campaignId);
-            if (camp) {
-                setCampaign(camp);
-                setSummary(getCampaignSummary(campaignId));
+        let cancelled = false;
+        (async () => {
+            try {
+                // Server-side lookup so shared links resolve in any browser
+                const camp = await fetchPublicCampaign(campaignId);
+                if (cancelled) return;
+                if (camp) {
+                    setCampaign(camp);
+                    setSummary(camp.summary);
+                }
+            } catch (err) {
+                console.error("Error loading campaign:", err);
+            } finally {
+                if (cancelled) return;
+                setIsLoading(false);
+                // Show right section loader for a bit longer
+                setTimeout(() => {
+                    setIsRightSectionLoading(false);
+                }, 300);
             }
-        } catch (err) {
-            console.error("Error loading campaign:", err);
-        } finally {
-            setIsLoading(false);
-            // Show right section loader for a bit longer
-            setTimeout(() => {
-                setIsRightSectionLoading(false);
-            }, 300);
-        }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [campaignId]);
 
     // PIN resend cooldown ticker
@@ -313,12 +323,23 @@ export default function ContributorView() {
         // Save the net amount in campaign currency so progress is tracked correctly relative to goal
         const contributionAmount = conversion ? conversion.netAmount : parseFloat(amount);
 
-        addContributor({
-            campaignId,
+        // Persist server-side so the campaign creator sees this contribution
+        addContribution(campaignId, {
             name: firstName + " " + lastName,
             email,
             amount: contributionAmount,
-        });
+        })
+            .then((result) => {
+                // Reconcile with the authoritative server totals
+                setSummary(result.summary);
+            })
+            .catch((err) => {
+                toast({
+                    title: "Contribution Not Saved",
+                    description: err instanceof Error ? err.message : "Your payment went through but we could not update the campaign totals.",
+                    variant: "destructive",
+                });
+            });
 
         // Update local state to reflect new contribution immediately
         setSummary(prev => ({
