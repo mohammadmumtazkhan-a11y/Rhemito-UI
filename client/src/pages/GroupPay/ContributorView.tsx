@@ -54,6 +54,7 @@ export default function ContributorView() {
     const [regPhoneNumber, setRegPhoneNumber] = useState("");
     const [isPaid, setIsPaid] = useState(false);
     const [wasManualTransfer, setWasManualTransfer] = useState(false);
+    const [demoPasswordCopied, setDemoPasswordCopied] = useState(false);
     const [paymentStep, setPaymentStep] = useState<"method" | "card_details" | "processing_instant" | "manual_transfer" | "manual_transfer_complete">("method");
     const [countdown, setCountdown] = useState(1);
     const [amount, setAmount] = useState("");
@@ -119,6 +120,15 @@ export default function ContributorView() {
             style: 'currency',
             currency: currency,
         }).format(val);
+    };
+
+    // Prototype affordance: copyable demo password on the login step
+    const isDemoPayerEmail = email.toLowerCase() === DEMO_PAYER_CREDENTIALS.email;
+
+    const handleCopyDemoPassword = () => {
+        navigator.clipboard.writeText(DEMO_PAYER_CREDENTIALS.password);
+        setDemoPasswordCopied(true);
+        setTimeout(() => setDemoPasswordCopied(false), 2000);
     };
 
     // Calculate FX conversion details
@@ -750,7 +760,7 @@ export default function ContributorView() {
                                                     <div className="space-y-2">
                                                         <div className="flex items-center justify-between">
                                                             <Label htmlFor="password">Password</Label>
-                                                            <button type="button" className="text-sm font-semibold text-blue-600 hover:underline" onClick={() => setShowForgotPassword(true)} data-testid="button-forgot-password">Forgot password?</button>
+                                                            <button type="button" className="text-sm text-blue-600 hover:underline font-semibold" onClick={() => setShowForgotPassword(true)} data-testid="button-forgot-password">Forgot password?</button>
                                                         </div>
                                                         <div className="relative">
                                                             <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
@@ -763,6 +773,35 @@ export default function ContributorView() {
                                                         Log in and Continue
                                                     </Button>
                                                 </form>
+
+                                                {/* Prototype affordance: copyable demo password for the demo account */}
+                                                {isDemoPayerEmail && (
+                                                    <div className="text-[11px] text-center text-slate-500 p-3 border border-dashed rounded-xl bg-slate-50/50" data-testid="demo-password-hint">
+                                                        <p className="font-bold uppercase tracking-wider mb-1.5 text-slate-400 text-[10px]">Prototype tip</p>
+                                                        <p className="flex items-center justify-center gap-2 flex-wrap">
+                                                            <span>Demo password:</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleCopyDemoPassword}
+                                                                className="inline-flex items-center gap-1 font-mono text-blue-600 hover:text-blue-700 font-semibold"
+                                                                data-testid="button-copy-demo-password"
+                                                            >
+                                                                {DEMO_PAYER_CREDENTIALS.password}
+                                                                {demoPasswordCopied
+                                                                    ? <CheckCircle2 className="w-3 h-3 text-green-600" />
+                                                                    : <Copy className="w-3 h-3" />}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPassword(DEMO_PAYER_CREDENTIALS.password)}
+                                                                className="text-blue-600 hover:underline font-semibold"
+                                                                data-testid="button-fill-demo-password"
+                                                            >
+                                                                Fill it
+                                                            </button>
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </motion.div>
                                         )}
 

@@ -270,7 +270,11 @@ test.describe('Contributor Flow', () => {
         await page.getByLabel('Email Address').fill('payer@rhemito.com');
         await page.getByRole('button', { name: 'Continue' }).click();
         await expect(page.getByRole('heading', { name: 'Welcome back!' })).toBeVisible({ timeout: 10000 });
-        await page.getByTestId('input-payer-password').fill('Demo1234!x');
+
+        // Copyable demo password tip is offered on the login step — fill from it
+        await expect(page.getByTestId('demo-password-hint')).toBeVisible();
+        await page.getByTestId('button-fill-demo-password').click();
+        await expect(page.getByTestId('input-payer-password')).toHaveValue('Demo1234!x');
         await page.getByRole('button', { name: 'Log in and Continue' }).click();
         await expect(page.getByText('How would you like to pay?')).toBeVisible({ timeout: 10000 });
 
