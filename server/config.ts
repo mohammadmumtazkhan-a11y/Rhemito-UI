@@ -18,8 +18,15 @@ export const serverConfig = {
   /**
    * Trusted public base URL used to build payment links, QR codes and emails.
    * NEVER built from request Origin/Host headers (header injection risk).
+   *
+   * Dev defaults to localhost; the live deployment on Render is the base URL
+   * every Sender/Payer link must use. Set PUBLIC_BASE_URL to override either.
    */
-  publicBaseUrl: process.env.PUBLIC_BASE_URL ?? "http://localhost:5000",
+  publicBaseUrl:
+    process.env.PUBLIC_BASE_URL ??
+    (process.env.NODE_ENV === "production"
+      ? "https://rhemito-ui.onrender.com"
+      : "http://localhost:5000"),
 
   /** Canonical checkout path appended to the base URL. */
   checkoutPath: "/pay/",
