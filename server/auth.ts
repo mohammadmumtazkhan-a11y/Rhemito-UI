@@ -355,9 +355,9 @@ export function registerAuthRoutes(app: Express) {
 
   // ─── Campaign contributor identification (GroupPay share links) ──────────
   // Mirrors the request-money/invoice payer PIN flow. Campaigns live in
-  // client-side mock storage, so there is no server resource to validate —
-  // the campaignId is an opaque session-bound token whose only role is tying
-  // the verified email to this contribution context for registration.
+  // server-side storage, so the campaignId is validated against a real
+  // campaign record before any PIN is issued — unknown links get a 404
+  // instead of a verification session.
   app.post("/api/public/campaign-verifications/send", async (req: Request, res: Response) => {
     try {
       if (!enforceAuthRateLimit(req, res, "paymentIntent")) return;
@@ -368,6 +368,10 @@ export function registerAuthRoutes(app: Express) {
       const campaignId = String(req.body?.campaignId ?? "").trim();
       if (!campaignId) {
         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "A campaign context is required." } });
+      }
+      const campaign = await storage.getGroupPayCampaignById(campaignId);
+      if (!campaign) {
+        return res.status(404).json({ error: { code: "CAMPAIGN_NOT_FOUND", message: "This contribution link is not valid or the campaign has ended." } });
       }
       const email = parsed.data.email.toLowerCase();
       if (await storage.getAuthUserByEmail(email)) {
@@ -409,6 +413,10 @@ export function registerAuthRoutes(app: Express) {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
       const campaignId = String(req.body?.campaignId ?? "").trim();
       const code = String(req.body?.code ?? "").trim();
+      const campaign = await storage.getGroupPayCampaignById(campaignId);
+      if (!campaign) {
+        return res.status(404).json({ error: { code: "CAMPAIGN_NOT_FOUND", message: "This contribution link is not valid or the campaign has ended." } });
+      }
       const verification = req.session.paymentRequestVerification;
       if (!verification || verification.token !== campaignId || verification.isEmailLink !== false || verification.email !== email) {
         return res.status(400).json({ error: { code: "PIN_NOT_SENT", message: "Request a new PIN for this email address." } });

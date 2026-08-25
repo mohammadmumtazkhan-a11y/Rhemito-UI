@@ -17,6 +17,7 @@ import {
   createGroupPayCampaignSchema,
   updateGroupPayCampaignSchema,
   createGroupPayContributionSchema,
+  contributionStatusForPaymentMethod,
   type GroupPayCampaign,
   type GroupPayCampaignSummary,
 } from "@shared/groupPay";
@@ -206,6 +207,8 @@ export function registerGroupPayRoutes(app: Express): void {
       if (!parsed.success) {
         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: firstZodMessage(parsed.error) } });
       }
+      // Instant/card settle immediately; manual bank transfers stay pending
+      // until the creator confirms receipt.
       const contribution = await storage.addGroupPayContribution({
         id: generateContributionId(),
         campaignId: campaign.id,
@@ -213,7 +216,7 @@ export function registerGroupPayRoutes(app: Express): void {
         email: parsed.data.email.toLowerCase(),
         amount: parsed.data.amount,
         paymentDate: new Date(),
-        status: "completed",
+        status: contributionStatusForPaymentMethod(parsed.data.paymentMethod),
       });
       return res.status(201).json({
         data: { contribution, summary: await campaignSummary(campaign.id) },
@@ -223,4 +226,32 @@ export function registerGroupPayRoutes(app: Express): void {
       return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to record the contribution." } });
     }
   });
+
+  // ─── Contribution confirmation (creator marks a manual transfer received) ─
+
+  app.post(
+    "/api/group-pay/campaigns/:id/contributions/:contributionId/confirm",
+    async (req: Request, res: Response) => {
+      try {
+        const campaign = await storage.getGroupPayCampaignById(req.params.id);
+        if (!campaign) {
+          return res.status(404).json({ error: { code: "NOT_FOUND", message: "Campaign not found." } });
+        }
+        const contribution = await storage.getGroupPayContributionById(req.params.contributionId);
+        if (!contribution || contribution.campaignId !== campaign.id) {
+          return res.status(404).json({ error: { code: "NOT_FOUND", message: "Contribution not found." } });
+        }
+        if (contribution.status !== "pending") {
+          return res.status(409).json({ error: { code: "INVALID_STATE", message: "Only pending contributions can be marked as received." } });
+        }
+        const updated = await storage.updateGroupPayContribution(contribution.id, { status: "completed" });
+        return res.json({
+          data: { contribution: updated, summary: await campaignSummary(campaign.id) },
+        });
+      } catch (err) {
+        console.error("[groupPayRoutes] confirm contribution error:", err);
+        return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Failed to confirm the contribution." } });
+      }
+    },
+  );
 }

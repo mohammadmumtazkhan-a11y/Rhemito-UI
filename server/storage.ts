@@ -148,6 +148,11 @@ export interface IStorage {
   ): Promise<GroupPayCampaign | undefined>;
   deleteGroupPayCampaign(id: string): Promise<boolean>;
   addGroupPayContribution(contribution: GroupPayContribution): Promise<GroupPayContribution>;
+  getGroupPayContributionById(id: string): Promise<GroupPayContribution | undefined>;
+  updateGroupPayContribution(
+    id: string,
+    patch: Partial<Omit<GroupPayContribution, "id">>,
+  ): Promise<GroupPayContribution | undefined>;
   listGroupPayContributions(campaignId: string): Promise<GroupPayContribution[]>;
 }
 
@@ -940,6 +945,22 @@ export class MemStorage implements IStorage {
     this.groupPayContributionsMap.set(contribution.id, contribution);
     this.persistDevSnapshot();
     return contribution;
+  }
+
+  async getGroupPayContributionById(id: string): Promise<GroupPayContribution | undefined> {
+    return this.groupPayContributionsMap.get(id);
+  }
+
+  async updateGroupPayContribution(
+    id: string,
+    patch: Partial<Omit<GroupPayContribution, "id">>,
+  ): Promise<GroupPayContribution | undefined> {
+    const existing = this.groupPayContributionsMap.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...patch, id };
+    this.groupPayContributionsMap.set(id, updated);
+    this.persistDevSnapshot();
+    return updated;
   }
 
   async listGroupPayContributions(campaignId: string): Promise<GroupPayContribution[]> {

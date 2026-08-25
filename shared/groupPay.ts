@@ -24,6 +24,14 @@ export type GroupPayContributionStatus =
 export const GROUP_PAY_CURRENCIES = ["GBP", "USD", "EUR", "NGN"] as const;
 export type GroupPayCurrency = (typeof GROUP_PAY_CURRENCIES)[number];
 
+/**
+ * How a contributor paid. The server derives the contribution status from
+ * this — instant/card settle immediately ("completed"), manual bank transfers
+ * stay "pending" until the creator confirms receipt.
+ */
+export const GROUP_PAY_PAYMENT_METHODS = ["instant_bank", "card", "manual_transfer"] as const;
+export type GroupPayPaymentMethod = (typeof GROUP_PAY_PAYMENT_METHODS)[number];
+
 export interface GroupPayCampaign {
   id: string;
   ownerId: string;
@@ -94,7 +102,15 @@ export const createGroupPayContributionSchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().trim().email(),
   amount: z.number().positive(),
+  paymentMethod: z.enum(GROUP_PAY_PAYMENT_METHODS).default("instant_bank"),
 });
 export type CreateGroupPayContributionInput = z.infer<
   typeof createGroupPayContributionSchema
 >;
+
+/** Server-side status derivation — the client never dictates it directly. */
+export function contributionStatusForPaymentMethod(
+  paymentMethod: GroupPayPaymentMethod,
+): GroupPayContributionStatus {
+  return paymentMethod === "manual_transfer" ? "pending" : "completed";
+}

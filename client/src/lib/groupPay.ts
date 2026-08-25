@@ -13,6 +13,7 @@ import type {
   GroupPayCampaign,
   GroupPayCampaignSummary,
   GroupPayContribution,
+  GroupPayPaymentMethod,
 } from "@shared/groupPay";
 
 /** Contribution link for a campaign id — identical to the previous client-side builder. */
@@ -131,12 +132,17 @@ export interface AddContributionPayload {
   email: string;
   /** Net amount in the campaign currency (matches the previous local record). */
   amount: number;
+  /**
+   * How the contributor paid. The server derives the status: manual bank
+   * transfers are recorded as "pending" until the creator confirms receipt.
+   */
+  paymentMethod?: GroupPayPaymentMethod;
 }
 
 export async function addContribution(
   campaignId: string,
   payload: AddContributionPayload,
-): Promise<{ summary: GroupPayCampaignSummary }> {
+): Promise<{ contribution: Contributor; summary: GroupPayCampaignSummary }> {
   const res = await apiRequest(
     "POST",
     `/api/public/group-pay/campaigns/${encodeURIComponent(campaignId)}/contributions`,
@@ -145,5 +151,20 @@ export async function addContribution(
   const json = (await res.json()) as {
     data: { contribution: GroupPayContribution; summary: GroupPayCampaignSummary };
   };
-  return { summary: json.data.summary };
+  return { contribution: toContributor(json.data.contribution), summary: json.data.summary };
+}
+
+/** Creator action: mark a pending manual-transfer contribution as received. */
+export async function confirmContribution(
+  campaignId: string,
+  contributionId: string,
+): Promise<{ contribution: Contributor; summary: GroupPayCampaignSummary }> {
+  const res = await apiRequest(
+    "POST",
+    `/api/group-pay/campaigns/${encodeURIComponent(campaignId)}/contributions/${encodeURIComponent(contributionId)}/confirm`,
+  );
+  const json = (await res.json()) as {
+    data: { contribution: GroupPayContribution; summary: GroupPayCampaignSummary };
+  };
+  return { contribution: toContributor(json.data.contribution), summary: json.data.summary };
 }

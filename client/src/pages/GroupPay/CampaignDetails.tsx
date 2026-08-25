@@ -11,9 +11,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { FEE_CONFIG } from "./mockData";
-import { fetchCampaign, updateCampaign, deleteCampaign as deleteCampaignApi, type UpdateCampaignPayload } from "@/lib/groupPay";
+import { fetchCampaign, updateCampaign, deleteCampaign as deleteCampaignApi, confirmContribution, type UpdateCampaignPayload } from "@/lib/groupPay";
 import { useToast } from "@/hooks/use-toast";
 import { Campaign, Contributor } from "./types";
+
+const contributionStatusStyles: Record<Contributor["status"], string> = {
+    pending: "bg-amber-100 text-amber-700",
+    completed: "bg-green-100 text-green-700",
+    failed: "bg-red-100 text-red-700",
+};
+
+const contributionStatusLabels: Record<Contributor["status"], string> = {
+    pending: "Pending",
+    completed: "Received",
+    failed: "Failed",
+};
 import {
     AlertDialog,
     AlertDialogAction,
@@ -84,6 +96,17 @@ export default function CampaignDetails() {
         },
         onError: (err: Error) => {
             toast({ title: "Campaign Not Deleted", description: err.message, variant: "destructive" });
+        },
+    });
+
+    const confirmContributionMutation = useMutation({
+        mutationFn: (contributionId: string) => confirmContribution(campaignId, contributionId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: campaignsQueryKey });
+            toast({ title: "Contribution Received", description: "The contribution now counts towards the campaign total." });
+        },
+        onError: (err: Error) => {
+            toast({ title: "Contribution Not Updated", description: err.message, variant: "destructive" });
         },
     });
 
@@ -663,13 +686,32 @@ export default function CampaignDetails() {
                                                         <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
                                                             {contributor.name.charAt(0)}
                                                         </div>
-                                                        <span className="font-medium">{contributor.name}</span>
+                                                        <div className="flex flex-col items-start gap-1">
+                                                            <span className="font-medium">{contributor.name}</span>
+                                                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${contributionStatusStyles[contributor.status]}`}>
+                                                                {contributionStatusLabels[contributor.status]}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="py-3 px-4 text-muted-foreground text-sm">{contributor.email}</td>
                                                 <td className="py-3 px-4 text-muted-foreground text-sm">{formatDate(contributor.paymentDate)}</td>
-                                                <td className="py-3 px-4 text-right font-semibold text-green-600">
-                                                    {formatCurrency(contributor.amount, campaign.currency)}
+                                                <td className="py-3 px-4 text-right">
+                                                    <p className={`font-semibold ${contributor.status === 'completed' ? 'text-green-600' : 'text-slate-500'}`}>
+                                                        {formatCurrency(contributor.amount, campaign.currency)}
+                                                    </p>
+                                                    {contributor.status === 'pending' && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-7 px-2 text-xs mt-1 text-green-700 border-green-200 hover:bg-green-50 hover:text-green-700"
+                                                            disabled={confirmContributionMutation.isPending}
+                                                            onClick={() => confirmContributionMutation.mutate(contributor.id)}
+                                                        >
+                                                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                            Mark Received
+                                                        </Button>
+                                                    )}
                                                 </td>
                                             </motion.tr>
                                         ))}

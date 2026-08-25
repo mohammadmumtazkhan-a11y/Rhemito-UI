@@ -318,7 +318,7 @@ export default function ContributorView() {
         }
     };
 
-    const handlePay = () => {
+    const handlePay = (method: "instant_bank" | "card") => {
         setIsPaid(true);
         // Save the net amount in campaign currency so progress is tracked correctly relative to goal
         const contributionAmount = conversion ? conversion.netAmount : parseFloat(amount);
@@ -328,6 +328,7 @@ export default function ContributorView() {
             name: firstName + " " + lastName,
             email,
             amount: contributionAmount,
+            paymentMethod: method,
         })
             .then((result) => {
                 // Reconcile with the authoritative server totals
@@ -353,8 +354,30 @@ export default function ContributorView() {
     const handleInstantPay = () => {
         setPaymentStep("processing_instant");
         setTimeout(() => {
-            handlePay();
+            handlePay("instant_bank");
         }, 500);
+    };
+
+    const handleManualTransferMade = () => {
+        // Save the net amount in campaign currency; recorded server-side as
+        // "pending" until the creator confirms the transfer arrived.
+        const contributionAmount = conversion ? conversion.netAmount : parseFloat(amount);
+
+        addContribution(campaignId, {
+            name: firstName + " " + lastName,
+            email,
+            amount: contributionAmount,
+            paymentMethod: "manual_transfer",
+        }).catch((err) => {
+            toast({
+                title: "Transfer Not Logged",
+                description: err instanceof Error ? err.message : "We could not record your transfer. Please contact the campaign creator so your contribution is not missed.",
+                variant: "destructive",
+            });
+        });
+
+        setWasManualTransfer(true);
+        setPaymentStep("manual_transfer_complete");
     };
 
     const PaymentMethodRow = ({ icon: Icon, title, subtitle, onClick, isSelected = false }: any) => (
@@ -966,7 +989,7 @@ export default function ContributorView() {
 
                                                             <div className="flex gap-3">
                                                                 <Button variant="outline" className="flex-1 h-11" onClick={() => setPaymentStep("method")}>Back</Button>
-                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={handlePay}>Contribute {formatCurrency(conversion?.sendingAmount || parseFloat(amount), conversion?.sendingCurrency || campaign.currency)}</Button>
+                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={() => handlePay("card")}>Contribute {formatCurrency(conversion?.sendingAmount || parseFloat(amount), conversion?.sendingCurrency || campaign.currency)}</Button>
                                                             </div>
                                                         </div>
                                                     ) : paymentStep === "processing_instant" ? (
@@ -1013,7 +1036,7 @@ export default function ContributorView() {
 
                                                             <div className="flex gap-3">
                                                                 <Button variant="outline" className="flex-1 h-11" onClick={() => setPaymentStep("method")}>Back</Button>
-                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl" onClick={() => { setWasManualTransfer(true); setPaymentStep("manual_transfer_complete"); }}>I Have Made the Transfer</Button>
+                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl" onClick={handleManualTransferMade}>I Have Made the Transfer</Button>
                                                             </div>
                                                         </div>
                                                     ) : paymentStep === "manual_transfer_complete" ? (

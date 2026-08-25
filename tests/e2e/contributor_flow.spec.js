@@ -103,4 +103,54 @@ test.describe('Contributor Flow', () => {
             await otherContext.close();
         }
     });
+
+    test('Manual bank transfer records a pending contribution the creator can confirm', async ({ request }) => {
+        const createRes = await request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Manual Transfer Fund',
+                creatorName: 'John Doe',
+                targetAmount: 500,
+                currency: 'GBP',
+                description: 'Manual transfer lifecycle test.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(createRes.ok()).toBeTruthy();
+        const { data: campaign } = await createRes.json();
+
+        // Contributor pays by manual bank transfer — recorded as pending
+        const payRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Manual Manny', email: 'manny@example.com', amount: 120, paymentMethod: 'manual_transfer' },
+        });
+        expect(payRes.ok()).toBeTruthy();
+        const payBody = await payRes.json();
+        expect(payBody.data.contribution.status).toBe('pending');
+        // Pending money does not count towards the raised total yet
+        expect(payBody.data.summary.totalRaised).toBe(0);
+
+        // Creator sees the pending contribution and confirms receipt
+        const confirmRes = await request.post(
+            `/api/group-pay/campaigns/${campaign.id}/contributions/${payBody.data.contribution.id}/confirm`
+        );
+        expect(confirmRes.ok()).toBeTruthy();
+        const confirmBody = await confirmRes.json();
+        expect(confirmBody.data.contribution.status).toBe('completed');
+        expect(confirmBody.data.summary.totalRaised).toBe(120);
+
+        // Confirming an already-received contribution is rejected
+        const secondConfirm = await request.post(
+            `/api/group-pay/campaigns/${campaign.id}/contributions/${payBody.data.contribution.id}/confirm`
+        );
+        expect(secondConfirm.status()).toBe(409);
+    });
+
+    test('Campaign PIN verification rejects unknown campaigns', async ({ request }) => {
+        const res = await request.post('/api/public/campaign-verifications/send', {
+            data: { campaignId: 'does-not-exist', email: 'pin-unknown-campaign@example.com' },
+        });
+        expect(res.status()).toBe(404);
+        const body = await res.json();
+        expect(body.error.code).toBe('CAMPAIGN_NOT_FOUND');
+    });
 });
