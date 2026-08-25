@@ -69,6 +69,11 @@ export default function ContributorView() {
                 if (camp) {
                     setCampaign(camp);
                     setSummary(camp.summary);
+                    // Fixed-amount campaigns: prefill the exact amount the
+                    // creator set (gross, in the campaign currency)
+                    if (camp.fixedContributionAmount) {
+                        setAmount(camp.fixedContributionAmount.toFixed(2));
+                    }
                 }
             } catch (err) {
                 console.error("Error loading campaign:", err);
@@ -141,6 +146,11 @@ export default function ContributorView() {
     };
 
     const conversion = getConversionDetails();
+
+    // Fixed-amount campaigns: the contributor pays an exact amount chosen by
+    // the creator — the amount/currency are locked and manual bank transfer
+    // (which cannot guarantee an exact payment) is not offered.
+    const hasFixedAmount = Boolean(campaign?.fixedContributionAmount);
 
     const progress = campaign ? (summary.totalRaised / campaign.targetAmount) * 100 : 0;
 
@@ -630,6 +640,7 @@ export default function ContributorView() {
                                                             <Select
                                                                 value={selectedCurrency || campaign.currency}
                                                                 onValueChange={setSelectedCurrency}
+                                                                disabled={hasFixedAmount}
                                                             >
                                                                 <SelectTrigger className="w-24 h-11 shrink-0">
                                                                     <SelectValue />
@@ -656,9 +667,16 @@ export default function ContributorView() {
                                                                     value={amount}
                                                                     onChange={(e) => setAmount(e.target.value)}
                                                                     required
+                                                                    disabled={hasFixedAmount}
                                                                 />
                                                             </div>
                                                         </div>
+                                                        {hasFixedAmount && (
+                                                            <p className="text-xs text-muted-foreground flex items-center gap-1.5" data-testid="fixed-amount-hint">
+                                                                <Lock className="w-3 h-3" />
+                                                                The contribution amount is fixed by the campaign creator.
+                                                            </p>
+                                                        )}
                                                     </div>
 
                                                     {/* Conversion Breakdown - shown when different currency selected */}
@@ -979,12 +997,16 @@ export default function ContributorView() {
                                                                 subtitle="Support for Visa, Mastercard, and Amex"
                                                                 onClick={() => setPaymentStep("card_details")}
                                                             />
-                                                            <PaymentMethodRow
-                                                                icon={ArrowRight}
-                                                                title="Manual Bank Transfer"
-                                                                subtitle="Get our bank details to send offline"
-                                                                onClick={() => setPaymentStep("manual_transfer")}
-                                                            />
+                                                            {/* Manual transfer lets the payer send any amount, so it
+                                                                is not offered when the campaign amount is fixed */}
+                                                            {!hasFixedAmount && (
+                                                                <PaymentMethodRow
+                                                                    icon={ArrowRight}
+                                                                    title="Manual Bank Transfer"
+                                                                    subtitle="Get our bank details to send offline"
+                                                                    onClick={() => setPaymentStep("manual_transfer")}
+                                                                />
+                                                            )}
                                                         </div>
                                                     ) : paymentStep === "card_details" ? (
                                                         <div className="space-y-6">

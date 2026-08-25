@@ -32,6 +32,21 @@ export type GroupPayCurrency = (typeof GROUP_PAY_CURRENCIES)[number];
 export const GROUP_PAY_PAYMENT_METHODS = ["instant_bank", "card", "manual_transfer"] as const;
 export type GroupPayPaymentMethod = (typeof GROUP_PAY_PAYMENT_METHODS)[number];
 
+/**
+ * Mito fee deducted from contributions (single source of truth — the client
+ * preview and the server's fixed-amount validation must agree).
+ */
+export const GROUP_PAY_CONTRIBUTION_FEE = {
+  PERCENTAGE: 0.015, // 1.5%
+  MIN_FEE: 0.5, // minimum fee in campaign currency
+} as const;
+
+/** Net amount (campaign currency) a contributor's gross amount converts to. */
+export function contributionNetAmount(grossAmount: number): number {
+  const fee = Math.max(grossAmount * GROUP_PAY_CONTRIBUTION_FEE.PERCENTAGE, GROUP_PAY_CONTRIBUTION_FEE.MIN_FEE);
+  return grossAmount - fee;
+}
+
 export interface GroupPayCampaign {
   id: string;
   ownerId: string;

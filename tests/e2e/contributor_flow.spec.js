@@ -219,4 +219,64 @@ test.describe('Contributor Flow', () => {
         // The contribution form must not be rendered
         await expect(page.getByRole('heading', { name: 'Make a Contribution' })).toHaveCount(0);
     });
+
+    test('Fixed-amount campaigns lock the amount and exclude manual bank transfer', async ({ request, page }) => {
+        // Gross per contributor 25.80 → fee = max(25.80*1.5%, £0.50) = £0.50 → net 25.30
+        const createRes = await request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Fixed Amount Fund',
+                creatorName: 'John Doe',
+                targetAmount: 200,
+                currency: 'GBP',
+                description: 'Fixed contribution amount test.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+                fixedContributionAmount: 25.80,
+            },
+        });
+        expect(createRes.ok()).toBeTruthy();
+        const { data: campaign } = await createRes.json();
+        expect(campaign.fixedContributionAmount).toBe(25.80);
+
+        // Server: manual transfer cannot guarantee the exact amount — rejected
+        const manualRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Fix Fay', email: 'fay@example.com', amount: 25.30, paymentMethod: 'manual_transfer' },
+        });
+        expect(manualRes.status()).toBe(409);
+        expect((await manualRes.json()).error.code).toBe('FIXED_AMOUNT_REQUIRED');
+
+        // Server: any other amount is rejected
+        const wrongRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Fix Fay', email: 'fay@example.com', amount: 10, paymentMethod: 'instant_bank' },
+        });
+        expect(wrongRes.status()).toBe(409);
+
+        // Server: the exact expected net amount is accepted
+        const okRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Fix Fay', email: 'fay@example.com', amount: 25.30, paymentMethod: 'instant_bank' },
+        });
+        expect(okRes.ok()).toBeTruthy();
+        expect((await okRes.json()).data.contribution.status).toBe('completed');
+
+        // UI: the amount is prefilled with the fixed value and locked
+        await page.goto(`/contribute/${campaign.id}`);
+        const amountInput = page.getByLabel('Contribution Amount');
+        await expect(amountInput).toBeVisible({ timeout: 10000 });
+        await expect(amountInput).toBeDisabled();
+        await expect(amountInput).toHaveValue('25.80');
+        await expect(page.getByTestId('fixed-amount-hint')).toBeVisible();
+
+        // UI: sign in with the registered demo payer to reach the payment screen
+        await page.getByLabel('Email Address').fill('payer@rhemito.com');
+        await page.getByRole('button', { name: 'Continue' }).click();
+        await expect(page.getByRole('heading', { name: 'Welcome back!' })).toBeVisible({ timeout: 10000 });
+        await page.getByTestId('input-payer-password').fill('Demo1234!x');
+        await page.getByRole('button', { name: 'Log in and Continue' }).click();
+        await expect(page.getByText('How would you like to pay?')).toBeVisible({ timeout: 10000 });
+
+        // Only amount-exact payment methods are offered
+        await expect(page.getByText('Instant Bank Transfer')).toBeVisible();
+        await expect(page.getByText('Debit/Credit Card')).toBeVisible();
+        await expect(page.getByText('Manual Bank Transfer')).toHaveCount(0);
+    });
 });

@@ -18,6 +18,7 @@ import {
   updateGroupPayCampaignSchema,
   createGroupPayContributionSchema,
   contributionStatusForPaymentMethod,
+  contributionNetAmount,
   type GroupPayCampaign,
   type GroupPayCampaignSummary,
 } from "@shared/groupPay";
@@ -210,6 +211,18 @@ export function registerGroupPayRoutes(app: Express): void {
       const parsed = createGroupPayContributionSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: firstZodMessage(parsed.error) } });
+      }
+      // Fixed-amount campaigns: the payer must be charged the exact amount.
+      // Manual bank transfers cannot guarantee that, and any other amount is
+      // rejected (the client locks the input, this is the authoritative check).
+      if (campaign.fixedContributionAmount != null) {
+        if (parsed.data.paymentMethod === "manual_transfer") {
+          return res.status(409).json({ error: { code: "FIXED_AMOUNT_REQUIRED", message: "This campaign has a fixed contribution amount which cannot be guaranteed by manual bank transfer. Please pay by instant bank transfer or card." } });
+        }
+        const expectedNet = contributionNetAmount(campaign.fixedContributionAmount);
+        if (Math.abs(parsed.data.amount - expectedNet) > 0.011) {
+          return res.status(409).json({ error: { code: "FIXED_AMOUNT_REQUIRED", message: "This campaign requires a fixed contribution amount." } });
+        }
       }
       // Instant/card settle immediately; manual bank transfers stay pending
       // until the creator confirms receipt.

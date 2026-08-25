@@ -3,6 +3,7 @@
 // pure display/calculation constants remain here.
 
 import { BankAccount } from './types';
+import { GROUP_PAY_CONTRIBUTION_FEE } from '@shared/groupPay';
 
 // Supported currencies for contributions
 export const SUPPORTED_CURRENCIES = ['GBP', 'USD', 'EUR', 'NGN'] as const;
@@ -16,11 +17,9 @@ export const MOCK_FX_RATES: Record<string, Record<string, number>> = {
     NGN: { GBP: 0.00051, USD: 0.00065, EUR: 0.0006, NGN: 1 },
 };
 
-// Mito fee configuration
-export const MITO_FEE_CONFIG = {
-    PERCENTAGE: 0.015, // 1.5%
-    MIN_FEE: 0.50,     // Minimum fee in campaign currency
-};
+// Mito fee configuration — re-exported from shared so the client preview and
+// the server's fixed-amount validation always use the same numbers
+export const MITO_FEE_CONFIG = GROUP_PAY_CONTRIBUTION_FEE;
 
 // Currency symbols
 export const CURRENCY_SYMBOLS: Record<string, string> = {
