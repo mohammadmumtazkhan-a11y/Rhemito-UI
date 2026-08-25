@@ -153,4 +153,70 @@ test.describe('Contributor Flow', () => {
         const body = await res.json();
         expect(body.error.code).toBe('CAMPAIGN_NOT_FOUND');
     });
+
+    test('Paused campaigns do not accept contributions; resuming reopens them', async ({ request }) => {
+        const createRes = await request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Pause Gate Fund',
+                creatorName: 'John Doe',
+                targetAmount: 400,
+                currency: 'GBP',
+                description: 'Pause/resume contribution gate test.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(createRes.ok()).toBeTruthy();
+        const { data: campaign } = await createRes.json();
+
+        // Pause the campaign
+        const pauseRes = await request.patch(`/api/group-pay/campaigns/${campaign.id}`, { data: { toggleStatus: true } });
+        expect(pauseRes.ok()).toBeTruthy();
+
+        // Contributions are rejected while paused
+        const payRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Paige Paused', email: 'paige@example.com', amount: 15 },
+        });
+        expect(payRes.status()).toBe(409);
+        expect((await payRes.json()).error.code).toBe('CAMPAIGN_NOT_ACCEPTING');
+
+        // The PIN entry point rejects while paused too
+        const pinRes = await request.post('/api/public/campaign-verifications/send', {
+            data: { campaignId: campaign.id, email: 'paige@example.com' },
+        });
+        expect(pinRes.status()).toBe(409);
+
+        // Resuming reopens contributions
+        const resumeRes = await request.patch(`/api/group-pay/campaigns/${campaign.id}`, { data: { toggleStatus: true } });
+        expect(resumeRes.ok()).toBeTruthy();
+        const payAgain = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Paige Paused', email: 'paige@example.com', amount: 15 },
+        });
+        expect(payAgain.ok()).toBeTruthy();
+        expect((await payAgain.json()).data.contribution.status).toBe('completed');
+    });
+
+    test('Paused campaign page shows the not-accepting state instead of the contribution form', async ({ request, page }) => {
+        const createRes = await request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Pause Page Fund',
+                creatorName: 'John Doe',
+                targetAmount: 300,
+                currency: 'GBP',
+                description: 'Paused contribute page test.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(createRes.ok()).toBeTruthy();
+        const { data: campaign } = await createRes.json();
+        const pauseRes = await request.patch(`/api/group-pay/campaigns/${campaign.id}`, { data: { toggleStatus: true } });
+        expect(pauseRes.ok()).toBeTruthy();
+
+        await page.goto(`/contribute/${campaign.id}`);
+        await expect(page.getByTestId('campaign-not-accepting')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole('heading', { name: 'Contributions Paused' })).toBeVisible();
+        // The contribution form must not be rendered
+        await expect(page.getByRole('heading', { name: 'Make a Contribution' })).toHaveCount(0);
+    });
 });

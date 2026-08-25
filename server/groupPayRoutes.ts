@@ -203,6 +203,10 @@ export function registerGroupPayRoutes(app: Express): void {
       if (!campaign) {
         return res.status(404).json({ error: { code: "NOT_FOUND", message: "Campaign not found." } });
       }
+      // Only active campaigns accept contributions (paused/completed/cancelled do not)
+      if (campaign.status !== "active") {
+        return res.status(409).json({ error: { code: "CAMPAIGN_NOT_ACCEPTING", message: "This campaign is not accepting contributions right now." } });
+      }
       const parsed = createGroupPayContributionSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: firstZodMessage(parsed.error) } });

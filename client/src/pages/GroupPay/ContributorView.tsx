@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRoute } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Target, CheckCircle2, Mail, User, CreditCard, ArrowRight, ArrowLeftRight, ShieldCheck, Loader2, Lock, KeyRound, Building2, Wallet, Copy, Star, Gift, Zap } from "lucide-react";
+import { Users, Target, CheckCircle2, Mail, User, CreditCard, ArrowRight, ArrowLeftRight, ShieldCheck, Loader2, Lock, KeyRound, Building2, Wallet, Copy, Star, Gift, Zap, PauseCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -323,7 +323,9 @@ export default function ContributorView() {
         // Save the net amount in campaign currency so progress is tracked correctly relative to goal
         const contributionAmount = conversion ? conversion.netAmount : parseFloat(amount);
 
-        // Persist server-side so the campaign creator sees this contribution
+        // Persist server-side; totals reconcile from the authoritative response
+        // (the server also rejects contributions if the campaign was paused
+        // after this page loaded)
         addContribution(campaignId, {
             name: firstName + " " + lastName,
             email,
@@ -331,7 +333,6 @@ export default function ContributorView() {
             paymentMethod: method,
         })
             .then((result) => {
-                // Reconcile with the authoritative server totals
                 setSummary(result.summary);
             })
             .catch((err) => {
@@ -341,12 +342,6 @@ export default function ContributorView() {
                     variant: "destructive",
                 });
             });
-
-        // Update local state to reflect new contribution immediately
-        setSummary(prev => ({
-            totalRaised: prev.totalRaised + contributionAmount,
-            contributorCount: prev.contributorCount + 1
-        }));
 
         setPaymentStep("method");
     };
@@ -572,6 +567,29 @@ export default function ContributorView() {
                                         <div className="text-center">
                                             <h3 className="text-lg font-bold text-slate-900 tracking-tight">Securing Connection</h3>
                                             <p className="text-slate-500 text-sm font-medium">Entering Campaign Workspace...</p>
+                                        </div>
+                                    </motion.div>
+                                ) : campaign.status !== "active" ? (
+                                    <motion.div
+                                        key="not-accepting"
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -20 }}
+                                        className="flex flex-col items-center text-center space-y-4 py-8"
+                                        data-testid="campaign-not-accepting"
+                                    >
+                                        <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center">
+                                            <PauseCircle className="w-7 h-7 text-amber-600" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+                                                {campaign.status === "paused" ? "Contributions Paused" : "Campaign Unavailable"}
+                                            </h2>
+                                            <p className="text-sm text-slate-500 leading-6 max-w-xs mx-auto">
+                                                {campaign.status === "paused"
+                                                    ? "This campaign is currently paused and is not accepting contributions. Please check back later or contact the campaign creator."
+                                                    : "This campaign is no longer accepting contributions."}
+                                            </p>
                                         </div>
                                     </motion.div>
                                 ) : (

@@ -373,6 +373,10 @@ export function registerAuthRoutes(app: Express) {
       if (!campaign) {
         return res.status(404).json({ error: { code: "CAMPAIGN_NOT_FOUND", message: "This contribution link is not valid or the campaign has ended." } });
       }
+      // Contributor identification only starts for campaigns that accept contributions
+      if (campaign.status !== "active") {
+        return res.status(409).json({ error: { code: "CAMPAIGN_NOT_ACCEPTING", message: "This campaign is not accepting contributions right now." } });
+      }
       const email = parsed.data.email.toLowerCase();
       if (await storage.getAuthUserByEmail(email)) {
         return res.status(409).json({ error: { code: "EMAIL_REGISTERED", message: "This email already has a Rhemito account. Please sign in." } });
