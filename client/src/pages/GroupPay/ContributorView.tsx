@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRoute } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Target, CheckCircle2, Mail, User, CreditCard, ArrowRight, ArrowLeftRight, ShieldCheck, Loader2, Lock, KeyRound, Building2, Wallet, Copy, Star, Gift, Zap } from "lucide-react";
+import { Users, Target, CheckCircle2, Mail, User, CreditCard, ArrowRight, ArrowLeftRight, ShieldCheck, Loader2, Lock, KeyRound, Building2, Wallet, Copy, Star, Gift, Zap, PauseCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,8 @@ import { PasswordInput } from "@/components/ui/password-input";
 import ForgotPassword from "@/pages/Auth/components/ForgotPassword";
 import { Label } from "@/components/ui/label";
 import { PremiumDatePicker } from "@/components/ui/premium-date-picker";
-import { getCampaignById, getCampaignSummary, addContributor, SUPPORTED_CURRENCIES, MOCK_FX_RATES, MITO_FEE_CONFIG, CURRENCY_SYMBOLS } from "./mockData";
+import { SUPPORTED_CURRENCIES, MOCK_FX_RATES, MITO_FEE_CONFIG, CURRENCY_SYMBOLS } from "./mockData";
+import { fetchPublicCampaign, addContribution } from "@/lib/groupPay";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Campaign } from "./types";
 import { useToast } from "@/hooks/use-toast";
@@ -53,27 +54,42 @@ export default function ContributorView() {
     const [regPhoneNumber, setRegPhoneNumber] = useState("");
     const [isPaid, setIsPaid] = useState(false);
     const [wasManualTransfer, setWasManualTransfer] = useState(false);
+    const [demoPasswordCopied, setDemoPasswordCopied] = useState(false);
     const [paymentStep, setPaymentStep] = useState<"method" | "card_details" | "processing_instant" | "manual_transfer" | "manual_transfer_complete">("method");
     const [countdown, setCountdown] = useState(1);
     const [amount, setAmount] = useState("");
     const [selectedCurrency, setSelectedCurrency] = useState<string>("");
 
     useEffect(() => {
-        try {
-            const camp = getCampaignById(campaignId);
-            if (camp) {
-                setCampaign(camp);
-                setSummary(getCampaignSummary(campaignId));
+        let cancelled = false;
+        (async () => {
+            try {
+                // Server-side lookup so shared links resolve in any browser
+                const camp = await fetchPublicCampaign(campaignId);
+                if (cancelled) return;
+                if (camp) {
+                    setCampaign(camp);
+                    setSummary(camp.summary);
+                    // Fixed-amount campaigns: prefill the exact amount the
+                    // creator set (gross, in the campaign currency)
+                    if (camp.fixedContributionAmount) {
+                        setAmount(camp.fixedContributionAmount.toFixed(2));
+                    }
+                }
+            } catch (err) {
+                console.error("Error loading campaign:", err);
+            } finally {
+                if (cancelled) return;
+                setIsLoading(false);
+                // Show right section loader for a bit longer
+                setTimeout(() => {
+                    setIsRightSectionLoading(false);
+                }, 300);
             }
-        } catch (err) {
-            console.error("Error loading campaign:", err);
-        } finally {
-            setIsLoading(false);
-            // Show right section loader for a bit longer
-            setTimeout(() => {
-                setIsRightSectionLoading(false);
-            }, 300);
-        }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [campaignId]);
 
     // PIN resend cooldown ticker
@@ -106,6 +122,15 @@ export default function ContributorView() {
         }).format(val);
     };
 
+    // Prototype affordance: copyable demo password on the login step
+    const isDemoPayerEmail = email.toLowerCase() === DEMO_PAYER_CREDENTIALS.email;
+
+    const handleCopyDemoPassword = () => {
+        navigator.clipboard.writeText(DEMO_PAYER_CREDENTIALS.password);
+        setDemoPasswordCopied(true);
+        setTimeout(() => setDemoPasswordCopied(false), 2000);
+    };
+
     // Calculate FX conversion details
     const getConversionDetails = () => {
         if (!amount || !campaign) return null;
@@ -131,6 +156,11 @@ export default function ContributorView() {
     };
 
     const conversion = getConversionDetails();
+
+    // Fixed-amount campaigns: the contributor pays an exact amount chosen by
+    // the creator — the amount/currency are locked and manual bank transfer
+    // (which cannot guarantee an exact payment) is not offered.
+    const hasFixedAmount = Boolean(campaign?.fixedContributionAmount);
 
     const progress = campaign ? (summary.totalRaised / campaign.targetAmount) * 100 : 0;
 
@@ -308,23 +338,30 @@ export default function ContributorView() {
         }
     };
 
-    const handlePay = () => {
+    const handlePay = (method: "instant_bank" | "card") => {
         setIsPaid(true);
         // Save the net amount in campaign currency so progress is tracked correctly relative to goal
         const contributionAmount = conversion ? conversion.netAmount : parseFloat(amount);
 
-        addContributor({
-            campaignId,
+        // Persist server-side; totals reconcile from the authoritative response
+        // (the server also rejects contributions if the campaign was paused
+        // after this page loaded)
+        addContribution(campaignId, {
             name: firstName + " " + lastName,
             email,
             amount: contributionAmount,
-        });
-
-        // Update local state to reflect new contribution immediately
-        setSummary(prev => ({
-            totalRaised: prev.totalRaised + contributionAmount,
-            contributorCount: prev.contributorCount + 1
-        }));
+            paymentMethod: method,
+        })
+            .then((result) => {
+                setSummary(result.summary);
+            })
+            .catch((err) => {
+                toast({
+                    title: "Contribution Not Saved",
+                    description: err instanceof Error ? err.message : "Your payment went through but we could not update the campaign totals.",
+                    variant: "destructive",
+                });
+            });
 
         setPaymentStep("method");
     };
@@ -332,8 +369,30 @@ export default function ContributorView() {
     const handleInstantPay = () => {
         setPaymentStep("processing_instant");
         setTimeout(() => {
-            handlePay();
+            handlePay("instant_bank");
         }, 500);
+    };
+
+    const handleManualTransferMade = () => {
+        // Save the net amount in campaign currency; recorded server-side as
+        // "pending" until the creator confirms the transfer arrived.
+        const contributionAmount = conversion ? conversion.netAmount : parseFloat(amount);
+
+        addContribution(campaignId, {
+            name: firstName + " " + lastName,
+            email,
+            amount: contributionAmount,
+            paymentMethod: "manual_transfer",
+        }).catch((err) => {
+            toast({
+                title: "Transfer Not Logged",
+                description: err instanceof Error ? err.message : "We could not record your transfer. Please contact the campaign creator so your contribution is not missed.",
+                variant: "destructive",
+            });
+        });
+
+        setWasManualTransfer(true);
+        setPaymentStep("manual_transfer_complete");
     };
 
     const PaymentMethodRow = ({ icon: Icon, title, subtitle, onClick, isSelected = false }: any) => (
@@ -530,6 +589,29 @@ export default function ContributorView() {
                                             <p className="text-slate-500 text-sm font-medium">Entering Campaign Workspace...</p>
                                         </div>
                                     </motion.div>
+                                ) : campaign.status !== "active" ? (
+                                    <motion.div
+                                        key="not-accepting"
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -20 }}
+                                        className="flex flex-col items-center text-center space-y-4 py-8"
+                                        data-testid="campaign-not-accepting"
+                                    >
+                                        <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center">
+                                            <PauseCircle className="w-7 h-7 text-amber-600" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+                                                {campaign.status === "paused" ? "Contributions Paused" : "Campaign Unavailable"}
+                                            </h2>
+                                            <p className="text-sm text-slate-500 leading-6 max-w-xs mx-auto">
+                                                {campaign.status === "paused"
+                                                    ? "This campaign is currently paused and is not accepting contributions. Please check back later or contact the campaign creator."
+                                                    : "This campaign is no longer accepting contributions."}
+                                            </p>
+                                        </div>
+                                    </motion.div>
                                 ) : (
                                     <>
                                         {authStep === 'check_email' && (
@@ -568,6 +650,7 @@ export default function ContributorView() {
                                                             <Select
                                                                 value={selectedCurrency || campaign.currency}
                                                                 onValueChange={setSelectedCurrency}
+                                                                disabled={hasFixedAmount}
                                                             >
                                                                 <SelectTrigger className="w-24 h-11 shrink-0">
                                                                     <SelectValue />
@@ -594,9 +677,16 @@ export default function ContributorView() {
                                                                     value={amount}
                                                                     onChange={(e) => setAmount(e.target.value)}
                                                                     required
+                                                                    disabled={hasFixedAmount}
                                                                 />
                                                             </div>
                                                         </div>
+                                                        {hasFixedAmount && (
+                                                            <p className="text-xs text-muted-foreground flex items-center gap-1.5" data-testid="fixed-amount-hint">
+                                                                <Lock className="w-3 h-3" />
+                                                                The contribution amount is fixed by the campaign creator.
+                                                            </p>
+                                                        )}
                                                     </div>
 
                                                     {/* Conversion Breakdown - shown when different currency selected */}
@@ -670,7 +760,7 @@ export default function ContributorView() {
                                                     <div className="space-y-2">
                                                         <div className="flex items-center justify-between">
                                                             <Label htmlFor="password">Password</Label>
-                                                            <button type="button" className="text-sm font-semibold text-blue-600 hover:underline" onClick={() => setShowForgotPassword(true)} data-testid="button-forgot-password">Forgot password?</button>
+                                                            <button type="button" className="text-sm text-blue-600 hover:underline font-semibold" onClick={() => setShowForgotPassword(true)} data-testid="button-forgot-password">Forgot password?</button>
                                                         </div>
                                                         <div className="relative">
                                                             <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
@@ -683,6 +773,35 @@ export default function ContributorView() {
                                                         Log in and Continue
                                                     </Button>
                                                 </form>
+
+                                                {/* Prototype affordance: copyable demo password for the demo account */}
+                                                {isDemoPayerEmail && (
+                                                    <div className="text-[11px] text-center text-slate-500 p-3 border border-dashed rounded-xl bg-slate-50/50" data-testid="demo-password-hint">
+                                                        <p className="font-bold uppercase tracking-wider mb-1.5 text-slate-400 text-[10px]">Prototype tip</p>
+                                                        <p className="flex items-center justify-center gap-2 flex-wrap">
+                                                            <span>Demo password:</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleCopyDemoPassword}
+                                                                className="inline-flex items-center gap-1 font-mono text-blue-600 hover:text-blue-700 font-semibold"
+                                                                data-testid="button-copy-demo-password"
+                                                            >
+                                                                {DEMO_PAYER_CREDENTIALS.password}
+                                                                {demoPasswordCopied
+                                                                    ? <CheckCircle2 className="w-3 h-3 text-green-600" />
+                                                                    : <Copy className="w-3 h-3" />}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPassword(DEMO_PAYER_CREDENTIALS.password)}
+                                                                className="text-blue-600 hover:underline font-semibold"
+                                                                data-testid="button-fill-demo-password"
+                                                            >
+                                                                Fill it
+                                                            </button>
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </motion.div>
                                         )}
 
@@ -917,12 +1036,16 @@ export default function ContributorView() {
                                                                 subtitle="Support for Visa, Mastercard, and Amex"
                                                                 onClick={() => setPaymentStep("card_details")}
                                                             />
-                                                            <PaymentMethodRow
-                                                                icon={ArrowRight}
-                                                                title="Manual Bank Transfer"
-                                                                subtitle="Get our bank details to send offline"
-                                                                onClick={() => setPaymentStep("manual_transfer")}
-                                                            />
+                                                            {/* Manual transfer lets the payer send any amount, so it
+                                                                is not offered when the campaign amount is fixed */}
+                                                            {!hasFixedAmount && (
+                                                                <PaymentMethodRow
+                                                                    icon={ArrowRight}
+                                                                    title="Manual Bank Transfer"
+                                                                    subtitle="Get our bank details to send offline"
+                                                                    onClick={() => setPaymentStep("manual_transfer")}
+                                                                />
+                                                            )}
                                                         </div>
                                                     ) : paymentStep === "card_details" ? (
                                                         <div className="space-y-6">
@@ -945,7 +1068,7 @@ export default function ContributorView() {
 
                                                             <div className="flex gap-3">
                                                                 <Button variant="outline" className="flex-1 h-11" onClick={() => setPaymentStep("method")}>Back</Button>
-                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={handlePay}>Contribute {formatCurrency(conversion?.sendingAmount || parseFloat(amount), conversion?.sendingCurrency || campaign.currency)}</Button>
+                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={() => handlePay("card")}>Contribute {formatCurrency(conversion?.sendingAmount || parseFloat(amount), conversion?.sendingCurrency || campaign.currency)}</Button>
                                                             </div>
                                                         </div>
                                                     ) : paymentStep === "processing_instant" ? (
@@ -992,7 +1115,7 @@ export default function ContributorView() {
 
                                                             <div className="flex gap-3">
                                                                 <Button variant="outline" className="flex-1 h-11" onClick={() => setPaymentStep("method")}>Back</Button>
-                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl" onClick={() => { setWasManualTransfer(true); setPaymentStep("manual_transfer_complete"); }}>I Have Made the Transfer</Button>
+                                                                <Button className="flex-[2] h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl" onClick={handleManualTransferMade}>I Have Made the Transfer</Button>
                                                             </div>
                                                         </div>
                                                     ) : paymentStep === "manual_transfer_complete" ? (

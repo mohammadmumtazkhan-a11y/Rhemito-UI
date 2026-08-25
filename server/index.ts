@@ -90,8 +90,10 @@ async function main() {
       storage.hydrateForDev(
         snapshot.authUsers as never[],
         snapshot.otpCodes as never[],
+        snapshot.groupPayCampaigns as never[],
+        snapshot.groupPayContributions as never[],
       );
-      log(`[devPersistence] restored ${snapshot.authUsers.length} user(s)`);
+      log(`[devPersistence] restored ${snapshot.authUsers.length} user(s), ${snapshot.groupPayCampaigns.length} campaign(s)`);
     }
   }
 

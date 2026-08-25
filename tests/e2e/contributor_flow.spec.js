@@ -48,30 +48,24 @@ test.describe('Contributor Flow', () => {
 
     });
 
-    test('Shared contribution link opens a persisted campaign after a fresh page load', async ({ page }) => {
-        // Simulate a campaign created in another tab: mockData persists to
-        // localStorage, so the shared link must resolve on a fresh load.
-        const campaignId = 'persist-campaign-1';
-        await page.addInitScript((id) => {
-            window.localStorage.setItem('rhemito:group-pay:state:v1', JSON.stringify({
-                campaigns: [{
-                    id,
-                    name: 'Persisted Relief Fund',
-                    targetAmount: 900,
-                    currency: 'GBP',
-                    description: 'Campaign persisted across page loads.',
-                    bankAccountId: '2',
-                    bankAccountName: 'John Doe - Barclays',
-                    status: 'active',
-                    createdAt: new Date().toISOString(),
-                    uniqueLink: `${window.location.origin}/contribute/${id}`,
-                    creatorName: 'John Doe',
-                }],
-                contributors: [],
-            }));
-        }, campaignId);
+    test('Shared contribution link opens a server-persisted campaign after a fresh page load', async ({ page }) => {
+        // Campaigns now live server-side: create one via the API, then open
+        // the share link — it must resolve without any browser-local seeding.
+        const res = await page.request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Persisted Relief Fund',
+                creatorName: 'John Doe',
+                targetAmount: 900,
+                currency: 'GBP',
+                description: 'Campaign persisted server-side.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(res.ok()).toBeTruthy();
+        const { data: campaign } = await res.json();
 
-        await page.goto(`/contribute/${campaignId}`);
+        await page.goto(`/contribute/${campaign.id}`);
         await expect(page.getByText('Persisted Relief Fund')).toBeVisible({ timeout: 10000 });
         await expect(page.getByRole('heading', { name: 'Make a Contribution' })).toBeVisible();
 
@@ -79,5 +73,214 @@ test.describe('Contributor Flow', () => {
         await page.goto('/contribute/does-not-exist');
         await expect(page.getByTestId('campaign-not-found')).toBeVisible();
         await expect(page.getByText('Campaign not found')).toBeVisible();
+    });
+
+    test('Campaign link created in one browser opens in a different browser', async ({ browser, page }) => {
+        // Regression test: campaigns used to live in localStorage, so share
+        // links showed "Campaign not found" in any other browser.
+        const res = await page.request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Cross Browser Fund',
+                creatorName: 'John Doe',
+                targetAmount: 250,
+                currency: 'GBP',
+                description: 'Created in browser A, opened in browser B.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(res.ok()).toBeTruthy();
+        const { data: campaign } = await res.json();
+
+        // A fresh context has completely separate storage — a different "browser"
+        const otherContext = await browser.newContext();
+        const otherPage = await otherContext.newPage();
+        try {
+            await otherPage.goto(`/contribute/${campaign.id}`);
+            await expect(otherPage.getByText('Cross Browser Fund')).toBeVisible({ timeout: 10000 });
+            await expect(otherPage.getByRole('heading', { name: 'Make a Contribution' })).toBeVisible();
+        } finally {
+            await otherContext.close();
+        }
+    });
+
+    test('Manual bank transfer records a pending contribution the creator can confirm', async ({ request }) => {
+        const createRes = await request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Manual Transfer Fund',
+                creatorName: 'John Doe',
+                targetAmount: 500,
+                currency: 'GBP',
+                description: 'Manual transfer lifecycle test.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(createRes.ok()).toBeTruthy();
+        const { data: campaign } = await createRes.json();
+
+        // Contributor pays by manual bank transfer — recorded as pending
+        const payRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Manual Manny', email: 'manny@example.com', amount: 120, paymentMethod: 'manual_transfer' },
+        });
+        expect(payRes.ok()).toBeTruthy();
+        const payBody = await payRes.json();
+        expect(payBody.data.contribution.status).toBe('pending');
+        // Pending money does not count towards the raised total yet
+        expect(payBody.data.summary.totalRaised).toBe(0);
+
+        // Creator sees the pending contribution and confirms receipt
+        const confirmRes = await request.post(
+            `/api/group-pay/campaigns/${campaign.id}/contributions/${payBody.data.contribution.id}/confirm`
+        );
+        expect(confirmRes.ok()).toBeTruthy();
+        const confirmBody = await confirmRes.json();
+        expect(confirmBody.data.contribution.status).toBe('completed');
+        expect(confirmBody.data.summary.totalRaised).toBe(120);
+
+        // Confirming an already-received contribution is rejected
+        const secondConfirm = await request.post(
+            `/api/group-pay/campaigns/${campaign.id}/contributions/${payBody.data.contribution.id}/confirm`
+        );
+        expect(secondConfirm.status()).toBe(409);
+    });
+
+    test('Campaign PIN verification rejects unknown campaigns', async ({ request }) => {
+        const res = await request.post('/api/public/campaign-verifications/send', {
+            data: { campaignId: 'does-not-exist', email: 'pin-unknown-campaign@example.com' },
+        });
+        expect(res.status()).toBe(404);
+        const body = await res.json();
+        expect(body.error.code).toBe('CAMPAIGN_NOT_FOUND');
+    });
+
+    test('Paused campaigns do not accept contributions; resuming reopens them', async ({ request }) => {
+        const createRes = await request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Pause Gate Fund',
+                creatorName: 'John Doe',
+                targetAmount: 400,
+                currency: 'GBP',
+                description: 'Pause/resume contribution gate test.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(createRes.ok()).toBeTruthy();
+        const { data: campaign } = await createRes.json();
+
+        // Pause the campaign
+        const pauseRes = await request.patch(`/api/group-pay/campaigns/${campaign.id}`, { data: { toggleStatus: true } });
+        expect(pauseRes.ok()).toBeTruthy();
+
+        // Contributions are rejected while paused
+        const payRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Paige Paused', email: 'paige@example.com', amount: 15 },
+        });
+        expect(payRes.status()).toBe(409);
+        expect((await payRes.json()).error.code).toBe('CAMPAIGN_NOT_ACCEPTING');
+
+        // The PIN entry point rejects while paused too
+        const pinRes = await request.post('/api/public/campaign-verifications/send', {
+            data: { campaignId: campaign.id, email: 'paige@example.com' },
+        });
+        expect(pinRes.status()).toBe(409);
+
+        // Resuming reopens contributions
+        const resumeRes = await request.patch(`/api/group-pay/campaigns/${campaign.id}`, { data: { toggleStatus: true } });
+        expect(resumeRes.ok()).toBeTruthy();
+        const payAgain = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Paige Paused', email: 'paige@example.com', amount: 15 },
+        });
+        expect(payAgain.ok()).toBeTruthy();
+        expect((await payAgain.json()).data.contribution.status).toBe('completed');
+    });
+
+    test('Paused campaign page shows the not-accepting state instead of the contribution form', async ({ request, page }) => {
+        const createRes = await request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Pause Page Fund',
+                creatorName: 'John Doe',
+                targetAmount: 300,
+                currency: 'GBP',
+                description: 'Paused contribute page test.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+            },
+        });
+        expect(createRes.ok()).toBeTruthy();
+        const { data: campaign } = await createRes.json();
+        const pauseRes = await request.patch(`/api/group-pay/campaigns/${campaign.id}`, { data: { toggleStatus: true } });
+        expect(pauseRes.ok()).toBeTruthy();
+
+        await page.goto(`/contribute/${campaign.id}`);
+        await expect(page.getByTestId('campaign-not-accepting')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole('heading', { name: 'Contributions Paused' })).toBeVisible();
+        // The contribution form must not be rendered
+        await expect(page.getByRole('heading', { name: 'Make a Contribution' })).toHaveCount(0);
+    });
+
+    test('Fixed-amount campaigns lock the amount and exclude manual bank transfer', async ({ request, page }) => {
+        // Gross per contributor 25.80 → fee = max(25.80*1.5%, £0.50) = £0.50 → net 25.30
+        const createRes = await request.post('/api/group-pay/campaigns', {
+            data: {
+                name: 'Fixed Amount Fund',
+                creatorName: 'John Doe',
+                targetAmount: 200,
+                currency: 'GBP',
+                description: 'Fixed contribution amount test.',
+                bankAccountId: 'acc_demo_gbp',
+                bankAccountName: 'John Doe - Barclays',
+                fixedContributionAmount: 25.80,
+            },
+        });
+        expect(createRes.ok()).toBeTruthy();
+        const { data: campaign } = await createRes.json();
+        expect(campaign.fixedContributionAmount).toBe(25.80);
+
+        // Server: manual transfer cannot guarantee the exact amount — rejected
+        const manualRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Fix Fay', email: 'fay@example.com', amount: 25.30, paymentMethod: 'manual_transfer' },
+        });
+        expect(manualRes.status()).toBe(409);
+        expect((await manualRes.json()).error.code).toBe('FIXED_AMOUNT_REQUIRED');
+
+        // Server: any other amount is rejected
+        const wrongRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Fix Fay', email: 'fay@example.com', amount: 10, paymentMethod: 'instant_bank' },
+        });
+        expect(wrongRes.status()).toBe(409);
+
+        // Server: the exact expected net amount is accepted
+        const okRes = await request.post(`/api/public/group-pay/campaigns/${campaign.id}/contributions`, {
+            data: { name: 'Fix Fay', email: 'fay@example.com', amount: 25.30, paymentMethod: 'instant_bank' },
+        });
+        expect(okRes.ok()).toBeTruthy();
+        expect((await okRes.json()).data.contribution.status).toBe('completed');
+
+        // UI: the amount is prefilled with the fixed value and locked
+        await page.goto(`/contribute/${campaign.id}`);
+        const amountInput = page.getByLabel('Contribution Amount');
+        await expect(amountInput).toBeVisible({ timeout: 10000 });
+        await expect(amountInput).toBeDisabled();
+        await expect(amountInput).toHaveValue('25.80');
+        await expect(page.getByTestId('fixed-amount-hint')).toBeVisible();
+
+        // UI: sign in with the registered demo payer to reach the payment screen
+        await page.getByLabel('Email Address').fill('payer@rhemito.com');
+        await page.getByRole('button', { name: 'Continue' }).click();
+        await expect(page.getByRole('heading', { name: 'Welcome back!' })).toBeVisible({ timeout: 10000 });
+
+        // Copyable demo password tip is offered on the login step — fill from it
+        await expect(page.getByTestId('demo-password-hint')).toBeVisible();
+        await page.getByTestId('button-fill-demo-password').click();
+        await expect(page.getByTestId('input-payer-password')).toHaveValue('Demo1234!x');
+        await page.getByRole('button', { name: 'Log in and Continue' }).click();
+        await expect(page.getByText('How would you like to pay?')).toBeVisible({ timeout: 10000 });
+
+        // Only amount-exact payment methods are offered
+        await expect(page.getByText('Instant Bank Transfer')).toBeVisible();
+        await expect(page.getByText('Debit/Credit Card')).toBeVisible();
+        await expect(page.getByText('Manual Bank Transfer')).toHaveCount(0);
     });
 });

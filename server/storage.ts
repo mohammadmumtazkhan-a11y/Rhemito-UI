@@ -19,6 +19,10 @@ import {
   type EmailDelivery,
   DEMO_PAYER_CREDENTIALS,
 } from "@shared/schema";
+import {
+  type GroupPayCampaign,
+  type GroupPayContribution,
+} from "@shared/groupPay";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { deriveInvoiceStatus, clientDisplayName } from "@shared/invoice-logic";
@@ -133,6 +137,23 @@ export interface IStorage {
   getEmailDeliveryByDedupeKey(dedupeKey: string): Promise<EmailDelivery | undefined>;
   updateEmailDelivery(id: string, patch: Partial<EmailDelivery>): Promise<EmailDelivery | undefined>;
   listEmailDeliveries(requestId: string): Promise<EmailDelivery[]>;
+
+  // GroupPay funding campaigns (server-owned so share links work cross-browser)
+  createGroupPayCampaign(campaign: GroupPayCampaign): Promise<GroupPayCampaign>;
+  getGroupPayCampaignById(id: string): Promise<GroupPayCampaign | undefined>;
+  listGroupPayCampaignsByOwner(ownerId: string): Promise<GroupPayCampaign[]>;
+  updateGroupPayCampaign(
+    id: string,
+    patch: Partial<Omit<GroupPayCampaign, "id">>,
+  ): Promise<GroupPayCampaign | undefined>;
+  deleteGroupPayCampaign(id: string): Promise<boolean>;
+  addGroupPayContribution(contribution: GroupPayContribution): Promise<GroupPayContribution>;
+  getGroupPayContributionById(id: string): Promise<GroupPayContribution | undefined>;
+  updateGroupPayContribution(
+    id: string,
+    patch: Partial<Omit<GroupPayContribution, "id">>,
+  ): Promise<GroupPayContribution | undefined>;
+  listGroupPayContributions(campaignId: string): Promise<GroupPayContribution[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -141,7 +162,12 @@ export class MemStorage implements IStorage {
    * continuity across dev-server restarts (see server/devPersistence.ts).
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  hydrateForDev(users: any[], otps: any[]): void {
+  hydrateForDev(
+    users: any[],
+    otps: any[],
+    groupPayCampaigns: any[] = [],
+    groupPayContributions: any[] = [],
+  ): void {
     // Demo seeds are re-created at boot with current credentials — never let a
     // stale dev snapshot resurrect old demo accounts over them.
     const demoEmails = new Set(["demo@rhemito.com", DEMO_PAYER_CREDENTIALS.email]);
@@ -150,14 +176,26 @@ export class MemStorage implements IStorage {
       this.authUsersMap.set(u.id, u as AuthUser);
     }
     for (const o of otps) this.otpCodesMap.set(o.id, o as OtpCode);
+    // Same rule for the seeded demo campaigns.
+    const demoCampaignIds = new Set(["demo-campaign-1", "demo-campaign-2"]);
+    for (const c of groupPayCampaigns) {
+      if (!c?.id || demoCampaignIds.has(String(c.id))) continue;
+      this.groupPayCampaignsMap.set(c.id, c as GroupPayCampaign);
+    }
+    for (const ct of groupPayContributions) {
+      if (!ct?.id) continue;
+      this.groupPayContributionsMap.set(ct.id, ct as GroupPayContribution);
+    }
   }
 
-  private persistAuthSnapshot(): void {
+  private persistDevSnapshot(): void {
     if (process.env.NODE_ENV === "production") return;
     import("./devPersistence").then(({ queuePersist }) => {
       queuePersist(() => ({
         authUsers: Array.from(this.authUsersMap.values()).map((u) => ({ ...u })) as unknown as Array<Record<string, unknown>>,
         otpCodes: Array.from(this.otpCodesMap.values()).map((o) => ({ ...o })) as unknown as Array<Record<string, unknown>>,
+        groupPayCampaigns: Array.from(this.groupPayCampaignsMap.values()).map((c) => ({ ...c })) as unknown as Array<Record<string, unknown>>,
+        groupPayContributions: Array.from(this.groupPayContributionsMap.values()).map((c) => ({ ...c })) as unknown as Array<Record<string, unknown>>,
         sessions: {},
       }));
     }).catch(() => { /* persistence is best-effort in dev */ });
@@ -189,6 +227,10 @@ export class MemStorage implements IStorage {
   private emailDeliveriesMap: Map<string, EmailDelivery>;
   private moneyRequestSequence: number;
 
+  // GroupPay funding campaigns
+  private groupPayCampaignsMap: Map<string, GroupPayCampaign>;
+  private groupPayContributionsMap: Map<string, GroupPayContribution>;
+
   constructor() {
     this.users = new Map();
     this.promoCodes = new Map();
@@ -212,10 +254,13 @@ export class MemStorage implements IStorage {
     this.webhookEventsMap = new Map();
     this.emailDeliveriesMap = new Map();
     this.moneyRequestSequence = 0;
+    this.groupPayCampaignsMap = new Map();
+    this.groupPayContributionsMap = new Map();
 
     // Seed Mock Promo Code & Demo User
     this.seedPromoCodes();
     this.seedDemoUser();
+    this.seedDemoCampaigns();
   }
 
   private seedPromoCodes() {
@@ -285,6 +330,67 @@ export class MemStorage implements IStorage {
       password: bcrypt.hashSync(DEMO_PAYER_CREDENTIALS.password, 12),
       firstName: "Demo",
       lastName: "Payer",
+    });
+  }
+
+  /**
+   * Demo funding campaigns — same seed content the GroupPay dashboard used to
+   * get from client-side mock data, so /contribute/demo-campaign-* links and
+   * the seeded dashboard cards keep working from any browser.
+   */
+  private seedDemoCampaigns() {
+    this.groupPayCampaignsMap.set("demo-campaign-1", {
+      id: "demo-campaign-1",
+      ownerId: "user_123",
+      name: "Office Birthday Collection",
+      targetAmount: 500,
+      currency: "GBP",
+      description: "Collecting funds for Jane's surprise birthday party. Let's make it special!",
+      bankAccountId: "2",
+      bankAccountName: "John Doe - Barclays",
+      status: "active",
+      createdAt: new Date("2026-01-20"),
+      creatorName: "John Doe",
+    });
+    this.groupPayCampaignsMap.set("demo-campaign-2", {
+      id: "demo-campaign-2",
+      ownerId: "user_123",
+      name: "Team Trip Fund",
+      targetAmount: 2000,
+      currency: "GBP",
+      description: "Saving up for our annual team outing. Everyone chip in what you can!",
+      bankAccountId: "2",
+      bankAccountName: "John Doe - Barclays",
+      status: "active",
+      createdAt: new Date("2026-01-15"),
+      creatorName: "John Doe",
+    });
+    this.groupPayContributionsMap.set("c1", {
+      id: "c1",
+      campaignId: "demo-campaign-1",
+      name: "Alice Smith",
+      email: "alice@example.com",
+      amount: 50,
+      paymentDate: new Date("2026-01-21T10:30:00"),
+      status: "completed",
+    });
+    this.groupPayContributionsMap.set("c2", {
+      id: "c2",
+      campaignId: "demo-campaign-1",
+      name: "Bob Johnson",
+      email: "bob@example.com",
+      amount: 75,
+      paymentDate: new Date("2026-01-22T14:15:00"),
+      status: "completed",
+    });
+    this.groupPayContributionsMap.set("c3", {
+      id: "c3",
+      campaignId: "demo-campaign-2",
+      name: "Charlie Brown",
+      email: "charlie@example.com",
+      amount: 100,
+      paymentDate: new Date("2026-01-18T09:00:00"),
+      status: "completed",
     });
   }
 
@@ -359,7 +465,7 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
     };
     this.authUsersMap.set(id, user);
-    this.persistAuthSnapshot();
+    this.persistDevSnapshot();
     return user;
   }
 
@@ -370,7 +476,7 @@ export class MemStorage implements IStorage {
       // (email OTP + personal details), which the product treats as passing
       // mini-KYC. Enhanced KYC remains an external/provider concern.
       this.authUsersMap.set(user.id, { ...user, status: "active", kycStatus: "passed" });
-      this.persistAuthSnapshot();
+      this.persistDevSnapshot();
     }
   }
 
@@ -378,7 +484,7 @@ export class MemStorage implements IStorage {
     const user = await this.getAuthUserByEmail(email);
     if (!user) return undefined;
     this.authUsersMap.set(user.id, { ...user, password: hashedPassword });
-    this.persistAuthSnapshot();
+    this.persistDevSnapshot();
     return this.authUsersMap.get(user.id);
   }
 
@@ -404,7 +510,7 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
     };
     this.otpCodesMap.set(id, otp);
-    this.persistAuthSnapshot();
+    this.persistDevSnapshot();
     return otp;
   }
 
@@ -443,7 +549,7 @@ export class MemStorage implements IStorage {
     const otp = this.otpCodesMap.get(id);
     if (otp) {
       this.otpCodesMap.set(id, { ...otp, used: true });
-      this.persistAuthSnapshot();
+      this.persistDevSnapshot();
     }
   }
 
@@ -792,6 +898,75 @@ export class MemStorage implements IStorage {
     return Array.from(this.emailDeliveriesMap.values())
       .filter((e) => e.requestId === requestId)
       .sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
+  }
+
+  // ─── GroupPay funding campaigns ──────────────────────────────────
+
+  async createGroupPayCampaign(campaign: GroupPayCampaign): Promise<GroupPayCampaign> {
+    this.groupPayCampaignsMap.set(campaign.id, campaign);
+    this.persistDevSnapshot();
+    return campaign;
+  }
+
+  async getGroupPayCampaignById(id: string): Promise<GroupPayCampaign | undefined> {
+    return this.groupPayCampaignsMap.get(id);
+  }
+
+  async listGroupPayCampaignsByOwner(ownerId: string): Promise<GroupPayCampaign[]> {
+    return Array.from(this.groupPayCampaignsMap.values())
+      .filter((c) => c.ownerId === ownerId)
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  }
+
+  async updateGroupPayCampaign(
+    id: string,
+    patch: Partial<Omit<GroupPayCampaign, "id">>,
+  ): Promise<GroupPayCampaign | undefined> {
+    const existing = this.groupPayCampaignsMap.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...patch, id };
+    this.groupPayCampaignsMap.set(id, updated);
+    this.persistDevSnapshot();
+    return updated;
+  }
+
+  async deleteGroupPayCampaign(id: string): Promise<boolean> {
+    const deleted = this.groupPayCampaignsMap.delete(id);
+    if (deleted) {
+      for (const [contributionId, contribution] of Array.from(this.groupPayContributionsMap.entries())) {
+        if (contribution.campaignId === id) this.groupPayContributionsMap.delete(contributionId);
+      }
+      this.persistDevSnapshot();
+    }
+    return deleted;
+  }
+
+  async addGroupPayContribution(contribution: GroupPayContribution): Promise<GroupPayContribution> {
+    this.groupPayContributionsMap.set(contribution.id, contribution);
+    this.persistDevSnapshot();
+    return contribution;
+  }
+
+  async getGroupPayContributionById(id: string): Promise<GroupPayContribution | undefined> {
+    return this.groupPayContributionsMap.get(id);
+  }
+
+  async updateGroupPayContribution(
+    id: string,
+    patch: Partial<Omit<GroupPayContribution, "id">>,
+  ): Promise<GroupPayContribution | undefined> {
+    const existing = this.groupPayContributionsMap.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...patch, id };
+    this.groupPayContributionsMap.set(id, updated);
+    this.persistDevSnapshot();
+    return updated;
+  }
+
+  async listGroupPayContributions(campaignId: string): Promise<GroupPayContribution[]> {
+    return Array.from(this.groupPayContributionsMap.values())
+      .filter((c) => c.campaignId === campaignId)
+      .sort((a, b) => (a.paymentDate?.getTime() ?? 0) - (b.paymentDate?.getTime() ?? 0));
   }
 }
 

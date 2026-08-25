@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRoute, Link, useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowLeft, Copy, CheckCircle2, Users, Target, TrendingUp, Share2, PauseCircle, PlayCircle, Trash2, Edit2, Save, AlertCircle, Lock, Info, Calculator, Settings } from "lucide-react";
+import { ArrowLeft, Copy, CheckCircle2, Users, Target, TrendingUp, Share2, PauseCircle, PlayCircle, Trash2, Edit2, Save, AlertCircle, Lock, Info, Calculator, Settings, Loader2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,8 +10,22 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { getCampaignById, getContributorsByCampaignId, getCampaignSummary, deleteCampaign, toggleCampaignStatus, updateCampaign, FEE_CONFIG } from "./mockData";
+import { FEE_CONFIG } from "./mockData";
+import { fetchCampaign, updateCampaign, deleteCampaign as deleteCampaignApi, confirmContribution, type UpdateCampaignPayload } from "@/lib/groupPay";
+import { useToast } from "@/hooks/use-toast";
 import { Campaign, Contributor } from "./types";
+
+const contributionStatusStyles: Record<Contributor["status"], string> = {
+    pending: "bg-amber-100 text-amber-700",
+    completed: "bg-green-100 text-green-700",
+    failed: "bg-red-100 text-red-700",
+};
+
+const contributionStatusLabels: Record<Contributor["status"], string> = {
+    pending: "Pending",
+    completed: "Received",
+    failed: "Failed",
+};
 import {
     AlertDialog,
     AlertDialogAction,
@@ -36,12 +51,64 @@ export default function CampaignDetails() {
     const [, params] = useRoute("/group-pay/:id");
     const campaignId = params?.id || "";
     const [, setLocation] = useLocation();
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
 
-    const [campaign, setCampaign] = useState<Campaign | null>(null);
-    const [contributors, setContributors] = useState<Contributor[]>([]);
-    const [summary, setSummary] = useState({ totalRaised: 0, contributorCount: 0 });
+    const { data, isLoading } = useQuery({
+        queryKey: ["/api/group-pay/campaigns", campaignId],
+        queryFn: () => fetchCampaign(campaignId),
+    });
+
+    const campaign: Campaign | null = data?.campaign ?? null;
+    const contributors: Contributor[] = data?.contributors ?? [];
+    const summary = data?.campaign.summary ?? { totalRaised: 0, contributorCount: 0 };
     const [copied, setCopied] = useState(false);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    const campaignsQueryKey = ["/api/group-pay/campaigns"];
+
+    const toggleMutation = useMutation({
+        mutationFn: () => updateCampaign(campaignId, { toggleStatus: true }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: campaignsQueryKey });
+        },
+        onError: (err: Error) => {
+            toast({ title: "Status Not Updated", description: err.message, variant: "destructive" });
+        },
+    });
+
+    const editMutation = useMutation({
+        mutationFn: (payload: UpdateCampaignPayload) => updateCampaign(campaignId, payload),
+        onSuccess: () => {
+            setIsEditModalOpen(false);
+            queryClient.invalidateQueries({ queryKey: campaignsQueryKey });
+            toast({ title: "Campaign Updated", description: "Your changes have been saved." });
+        },
+        onError: (err: Error) => {
+            toast({ title: "Campaign Not Updated", description: err.message, variant: "destructive" });
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: () => deleteCampaignApi(campaignId),
+        onSuccess: () => {
+            toast({ title: "Campaign Deleted", description: "The campaign and its contributions were removed." });
+            setLocation("/group-pay");
+        },
+        onError: (err: Error) => {
+            toast({ title: "Campaign Not Deleted", description: err.message, variant: "destructive" });
+        },
+    });
+
+    const confirmContributionMutation = useMutation({
+        mutationFn: (contributionId: string) => confirmContribution(campaignId, contributionId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: campaignsQueryKey });
+            toast({ title: "Contribution Received", description: "The contribution now counts towards the campaign total." });
+        },
+        onError: (err: Error) => {
+            toast({ title: "Contribution Not Updated", description: err.message, variant: "destructive" });
+        },
+    });
 
     // Edit State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -52,16 +119,6 @@ export default function CampaignDetails() {
         useFixedAmount: false,
         netFixedContributionAmount: "",
     });
-
-    useEffect(() => {
-        const camp = getCampaignById(campaignId);
-        if (camp) {
-            setCampaign({ ...camp });
-            setContributors(getContributorsByCampaignId(campaignId));
-            const sum = getCampaignSummary(campaignId);
-            setSummary(sum);
-        }
-    }, [campaignId, refreshTrigger]);
 
     // Initialize edit form when opening modal
     useEffect(() => {
@@ -98,13 +155,11 @@ export default function CampaignDetails() {
     };
 
     const handleToggleStatus = () => {
-        toggleCampaignStatus(campaignId);
-        setRefreshTrigger(prev => prev + 1);
+        toggleMutation.mutate();
     };
 
     const handleDelete = () => {
-        deleteCampaign(campaignId);
-        setLocation('/group-pay');
+        deleteMutation.mutate();
     };
 
     // Calculate new target fee breakdown
@@ -163,16 +218,15 @@ export default function CampaignDetails() {
     const handleSaveEdit = () => {
         if (targetError || fixedAmountError) return;
 
-        updateCampaign(campaignId, {
+        editMutation.mutate({
             name: editForm.name,
             description: editForm.description,
             targetAmount: newTargetFeeBreakdown.grossAmount,
+            // null clears the fixed amount when the toggle is off (same as before)
             fixedContributionAmount: editForm.useFixedAmount && editForm.netFixedContributionAmount
                 ? newFixedFeeBreakdown.grossAmount
-                : undefined
+                : null
         });
-        setIsEditModalOpen(false);
-        setRefreshTrigger(prev => prev + 1);
     };
 
     function formatCurrency(amount: number, currency: string) {
@@ -191,6 +245,17 @@ export default function CampaignDetails() {
             minute: '2-digit',
         }).format(new Date(date));
     };
+
+    if (isLoading) {
+        return (
+            <DashboardLayout>
+                <div className="flex items-center justify-center py-24 text-muted-foreground">
+                    <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                    Loading campaign...
+                </div>
+            </DashboardLayout>
+        );
+    }
 
     if (!campaign) {
         return (
@@ -621,13 +686,32 @@ export default function CampaignDetails() {
                                                         <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
                                                             {contributor.name.charAt(0)}
                                                         </div>
-                                                        <span className="font-medium">{contributor.name}</span>
+                                                        <div className="flex flex-col items-start gap-1">
+                                                            <span className="font-medium">{contributor.name}</span>
+                                                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${contributionStatusStyles[contributor.status]}`}>
+                                                                {contributionStatusLabels[contributor.status]}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="py-3 px-4 text-muted-foreground text-sm">{contributor.email}</td>
                                                 <td className="py-3 px-4 text-muted-foreground text-sm">{formatDate(contributor.paymentDate)}</td>
-                                                <td className="py-3 px-4 text-right font-semibold text-green-600">
-                                                    {formatCurrency(contributor.amount, campaign.currency)}
+                                                <td className="py-3 px-4 text-right">
+                                                    <p className={`font-semibold ${contributor.status === 'completed' ? 'text-green-600' : 'text-slate-500'}`}>
+                                                        {formatCurrency(contributor.amount, campaign.currency)}
+                                                    </p>
+                                                    {contributor.status === 'pending' && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-7 px-2 text-xs mt-1 text-green-700 border-green-200 hover:bg-green-50 hover:text-green-700"
+                                                            disabled={confirmContributionMutation.isPending}
+                                                            onClick={() => confirmContributionMutation.mutate(contributor.id)}
+                                                        >
+                                                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                            Mark Received
+                                                        </Button>
+                                                    )}
                                                 </td>
                                             </motion.tr>
                                         ))}

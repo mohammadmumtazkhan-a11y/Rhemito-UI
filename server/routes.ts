@@ -6,6 +6,7 @@ import { bonusService } from "./bonus";
 import { registerAuthRoutes } from "./auth";
 import { registerInvoiceRoutes } from "./invoiceRoutes";
 import { registerRequestMoneyRoutes } from "./requestRoutes";
+import { registerGroupPayRoutes } from "./groupPayRoutes";
 import {
   dispatchNotification,
   markNotificationRead,
@@ -113,6 +114,8 @@ export async function registerRoutes(
   registerInvoiceRoutes(app);
   // Request Money routes (strict auth, corridors, webhooks, QR, sweeps)
   registerRequestMoneyRoutes(app);
+  // GroupPay funding campaigns (server-owned campaigns + public share links)
+  registerGroupPayRoutes(app);
   // Promo Code Validation Endpoint
   app.post("/api/promocodes/validate", (req, res) => {
     try {

@@ -1,14 +1,15 @@
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Users, Calendar, PauseCircle, PlayCircle, Trash2, Search, Filter, X, RotateCcw } from "lucide-react";
+import { Plus, Users, Calendar, PauseCircle, PlayCircle, Trash2, Search, Filter, X, RotateCcw, Loader2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getAllCampaigns, getCampaignSummary, deleteCampaign, toggleCampaignStatus } from "./mockData";
-import { Campaign } from "./types";
+import { fetchCampaigns, updateCampaign, deleteCampaign as deleteCampaignApi, type CampaignWithSummary } from "@/lib/groupPay";
+import { useToast } from "@/hooks/use-toast";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -22,8 +23,35 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function GroupPayDashboard() {
-    const [campaigns, setCampaigns] = useState<Campaign[]>(getAllCampaigns());
-    const [refresh, setRefresh] = useState(0);
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
+
+    const { data: campaigns, isLoading } = useQuery({
+        queryKey: ["/api/group-pay/campaigns"],
+        queryFn: fetchCampaigns,
+    });
+
+    const campaignsQueryKey = ["/api/group-pay/campaigns"];
+
+    const toggleMutation = useMutation({
+        mutationFn: (id: string) => updateCampaign(id, { toggleStatus: true }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: campaignsQueryKey });
+        },
+        onError: (err: Error) => {
+            toast({ title: "Status Not Updated", description: err.message, variant: "destructive" });
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => deleteCampaignApi(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: campaignsQueryKey });
+        },
+        onError: (err: Error) => {
+            toast({ title: "Campaign Not Deleted", description: err.message, variant: "destructive" });
+        },
+    });
 
     // Search & Filter State
     const [searchQuery, setSearchQuery] = useState("");
@@ -37,25 +65,22 @@ export default function GroupPayDashboard() {
     });
 
     const handleRefresh = () => {
-        setCampaigns(getAllCampaigns());
-        setRefresh(prev => prev + 1);
+        queryClient.invalidateQueries({ queryKey: campaignsQueryKey });
     };
 
     const handleToggleStatus = (e: React.MouseEvent, id: string) => {
         e.preventDefault(); // Prevent card click
-        toggleCampaignStatus(id);
-        handleRefresh();
+        toggleMutation.mutate(id);
     };
 
     const handleDelete = (e: React.MouseEvent, id: string) => {
         e.preventDefault(); // Prevent card click
-        deleteCampaign(id);
-        handleRefresh();
+        deleteMutation.mutate(id);
     };
 
     // Filter Logic
     const filteredCampaigns = useMemo(() => {
-        return campaigns.filter(campaign => {
+        return (campaigns ?? []).filter((campaign: CampaignWithSummary) => {
             // Search
             const searchLower = searchQuery.toLowerCase();
             const matchesSearch = campaign.name.toLowerCase().includes(searchLower) ||
@@ -241,7 +266,12 @@ export default function GroupPayDashboard() {
                 </div>
 
                 {/* Campaigns Grid */}
-                {filteredCampaigns.length === 0 ? (
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-24 text-muted-foreground">
+                        <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                        Loading campaigns...
+                    </div>
+                ) : filteredCampaigns.length === 0 ? (
                     <Card>
                         <CardContent className="py-16 text-center">
                             <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -277,7 +307,7 @@ export default function GroupPayDashboard() {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredCampaigns.map((campaign, index) => {
-                            const summary = getCampaignSummary(campaign.id);
+                            const summary = campaign.summary;
                             const progress = (summary.totalRaised / campaign.targetAmount) * 100;
 
                             return (

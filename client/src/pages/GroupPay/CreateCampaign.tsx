@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Copy, CheckCircle2, Building2, Sparkles, Lock, AlertCircle, Info, Calculator } from "lucide-react";
+import { ArrowLeft, Copy, CheckCircle2, Building2, Sparkles, Lock, AlertCircle, Info, Calculator, Loader2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { createCampaign, FEE_CONFIG } from "./mockData";
+import { FEE_CONFIG } from "./mockData";
+import { createCampaign } from "@/lib/groupPay";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { PayoutAccountSelector } from "@/components/payout/PayoutAccountSelector";
 import type { PayoutAccountView } from "@/lib/requests";
 
@@ -21,6 +23,7 @@ const CURRENCIES = ["GBP", "USD", "EUR", "NGN"];
 export default function CreateCampaign() {
     const [, setLocation] = useLocation();
     const { user } = useAuth();
+    const { toast } = useToast();
     const requesterName = useMemo(() => {
         if (!user) return "John Doe";
         if (user.accountType === "business" && user.businessName) {
@@ -34,6 +37,7 @@ export default function CreateCampaign() {
     const [copied, setCopied] = useState(false);
     const [createdCampaignLink, setCreatedCampaignLink] = useState("");
     const [createdCampaignId, setCreatedCampaignId] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedPayoutAccount, setSelectedPayoutAccount] = useState<PayoutAccountView | null>(null);
 
     const handleSelectPayoutAccount = (account: PayoutAccountView) => {
@@ -103,27 +107,32 @@ export default function CreateCampaign() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (fixedAmountError) return;
+        if (fixedAmountError || isSubmitting) return;
 
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        setIsSubmitting(true);
+        try {
+            const newCampaign = await createCampaign({
+                name: formData.name,
+                creatorName: requesterName,
+                targetAmount: targetFeeBreakdown.grossAmount, // Store gross amount as target
+                currency: formData.currency,
+                description: formData.description,
+                bankAccountId: selectedPayoutAccount?.id || formData.bankAccountId,
+                bankAccountName: selectedPayoutAccount ? `${selectedPayoutAccount.bankName} - ${selectedPayoutAccount.maskedNumber}` : "",
+                fixedContributionAmount: formData.useFixedAmount && formData.fixedContributionAmount
+                    ? fixedFeeBreakdown.grossPerContributor // Store gross amount per contributor
+                    : undefined,
+            });
 
-        const newCampaign = createCampaign({
-            name: formData.name,
-            creatorName: requesterName,
-            targetAmount: targetFeeBreakdown.grossAmount, // Store gross amount as target
-            currency: formData.currency,
-            description: formData.description,
-            bankAccountId: selectedPayoutAccount?.id || formData.bankAccountId,
-            bankAccountName: selectedPayoutAccount ? `${selectedPayoutAccount.bankName} - ${selectedPayoutAccount.maskedNumber}` : "",
-            fixedContributionAmount: formData.useFixedAmount && formData.fixedContributionAmount
-                ? fixedFeeBreakdown.grossPerContributor // Store gross amount per contributor
-                : undefined,
-        });
-
-        setCreatedCampaignLink(newCampaign.uniqueLink);
-        setCreatedCampaignId(newCampaign.id);
-        setStep('success');
+            setCreatedCampaignLink(newCampaign.uniqueLink);
+            setCreatedCampaignId(newCampaign.id);
+            setStep('success');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+            toast({ title: "Campaign Not Created", description: message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleCopyLink = () => {
@@ -359,9 +368,10 @@ export default function CreateCampaign() {
                                         {/* Submit */}
                                         <Button
                                             type="submit"
-                                            disabled={!isFormValid}
+                                            disabled={!isFormValid || isSubmitting}
                                             className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-lg font-semibold"
                                         >
+                                            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
                                             Create Funding Campaign
                                         </Button>
                                     </form>
