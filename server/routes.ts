@@ -7,6 +7,8 @@ import { registerAuthRoutes } from "./auth";
 import { registerInvoiceRoutes } from "./invoiceRoutes";
 import { registerRequestMoneyRoutes } from "./requestRoutes";
 import { registerGroupPayRoutes } from "./groupPayRoutes";
+import { registerSendMoneyRoutes } from "./sendMoneyRoutes";
+import { registerPaymentsReceivedRoutes } from "./paymentsReceivedRoutes";
 import {
   dispatchNotification,
   markNotificationRead,
@@ -116,6 +118,10 @@ export async function registerRoutes(
   registerRequestMoneyRoutes(app);
   // GroupPay funding campaigns (server-owned campaigns + public share links)
   registerGroupPayRoutes(app);
+  // Send Money transactions (server-owned store behind the wizard + Dashboard)
+  registerSendMoneyRoutes(app);
+  // Received Payments (merged view of settled/in-flight money-in payments)
+  registerPaymentsReceivedRoutes(app);
   // Promo Code Validation Endpoint
   app.post("/api/promocodes/validate", (req, res) => {
     try {

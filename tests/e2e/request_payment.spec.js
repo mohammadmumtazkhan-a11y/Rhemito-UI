@@ -535,36 +535,41 @@ test.describe('Request Money E2E', () => {
     await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
   });
 
-  test('Cancellation flow on /payments takes confirmation before cancelling and displays confirmation post-cancellation', async ({ page }) => {
-    await page.goto('/payments');
+  test('Cancellation flow on /payments takes confirmation before cancelling and displays confirmation post-cancellation', async ({ page, request }) => {
+    // Real data: register a requester, sign the page in, create a request via the API.
+    const user = await registerAndActivate(request);
+    const pageRequest = page.context().request;
+    await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
+    const created = await createRequestViaApi(pageRequest, user);
 
-    // Find pending payment request row (e.g. Michael Chen)
-    const cancelBtn = page.getByTestId('button-cancel-payment-3');
+    await page.goto('/payments');
+    const row = page.getByTestId(`payment-row-money_request-${created.request.requestNumber}`);
+    await expect(row).toBeVisible();
+    await expect(row.getByText('Pending')).toBeVisible();
+
+    const cancelBtn = page.getByTestId(`button-cancel-payment-money_request-${created.request.requestNumber}`);
     await expect(cancelBtn).toBeVisible();
     await cancelBtn.click();
 
-    // Pre-cancellation dialog must appear
+    // Pre-cancellation dialog must appear with the real request's details
     const dialog = page.getByTestId('dialog-cancel-payment-request');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('Cancel Money Request?')).toBeVisible();
-    await expect(dialog.getByText('Michael Chen')).toBeVisible();
-    await expect(dialog.getByText('REF-D4E5F6')).toBeVisible();
+    await expect(dialog.getByText(created.request.senderName)).toBeVisible();
+    await expect(dialog.getByText(created.request.requestNumber)).toBeVisible();
 
     // Dismissing keeps request
     await dialog.getByTestId('button-cancel-dialog-keep').click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByTestId('payment-row-3')).toBeVisible();
+    await expect(row).toBeVisible();
 
-    // Cancel again and confirm
+    // Cancel again and confirm — the row flips to Cancelled via the real cancel API
     await cancelBtn.click();
     await expect(dialog).toBeVisible();
     await dialog.getByTestId('button-cancel-dialog-confirm').click();
-
-    // Post-cancellation confirmation banner and status updated
-    await expect(dialog).toBeHidden();
     await expect(page.getByTestId('success-cancel-banner')).toBeVisible();
-    await expect(page.getByTestId('success-cancel-banner').getByText('REF-D4E5F6')).toBeVisible();
-    await expect(page.getByTestId('payment-row-3').getByText('Cancelled')).toBeVisible();
+    await expect(page.getByTestId('success-cancel-banner').getByText(created.request.requestNumber)).toBeVisible();
+    await expect(row.getByText('Cancelled')).toBeVisible({ timeout: 15000 });
   });
 
   test('Cancellation on /payment-requests takes confirmation dialog before cancelling', async ({ page, request }) => {

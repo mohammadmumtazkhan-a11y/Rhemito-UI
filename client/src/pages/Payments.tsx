@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2,
@@ -10,6 +11,7 @@ import {
   FileText,
   Link as LinkIcon,
   QrCode,
+  Users,
   UserPlus,
   X,
   User,
@@ -26,6 +28,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { cancelRequest } from "@/lib/requests";
+import { getPaymentsReceived } from "@/lib/paymentsReceived";
+import type { ReceivedPayment } from "@shared/paymentsReceived";
 import {
   Dialog,
   DialogContent,
@@ -49,79 +54,56 @@ interface Payment {
   amount: number;
   currency: string;
   status: "completed" | "pending" | "failed" | "cancelled";
-  type: "invoice" | "payment_request" | "qr_code";
+  type: "invoice" | "payment_request" | "qr_code" | "campaign";
   date: string;
   reference: string;
+  /** Owning money-request id when the row can still be cancelled. */
+  requestId: string | null;
+  cancellable: boolean;
 }
 
-const mockPayments: Payment[] = [
-  {
-    id: "1",
-    senderName: "John Adeyemi",
-    senderEmail: "john.adeyemi@email.com",
-    amount: 500.00,
-    currency: "GBP",
-    status: "completed",
-    type: "payment_request",
-    date: "2026-01-11T14:30:00",
-    reference: "REF-A1B2C3"
-  },
-  {
-    id: "2",
-    senderName: "Sarah Williams",
-    senderEmail: "sarah.w@company.co.uk",
-    amount: 1250.00,
-    currency: "GBP",
-    status: "completed",
-    type: "invoice",
-    date: "2026-01-10T09:15:00",
-    reference: "INV-2026-001"
-  },
-  {
-    id: "3",
-    senderName: "Michael Chen",
-    senderEmail: "m.chen@business.com",
-    amount: 750.00,
-    currency: "USD",
-    status: "pending",
-    type: "payment_request",
-    date: "2026-01-09T16:45:00",
-    reference: "REF-D4E5F6"
-  },
-  {
-    id: "4",
-    senderName: null,
-    senderEmail: null,
-    amount: 320.50,
-    currency: "GBP",
-    status: "completed",
-    type: "qr_code",
-    date: "2026-01-08T11:20:00",
-    reference: "QR-G7H8I9"
-  },
-  {
-    id: "5",
-    senderName: null,
-    senderEmail: null,
-    amount: 890.00,
-    currency: "EUR",
-    status: "completed",
-    type: "payment_request",
-    date: "2026-01-07T08:00:00",
-    reference: "REF-J0K1L2"
-  },
-  {
-    id: "6",
-    senderName: "Emma Thompson",
-    senderEmail: "emma.t@mail.com",
-    amount: 2100.00,
-    currency: "GBP",
-    status: "failed",
-    type: "invoice",
-    date: "2026-01-06T13:30:00",
-    reference: "INV-2026-002"
-  },
-];
+/** Maps a server ReceivedPayment row into this page's Payment shape. */
+const toPayment = (row: ReceivedPayment): Payment => ({
+  id: row.id,
+  senderName: row.payerName,
+  senderEmail: row.payerEmail,
+  amount: Number(row.amount),
+  currency: row.currency,
+  status: row.status,
+  type: row.sourceType === "money_request" ? "payment_request" : row.sourceType,
+  date: row.receivedAt,
+  reference: row.reference,
+  requestId: row.requestId,
+  cancellable: row.cancellable,
+});
+
+/** Totals grouped per currency (GBP first) so the summary cards stay honest in multi-currency accounts. */
+const totalsByCurrency = (payments: Payment[], status: Payment["status"]): [string, number][] => {
+  const totals: Record<string, number> = {};
+  for (const p of payments) {
+    if (p.status !== status) continue;
+    totals[p.currency] = (totals[p.currency] ?? 0) + p.amount;
+  }
+  return Object.entries(totals).sort(([a], [b]) => (a === "GBP" ? -1 : b === "GBP" ? 1 : a.localeCompare(b)));
+};
+
+const formatTotal = ([currency, value]: [string, number]) =>
+  `${CURRENCY_SYMBOLS[currency] ?? ""}${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function CurrencyTotals({ totals }: { totals: [string, number][] }) {
+  if (totals.length === 0) {
+    return <p className="text-xl md:text-2xl font-bold">£0.00</p>;
+  }
+  const [primary, ...rest] = totals;
+  return (
+    <div>
+      <p className="text-xl md:text-2xl font-bold">{formatTotal(primary)}</p>
+      {rest.length > 0 && (
+        <p className="text-[10px] md:text-xs text-muted-foreground">{rest.map(formatTotal).join(" · ")}</p>
+      )}
+    </div>
+  );
+}
 
 const getStatusIcon = (status: string) => {
   switch (status) {
@@ -159,6 +141,8 @@ const getTypeIcon = (type: string) => {
       return <LinkIcon className="w-4 h-4" />;
     case "qr_code":
       return <QrCode className="w-4 h-4" />;
+    case "campaign":
+      return <Users className="w-4 h-4" />;
     default:
       return null;
   }
@@ -172,6 +156,8 @@ const getTypeLabel = (type: string) => {
       return "Money Request";
     case "qr_code":
       return "QR Code";
+    case "campaign":
+      return "Funding Campaign";
     default:
       return type;
   }
@@ -180,7 +166,14 @@ const getTypeLabel = (type: string) => {
 export default function Payments() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [paymentsList, setPaymentsList] = useState<Payment[]>(mockPayments);
+  const queryClient = useQueryClient();
+  const paymentsQuery = useQuery({
+    queryKey: ["/api/payments-received"],
+    queryFn: getPaymentsReceived,
+    refetchOnMount: "always",
+    refetchInterval: 5000,
+  });
+  const paymentsList = (paymentsQuery.data ?? []).map(toPayment);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterType, setFilterType] = useState("all");
@@ -236,20 +229,30 @@ export default function Payments() {
     return (searchQuery === "" || matchesSearch) && matchesStatus && matchesType;
   });
 
-  const totalReceived = paymentsList
-    .filter(p => p.status === "completed")
-    .reduce((sum, p) => sum + p.amount, 0);
+  const totalReceived = totalsByCurrency(paymentsList, "completed");
 
-  const pendingAmount = paymentsList
-    .filter(p => p.status === "pending")
-    .reduce((sum, p) => sum + p.amount, 0);
+  const pendingAmount = totalsByCurrency(paymentsList, "pending");
 
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
     if (!paymentToCancel) return;
 
-    setPaymentsList(prev =>
-      prev.map(p => (p.id === paymentToCancel.id ? { ...p, status: "cancelled" as const } : p))
-    );
+    if (paymentToCancel.requestId) {
+      try {
+        await cancelRequest(paymentToCancel.requestId);
+      } catch (err) {
+        toast({
+          title: "Cancellation failed",
+          description: err instanceof Error ? err.message : "Please try again shortly.",
+          variant: "destructive",
+        });
+        setCancelDialogOpen(false);
+        setPaymentToCancel(null);
+        return;
+      }
+      // Await the refetch so the row flips to Cancelled immediately.
+      await queryClient.invalidateQueries({ queryKey: ["/api/payments-received"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/request-money/requests"] });
+    }
 
     const formattedAmount = `${CURRENCY_SYMBOLS[paymentToCancel.currency] || ""}${paymentToCancel.amount.toFixed(2)} ${paymentToCancel.currency}`;
     const sender = paymentToCancel.senderName || "the recipient";
@@ -377,7 +380,7 @@ export default function Payments() {
                 </div>
                 <div>
                   <p className="text-xs md:text-sm text-muted-foreground">Total Received</p>
-                  <p className="text-xl md:text-2xl font-bold">£{totalReceived.toLocaleString()}</p>
+                  <CurrencyTotals totals={totalReceived} />
                 </div>
               </div>
             </CardContent>
@@ -391,7 +394,7 @@ export default function Payments() {
                 </div>
                 <div>
                   <p className="text-xs md:text-sm text-muted-foreground">Pending</p>
-                  <p className="text-xl md:text-2xl font-bold">£{pendingAmount.toLocaleString()}</p>
+                  <CurrencyTotals totals={pendingAmount} />
                 </div>
               </div>
             </CardContent>
@@ -460,6 +463,7 @@ export default function Payments() {
                           <SelectItem value="all">All Types</SelectItem>
                           <SelectItem value="invoice">Invoice</SelectItem>
                           <SelectItem value="payment_request">Request</SelectItem>
+                          <SelectItem value="campaign">Funding Campaign</SelectItem>
                           <SelectItem value="qr_code">QR Code</SelectItem>
                         </SelectContent>
                       </Select>
@@ -507,7 +511,7 @@ export default function Payments() {
                           <p className="text-[10px] md:text-sm text-muted-foreground">{payment.currency}</p>
                         </div>
                         <div className="hidden sm:block">{getStatusBadge(payment.status)}</div>
-                        {payment.status === "pending" && payment.type === "payment_request" && (
+                        {payment.cancellable && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -526,9 +530,19 @@ export default function Payments() {
                     </motion.div>
                   ))}
 
-                  {filteredPayments.length === 0 && (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <p>No payments found matching your criteria</p>
+                  {paymentsQuery.isLoading && (
+                    <div className="text-center py-12 text-muted-foreground text-sm" data-testid="loading-payments">
+                      Loading payments…
+                    </div>
+                  )}
+
+                  {!paymentsQuery.isLoading && filteredPayments.length === 0 && (
+                    <div className="text-center py-12 text-muted-foreground" data-testid="empty-payments">
+                      <p>
+                        {paymentsList.length === 0
+                          ? "No payments yet — money you receive via links, invoices and campaigns appears here."
+                          : "No payments found matching your criteria"}
+                      </p>
                     </div>
                   )}
                 </div>
