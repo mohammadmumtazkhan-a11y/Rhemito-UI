@@ -139,7 +139,9 @@ export function fromCampaign(c: CampaignWithSummary): UnifiedTransactionRow {
     service: "Funding Campaign",
     dateLabel: created.label,
     dateSort: created.sort,
-    amountLabel: `${CURRENCY_SYMBOLS[c.currency] ?? ""}${c.targetAmount} ${c.currency}`,
+    // targetAmount is stored as the raw fee-inclusive float computed at
+    // creation (e.g. 102.87179487179488) — always render money at 2dp.
+    amountLabel: `${CURRENCY_SYMBOLS[c.currency] ?? ""}${c.targetAmount.toFixed(2)} ${c.currency}`,
     subNote: `${raisedPct}% raised · ${c.summary.contributorCount} contributor${c.summary.contributorCount === 1 ? "" : "s"}`,
     statusLabel: status.label,
     statusClass: status.pill,
