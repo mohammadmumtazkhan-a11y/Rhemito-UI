@@ -235,7 +235,7 @@ export default function Senders() {
                                   <Send className="w-4 h-4 text-primary" />
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent>Request Payment</TooltipContent>
+                              <TooltipContent>Receive Money</TooltipContent>
                             </Tooltip>
 
                             <Tooltip>

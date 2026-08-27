@@ -48,7 +48,7 @@ const moneySentItems: NavItemData[] = [
 
 const paymentsReceivedItems: NavItemData[] = [
   { icon: Wallet, label: "Received Payments", href: "/payments", enabled: true },
-  { icon: ArrowLeftRight, label: "Payment Requests", href: "/payment-requests", enabled: true },
+  { icon: ArrowLeftRight, label: "Money Requests", href: "/payment-requests", enabled: true },
   { icon: FileText, label: "Sent Invoices", href: "/sent-invoices", enabled: true },
   { icon: UserCheck, label: "Senders", href: "/senders", enabled: true },
   { icon: UsersRound, label: "Funding Campaigns", href: "/group-pay", enabled: true, tooltip: "Funding campaigns", gradient: "from-blue-500 to-indigo-600" },

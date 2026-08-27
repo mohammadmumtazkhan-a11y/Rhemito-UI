@@ -169,7 +169,7 @@ const getTypeLabel = (type: string) => {
     case "invoice":
       return "Invoice";
     case "payment_request":
-      return "Payment Request";
+      return "Money Request";
     case "qr_code":
       return "QR Code";
     default:
@@ -261,8 +261,8 @@ export default function Payments() {
     });
 
     toast({
-      title: "Payment Request Cancelled",
-      description: `Payment request ${paymentToCancel.reference} has been successfully cancelled.`,
+      title: "Money Request Cancelled",
+      description: `Money request ${paymentToCancel.reference} has been successfully cancelled.`,
     });
 
     setCancelDialogOpen(false);
@@ -299,7 +299,7 @@ export default function Payments() {
             <p className="text-muted-foreground text-sm md:text-base mt-1">Track and manage your received payments</p>
           </div>
           <Button onClick={() => setLocation("/request-payment")} className="bg-primary hover:bg-primary/90">
-            <Plus className="mr-2 h-4 w-4" /> Request Payment
+            <Plus className="mr-2 h-4 w-4" /> Receive Money
           </Button>
         </motion.div>
 
@@ -317,9 +317,9 @@ export default function Payments() {
                   <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-white">Payment Request Cancelled</p>
+                  <p className="font-semibold text-white">Money Request Cancelled</p>
                   <p className="text-sm text-slate-300">
-                    Payment request <span className="font-mono text-white">{cancelSuccessInfo.reference}</span> for <span className="font-medium text-white">{cancelSuccessInfo.amount}</span> has been successfully cancelled.
+                    Money request <span className="font-mono text-white">{cancelSuccessInfo.reference}</span> for <span className="font-medium text-white">{cancelSuccessInfo.amount}</span> has been successfully cancelled.
                   </p>
                 </div>
               </div>
@@ -767,9 +767,9 @@ export default function Payments() {
               <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-2">
                 <AlertCircle className="w-6 h-6" />
               </div>
-              <DialogTitle className="font-display text-lg">Cancel Payment Request?</DialogTitle>
+              <DialogTitle className="font-display text-lg">Cancel Money Request?</DialogTitle>
               <DialogDescription>
-                Are you sure you want to cancel this payment request? The sender will no longer be able to make a payment using this request link.
+                Are you sure you want to cancel this money request? The sender will no longer be able to make a payment using this request link.
               </DialogDescription>
             </DialogHeader>
 

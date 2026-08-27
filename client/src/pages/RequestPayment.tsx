@@ -538,7 +538,7 @@ export default function RequestPayment() {
   const handleShareLink = async () => {
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Rhemito payment request", text: "Please pay this Rhemito request", url: paymentLink });
+        await navigator.share({ title: "Rhemito money request", text: "Please pay this Rhemito request", url: paymentLink });
       } catch {
         // user cancelled
       }
@@ -551,7 +551,7 @@ export default function RequestPayment() {
     if (!createdRequestId) return;
     try {
       await resendEmail(createdRequestId);
-      toast({ title: "Email sent", description: `The payment request email was sent to ${formData.senderEmail}.` });
+      toast({ title: "Email sent", description: `The money request email was sent to ${formData.senderEmail}.` });
     } catch (err) {
       toast({
         title: "Email not sent",
@@ -618,7 +618,7 @@ export default function RequestPayment() {
               </motion.div>
 
               <div className="space-y-1.5">
-                <h2 className="text-2xl font-bold font-display text-slate-900">Payment Request Sent!</h2>
+                <h2 className="text-2xl font-bold font-display text-slate-900">Money Request Sent!</h2>
                 <p className="text-sm text-muted-foreground">
                   The payment link has been sent to{" "}
                   <span className="font-semibold text-foreground">{formData.senderEmail}</span> for{" "}
@@ -723,7 +723,7 @@ export default function RequestPayment() {
                   <div className="flex flex-col sm:flex-row items-center gap-4 pt-1">
                     <img
                       src={`/api/request-money/requests/${createdRequestId}/qr.png`}
-                      alt={`QR code for payment request`}
+                      alt={`QR code for money request`}
                       className="w-36 h-36 border border-border rounded-xl bg-white"
                       data-testid="img-qr"
                     />
@@ -820,8 +820,8 @@ export default function RequestPayment() {
             Back
           </Button>
 
-          <h1 className="text-xl md:text-2xl font-bold font-display text-slate-900">Request Payment</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Request money from customers or clients worldwide with instant payout</p>
+          <h1 className="text-xl md:text-2xl font-bold font-display text-slate-900">Receive Money</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Receive money from customers or clients worldwide with instant payout</p>
         </motion.div>
 
         {/* Step Indicator */}
@@ -887,7 +887,7 @@ export default function RequestPayment() {
                           <div>
                             <p className="font-semibold text-amber-950">Active Destination Payout Account Required</p>
                             <p className="text-[11px] text-amber-900/80 mt-0.5">
-                              You cannot proceed with a payment request without an active, verified destination payout account. Please select or add an account above.
+                              You cannot proceed with a money request without an active, verified destination payout account. Please select or add an account above.
                             </p>
                           </div>
                         </div>

@@ -57,7 +57,7 @@ export function WaysToGetPaidModal({ isOpen, onClose, senderEmail }: WaysToGetPa
                     <Link2 className="w-6 h-6 text-primary" />
                   </div>
                   <div>
-                    <p className="font-semibold text-foreground">Request payment link</p>
+                    <p className="font-semibold text-foreground">Receive Money link</p>
                     <p className="text-sm text-muted-foreground">Generate a shareable payment link</p>
                   </div>
                 </button>
