@@ -638,4 +638,36 @@ test.describe('Request Money E2E', () => {
     await expect(copyBtn).toHaveCount(0);
   });
 
+  test('Money Requests table auto-updates when the payer pays — no refresh', async ({ page, browser }) => {
+    // The requester's session lives in the page context so the open table owns the request.
+    const requester = await registerAndActivate(page.context().request);
+    const created = await createRequestViaApi(page.context().request, requester);
+    const token = created.checkoutUrl.split('/pay/')[1];
+
+    await page.goto('/payment-requests');
+    const row = page.getByTestId(`request-row-${created.request.requestNumber}`);
+    await expect(row).toBeVisible();
+    await expect(row.getByTestId('request-status-active')).toBeVisible();
+
+    // The payer completes payment from a completely separate browser session.
+    const payerContext = await browser.newContext();
+    const payerPage = await payerContext.newPage();
+    const payer = await registerAndActivate(payerContext.request, 'GB');
+    await payerPage.setViewportSize({ width: 375, height: 720 });
+    await payerPage.goto(`/pay/${token}`);
+    await payerPage.getByTestId('input-payer-email').fill(payer.email);
+    await payerPage.getByTestId('button-check-email').click();
+    await payerPage.getByTestId('input-payer-password').fill('Passw0rd!x');
+    await payerPage.getByTestId('button-signin-pay').click();
+    await payerPage.getByTestId('button-method-pay_by_bank').click();
+    await payerPage.getByTestId('button-authorize').click();
+    await expect(payerPage.getByText('Payment Successful!')).toBeVisible({ timeout: 30000 });
+    await payerContext.close();
+
+    // The requester's already-open table reflects the payout via polling —
+    // no reload, no navigation away from /payment-requests.
+    await expect(row.getByTestId('request-status-paid_out')).toBeVisible({ timeout: 15000 });
+    await expect(page).toHaveURL(/\/payment-requests/);
+  });
+
 });

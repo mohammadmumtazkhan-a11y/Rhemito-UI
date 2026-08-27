@@ -390,6 +390,7 @@ export default function Dashboard() {
     queryKey: ["/api/request-money/requests"],
     queryFn: getRequests,
     refetchOnMount: "always",
+    refetchInterval: 5000,
   });
   const invoicesQuery = useQuery({
     queryKey: ["/api/invoices", "dashboard"],
@@ -398,11 +399,13 @@ export default function Dashboard() {
       return ((await res.json()) as InvoiceListResponse).data;
     },
     refetchOnMount: "always",
+    refetchInterval: 5000,
   });
   const campaignsQuery = useQuery({
     queryKey: ["/api/group-pay/campaigns"],
     queryFn: fetchCampaigns,
     refetchOnMount: "always",
+    refetchInterval: 5000,
   });
 
   const mergedRows = useMemo<MergedRow[]>(() => {
