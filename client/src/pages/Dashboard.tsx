@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { CancelTransactionModal, type TransactionDetails } from "@/components/Ca
 import { getRequests } from "@/lib/requests";
 import { invoiceListUrl, type InvoiceListResponse } from "@/lib/invoices";
 import { fetchCampaigns } from "@/lib/groupPay";
+import { cancelSendMoneyTransaction, getSendMoneyTransactions, toSendMoneyRow } from "@/lib/sendMoney";
 import {
   TYPE_BADGES,
   fromCampaign,
@@ -51,41 +52,6 @@ const recentRecipients = [
   { id: 2, name: "Profilea", initials: "PL", color: "bg-purple-500" },
   { id: 3, name: "Testing...", initials: "T", color: "bg-gray-400" },
   { id: 4, name: "Steve", initials: "SS", color: "bg-teal" },
-];
-
-const initialRecentTransactions = [
-  {
-    id: "22502787",
-    recipient: "Aisha Bello",
-    service: "Bank Deposit",
-    date: "30 Oct 2025",
-    amount: "GBP 120.00",
-    status: "awaiting_payment",
-  },
-  {
-    id: "22502784",
-    recipient: "Bob Woolmer",
-    service: "Bank Deposit",
-    date: "29 Oct 2025",
-    amount: "GBP 60.00",
-    status: "pending",
-  },
-  {
-    id: "22502785",
-    recipient: "Sarah Chen",
-    service: "Mobile Money",
-    date: "28 Oct 2025",
-    amount: "GBP 150.00",
-    status: "completed",
-  },
-  {
-    id: "22502786",
-    recipient: "James Okonkwo",
-    service: "Bank Deposit",
-    date: "27 Oct 2025",
-    amount: "GBP 200.00",
-    status: "completed",
-  },
 ];
 
 const scheduledTransactions = [
@@ -362,24 +328,8 @@ export default function Dashboard() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   // Bonus State - Hardcoded for Prototype
   const [bonusBalance] = useState(5);
-  // Transactions local state (prototype — no real API)
-  const [transactions, setTransactions] = useState(initialRecentTransactions);
   const [cancelTarget, setCancelTarget] = useState<TransactionDetails | null>(null);
   const { toast } = useToast();
-
-  // On mount: pick up any transaction cancelled from SendMoney and show it at top of list
-  useEffect(() => {
-    const raw = sessionStorage.getItem("rhemito_cancelled_tx");
-    if (raw) {
-      try {
-        const tx = JSON.parse(raw);
-        setTransactions((prev) => [tx, ...prev]);
-      } catch {
-        // malformed — ignore
-      }
-      sessionStorage.removeItem("rhemito_cancelled_tx");
-    }
-  }, []);
 
   // Unified Transactions table — server-backed money-in records (money
   // requests, invoices, campaigns) merged with the send-money prototype rows.
@@ -389,6 +339,12 @@ export default function Dashboard() {
   const requestsQuery = useQuery({
     queryKey: ["/api/request-money/requests"],
     queryFn: getRequests,
+    refetchOnMount: "always",
+    refetchInterval: 5000,
+  });
+  const sendMoneyQuery = useQuery({
+    queryKey: ["/api/send-money/transactions"],
+    queryFn: getSendMoneyTransactions,
     refetchOnMount: "always",
     refetchInterval: 5000,
   });
@@ -410,7 +366,7 @@ export default function Dashboard() {
 
   const mergedRows = useMemo<MergedRow[]>(() => {
     const sendRows: MergedRow[] = [
-      ...transactions.map((tx) => ({ kind: "send_money" as const, scheduled: false, dateSort: Date.parse(tx.date) || 0, tx })),
+      ...(sendMoneyQuery.data ?? []).map(toSendMoneyRow).map((tx) => ({ kind: "send_money" as const, scheduled: false, dateSort: Date.parse(tx.date) || 0, tx })),
       ...scheduledTransactions.map((tx) => ({ kind: "send_money" as const, scheduled: true, dateSort: Date.parse(tx.date) || 0, tx })),
     ];
     const moneyInRows: MergedRow[] = [
@@ -419,7 +375,7 @@ export default function Dashboard() {
       ...(campaignsQuery.data ?? []).map(fromCampaign),
     ].map((row) => ({ kind: row.type, dateSort: row.dateSort, row }));
     return [...sendRows, ...moneyInRows].sort((a, b) => b.dateSort - a.dateSort);
-  }, [transactions, requestsQuery.data, invoicesQuery.data, campaignsQuery.data]);
+  }, [sendMoneyQuery.data, requestsQuery.data, invoicesQuery.data, campaignsQuery.data]);
 
   const searchLower = search.trim().toLowerCase();
   const searchedRows = useMemo(() => {
@@ -467,31 +423,19 @@ export default function Dashboard() {
   };
 
   const handleCancelConfirm = async (transactionId: string): Promise<void> => {
-    // Prototype: simulate 1.5s API delay
-    await new Promise<void>((resolve) => setTimeout(resolve, 1500));
-    const tx = transactions.find(t => t.id === transactionId);
-    setTransactions((prev) =>
-      prev.map((t) =>
-        t.id === transactionId ? { ...t, status: "cancelled" } : t
-      )
-    );
-    setCancelTarget(null);
-    // Dispatch bell notification, then refresh unread count immediately
+    // Cancel the real server-owned transaction (the endpoint accepts the row
+    // reference) — the bell notification is dispatched server-side with the
+    // same payload shape this page used to send, and polling brings the
+    // cancelled row back into the table.
     try {
-      await apiRequest("POST", "/api/notifications/dispatch", {
-        type: "transaction_cancelled_customer",
-        data: {
-          txnId: transactionId,
-          recipientName: tx?.recipient ?? "Unknown",
-          amount: tx?.amount ?? "",
-          service: tx?.service ?? "Bank Transfer",
-        },
-      });
-      void queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
-      void queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      await cancelSendMoneyTransaction(transactionId);
     } catch {
-      // Notification failure is non-blocking
+      // Non-blocking — the table refreshes via polling either way.
     }
+    setCancelTarget(null);
+    void queryClient.invalidateQueries({ queryKey: ["/api/send-money/transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     toast({
       title: "Transaction cancelled",
       description: `Ref ${transactionId} has been cancelled successfully. A confirmation has been sent to your registered email address.`,

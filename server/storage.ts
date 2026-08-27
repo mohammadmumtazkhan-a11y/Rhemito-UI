@@ -23,6 +23,7 @@ import {
   type GroupPayCampaign,
   type GroupPayContribution,
 } from "@shared/groupPay";
+import type { SendMoneyTransaction } from "@shared/sendMoney";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { deriveInvoiceStatus, clientDisplayName } from "@shared/invoice-logic";
@@ -154,6 +155,16 @@ export interface IStorage {
     patch: Partial<Omit<GroupPayContribution, "id">>,
   ): Promise<GroupPayContribution | undefined>;
   listGroupPayContributions(campaignId: string): Promise<GroupPayContribution[]>;
+
+  // Send Money transactions
+  createSendMoneyTransaction(transaction: SendMoneyTransaction): Promise<SendMoneyTransaction>;
+  getSendMoneyTransactionById(id: string): Promise<SendMoneyTransaction | undefined>;
+  listSendMoneyTransactionsByOwner(ownerId: string): Promise<SendMoneyTransaction[]>;
+  updateSendMoneyTransaction(
+    id: string,
+    patch: Partial<Omit<SendMoneyTransaction, "id">>,
+  ): Promise<SendMoneyTransaction | undefined>;
+  nextSendMoneySequence(): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
@@ -231,6 +242,10 @@ export class MemStorage implements IStorage {
   private groupPayCampaignsMap: Map<string, GroupPayCampaign>;
   private groupPayContributionsMap: Map<string, GroupPayContribution>;
 
+  // Send Money transactions
+  private sendMoneyTransactionsMap: Map<string, SendMoneyTransaction>;
+  private sendMoneySequence: number;
+
   constructor() {
     this.users = new Map();
     this.promoCodes = new Map();
@@ -256,11 +271,14 @@ export class MemStorage implements IStorage {
     this.moneyRequestSequence = 0;
     this.groupPayCampaignsMap = new Map();
     this.groupPayContributionsMap = new Map();
+    this.sendMoneyTransactionsMap = new Map();
+    this.sendMoneySequence = 0;
 
     // Seed Mock Promo Code & Demo User
     this.seedPromoCodes();
     this.seedDemoUser();
     this.seedDemoCampaigns();
+    this.seedDemoSendMoneyTransactions();
   }
 
   private seedPromoCodes() {
@@ -331,6 +349,48 @@ export class MemStorage implements IStorage {
       firstName: "Demo",
       lastName: "Payer",
     });
+  }
+
+  /**
+   * Demo send-money transactions — the same rows the Dashboard used to render
+   * from client-side mock data, so the unified Transactions table stays
+   * populated for anonymous demo visitors and the e2e assertions on the
+   * legacy references (22502784–87) keep working against real API data.
+   */
+  private seedDemoSendMoneyTransactions() {
+    const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const seed = (
+      reference: string,
+      recipientName: string,
+      service: "bank_deposit" | "mobile_money",
+      sendAmountMinor: number,
+      receiveAmountMinor: number,
+      status: "awaiting_payment" | "pending" | "completed",
+      createdAt: Date,
+    ): SendMoneyTransaction => ({
+      id: randomUUID(),
+      ownerId: "user_123",
+      reference,
+      recipientName,
+      service,
+      paymentMethod: status === "completed" ? "instant_bank" : null,
+      sendCurrency: "GBP",
+      sendAmountMinor,
+      receiveCurrency: "NGN",
+      receiveAmountMinor,
+      feeMinor: Math.round(sendAmountMinor * 0.01),
+      exchangeRate: "2025.50",
+      promoCode: null,
+      status,
+      createdAt,
+      paidAt: status === "completed" ? createdAt : null,
+      cancelledAt: null,
+    });
+
+    this.sendMoneyTransactionsMap.set("demo_txn_22502787", seed("22502787", "Aisha Bello", "bank_deposit", 12000, 24306000, "awaiting_payment", daysAgo(1)));
+    this.sendMoneyTransactionsMap.set("demo_txn_22502784", seed("22502784", "Bob Woolmer", "bank_deposit", 6000, 12153000, "pending", daysAgo(2)));
+    this.sendMoneyTransactionsMap.set("demo_txn_22502785", seed("22502785", "Sarah Chen", "mobile_money", 15000, 30382500, "completed", daysAgo(3)));
+    this.sendMoneyTransactionsMap.set("demo_txn_22502786", seed("22502786", "James Okonkwo", "bank_deposit", 20000, 40510000, "completed", daysAgo(4)));
   }
 
   /**
@@ -967,6 +1027,39 @@ export class MemStorage implements IStorage {
     return Array.from(this.groupPayContributionsMap.values())
       .filter((c) => c.campaignId === campaignId)
       .sort((a, b) => (a.paymentDate?.getTime() ?? 0) - (b.paymentDate?.getTime() ?? 0));
+  }
+
+  // ─── Send Money transactions ─────────────────────────────────────
+
+  async createSendMoneyTransaction(transaction: SendMoneyTransaction): Promise<SendMoneyTransaction> {
+    this.sendMoneyTransactionsMap.set(transaction.id, transaction);
+    return transaction;
+  }
+
+  async getSendMoneyTransactionById(id: string): Promise<SendMoneyTransaction | undefined> {
+    return this.sendMoneyTransactionsMap.get(id);
+  }
+
+  async listSendMoneyTransactionsByOwner(ownerId: string): Promise<SendMoneyTransaction[]> {
+    return Array.from(this.sendMoneyTransactionsMap.values())
+      .filter((t) => t.ownerId === ownerId)
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  }
+
+  async updateSendMoneyTransaction(
+    id: string,
+    patch: Partial<Omit<SendMoneyTransaction, "id">>,
+  ): Promise<SendMoneyTransaction | undefined> {
+    const existing = this.sendMoneyTransactionsMap.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...patch, id };
+    this.sendMoneyTransactionsMap.set(id, updated);
+    return updated;
+  }
+
+  async nextSendMoneySequence(): Promise<number> {
+    this.sendMoneySequence += 1;
+    return this.sendMoneySequence;
   }
 }
 

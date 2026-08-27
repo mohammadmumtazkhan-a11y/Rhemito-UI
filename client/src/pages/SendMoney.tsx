@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -20,6 +19,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
+import {
+    cancelSendMoneyTransaction,
+    createSendMoneyTransaction,
+    paySendMoneyTransaction,
+} from "@/lib/sendMoney";
+import type { SendMoneyPaymentMethod, SendMoneyService } from "@shared/sendMoney";
 
 // Mock Data
 const EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN
@@ -81,7 +86,8 @@ export default function SendMoney() {
     // Transaction submission state
     const [transactionSubmitted, setTransactionSubmitted] = useState(false);
     const [submittingTransaction, setSubmittingTransaction] = useState(false);
-    const [transactionRef] = useState("24426299");
+    const [transactionId, setTransactionId] = useState<string | null>(null);
+    const [transactionRef, setTransactionRef] = useState("");
 
     // Cancel transaction modal
     const [cancelTarget, setCancelTarget] = useState<TransactionDetails | null>(null);
@@ -262,13 +268,38 @@ export default function SendMoney() {
         setTimeout(() => setCopiedField(null), 2000);
     };
 
-    // Handle transaction submission on Step 3 Continue
+    // Handle transaction submission on Step 3 Continue — creates the real
+    // server-owned transaction (status awaiting_payment) so the Dashboard
+    // unified table, cancel flow and notifications all work off server state.
     const handleSubmitTransaction = async () => {
         setSubmittingTransaction(true);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        setTransactionSubmitted(true);
-        setSubmittingTransaction(false);
-        setCurrentStep(4);
+        try {
+            const recipientName = selectedRecipient?.name
+                ?? (`${recipientDetails.firstName} ${recipientDetails.lastName}`.trim() || "Unknown");
+            const created = await createSendMoneyTransaction({
+                recipientName,
+                service: deliveryMethod as SendMoneyService,
+                sendCurrency: "GBP",
+                sendAmount: parseFloat(amount || "0").toFixed(2),
+                receiveCurrency: recipientDetails.currency || "NGN",
+                receiveAmount: (parseFloat(receiveAmount || "0") || 0).toFixed(2),
+                fee: effectiveFee.toFixed(2),
+                exchangeRate: String(EXCHANGE_RATE),
+                ...(promoApplied && promoCode ? { promoCode } : {}),
+            });
+            setTransactionId(created.id);
+            setTransactionRef(created.reference);
+            setTransactionSubmitted(true);
+            setCurrentStep(4);
+        } catch (err) {
+            toast({
+                title: "Transaction not created",
+                description: err instanceof Error ? err.message : "Please try again shortly.",
+                variant: "destructive",
+            });
+        } finally {
+            setSubmittingTransaction(false);
+        }
     };
 
     // Payment countdown timer (30 min for bank transfer page)
@@ -339,46 +370,19 @@ export default function SendMoney() {
     };
 
     const handleCancelConfirm = async (_transactionId: string): Promise<void> => {
-        // Resolve recipient name — from selected recent recipient or from manually entered details
-        const recipientName = selectedRecipient?.name
-            ?? (`${recipientDetails.firstName} ${recipientDetails.lastName}`.trim() || "Unknown");
-
-        // Resolve human-readable service label
-        const serviceLabels: Record<string, string> = {
-            bank_deposit: "Bank Deposit",
-            mobile_money: "Mobile Money",
-            cash_pickup: "Cash Pickup",
-        };
-        const serviceLabel = serviceLabels[deliveryMethod] ?? deliveryMethod ?? "Bank Transfer";
-
-        // Store the cancelled transaction so Dashboard can show it immediately
-        const now = new Date();
-        const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-        sessionStorage.setItem("rhemito_cancelled_tx", JSON.stringify({
-            id: transactionRef,
-            recipient: recipientName,
-            service: serviceLabel,
-            date: dateStr,
-            amount: `GBP ${totalPay.toFixed(2)}`,
-            status: "cancelled",
-        }));
-        // Dispatch bell notification, then immediately refresh unread count before navigating
-        try {
-            await apiRequest("POST", "/api/notifications/dispatch", {
-                type: "transaction_cancelled_customer",
-                data: {
-                    txnId: transactionRef,
-                    recipientName,
-                    amount: `GBP ${totalPay.toFixed(2)}`,
-                    service: serviceLabel,
-                },
-            });
-            // Invalidate so the badge updates immediately on Dashboard
-            void queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
-            void queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-        } catch {
-            // Notification failure is non-blocking — continue with cancel flow
+        // Cancel the real server-owned transaction — the bell notification is
+        // dispatched server-side with the same payload shape this page used to
+        // send itself, and the Dashboard picks the change up via polling.
+        if (transactionId) {
+            try {
+                await cancelSendMoneyTransaction(transactionId);
+            } catch {
+                // Already cancelled or store unavailable — continue with the UX flow.
+            }
         }
+        void queryClient.invalidateQueries({ queryKey: ["/api/send-money/transactions"] });
+        void queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+        void queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
 
         setCancelTarget(null);
         setShowBankTransferPage(false);
@@ -1107,6 +1111,15 @@ export default function SendMoney() {
                                                     key={method.id}
                                                     onClick={async () => {
                                                         setPaymentMethod(method.id);
+                                                        // Record the payment method on the server-owned
+                                                        // transaction (instant methods complete it).
+                                                        if (transactionId) {
+                                                            try {
+                                                                await paySendMoneyTransaction(transactionId, method.id as SendMoneyPaymentMethod);
+                                                            } catch (e) {
+                                                                console.error("Failed to record payment method", e);
+                                                            }
+                                                        }
                                                         if (useBonus) {
                                                             try {
                                                                 await fetch("/api/bonus/redeem", {
@@ -1646,8 +1659,15 @@ export default function SendMoney() {
                                         disabled={isSubmittingTransaction}
                                         onClick={async () => {
                                             setIsSubmittingTransaction(true);
-                                            // Simulate transaction submission delay
-                                            await new Promise(resolve => setTimeout(resolve, 2000));
+                                            // Record manual transfer as the payment method — the
+                                            // transaction stays awaiting_payment inside the 30-min window.
+                                            if (transactionId) {
+                                                try {
+                                                    await paySendMoneyTransaction(transactionId, "manual_transfer");
+                                                } catch (e) {
+                                                    console.error("Failed to record payment method", e);
+                                                }
+                                            }
                                             setIsSubmittingTransaction(false);
                                             setShowManualTransferConfirm(false);
                                             setShowBankTransferPage(true);
