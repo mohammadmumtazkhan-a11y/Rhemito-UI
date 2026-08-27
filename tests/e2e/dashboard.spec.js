@@ -60,11 +60,10 @@ test.describe('Rhemito Dashboard', () => {
     test('Transaction type filters narrow the unified table', async ({ page }) => {
         await page.goto('/');
 
-        // All shows the send-money prototype rows (recent + scheduled)
+        // All paginates the merged list — recent rows stay on page 1
         await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
-        await expect(page.getByTestId('row-scheduled-SCH001')).toBeVisible();
 
-        // Send Money chip keeps the recent + scheduled rows
+        // Send Money chip keeps the recent + scheduled rows on one page
         await page.getByTestId('chip-type-send-money').click();
         await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
         await expect(page.getByTestId('row-scheduled-SCH001')).toBeVisible();
@@ -84,6 +83,27 @@ test.describe('Rhemito Dashboard', () => {
         // Clearing the search restores the rows
         await page.getByTestId('input-search-transactions').fill('');
         await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
+    });
+
+    test('Unified table paginates at 20 records max per page across all types', async ({ page }) => {
+        await page.goto('/');
+        await expect(page.getByTestId('chip-type-all')).toBeVisible();
+
+        // Seeded demo data spans send money, receive money, invoices and campaigns (22+ rows)
+        const rows = page.locator('[data-testid^="row-transaction-"], [data-testid^="row-scheduled-"], [data-testid^="row-receive_money-"], [data-testid^="row-invoice-"], [data-testid^="row-campaign-"]');
+        await expect(rows).toHaveCount(20, { timeout: 10000 });
+        await expect(page.getByTestId('transactions-pagination')).toContainText('Page 1 of');
+
+        // Page 2 holds the remainder
+        await page.getByTestId('button-next-page').click();
+        await expect(rows.first()).toBeVisible();
+        expect(await rows.count()).toBeGreaterThan(0);
+        expect(await rows.count()).toBeLessThan(20);
+        await expect(page.getByTestId('transactions-pagination')).toContainText('Page 2 of');
+
+        // Back to page 1
+        await page.getByTestId('button-prev-page').click();
+        await expect(rows).toHaveCount(20);
     });
 
 });

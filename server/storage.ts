@@ -25,8 +25,9 @@ import {
 } from "@shared/groupPay";
 import type { SendMoneyTransaction } from "@shared/sendMoney";
 import bcrypt from "bcryptjs";
-import { randomUUID } from "crypto";
-import { deriveInvoiceStatus, clientDisplayName } from "@shared/invoice-logic";
+import { randomUUID, randomBytes, createHash } from "crypto";
+import { deriveInvoiceStatus, clientDisplayName, formatDocumentNumber } from "@shared/invoice-logic";
+import { maskAccountNumber, maskEmail } from "@shared/money";
 
 export interface InvoiceListQuery {
   senderId: string;
@@ -279,6 +280,7 @@ export class MemStorage implements IStorage {
     this.seedDemoUser();
     this.seedDemoCampaigns();
     this.seedDemoSendMoneyTransactions();
+    this.seedDemoMoneyInTransactions();
   }
 
   private seedPromoCodes() {
@@ -391,6 +393,168 @@ export class MemStorage implements IStorage {
     this.sendMoneyTransactionsMap.set("demo_txn_22502784", seed("22502784", "Bob Woolmer", "bank_deposit", 6000, 12153000, "pending", daysAgo(2)));
     this.sendMoneyTransactionsMap.set("demo_txn_22502785", seed("22502785", "Sarah Chen", "mobile_money", 15000, 30382500, "completed", daysAgo(3)));
     this.sendMoneyTransactionsMap.set("demo_txn_22502786", seed("22502786", "James Okonkwo", "bank_deposit", 20000, 40510000, "completed", daysAgo(4)));
+  }
+
+  /**
+   * Demo money-in rows — a representative spread of money requests and
+   * invoices for the demo user so the unified Transactions table (all four
+   * types incl. pagination), Money Requests, Sent Invoices and Received
+   * Payments pages carry real-shaped data in every status family from a
+   * fresh boot. Records mirror the exact field shapes the real services
+   * write; tokens are generated like-for-like.
+   */
+  private seedDemoMoneyInTransactions() {
+    const daysAgo = (days: number, hours = 0) =>
+      new Date(Date.now() - days * 24 * 60 * 60 * 1000 - hours * 60 * 60 * 1000);
+    const tokenPair = () => {
+      const token = randomBytes(24).toString("hex");
+      return { token, tokenHash: createHash("sha256").update(token).digest("hex") };
+    };
+    const yearMonthOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+    const demoRequests: Array<{
+      senderName: string; senderEmail: string; amountMinor: number; status: string;
+      createdDaysAgo: number; fundedDaysAgo?: number; paidOutDaysAgo?: number; cancelledDaysAgo?: number; failureReason?: string;
+    }> = [
+      { senderName: "Ngozi Okafor", senderEmail: "ngozi.okafor@example.com", amountMinor: 31000, status: "active", createdDaysAgo: 1 },
+      { senderName: "Tom Baker", senderEmail: "tom.baker@example.com", amountMinor: 9500, status: "payment_processing", createdDaysAgo: 2 },
+      { senderName: "Priya Nair", senderEmail: "priya.nair@example.com", amountMinor: 18000, status: "payout_pending", createdDaysAgo: 3, fundedDaysAgo: 3 },
+      { senderName: "Emily Clarke", senderEmail: "emily.clarke@example.com", amountMinor: 25000, status: "paid_out", createdDaysAgo: 5, fundedDaysAgo: 5, paidOutDaysAgo: 4 },
+      { senderName: "Daniel Osei", senderEmail: "daniel.osei@example.com", amountMinor: 42000, status: "paid_out", createdDaysAgo: 8, fundedDaysAgo: 8, paidOutDaysAgo: 7 },
+      { senderName: "Liam Smith", senderEmail: "liam.smith@example.com", amountMinor: 6000, status: "cancelled", createdDaysAgo: 10, cancelledDaysAgo: 9 },
+      { senderName: "Hannah Cole", senderEmail: "hannah.cole@example.com", amountMinor: 15000, status: "failed", createdDaysAgo: 12, failureReason: "Payer bank declined the authorisation." },
+      { senderName: "Yusuf Bello", senderEmail: "yusuf.bello@example.com", amountMinor: 27500, status: "paid_out", createdDaysAgo: 15, fundedDaysAgo: 15, paidOutDaysAgo: 14 },
+    ];
+
+    demoRequests.forEach((r, i) => {
+      this.moneyRequestSequence += 1;
+      const createdAt = daysAgo(r.createdDaysAgo, i); // stagger hours for a stable sort order
+      const { token, tokenHash } = tokenPair();
+      const { token: emailToken, tokenHash: emailTokenHash } = tokenPair();
+      const feeMinor = Math.round(r.amountMinor * 0.03);
+      this.moneyRequestsMap.set(`demo_req_${i + 1}`, {
+        id: `demo_req_${i + 1}`,
+        requestNumber: formatDocumentNumber("RM", this.moneyRequestSequence, yearMonthOf(createdAt)),
+        requesterId: "user_123",
+        requesterName: "John Doe",
+        requesterCountry: "GB",
+        corridorId: "GB-GB-GBP",
+        senderCountry: "GB",
+        payInCurrency: "GBP",
+        payInAmountMinor: r.amountMinor,
+        payoutCurrency: "GBP",
+        feeMinor,
+        absorbFee: true,
+        payoutAmountMinor: r.amountMinor - feeMinor,
+        fxRate: "1",
+        fxRateIsIndicative: false,
+        fxMarkupApplied: "0.005",
+        payoutAccountId: "acc_demo_gbp",
+        payoutAccountMasked: maskAccountNumber("12345678"),
+        payoutAccountBankName: "Barclays Bank",
+        payoutAccountHolderName: "John Doe",
+        payoutAccountCountry: "GB",
+        senderType: "individual",
+        senderName: r.senderName,
+        senderEmail: r.senderEmail,
+        senderPhone: null,
+        purpose: "invoice_payment",
+        reference: null,
+        status: r.status,
+        token,
+        tokenHash,
+        emailToken,
+        emailTokenHash,
+        recipientEmailMasked: maskEmail(r.senderEmail),
+        payerUserId: null,
+        payerName: null,
+        payerEmail: null,
+        payerEmailMasked: null,
+        activeSessionId: null,
+        sessionExpiresAt: null,
+        reservedAttemptId: null,
+        dueDate: null,
+        expiresAt: daysAgo(r.createdDaysAgo - 60),
+        expiryExtendedOnce: false,
+        viewedAt: r.status !== "active" ? createdAt : null,
+        paymentInitiatedAt: null,
+        fundedAt: r.fundedDaysAgo !== undefined ? daysAgo(r.fundedDaysAgo) : null,
+        payoutSubmittedAt: r.paidOutDaysAgo !== undefined ? daysAgo(r.paidOutDaysAgo, 1) : null,
+        paidOutAt: r.paidOutDaysAgo !== undefined ? daysAgo(r.paidOutDaysAgo) : null,
+        cancelledAt: r.cancelledDaysAgo !== undefined ? daysAgo(r.cancelledDaysAgo) : null,
+        failureReason: r.failureReason ?? null,
+        payinIntentId: null,
+        providerPaymentRef: null,
+        payoutProviderRef: null,
+        paymentMethod: r.fundedDaysAgo !== undefined ? "pay_by_bank" : null,
+        idempotencyKey: `demo-seed-req-${i + 1}`,
+        createdAt,
+      } satisfies MoneyRequest);
+    });
+
+    const demoInvoices: Array<{
+      clientFirst: string; clientLast: string; clientEmail: string; amount: string; status: string;
+      createdDaysAgo: number; paidDaysAgo?: number; cancelledDaysAgo?: number; dueDaysAgo?: number;
+    }> = [
+      { clientFirst: "Dev", clientLast: "Patel", clientEmail: "dev.patel@example.com", amount: "750.00", status: "payment_processing", createdDaysAgo: 2 },
+      { clientFirst: "Alice", clientLast: "Munro", clientEmail: "alice.munro@acme.com", amount: "500.00", status: "paid", createdDaysAgo: 6, paidDaysAgo: 5 },
+      { clientFirst: "Frank", clientLast: "Ocean", clientEmail: "frank.ocean@example.com", amount: "2100.00", status: "sent", createdDaysAgo: 7 },
+      { clientFirst: "Brian", clientLast: "Ferry", clientEmail: "brian.ferry@example.com", amount: "1250.00", status: "paid", createdDaysAgo: 9, paidDaysAgo: 8 },
+      { clientFirst: "Elena", clientLast: "Fisher", clientEmail: "elena.fisher@example.com", amount: "890.00", status: "cancelled", createdDaysAgo: 11, cancelledDaysAgo: 10 },
+      { clientFirst: "Chloe", clientLast: "Diaz", clientEmail: "chloe.diaz@example.com", amount: "320.50", status: "paid", createdDaysAgo: 14, paidDaysAgo: 13 },
+      { clientFirst: "Grace", clientLast: "Hopper", clientEmail: "grace.hopper@example.com", amount: "145.00", status: "sent", createdDaysAgo: 16, dueDaysAgo: 3 },
+      { clientFirst: "Henry", clientLast: "Ives", clientEmail: "henry.ives@example.com", amount: "675.00", status: "paid", createdDaysAgo: 18, paidDaysAgo: 17 },
+    ];
+
+    demoInvoices.forEach((inv, i) => {
+      this.invoiceSequence += 1;
+      const createdAt = daysAgo(inv.createdDaysAgo, i + 1);
+      const { token, tokenHash } = tokenPair();
+      this.invoicesMap.set(`demo_inv_${i + 1}`, {
+        id: `demo_inv_${i + 1}`,
+        invoiceNumber: formatDocumentNumber("INV", this.invoiceSequence, yearMonthOf(createdAt)),
+        senderId: "user_123",
+        senderName: "John Doe",
+        clientType: "individual",
+        clientFirstName: inv.clientFirst,
+        clientMiddleName: null,
+        clientLastName: inv.clientLast,
+        clientBusinessName: null,
+        clientEmail: inv.clientEmail,
+        clientPhoneCode: null,
+        clientPhoneNumber: null,
+        amount: inv.amount,
+        currency: "GBP",
+        absorbFee: true,
+        payoutAccountBank: "Barclays Bank",
+        payoutAccountNumber: "12345678",
+        payoutAccountName: "John Doe",
+        payoutAccountCurrency: "GBP",
+        paymentInitiatedAt: inv.status === "payment_processing" ? createdAt : null,
+        paymentMethod: inv.status === "payment_processing" ? "pay_by_bank" : null,
+        payerUserId: null,
+        dueDate: inv.dueDaysAgo !== undefined ? daysAgo(inv.dueDaysAgo).toISOString().slice(0, 10) : null,
+        expiresAt: daysAgo(inv.createdDaysAgo - 60),
+        expiryTimezone: "Europe/London",
+        status: inv.status,
+        paymentRef: inv.status === "paid" ? `PAY-DEMOINV${i + 1}` : null,
+        token,
+        tokenHash,
+        documentId: null,
+        sentAt: createdAt,
+        paidAt: inv.paidDaysAgo !== undefined ? daysAgo(inv.paidDaysAgo) : null,
+        expiredAt: null,
+        cancelledAt: inv.cancelledDaysAgo !== undefined ? daysAgo(inv.cancelledDaysAgo) : null,
+        cancellationReason: inv.cancelledDaysAgo !== undefined ? "Demo seed cancellation" : null,
+        cancelledBy: null,
+        dueReminderSentAt: null,
+        expiryReminderSentAt: null,
+        newLinkRequestedAt: null,
+        newLinkRequestedBy: null,
+        idempotencyKey: `demo-seed-inv-${i + 1}`,
+        createdAt,
+      } satisfies Invoice);
+    });
   }
 
   /**
