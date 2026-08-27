@@ -66,10 +66,9 @@ export default function PaymentRequests() {
     queryFn: getRequests,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
-    refetchInterval: (query) =>
-      (query.state.data ?? []).some((r) => ["authorisation_in_progress", "payment_processing", "payment_pending", "funded", "payout_pending"].includes(r.status))
-        ? 3000
-        : false,
+    // Always poll — a payer can complete payment on a "Sent" request at any
+    // time and the table must reflect it without a manual refresh.
+    refetchInterval: 3000,
   });
 
   const requests = data ?? [];

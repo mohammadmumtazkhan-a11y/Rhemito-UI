@@ -89,4 +89,41 @@ test.describe('Funding Campaigns', () => {
         }
     });
 
+    test('Created campaign auto-reflects in the list without a refresh', async ({ page }) => {
+        const api = page.context().request;
+        const email = `gp-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
+        await api.post('/api/auth/register', { data: {
+            email, accountType: 'individual', country: 'GB', firstName: 'Gina', lastName: 'Pay',
+            dateOfBirth: '1990-05-05', gender: 'female', mobileCode: '+44', mobileNumber: '7700900123',
+            password: 'Passw0rd!x', confirmPassword: 'Passw0rd!x',
+        } });
+        const verify = await api.post('/api/auth/verify-otp', { data: { email, code: '123456' } });
+        expect(verify.ok()).toBeTruthy();
+        const account = await api.post('/api/request-money/payout-accounts', { data: {
+            holderName: 'Gina Pay', country: 'GB', bankName: 'Barclays',
+            accountNumber: `1234${Math.floor(1000 + Math.random() * 9000)}`, currency: 'GBP',
+        } });
+        expect(account.ok()).toBeTruthy();
+        const accountId = (await account.json()).data.id;
+
+        await page.goto('/group-pay');
+        await expect(page.getByRole('heading', { name: 'Funding Campaigns', exact: true })).toBeVisible();
+
+        // Campaign created out-of-band (as if from another tab or device)
+        const campaignName = `Auto Reflect ${Date.now()}`;
+        const res = await api.post('/api/group-pay/campaigns', { data: {
+            name: campaignName,
+            creatorName: 'Gina Pay',
+            targetAmount: 250,
+            currency: 'GBP',
+            description: 'Auto-update e2e',
+            bankAccountId: accountId,
+            bankAccountName: 'Barclays',
+        } });
+        expect(res.ok()).toBeTruthy();
+
+        // The already-open list picks the new campaign up via polling — no reload.
+        await expect(page.getByRole('heading', { name: campaignName, exact: true })).toBeVisible({ timeout: 15000 });
+    });
+
 });

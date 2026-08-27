@@ -81,6 +81,8 @@ export default function SentInvoices() {
     // store resets on restart — never show stale cached rows.
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
+    // Payments land from the public invoice link — keep the list live.
+    refetchInterval: 5000,
   });
 
   const invoices = data?.data ?? [];

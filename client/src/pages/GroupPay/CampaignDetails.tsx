@@ -57,6 +57,8 @@ export default function CampaignDetails() {
     const { data, isLoading } = useQuery({
         queryKey: ["/api/group-pay/campaigns", campaignId],
         queryFn: () => fetchCampaign(campaignId),
+        // Incoming contributions must appear live on the details page.
+        refetchInterval: 5000,
     });
 
     const campaign: Campaign | null = data?.campaign ?? null;

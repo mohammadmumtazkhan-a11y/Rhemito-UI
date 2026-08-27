@@ -29,6 +29,8 @@ export default function GroupPayDashboard() {
     const { data: campaigns, isLoading } = useQuery({
         queryKey: ["/api/group-pay/campaigns"],
         queryFn: fetchCampaigns,
+        // Contributions and newly created campaigns must appear live.
+        refetchInterval: 5000,
     });
 
     const campaignsQueryKey = ["/api/group-pay/campaigns"];
