@@ -1,11 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Phone, Receipt, ArrowRight, Gift, Copy, Sparkles } from "lucide-react";
+import { Send, Phone, Receipt, ArrowRight, Gift, Copy, Sparkles, Search, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { RequestPaymentModal } from "@/components/RequestPaymentModal";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
+import { getRequests } from "@/lib/requests";
+import { invoiceListUrl, type InvoiceListResponse } from "@/lib/invoices";
+import { fetchCampaigns } from "@/lib/groupPay";
+import {
+  TYPE_BADGES,
+  fromCampaign,
+  fromInvoice,
+  fromMoneyRequest,
+  type TransactionType,
+  type UnifiedTransactionRow,
+} from "@/lib/unifiedTransactions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -19,7 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -87,6 +99,248 @@ const scheduledTransactions = [
   },
 ];
 
+/** Shape shared by the send-money prototype rows (recent + scheduled). */
+interface SendMoneyTx {
+  id: string;
+  recipient: string;
+  service: string;
+  date: string;
+  amount: string;
+  status: string;
+}
+
+type TypeFilter = "all" | TransactionType;
+
+const TYPE_FILTERS: { value: TypeFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "send_money", label: "Send Money" },
+  { value: "receive_money", label: "Receive Money" },
+  { value: "invoice", label: "Invoices" },
+  { value: "campaign", label: "Campaigns" },
+];
+
+/** One entry per row of the unified transactions table, sorted by dateSort. */
+type MergedRow =
+  | { kind: "send_money"; scheduled: boolean; dateSort: number; tx: SendMoneyTx }
+  | { kind: "receive_money" | "invoice" | "campaign"; dateSort: number; row: UnifiedTransactionRow };
+
+function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled: boolean; onCancel: (tx: SendMoneyTx) => void }) {
+  // Resend is offered ONLY for terminal (settled) statuses.
+  // Terminal = completed (successful), failed, cancelled (aborted).
+  // In-flight states (awaiting_payment, pending, scheduled) never show Resend.
+  // Cancel is offered ONLY while awaiting_payment.
+  const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
+  const isTerminal = (TERMINAL_STATUSES as readonly string[]).includes(tx.status);
+  const canCancel = tx.status === "awaiting_payment";
+  return (
+    <TableRow
+      data-testid={scheduled ? `row-scheduled-${tx.id}` : `row-transaction-${tx.id}`}
+      className={cn(
+        "hover:bg-blue-50/50 transition-colors duration-200 group border-b border-gray-50 last:border-b-0",
+        tx.status === "awaiting_payment" && "border-l-2 border-l-amber-400"
+      )}
+    >
+      <TableCell className="font-semibold text-blue-600 text-sm py-4 pl-4 sm:pl-6">
+        <div>{tx.id}</div>
+        <div className="text-xs font-bold text-gray-900 mt-0.5 sm:hidden">{tx.amount}</div>
+      </TableCell>
+      <TableCell className="text-sm font-medium text-gray-900 py-4">
+        <div>{tx.recipient}</div>
+        <div className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-gray-500">
+          <span className={cn("w-1.5 h-1.5 rounded-full", TYPE_BADGES.send_money.dot)} />
+          {TYPE_BADGES.send_money.label}
+        </div>
+      </TableCell>
+      <TableCell className="text-gray-500 text-sm hidden md:table-cell py-4">{tx.service}</TableCell>
+      <TableCell className="text-gray-500 text-sm hidden sm:table-cell py-4">{tx.date}</TableCell>
+      <TableCell className="text-right font-bold text-gray-900 text-sm py-4 hidden sm:table-cell">
+        <div className="flex items-center justify-end gap-1">
+          <ArrowUpRight className="w-3.5 h-3.5 text-gray-400" aria-hidden />
+          {tx.amount}
+        </div>
+      </TableCell>
+      <TableCell className="text-center py-4">
+        {scheduled ? (
+          <div className="flex items-center justify-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+              Scheduled
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-2">
+            <AnimatePresence mode="wait">
+              {tx.status === "cancelled" ? (
+                <motion.span
+                  key="cancelled"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                  Cancelled
+                </motion.span>
+              ) : tx.status === "completed" ? (
+                <motion.span
+                  key="completed"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Completed
+                </motion.span>
+              ) : tx.status === "awaiting_payment" ? (
+                <motion.span
+                  key="awaiting_payment"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 motion-reduce:animate-none" style={{ animationDuration: '2s' }} />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                  </span>
+                  Awaiting Payment
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="pending"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Pending
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </TableCell>
+      <TableCell className="text-center py-4 pr-4 sm:pr-6">
+        {scheduled ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-4 text-xs font-medium rounded-lg border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all"
+            data-testid={`button-cancel-${tx.id}`}
+          >
+            Cancel
+          </Button>
+        ) : (
+          (() => {
+            if (!isTerminal && !canCancel) {
+              return <span className="text-gray-300 text-sm">—</span>;
+            }
+            return (
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2">
+                {isTerminal && (
+                  <Button
+                    size="sm"
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all"
+                    data-testid={`button-resend-${tx.id}`}
+                  >
+                    Resend
+                  </Button>
+                )}
+                <AnimatePresence>
+                  {canCancel && (
+                    <motion.div
+                      key={`cancel-btn-${tx.id}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="w-full sm:w-auto"
+                    >
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={cn(
+                          "h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-full",
+                          "text-red-500 border border-red-200 bg-transparent",
+                          "hover:bg-red-50 hover:border-red-300 hover:text-red-600",
+                          "active:bg-red-100 active:border-red-400",
+                          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400",
+                          "transition-colors duration-150"
+                        )}
+                        aria-label={`Cancel transaction ${tx.id}`}
+                        data-testid={`button-cancel-${tx.id}`}
+                        onClick={() => onCancel(tx)}
+                      >
+                        Cancel
+                      </Button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })()
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function UnifiedRow({ row, onView }: { row: UnifiedTransactionRow; onView: (href: string) => void }) {
+  const badge = TYPE_BADGES[row.type];
+  return (
+    <TableRow
+      data-testid={`row-${row.type}-${row.ref}`}
+      className="hover:bg-blue-50/50 transition-colors duration-200 group border-b border-gray-50 last:border-b-0"
+    >
+      <TableCell className="font-semibold text-blue-600 text-sm py-4 pl-4 sm:pl-6">
+        <div>{row.ref}</div>
+        <div className="text-xs font-bold text-gray-900 mt-0.5 sm:hidden">{row.amountLabel}</div>
+      </TableCell>
+      <TableCell className="text-sm font-medium text-gray-900 py-4">
+        <div>{row.name}</div>
+        {row.email ? <div className="text-xs text-gray-400 mt-0.5">{row.email}</div> : null}
+        <div className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-gray-500">
+          <span className={cn("w-1.5 h-1.5 rounded-full", badge.dot)} />
+          {badge.label}
+        </div>
+      </TableCell>
+      <TableCell className="text-gray-500 text-sm hidden md:table-cell py-4">{row.service}</TableCell>
+      <TableCell className="text-gray-500 text-sm hidden sm:table-cell py-4">{row.dateLabel}</TableCell>
+      <TableCell className="text-right font-bold text-gray-900 text-sm py-4 hidden sm:table-cell">
+        <div className="flex items-center justify-end gap-1">
+          <ArrowDownLeft className="w-3.5 h-3.5 text-teal-500" aria-hidden />
+          {row.amountLabel}
+        </div>
+        {row.subNote ? <div className="text-xs font-normal text-gray-400 mt-0.5">{row.subNote}</div> : null}
+      </TableCell>
+      <TableCell className="text-center py-4">
+        <div className="flex items-center justify-center gap-2">
+          <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border", row.statusClass)}>
+            <span className={cn("w-1.5 h-1.5 rounded-full", row.dotClass)} />
+            {row.statusLabel}
+          </span>
+        </div>
+      </TableCell>
+      <TableCell className="text-center py-4 pr-4 sm:pr-6">
+        <Button
+          size="sm"
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all"
+          data-testid={`button-view-${row.ref}`}
+          onClick={() => onView(row.viewHref)}
+        >
+          View
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -127,6 +381,64 @@ export default function Dashboard() {
     }
   }, []);
 
+  // Unified Transactions table — server-backed money-in records (money
+  // requests, invoices, campaigns) merged with the send-money prototype rows.
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [search, setSearch] = useState("");
+
+  const requestsQuery = useQuery({
+    queryKey: ["/api/request-money/requests"],
+    queryFn: getRequests,
+    refetchOnMount: "always",
+  });
+  const invoicesQuery = useQuery({
+    queryKey: ["/api/invoices", "dashboard"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", invoiceListUrl({}));
+      return ((await res.json()) as InvoiceListResponse).data;
+    },
+    refetchOnMount: "always",
+  });
+  const campaignsQuery = useQuery({
+    queryKey: ["/api/group-pay/campaigns"],
+    queryFn: fetchCampaigns,
+    refetchOnMount: "always",
+  });
+
+  const mergedRows = useMemo<MergedRow[]>(() => {
+    const sendRows: MergedRow[] = [
+      ...transactions.map((tx) => ({ kind: "send_money" as const, scheduled: false, dateSort: Date.parse(tx.date) || 0, tx })),
+      ...scheduledTransactions.map((tx) => ({ kind: "send_money" as const, scheduled: true, dateSort: Date.parse(tx.date) || 0, tx })),
+    ];
+    const moneyInRows: MergedRow[] = [
+      ...(requestsQuery.data ?? []).map(fromMoneyRequest),
+      ...(invoicesQuery.data ?? []).map(fromInvoice),
+      ...(campaignsQuery.data ?? []).map(fromCampaign),
+    ].map((row) => ({ kind: row.type, dateSort: row.dateSort, row }));
+    return [...sendRows, ...moneyInRows].sort((a, b) => b.dateSort - a.dateSort);
+  }, [transactions, requestsQuery.data, invoicesQuery.data, campaignsQuery.data]);
+
+  const searchLower = search.trim().toLowerCase();
+  const searchedRows = useMemo(() => {
+    if (!searchLower) return mergedRows;
+    return mergedRows.filter((row) => {
+      const fields =
+        row.kind === "send_money"
+          ? [row.tx.id, row.tx.recipient, row.tx.service, row.tx.amount]
+          : [row.row.ref, row.row.name, row.row.email ?? "", row.row.service, row.row.amountLabel];
+      return fields.some((value) => value.toLowerCase().includes(searchLower));
+    });
+  }, [mergedRows, searchLower]);
+
+  const typeCounts = useMemo(() => {
+    const counts: Record<TypeFilter, number> = { all: searchedRows.length, send_money: 0, receive_money: 0, invoice: 0, campaign: 0 };
+    for (const row of searchedRows) counts[row.kind] += 1;
+    return counts;
+  }, [searchedRows]);
+
+  const visibleRows = typeFilter === "all" ? searchedRows : searchedRows.filter((row) => row.kind === typeFilter);
+  const anyQueryLoading = requestsQuery.isLoading || invoicesQuery.isLoading || campaignsQuery.isLoading;
+
   const handlePaymentOptionSelect = (option: "request" | "invoice" | "funding") => {
     setShowPaymentModal(false);
     switch (option) {
@@ -142,7 +454,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleCancelClick = (tx: typeof initialRecentTransactions[0]): void => {
+  const handleCancelClick = (tx: SendMoneyTx): void => {
     setCancelTarget({
       id: tx.id,
       recipient: tx.recipient,
@@ -434,37 +746,47 @@ export default function Dashboard() {
         <motion.div variants={itemVariants}>
           <Card className="border-gray-100/80 shadow-xl shadow-gray-100/50 overflow-hidden">
             <CardContent className="p-0">
-              <Tabs defaultValue="recent" className="w-full">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 md:px-6 pt-4 md:pt-5 pb-3 gap-2 border-b border-gray-100 bg-gradient-to-r from-gray-50/50 to-white">
-                  <TabsList className="bg-transparent h-auto p-0 gap-4 md:gap-8 w-full sm:w-auto">
-                    <TabsTrigger
-                      value="recent"
-                      className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-3 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 font-semibold text-sm data-[state=active]:text-blue-600 text-gray-500 hover:text-gray-700 transition-colors"
-                      data-testid="tab-recent-transactions"
-                    >
-                      Recent Transactions
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="scheduled"
-                      className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none px-0 pb-3 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 font-semibold text-sm data-[state=active]:text-blue-600 text-gray-500 hover:text-gray-700 transition-colors"
-                      data-testid="tab-scheduled-transactions"
-                    >
-                      Scheduled
-                    </TabsTrigger>
-                  </TabsList>
-                  <Button variant="ghost" className="text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium hidden sm:flex gap-1.5 h-9 px-3 rounded-lg">
-                    View All
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
+              <div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 md:px-6 pt-4 md:pt-5 pb-3 border-b border-gray-100 bg-gradient-to-r from-gray-50/50 to-white">
+                  <h2 className="font-display font-semibold text-sm md:text-base text-gray-900">Transactions</h2>
+                  <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <Input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search by ref, name, email or service…"
+                      className="pl-9 h-9 text-sm rounded-lg bg-white"
+                      data-testid="input-search-transactions"
+                    />
+                  </div>
                 </div>
-
-                <TabsContent value="recent" className="m-0">
-                  <div className="overflow-x-auto">
-                    <Table>
+                <div className="flex flex-wrap items-center gap-2 px-4 md:px-6 py-3 border-b border-gray-100 bg-gray-50/30">
+                  {TYPE_FILTERS.map((filter) => (
+                    <button
+                      key={filter.value}
+                      type="button"
+                      onClick={() => setTypeFilter(filter.value)}
+                      data-testid={`chip-type-${filter.value.replace(/_/g, "-")}`}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all",
+                        typeFilter === filter.value
+                          ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600"
+                      )}
+                    >
+                      {filter.label}
+                      <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", typeFilter === filter.value ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500")}>
+                        {typeCounts[filter.value]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div className="overflow-x-auto" data-testid="table-transactions">
+                  <Table>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent bg-gray-50/50 border-b border-gray-100">
                           <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-[90px] sm:w-[130px] py-4 pl-4 sm:pl-6">Ref No.</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider py-4">Recipient</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider py-4">Recipient / Sender</TableHead>
                           <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell py-4">Service</TableHead>
                           <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden sm:table-cell py-4">Date</TableHead>
                           <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-right py-4 hidden sm:table-cell">Amount</TableHead>
@@ -473,195 +795,33 @@ export default function Dashboard() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {transactions.map((tx) => (
-                          <TableRow
-                            key={tx.id}
-                            data-testid={`row-transaction-${tx.id}`}
-                            className={cn(
-                              "hover:bg-blue-50/50 transition-colors duration-200 group border-b border-gray-50 last:border-b-0",
-                              tx.status === "awaiting_payment" && "border-l-2 border-l-amber-400"
-                            )}
-                          >
-                            <TableCell className="font-semibold text-blue-600 text-sm py-4 pl-4 sm:pl-6">
-                              <div>{tx.id}</div>
-                              <div className="text-xs font-bold text-gray-900 mt-0.5 sm:hidden">{tx.amount}</div>
-                            </TableCell>
-                            <TableCell className="text-sm font-medium text-gray-900 py-4">{tx.recipient}</TableCell>
-                            <TableCell className="text-gray-500 text-sm hidden md:table-cell py-4">{tx.service}</TableCell>
-                            <TableCell className="text-gray-500 text-sm hidden sm:table-cell py-4">{tx.date}</TableCell>
-                            <TableCell className="text-right font-bold text-gray-900 text-sm py-4 hidden sm:table-cell">{tx.amount}</TableCell>
-                            <TableCell className="text-center py-4">
-                              <div className="flex items-center justify-center gap-2">
-                                <AnimatePresence mode="wait">
-                                  {tx.status === "cancelled" ? (
-                                    <motion.span
-                                      key="cancelled"
-                                      initial={{ opacity: 0 }}
-                                      animate={{ opacity: 1 }}
-                                      exit={{ opacity: 0 }}
-                                      transition={{ duration: 0.3 }}
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200"
-                                    >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-                                      Cancelled
-                                    </motion.span>
-                                  ) : tx.status === "completed" ? (
-                                    <motion.span
-                                      key="completed"
-                                      initial={{ opacity: 0 }}
-                                      animate={{ opacity: 1 }}
-                                      exit={{ opacity: 0 }}
-                                      transition={{ duration: 0.3 }}
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                      Completed
-                                    </motion.span>
-                                  ) : tx.status === "awaiting_payment" ? (
-                                    <motion.span
-                                      key="awaiting_payment"
-                                      initial={{ opacity: 0 }}
-                                      animate={{ opacity: 1 }}
-                                      exit={{ opacity: 0 }}
-                                      transition={{ duration: 0.3 }}
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200"
-                                    >
-                                      <span className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 motion-reduce:animate-none" style={{ animationDuration: '2s' }} />
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-                                      </span>
-                                      Awaiting Payment
-                                    </motion.span>
-                                  ) : (
-                                    <motion.span
-                                      key="pending"
-                                      initial={{ opacity: 0 }}
-                                      animate={{ opacity: 1 }}
-                                      exit={{ opacity: 0 }}
-                                      transition={{ duration: 0.3 }}
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200"
-                                    >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                      Pending
-                                    </motion.span>
-                                  )}
-                                </AnimatePresence>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center py-4 pr-4 sm:pr-6">
-                              {(() => {
-                                // Resend is offered ONLY for terminal (settled) statuses.
-                                // Terminal = completed (successful), failed, cancelled (aborted).
-                                // In-flight states (awaiting_payment, pending, scheduled) never show Resend.
-                                // Cancel is offered ONLY while awaiting_payment.
-                                const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
-                                const isTerminal = (TERMINAL_STATUSES as readonly string[]).includes(tx.status);
-                                const canCancel = tx.status === "awaiting_payment";
-                                if (!isTerminal && !canCancel) {
-                                  return <span className="text-gray-300 text-sm">—</span>;
-                                }
-                                return (
-                                <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2">
-                                  {isTerminal && (
-                                    <Button
-                                      size="sm"
-                                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all"
-                                      data-testid={`button-resend-${tx.id}`}
-                                    >
-                                      Resend
-                                    </Button>
-                                  )}
-                                  <AnimatePresence>
-                                    {canCancel && (
-                                      <motion.div
-                                        key={`cancel-btn-${tx.id}`}
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        transition={{ duration: 0.2 }}
-                                        className="w-full sm:w-auto"
-                                      >
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className={cn(
-                                            "h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-full",
-                                            "text-red-500 border border-red-200 bg-transparent",
-                                            "hover:bg-red-50 hover:border-red-300 hover:text-red-600",
-                                            "active:bg-red-100 active:border-red-400",
-                                            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400",
-                                            "transition-colors duration-150"
-                                          )}
-                                          aria-label={`Cancel transaction ${tx.id}`}
-                                          data-testid={`button-cancel-${tx.id}`}
-                                          onClick={() => handleCancelClick(tx)}
-                                        >
-                                          Cancel
-                                        </Button>
-                                      </motion.div>
-                                    )}
-                                  </AnimatePresence>
-                                </div>
-                                );
-                              })()}
+                        {visibleRows.length === 0 && !anyQueryLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className="py-12 text-center text-sm text-gray-400" data-testid="empty-transactions">
+                              No transactions match your search or filters.
                             </TableCell>
                           </TableRow>
-                        ))}
+                        ) : (
+                          visibleRows.map((row) =>
+                            row.kind === "send_money" ? (
+                              <SendMoneyRow key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} />
+                            ) : (
+                              <UnifiedRow key={row.row.key} row={row.row} onView={setLocation} />
+                            )
+                          )
+                        )}
+                        {anyQueryLoading && (
+                          <TableRow>
+                            <TableCell colSpan={7} className="py-4">
+                              <Skeleton className="h-9 w-full rounded-lg" />
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>
-                </TabsContent>
-
-                <TabsContent value="scheduled" className="m-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="hover:bg-transparent bg-gray-50/50 border-b border-gray-100">
-                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-[100px] md:w-[130px] py-4">Ref No.</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider py-4">Recipient</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell py-4">Service</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden sm:table-cell py-4">Date</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-right py-4">Amount</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center py-4">Status</TableHead>
-                          <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center hidden sm:table-cell py-4">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {scheduledTransactions.map((tx) => (
-                          <TableRow
-                            key={tx.id}
-                            data-testid={`row-scheduled-${tx.id}`}
-                            className="hover:bg-blue-50/50 transition-colors duration-200 group border-b border-gray-50 last:border-b-0"
-                          >
-                            <TableCell className="font-semibold text-blue-600 text-sm py-4">{tx.id}</TableCell>
-                            <TableCell className="text-sm font-medium text-gray-900 py-4">{tx.recipient}</TableCell>
-                            <TableCell className="text-gray-500 text-sm hidden md:table-cell py-4">{tx.service}</TableCell>
-                            <TableCell className="text-gray-500 text-sm hidden sm:table-cell py-4">{tx.date}</TableCell>
-                            <TableCell className="text-right font-bold text-gray-900 text-sm py-4">{tx.amount}</TableCell>
-                            <TableCell className="text-center py-4">
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                                Scheduled
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center hidden sm:table-cell py-4">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 px-4 text-xs font-medium rounded-lg border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all"
-                                data-testid={`button-cancel-${tx.id}`}
-                              >
-                                Cancel
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
+                </div>
+              </CardContent>
           </Card>
         </motion.div>
       </motion.div>
