@@ -95,7 +95,7 @@ export default function PaymentRequests() {
       <div className="max-w-7xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold font-display">Payment Requests</h1>
+            <h1 className="text-2xl font-bold font-display">Money Requests</h1>
             <p className="text-muted-foreground mt-1">Track every request across its lifecycle — link, email and QR all share one secure URL</p>
           </div>
           <Button onClick={() => setLocation("/request-payment")} data-testid="button-new-request-header">
@@ -107,14 +107,14 @@ export default function PaymentRequests() {
         <Card>
           <CardContent className="pt-6">
             {isLoading ? (
-              <div className="py-16 text-center text-muted-foreground text-sm">Loading payment requests…</div>
+              <div className="py-16 text-center text-muted-foreground text-sm">Loading money requests…</div>
             ) : requests.length === 0 ? (
               <div className="py-16 flex flex-col items-center text-center gap-3" data-testid="empty-requests">
                 <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
                   <Inbox className="w-7 h-7 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium">No payment requests yet</p>
+                  <p className="font-medium">No money requests yet</p>
                   <p className="text-sm text-muted-foreground mt-1">Requests appear here once you create one.</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setLocation("/request-payment")} data-testid="button-create-first-request">
@@ -232,9 +232,9 @@ export default function PaymentRequests() {
               <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-2">
                 <AlertCircle className="w-6 h-6" />
               </div>
-              <DialogTitle className="font-display text-lg">Cancel Payment Request?</DialogTitle>
+              <DialogTitle className="font-display text-lg">Cancel Money Request?</DialogTitle>
               <DialogDescription>
-                Are you sure you want to cancel this payment request? The sender will no longer be able to make a payment using this request link.
+                Are you sure you want to cancel this money request? The sender will no longer be able to make a payment using this request link.
               </DialogDescription>
             </DialogHeader>
 
@@ -277,7 +277,7 @@ export default function PaymentRequests() {
                   const reqId = requestToCancel.id;
                   setCancelModalOpen(false);
                   setRequestToCancel(null);
-                  await run("Cancel", () => cancelRequest(reqId), "Payment request cancelled successfully.");
+                  await run("Cancel", () => cancelRequest(reqId), "Money request cancelled successfully.");
                 }}
                 data-testid="button-dialog-confirm-cancel"
               >

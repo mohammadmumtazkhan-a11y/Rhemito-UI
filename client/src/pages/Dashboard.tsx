@@ -291,7 +291,7 @@ export default function Dashboard() {
                       <Receipt className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 flex flex-col items-start gap-0.5">
-                      <span className="leading-none text-white">Request Payment</span>
+                      <span className="leading-none text-white">Receive Money</span>
                       <span className="text-xs font-normal text-teal-50">Get paid fast</span>
                     </div>
                     <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">

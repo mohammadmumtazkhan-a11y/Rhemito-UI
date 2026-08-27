@@ -151,7 +151,7 @@ test.describe('Request Money E2E', () => {
     await page.getByTestId('button-step-next').click();
 
     // Success screen: same URL distributed by email / copy / share / QR
-    await expect(page.getByText('Payment Request Sent!')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Money Request Sent!')).toBeVisible({ timeout: 15000 });
     await expect(page.getByTestId('img-qr')).toBeVisible();
     await expect(page.getByTestId('input-payment-link')).toHaveValue(/\/pay\/[0-9a-f]{40,}/);
     await expect(page.getByTestId('button-copy-link')).toBeVisible();
@@ -213,7 +213,7 @@ test.describe('Request Money E2E', () => {
     await page.getByTestId('button-step-next').click();
 
     // Success screen
-    await expect(page.getByText('Payment Request Sent!')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Money Request Sent!')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Sender Pays:').locator('..')).toContainText('£257.50');
 
     // The public checkout charges the payer the total incl. fee — identify as a
@@ -486,7 +486,7 @@ test.describe('Request Money E2E', () => {
     await page.getByTestId('button-step-next').click();
     await expect(page.getByText('KSh5000.00 KES')).toBeVisible();
     await page.getByTestId('button-step-next').click();
-    await expect(page.getByText('Payment Request Sent!')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Money Request Sent!')).toBeVisible({ timeout: 15000 });
   });
 
   test('Password fields expose a show/hide visibility toggle (eye icon)', async ({ page, request }) => {
@@ -546,7 +546,7 @@ test.describe('Request Money E2E', () => {
     // Pre-cancellation dialog must appear
     const dialog = page.getByTestId('dialog-cancel-payment-request');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText('Cancel Payment Request?')).toBeVisible();
+    await expect(dialog.getByText('Cancel Money Request?')).toBeVisible();
     await expect(dialog.getByText('Michael Chen')).toBeVisible();
     await expect(dialog.getByText('REF-D4E5F6')).toBeVisible();
 

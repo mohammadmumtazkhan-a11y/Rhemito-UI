@@ -243,7 +243,7 @@ export function PayoutAccountSelector({
             <h4 className="font-bold text-sm text-amber-950">Sign in required</h4>
             <p className="text-xs text-amber-800 leading-relaxed">
               You must be signed in to add or select a payout bank account. Sign in or register to continue with your{" "}
-              {context === "invoice" ? "invoice" : context === "campaign" || context === "group_pay" ? "funding campaign" : "payment request"}.
+              {context === "invoice" ? "invoice" : context === "campaign" || context === "group_pay" ? "funding campaign" : "money request"}.
             </p>
           </div>
         </div>
@@ -277,7 +277,7 @@ export function PayoutAccountSelector({
               </h4>
               <p className="text-xs text-amber-800 leading-relaxed">
                 You must first add a valid bank account in your name (<strong>{requesterName}</strong>) to receive
-                payouts from your {context === "invoice" ? "invoices" : context === "campaign" || context === "group_pay" ? "funding campaigns" : "payment requests"}. The account holder name must match your registered name.
+                payouts from your {context === "invoice" ? "invoices" : context === "campaign" || context === "group_pay" ? "funding campaigns" : "money requests"}. The account holder name must match your registered name.
               </p>
             </div>
           </div>
@@ -383,7 +383,7 @@ export function PayoutAccountSelector({
               <span>Add Payout Bank Account</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Add a bank account to receive payouts directly from your {context === "invoice" ? "invoices" : context === "campaign" || context === "group_pay" ? "funding campaigns" : "payment requests"}.
+              Add a bank account to receive payouts directly from your {context === "invoice" ? "invoices" : context === "campaign" || context === "group_pay" ? "funding campaigns" : "money requests"}.
             </DialogDescription>
           </DialogHeader>
 
