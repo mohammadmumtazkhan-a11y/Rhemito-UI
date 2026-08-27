@@ -17,8 +17,13 @@ test.describe('Rhemito Dashboard', () => {
         await expect(page.getByTestId('button-airtime-topup')).toBeVisible();
         await expect(page.getByTestId('button-request-payment')).toBeVisible();
 
-        // Verify Recent Transactions section
-        await expect(page.getByTestId('tab-recent-transactions')).toBeVisible();
+        // Verify unified Transactions table with its type filter chips
+        await expect(page.getByTestId('table-transactions')).toBeVisible();
+        await expect(page.getByTestId('chip-type-all')).toBeVisible();
+        await expect(page.getByTestId('chip-type-send-money')).toBeVisible();
+        await expect(page.getByTestId('chip-type-receive-money')).toBeVisible();
+        await expect(page.getByTestId('chip-type-invoice')).toBeVisible();
+        await expect(page.getByTestId('chip-type-campaign')).toBeVisible();
     });
 
     test('Quick Services - Send Money navigation', async ({ page }) => {
@@ -42,7 +47,7 @@ test.describe('Rhemito Dashboard', () => {
         await expect(page.getByTestId('button-invoice')).toBeVisible();
     });
 
-    test('Recent Transactions table displays data', async ({ page }) => {
+    test('Unified Transactions table displays data', async ({ page }) => {
         await page.goto('/');
 
         // Verify transactions table has rows
@@ -52,14 +57,33 @@ test.describe('Rhemito Dashboard', () => {
         await expect(page.getByTestId('button-resend-22502785')).toBeVisible();
     });
 
-    test('Scheduled Transactions tab works', async ({ page }) => {
+    test('Transaction type filters narrow the unified table', async ({ page }) => {
         await page.goto('/');
 
-        // Click Scheduled tab
-        await page.getByTestId('tab-scheduled-transactions').click();
-
-        // Verify scheduled transaction is visible
+        // All shows the send-money prototype rows (recent + scheduled)
+        await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
         await expect(page.getByTestId('row-scheduled-SCH001')).toBeVisible();
+
+        // Send Money chip keeps the recent + scheduled rows
+        await page.getByTestId('chip-type-send-money').click();
+        await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
+        await expect(page.getByTestId('row-scheduled-SCH001')).toBeVisible();
+
+        // Invoices chip hides the send-money prototype rows
+        await page.getByTestId('chip-type-invoice').click();
+        await expect(page.getByTestId('row-transaction-22502784')).toBeHidden();
+    });
+
+    test('Transaction search narrows the unified table', async ({ page }) => {
+        await page.goto('/');
+
+        await page.getByTestId('input-search-transactions').fill('Aisha Bello');
+        await expect(page.getByTestId('row-transaction-22502787')).toBeVisible();
+        await expect(page.getByTestId('row-transaction-22502784')).toBeHidden();
+
+        // Clearing the search restores the rows
+        await page.getByTestId('input-search-transactions').fill('');
+        await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
     });
 
 });
