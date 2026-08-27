@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Phone, Receipt, ArrowRight, Gift, Copy, Sparkles, Search, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { Send, Phone, Receipt, ArrowRight, Gift, Copy, Sparkles, Search, ArrowUpRight, ArrowDownLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { RequestPaymentModal } from "@/components/RequestPaymentModal";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
 import { getRequests } from "@/lib/requests";
@@ -76,6 +76,9 @@ interface SendMoneyTx {
 }
 
 type TypeFilter = "all" | TransactionType;
+
+/** Unified transactions table page size — 20 records max per page. */
+const TRANSACTIONS_PAGE_SIZE = 20;
 
 const TYPE_FILTERS: { value: TypeFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -335,6 +338,7 @@ export default function Dashboard() {
   // requests, invoices, campaigns) merged with the send-money prototype rows.
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const requestsQuery = useQuery({
     queryKey: ["/api/request-money/requests"],
@@ -396,7 +400,10 @@ export default function Dashboard() {
   }, [searchedRows]);
 
   const visibleRows = typeFilter === "all" ? searchedRows : searchedRows.filter((row) => row.kind === typeFilter);
-  const anyQueryLoading = requestsQuery.isLoading || invoicesQuery.isLoading || campaignsQuery.isLoading;
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / TRANSACTIONS_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = visibleRows.slice((safePage - 1) * TRANSACTIONS_PAGE_SIZE, safePage * TRANSACTIONS_PAGE_SIZE);
+  const anyQueryLoading = requestsQuery.isLoading || invoicesQuery.isLoading || campaignsQuery.isLoading || sendMoneyQuery.isLoading;
 
   const handlePaymentOptionSelect = (option: "request" | "invoice" | "funding") => {
     setShowPaymentModal(false);
@@ -700,7 +707,10 @@ export default function Dashboard() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                     <Input
                       value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      onChange={(e) => {
+                        setSearch(e.target.value);
+                        setPage(1);
+                      }}
                       placeholder="Search by ref, name, email or service…"
                       className="pl-9 h-9 text-sm rounded-lg bg-white"
                       data-testid="input-search-transactions"
@@ -712,7 +722,10 @@ export default function Dashboard() {
                     <button
                       key={filter.value}
                       type="button"
-                      onClick={() => setTypeFilter(filter.value)}
+                      onClick={() => {
+                        setTypeFilter(filter.value);
+                        setPage(1);
+                      }}
                       data-testid={`chip-type-${filter.value.replace(/_/g, "-")}`}
                       className={cn(
                         "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all",
@@ -749,7 +762,7 @@ export default function Dashboard() {
                             </TableCell>
                           </TableRow>
                         ) : (
-                          visibleRows.map((row) =>
+                          pageRows.map((row) =>
                             row.kind === "send_money" ? (
                               <SendMoneyRow key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} />
                             ) : (
@@ -767,6 +780,38 @@ export default function Dashboard() {
                       </TableBody>
                     </Table>
                   </div>
+                  {visibleRows.length > 0 && (
+                    <div
+                      className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 md:px-6 py-3 border-t border-gray-100"
+                      data-testid="transactions-pagination"
+                    >
+                      <p className="text-xs text-gray-500">
+                        Showing {Math.min(visibleRows.length, (safePage - 1) * TRANSACTIONS_PAGE_SIZE + 1)}–{Math.min(safePage * TRANSACTIONS_PAGE_SIZE, visibleRows.length)} of {visibleRows.length} transactions • Page {safePage} of {totalPages}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={safePage <= 1}
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          data-testid="button-prev-page"
+                        >
+                          <ChevronLeft className="w-4 h-4 mr-1" />
+                          Previous
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={safePage >= totalPages}
+                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                          data-testid="button-next-page"
+                        >
+                          Next
+                          <ChevronRight className="w-4 h-4 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
           </Card>
