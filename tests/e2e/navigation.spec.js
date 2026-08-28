@@ -83,6 +83,17 @@ test.describe('Rhemito Navigation', () => {
         await expect(page).toHaveURL(/\/payout-accounts/);
     });
 
+    test('Sidebar navigation - Transactions', async ({ page }) => {
+        await page.goto('/');
+
+        // Click Transactions link
+        await page.getByTestId('link-transactions').click();
+
+        // Verify navigation
+        await expect(page).toHaveURL(/\/transactions/);
+        await expect(page.getByTestId('section-transactions-page')).toBeVisible();
+    });
+
     test('Sidebar navigation - Bonus & Discounts', async ({ page }) => {
         await page.goto('/');
 
