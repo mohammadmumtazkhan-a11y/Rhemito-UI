@@ -139,13 +139,15 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     <>
       {/* Header with Logo */}
       <div className="p-6 flex items-center gap-3">
-        <div className="w-10 h-10 flex items-center justify-center">
-          <img
-            src="/logo.png"
-            alt="Rhemito Logo"
-            className="w-10 h-10 object-contain"
-          />
-        </div>
+        <Link href="/" onClick={onClose} data-testid="link-logo-home">
+          <div className="w-10 h-10 flex items-center justify-center cursor-pointer transition-transform duration-200 hover:scale-105">
+            <img
+              src="/logo.png"
+              alt="Rhemito Logo"
+              className="w-10 h-10 object-contain"
+            />
+          </div>
+        </Link>
         <button
           onClick={onClose}
           className="ml-auto w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors lg:hidden"

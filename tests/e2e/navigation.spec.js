@@ -12,6 +12,18 @@ test.describe('Rhemito Navigation', () => {
         await expect(page).toHaveURL('/');
     });
 
+    test('Sidebar logo always navigates to dashboard', async ({ page }) => {
+        // Start on a page other than the dashboard
+        await page.goto('/payments');
+        await expect(page).toHaveURL(/\/payments/);
+
+        // Click the Rhemito logo
+        await page.getByTestId('link-logo-home').click();
+
+        // Verify we're back on the dashboard
+        await expect(page).toHaveURL('/');
+    });
+
     test('Sidebar navigation - Payments (via accordion)', async ({ page }) => {
         await page.goto('/');
 
