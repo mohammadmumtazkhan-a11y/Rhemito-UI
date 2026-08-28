@@ -42,7 +42,9 @@ interface NavItemData {
 const overviewItem: NavItemData = { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true, gradient: "from-blue-500 to-indigo-600" };
 
 const moneySentItems: NavItemData[] = [
-  { icon: ArrowLeftRight, label: "Transactions", href: "/test-checkout", enabled: true },
+  // Deep link: opens the Dashboard with the transactions table filtered to
+  // Send Money records and scrolled into view (handled in Dashboard.tsx).
+  { icon: ArrowLeftRight, label: "Transactions", href: "/?type=send_money", enabled: true },
   { icon: Users, label: "Recipients", href: "/recipients", enabled: true },
 ];
 
