@@ -14,7 +14,6 @@ test.describe('Rhemito Dashboard', () => {
 
         // Verify Quick Service buttons are present
         await expect(page.getByTestId('button-send-money')).toBeVisible();
-        await expect(page.getByTestId('button-airtime-topup')).toBeVisible();
         await expect(page.getByTestId('button-request-payment')).toBeVisible();
 
         // Verify unified Transactions table with its type filter chips

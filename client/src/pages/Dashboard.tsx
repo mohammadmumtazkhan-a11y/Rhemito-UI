@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Phone, Receipt, ArrowRight, Gift, Copy, Sparkles, Search, ArrowUpRight, ArrowDownLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { Send, Receipt, ArrowRight, Gift, Copy, Sparkles, Search, ArrowUpRight, ArrowDownLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { RequestPaymentModal } from "@/components/RequestPaymentModal";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
 import { getRequests } from "@/lib/requests";
@@ -522,24 +522,6 @@ export default function Dashboard() {
                     <div className="flex-1 flex flex-col items-start gap-0.5">
                       <span className="leading-none text-white">Send Money</span>
                       <span className="text-xs font-normal text-blue-100">Transfer globally</span>
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                      <ArrowRight className="w-4 h-4 text-white" />
-                    </div>
-                  </Button>
-                </motion.div>
-
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    className="group w-full justify-start gap-4 bg-[#9CA3D5] hover:bg-[#8890cc] text-white h-[72px] text-[15px] font-semibold rounded-2xl shadow-md hover:shadow-xl hover:shadow-indigo-500/20 transition-all duration-300 border-none"
-                    data-testid="button-airtime-topup"
-                  >
-                    <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-                      <Phone className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 flex flex-col items-start gap-0.5">
-                      <span className="leading-none text-white">Airtime Topup</span>
-                      <span className="text-xs font-normal text-indigo-50">Recharge mobile</span>
                     </div>
                     <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
                       <ArrowRight className="w-4 h-4 text-white" />
