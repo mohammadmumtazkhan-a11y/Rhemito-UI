@@ -8,12 +8,9 @@ import { NotificationContextProvider } from "@/contexts/NotificationContext";
 import Dashboard from "@/pages/Dashboard";
 import RequestPayment from "@/pages/RequestPayment";
 import RequestCheckout from "@/pages/RequestCheckout";
-import PaymentRequests from "@/pages/PaymentRequests";
 import SendInvoice from "@/pages/SendInvoice";
-import SentInvoices from "@/pages/SentInvoices";
 import SentInvoiceDetails from "@/pages/SentInvoiceDetails";
 import InvoiceView from "@/pages/InvoiceView";
-import Payments from "@/pages/Payments";
 import Senders from "@/pages/Senders";
 import SenderDetail from "@/pages/SenderDetail";
 import PayoutAccounts from "@/pages/PayoutAccounts";
@@ -72,12 +69,11 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/request-payment" component={RequestPayment} />
-      <Route path="/payment-requests" component={PaymentRequests} />
       <Route path="/send-invoice" component={SendInvoice} />
-      <Route path="/sent-invoices" component={SentInvoices} />
+      {/* /payments, /payment-requests and /sent-invoices were consolidated
+          into the Dashboard Transactions table (/?type=<filter>) */}
       <Route path="/sent-invoices/:id" component={SentInvoiceDetails} />
       <Route path="/show-qr-code"><Redirect to="/request-payment" /></Route>
-      <Route path="/payments" component={Payments} />
       <Route path="/send-money" component={SendMoney} />
       <Route path="/recipients" component={Recipients} />
       <Route path="/senders" component={Senders} />

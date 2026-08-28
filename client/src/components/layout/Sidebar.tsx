@@ -11,14 +11,12 @@ import {
   Settings,
   LogOut,
   X,
-  Wallet,
   Building2,
   Gift,
   Inbox,
   Send,
   Sparkles,
-  UsersRound,
-  FileText
+  UsersRound
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -49,9 +47,8 @@ const moneySentItems: NavItemData[] = [
 ];
 
 const paymentsReceivedItems: NavItemData[] = [
-  { icon: Wallet, label: "Received Payments", href: "/payments", enabled: true },
-  { icon: ArrowLeftRight, label: "Money Requests", href: "/payment-requests", enabled: true },
-  { icon: FileText, label: "Sent Invoices", href: "/sent-invoices", enabled: true },
+  // Received Payments, Money Requests and Sent Invoices live in the Dashboard
+  // Transactions table (filtered via /?type=<filter>) — no dedicated pages.
   { icon: UserCheck, label: "Senders", href: "/senders", enabled: true },
   { icon: UsersRound, label: "Funding Campaigns", href: "/group-pay", enabled: true, tooltip: "Funding campaigns", gradient: "from-blue-500 to-indigo-600" },
   { icon: Building2, label: "Collections Accounts", href: "/payout-accounts", enabled: true, tooltip: "You receive money here" },

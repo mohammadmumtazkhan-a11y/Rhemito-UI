@@ -14,8 +14,8 @@ test.describe('Rhemito Navigation', () => {
 
     test('Sidebar logo always navigates to dashboard', async ({ page }) => {
         // Start on a page other than the dashboard
-        await page.goto('/payments');
-        await expect(page).toHaveURL(/\/payments/);
+        await page.goto('/senders');
+        await expect(page).toHaveURL(/\/senders/);
 
         // Click the Rhemito logo
         await page.getByTestId('link-logo-home').click();
@@ -24,20 +24,22 @@ test.describe('Rhemito Navigation', () => {
         await expect(page).toHaveURL('/');
     });
 
-    test('Sidebar navigation - Payments (via accordion)', async ({ page }) => {
+    test('Payments Received pages are consolidated into the dashboard table', async ({ page }) => {
         await page.goto('/');
 
-        // First expand the "Payments Received" accordion
+        // Expand the "Payments Received" accordion
         await page.getByText('Payments Received').click();
-
-        // Wait for accordion to expand
         await page.waitForTimeout(500);
 
-        // Click Received Payments link
-        await page.getByTestId('link-received-payments').click();
+        // Received Payments, Money Requests and Sent Invoices no longer have
+        // their own sidebar entries — their data lives in the Transactions table.
+        await expect(page.getByTestId('link-received-payments')).toHaveCount(0);
+        await expect(page.getByTestId('link-money-requests')).toHaveCount(0);
+        await expect(page.getByTestId('link-sent-invoices')).toHaveCount(0);
 
-        // Verify navigation
-        await expect(page).toHaveURL(/\/payments/);
+        // The remaining Payments Received entries are still navigable.
+        await page.getByTestId('link-senders').click();
+        await expect(page).toHaveURL(/\/senders/);
     });
 
     test('Sidebar navigation - Senders (via accordion)', async ({ page }) => {

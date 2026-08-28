@@ -1,13 +1,16 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Receipt, ArrowRight, Gift, Copy, Sparkles, Search, ArrowUpRight, ArrowDownLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { Send, Receipt, ArrowRight, Gift, Copy, Sparkles, Search, ArrowUpRight, ArrowDownLeft, ChevronLeft, ChevronRight, Mail, XCircle, FilePlus2 } from "lucide-react";
 import { RequestPaymentModal } from "@/components/RequestPaymentModal";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
-import { getRequests } from "@/lib/requests";
-import { invoiceListUrl, type InvoiceListResponse } from "@/lib/invoices";
+import { CancelMoneyRequestDialog } from "@/components/transactions/CancelMoneyRequestDialog";
+import { MoneyRequestDetailsDialog } from "@/components/transactions/MoneyRequestDetailsDialog";
+import { CancelInvoiceDialog } from "@/components/invoices/CancelInvoiceDialog";
+import { cancelRequest, getRequests, resendEmail, type MoneyRequestView } from "@/lib/requests";
+import { invoiceListUrl, resendInvoiceNotificationRequest, type InvoiceListItem, type InvoiceListResponse } from "@/lib/invoices";
 import { fetchCampaigns } from "@/lib/groupPay";
 import { cancelSendMoneyTransaction, getSendMoneyTransactions, toSendMoneyRow } from "@/lib/sendMoney";
 import {
@@ -15,6 +18,9 @@ import {
   fromCampaign,
   fromInvoice,
   fromMoneyRequest,
+  invoiceActionable,
+  moneyRequestAwaiting,
+  moneyRequestLinkShareable,
   type TransactionType,
   type UnifiedTransactionRow,
 } from "@/lib/unifiedTransactions";
@@ -260,8 +266,68 @@ function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled:
   );
 }
 
-function UnifiedRow({ row, onView }: { row: UnifiedTransactionRow; onView: (href: string) => void }) {
+interface UnifiedRowProps {
+  row: UnifiedTransactionRow;
+  onView: (href: string) => void;
+  onRequestDetails: (req: MoneyRequestView) => void;
+  onRequestResend: (req: MoneyRequestView) => void;
+  onRequestCopyLink: (req: MoneyRequestView) => void;
+  onRequestCancel: (req: MoneyRequestView) => void;
+  onInvoiceResend: (invoice: InvoiceListItem) => void;
+  onInvoiceCancel: (invoice: InvoiceListItem) => void;
+  resendingInvoiceId: string | null;
+}
+
+function UnifiedRow({
+  row,
+  onView,
+  onRequestDetails,
+  onRequestResend,
+  onRequestCopyLink,
+  onRequestCancel,
+  onInvoiceResend,
+  onInvoiceCancel,
+  resendingInvoiceId,
+}: UnifiedRowProps) {
   const badge = TYPE_BADGES[row.type];
+  const req = row.moneyRequest;
+  const invoice = row.invoice;
+  // Ghost icon action for the money-request/invoice rows — the same compact
+  // icon buttons the removed Money Requests / Sent Invoices pages used, so
+  // their actions live on in this table.
+  const iconAction = (
+    title: string,
+    testid: string,
+    destructive: boolean,
+    disabled: boolean,
+    onClick: () => void,
+    children: ReactNode,
+  ) => (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={disabled}
+          className={cn(
+            "h-8 w-8 p-0 transition-colors",
+            destructive
+              ? "text-red-600 hover:bg-red-50 hover:text-red-700"
+              : "text-gray-500 hover:bg-blue-50 hover:text-blue-600",
+          )}
+          aria-label={title}
+          data-testid={testid}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <p>{title}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+
   return (
     <TableRow
       data-testid={`row-${row.type}-${row.ref}`}
@@ -297,14 +363,38 @@ function UnifiedRow({ row, onView }: { row: UnifiedTransactionRow; onView: (href
         </div>
       </TableCell>
       <TableCell className="text-center py-4 pr-4 sm:pr-6">
-        <Button
-          size="sm"
-          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all"
-          data-testid={`button-view-${row.ref}`}
-          onClick={() => onView(row.viewHref)}
-        >
-          View
-        </Button>
+        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+          <Button
+            size="sm"
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all"
+            data-testid={`button-view-${row.ref}`}
+            onClick={() => (req ? onRequestDetails(req) : onView(row.viewHref))}
+          >
+            View
+          </Button>
+          {req && moneyRequestAwaiting(req.status) &&
+            iconAction("Resend email", `button-resend-${row.ref}`, false, false, () => onRequestResend(req), <Mail className="w-4 h-4" />)}
+          {req && moneyRequestLinkShareable(req.status) &&
+            iconAction("Copy payment link", `button-copy-link-${row.ref}`, false, false, () => onRequestCopyLink(req), <Copy className="w-4 h-4" />)}
+          {req && moneyRequestAwaiting(req.status) &&
+            iconAction("Cancel request", `button-cancel-${row.ref}`, true, false, () => onRequestCancel(req), <XCircle className="w-4 h-4" />)}
+          {invoice && invoiceActionable(invoice.status) &&
+            iconAction("Resend Notification", `button-resend-${row.ref}`, false, resendingInvoiceId === invoice.id, () => onInvoiceResend(invoice), <Mail className="w-4 h-4" />)}
+          {invoice && invoiceActionable(invoice.status) &&
+            iconAction("Cancel Invoice", `button-cancel-${row.ref}`, true, false, () => onInvoiceCancel(invoice), <XCircle className="w-4 h-4" />)}
+          {invoice?.status === "expired" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs font-medium rounded-lg border-gray-200 hover:border-blue-300 hover:text-blue-600"
+              data-testid={`button-create-new-${row.ref}`}
+              onClick={() => onView("/send-invoice")}
+            >
+              <FilePlus2 className="w-3.5 h-3.5 mr-1.5" />
+              Create New Invoice
+            </Button>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );
@@ -333,6 +423,11 @@ export default function Dashboard() {
   // Bonus State - Hardcoded for Prototype
   const [bonusBalance] = useState(5);
   const [cancelTarget, setCancelTarget] = useState<TransactionDetails | null>(null);
+  // Money-request / invoice actions merged from the removed standalone pages.
+  const [requestDetails, setRequestDetails] = useState<MoneyRequestView | null>(null);
+  const [requestToCancel, setRequestToCancel] = useState<MoneyRequestView | null>(null);
+  const [invoiceToCancel, setInvoiceToCancel] = useState<InvoiceListItem | null>(null);
+  const [resendingInvoiceId, setResendingInvoiceId] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Unified Transactions table — server-backed money-in records (money
@@ -472,6 +567,63 @@ export default function Dashboard() {
     setCancelTarget(null);
   };
 
+  // ── Money-request actions (ported from the removed /payment-requests page) ──
+  const runRequestAction = async (action: string, fn: () => Promise<unknown>, successMessage: string) => {
+    try {
+      await fn();
+      toast({ title: successMessage });
+      void queryClient.invalidateQueries({ queryKey: ["/api/request-money/requests"] });
+    } catch (err) {
+      toast({
+        title: `${action} failed`,
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleResendRequestEmail = (req: MoneyRequestView): void => {
+    void runRequestAction("Resend", () => resendEmail(req.id), "Email resent.");
+  };
+
+  const handleCopyRequestLink = (req: MoneyRequestView): void => {
+    navigator.clipboard.writeText(req.checkoutUrl).then(
+      () => toast({ title: "Link Copied!", description: "Payment link copied to clipboard — share it whenever you want." }),
+      () => toast({ title: "Copy Failed", description: "Could not copy the link. Please try again.", variant: "destructive" })
+    );
+  };
+
+  const handleRequestCancel = (req: MoneyRequestView): void => {
+    setRequestDetails(null);
+    setRequestToCancel(req);
+  };
+
+  const handleCancelRequestConfirm = async (req: MoneyRequestView): Promise<void> => {
+    setRequestToCancel(null);
+    await runRequestAction("Cancel", () => cancelRequest(req.id), "Money request cancelled successfully.");
+  };
+
+  // ── Invoice actions (ported from the removed /sent-invoices page) ──
+  const handleInvoiceResend = async (invoice: InvoiceListItem): Promise<void> => {
+    setResendingInvoiceId(invoice.id);
+    try {
+      await resendInvoiceNotificationRequest(invoice.id);
+      toast({
+        title: "Notification resent",
+        description: `The invoice email was resent to ${invoice.clientEmail} using the same payment link.`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+    } catch (err) {
+      toast({
+        title: "Resend failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setResendingInvoiceId(null);
+    }
+  };
+
   return (
     <DashboardLayout>
       <RequestPaymentModal
@@ -484,6 +636,25 @@ export default function Dashboard() {
         transaction={cancelTarget}
         onConfirm={handleCancelConfirm}
         onCancel={handleCancelModalClose}
+      />
+      <MoneyRequestDetailsDialog
+        request={requestDetails}
+        open={requestDetails !== null}
+        onOpenChange={(open) => { if (!open) setRequestDetails(null); }}
+        onResendEmail={handleResendRequestEmail}
+        onCopyPaymentLink={handleCopyRequestLink}
+        onCancelRequest={handleRequestCancel}
+      />
+      <CancelMoneyRequestDialog
+        request={requestToCancel}
+        open={requestToCancel !== null}
+        onOpenChange={(open) => { if (!open) setRequestToCancel(null); }}
+        onConfirm={handleCancelRequestConfirm}
+      />
+      <CancelInvoiceDialog
+        invoice={invoiceToCancel}
+        open={invoiceToCancel !== null}
+        onOpenChange={(open) => { if (!open) setInvoiceToCancel(null); }}
       />
       <motion.div
         variants={containerVariants}
@@ -766,7 +937,18 @@ export default function Dashboard() {
                             row.kind === "send_money" ? (
                               <SendMoneyRow key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} />
                             ) : (
-                              <UnifiedRow key={row.row.key} row={row.row} onView={setLocation} />
+                              <UnifiedRow
+                                key={row.row.key}
+                                row={row.row}
+                                onView={setLocation}
+                                onRequestDetails={setRequestDetails}
+                                onRequestResend={handleResendRequestEmail}
+                                onRequestCopyLink={handleCopyRequestLink}
+                                onRequestCancel={handleRequestCancel}
+                                onInvoiceResend={handleInvoiceResend}
+                                onInvoiceCancel={setInvoiceToCancel}
+                                resendingInvoiceId={resendingInvoiceId}
+                              />
                             )
                           )
                         )}

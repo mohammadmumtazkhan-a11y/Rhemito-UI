@@ -3,7 +3,9 @@
  * record types (money requests, invoices, funding campaigns) into the row
  * shape the Dashboard transactions table renders alongside the send-money
  * prototype rows. Labels and pill styles mirror each record's dedicated page
- * so the unified table never reinterprets a status.
+ * so the unified table never reinterprets a status. The table also hosts the
+ * requester/invoice actions of the removed standalone pages, so each row
+ * carries its raw server record.
  */
 
 import { CURRENCY_SYMBOLS } from "@shared/currencies";
@@ -29,6 +31,28 @@ export interface UnifiedTransactionRow {
   statusClass: string;
   dotClass: string;
   viewHref: string;
+  /** Raw server records — power the row's contextual actions in the table. */
+  moneyRequest?: MoneyRequestView;
+  invoice?: InvoiceListItem;
+}
+
+// Requester-side action rules, ported from the removed Money Requests page:
+// cancel/resend are offered only while the sender can still pay (active/viewed);
+// the payment link stays shareable until the money lands or the request dies.
+export const moneyRequestAwaiting = (status: string): boolean =>
+  status === "active" || status === "viewed";
+
+export const moneyRequestLinkShareable = (status: string): boolean =>
+  ["active", "viewed", "authorisation_in_progress", "payment_processing", "payment_pending", "failed"].includes(status);
+
+// Invoice notifications can be resent and the invoice cancelled only while it
+// is awaiting payment (mirrors the removed Sent Invoices page).
+export const invoiceActionable = (status: string): boolean =>
+  status === "sent" || status === "overdue";
+
+/** Status pill info for a raw money request (details dialog). */
+export function moneyRequestStatusInfo(status: string): { label: string; pill: string; dot: string } {
+  return REQUEST_STATUS[status] ?? { ...FALLBACK_STATUS, label: status };
 }
 
 /** Compact type badge shown under the counterparty name in the unified table. */
@@ -101,7 +125,10 @@ export function fromMoneyRequest(req: MoneyRequestView): UnifiedTransactionRow {
     statusLabel: status.label,
     statusClass: status.pill,
     dotClass: status.dot,
-    viewHref: "/payment-requests",
+    // The /payment-requests page was consolidated into this table — the row's
+    // View button opens the request details dialog instead of navigating.
+    viewHref: "",
+    moneyRequest: req,
   };
 }
 
@@ -123,6 +150,7 @@ export function fromInvoice(inv: InvoiceListItem): UnifiedTransactionRow {
     statusClass: status.pill,
     dotClass: status.dot,
     viewHref: `/sent-invoices/${inv.id}`,
+    invoice: inv,
   };
 }
 

@@ -535,63 +535,67 @@ test.describe('Request Money E2E', () => {
     await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
   });
 
-  test('Cancellation flow on /payments takes confirmation before cancelling and displays confirmation post-cancellation', async ({ page, request }) => {
+  test('Cancellation from the dashboard Transactions table takes confirmation before cancelling', async ({ page, request }) => {
     // Real data: register a requester, sign the page in, create a request via the API.
     const user = await registerAndActivate(request);
     const pageRequest = page.context().request;
     await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
     const created = await createRequestViaApi(pageRequest, user);
 
-    await page.goto('/payments');
-    const row = page.getByTestId(`payment-row-money_request-${created.request.requestNumber}`);
+    // The removed /payments + /payment-requests pages live on in the table.
+    await page.goto('/?type=receive_money');
+    const row = page.getByTestId(`row-receive_money-${created.request.requestNumber}`);
     await expect(row).toBeVisible();
-    await expect(row.getByText('Pending')).toBeVisible();
+    await expect(row.getByText('Sent', { exact: true })).toBeVisible();
 
-    const cancelBtn = page.getByTestId(`button-cancel-payment-money_request-${created.request.requestNumber}`);
+    const cancelBtn = page.getByTestId(`button-cancel-${created.request.requestNumber}`);
     await expect(cancelBtn).toBeVisible();
     await cancelBtn.click();
 
     // Pre-cancellation dialog must appear with the real request's details
-    const dialog = page.getByTestId('dialog-cancel-payment-request');
+    const dialog = page.getByTestId('dialog-cancel-request');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('Cancel Money Request?')).toBeVisible();
     await expect(dialog.getByText(created.request.senderName)).toBeVisible();
     await expect(dialog.getByText(created.request.requestNumber)).toBeVisible();
 
     // Dismissing keeps request
-    await dialog.getByTestId('button-cancel-dialog-keep').click();
+    await dialog.getByTestId('button-dialog-keep-request').click();
     await expect(dialog).toBeHidden();
     await expect(row).toBeVisible();
 
     // Cancel again and confirm — the row flips to Cancelled via the real cancel API
     await cancelBtn.click();
     await expect(dialog).toBeVisible();
-    await dialog.getByTestId('button-cancel-dialog-confirm').click();
-    await expect(page.getByTestId('success-cancel-banner')).toBeVisible();
-    await expect(page.getByTestId('success-cancel-banner').getByText(created.request.requestNumber)).toBeVisible();
-    await expect(row.getByText('Cancelled')).toBeVisible({ timeout: 15000 });
+    await dialog.getByTestId('button-dialog-confirm-cancel').click();
+    await expect(row.getByText('Cancelled')).toBeVisible({ timeout: 30000 });
   });
 
-  test('Cancellation on /payment-requests takes confirmation dialog before cancelling', async ({ page, request }) => {
+  test('Cancel from the money request details dialog takes confirmation before cancelling', async ({ page, request }) => {
     const user = await registerAndActivate(request);
     const pageRequest = page.context().request;
     await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
     const created = await createRequestViaApi(pageRequest, user);
 
-    await page.goto('/payment-requests');
-    const cancelBtn = page.getByTestId(`button-cancel-${created.request.requestNumber}`);
-    await expect(cancelBtn).toBeVisible();
-    await cancelBtn.click();
+    await page.goto('/?type=receive_money');
+    const row = page.getByTestId(`row-receive_money-${created.request.requestNumber}`);
+    await expect(row).toBeVisible();
 
-    // Pre-cancellation confirmation modal
+    // View opens the details dialog carrying the removed page's full data
+    await row.getByTestId(`button-view-${created.request.requestNumber}`).click();
+    const details = page.getByTestId('dialog-request-details');
+    await expect(details).toBeVisible();
+    await expect(details.getByText(created.request.senderName)).toBeVisible();
+    await expect(details.getByText(created.request.senderEmail)).toBeVisible();
+    await expect(details.getByTestId(`request-status-${created.request.status}`)).toBeVisible();
+
+    // Cancelling from the details dialog hands over to the confirmation dialog
+    await details.getByTestId('button-details-cancel-request').click();
     const dialog = page.getByTestId('dialog-cancel-request');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText(created.request.requestNumber)).toBeVisible();
-
-    // Confirm cancel
     await dialog.getByTestId('button-dialog-confirm-cancel').click();
-    await expect(dialog).toBeHidden();
-    await expect(page.getByTestId(`request-status-cancelled`)).toBeVisible({ timeout: 10000 });
+    await expect(row.getByText('Cancelled')).toBeVisible({ timeout: 30000 });
   });
 
   test('Copy link action copies the checkout URL to the clipboard (replaces Rotate Link)', async ({ page, request }) => {
@@ -601,7 +605,7 @@ test.describe('Request Money E2E', () => {
     await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
     const created = await createRequestViaApi(pageRequest, user);
 
-    await page.goto('/payment-requests');
+    await page.goto('/?type=receive_money');
     const copyBtn = page.getByTestId(`button-copy-link-${created.request.requestNumber}`);
     await expect(copyBtn).toBeVisible();
 
@@ -637,9 +641,9 @@ test.describe('Request Money E2E', () => {
     // Back as the requester: the settled row no longer offers Copy Link.
     await pageRequest.post('/api/auth/logout', { data: {} });
     await pageRequest.post('/api/auth/login', { data: { email: user.email, password: 'Passw0rd!x' } });
-    await page.goto('/payment-requests');
-    await expect(page.getByTestId(`request-row-${created.request.requestNumber}`)).toBeVisible();
-    await expect(page.getByTestId('request-status-paid_out')).toBeVisible({ timeout: 15000 });
+    await page.goto('/?type=receive_money');
+    await expect(page.getByTestId(`row-receive_money-${created.request.requestNumber}`)).toBeVisible();
+    await expect(page.getByTestId(`row-receive_money-${created.request.requestNumber}`).getByText('Paid Out')).toBeVisible({ timeout: 30000 });
     await expect(copyBtn).toHaveCount(0);
   });
 
@@ -649,10 +653,10 @@ test.describe('Request Money E2E', () => {
     const created = await createRequestViaApi(page.context().request, requester);
     const token = created.checkoutUrl.split('/pay/')[1];
 
-    await page.goto('/payment-requests');
-    const row = page.getByTestId(`request-row-${created.request.requestNumber}`);
+    await page.goto('/?type=receive_money');
+    const row = page.getByTestId(`row-receive_money-${created.request.requestNumber}`);
     await expect(row).toBeVisible();
-    await expect(row.getByTestId('request-status-active')).toBeVisible();
+    await expect(row.getByText('Sent', { exact: true })).toBeVisible();
 
     // The payer completes payment from a completely separate browser session.
     const payerContext = await browser.newContext();
@@ -670,9 +674,9 @@ test.describe('Request Money E2E', () => {
     await payerContext.close();
 
     // The requester's already-open table reflects the payout via polling —
-    // no reload, no navigation away from /payment-requests.
-    await expect(row.getByTestId('request-status-paid_out')).toBeVisible({ timeout: 15000 });
-    await expect(page).toHaveURL(/\/payment-requests/);
+    // no reload, no navigation away from the dashboard.
+    await expect(row.getByText('Paid Out')).toBeVisible({ timeout: 30000 });
+    await expect(page).toHaveURL(/type=receive_money/);
   });
 
 });

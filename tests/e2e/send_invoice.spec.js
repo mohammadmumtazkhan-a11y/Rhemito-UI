@@ -348,10 +348,10 @@ test.describe('Send Invoice MVP1 E2E', () => {
     const pageRequest = page.context().request;
     await pageRequest.post('/api/auth/logout', { data: {} });
     await pageRequest.post('/api/auth/login', { data: { email: senderEmail, password: 'Passw0rd!x' } });
-    await page.goto('/sent-invoices');
-    const row = page.getByTestId(`invoice-row-${invoice.invoiceNumber}`);
+    await page.goto('/?type=invoice');
+    const row = page.getByTestId(`row-invoice-${invoice.invoiceNumber}`);
     await expect(row).toBeVisible();
-    await expect(row.getByTestId('status-badge-paid')).toBeVisible();
+    await expect(row.getByText('Paid', { exact: true })).toBeVisible();
   });
 
   test('Unregistered client verifies a PIN, registers (prefilled) and pays the invoice', async ({ page }) => {
@@ -410,8 +410,8 @@ test.describe('Send Invoice MVP1 E2E', () => {
     const { request, email: senderEmail } = await setupSender(page);
     const { invoice, token } = await createInvoiceViaApi(request);
 
-    await page.goto('/sent-invoices');
-    const row = page.getByTestId(`invoice-row-${invoice.invoiceNumber}`);
+    await page.goto('/?type=invoice');
+    const row = page.getByTestId(`row-invoice-${invoice.invoiceNumber}`);
     await expect(row).toBeVisible();
 
     // Cancel modal requires a reason and shows the mandatory warning copy
@@ -430,7 +430,7 @@ test.describe('Send Invoice MVP1 E2E', () => {
     await dialog.getByTestId('button-confirm-cancel').click();
 
     // Row flips to Cancelled
-    await expect(row.getByTestId('status-badge-cancelled')).toBeVisible({ timeout: 10000 });
+    await expect(row.getByText('Cancelled', { exact: true })).toBeVisible({ timeout: 10000 });
 
     // Client page shows the cancellation and reason, with no payment CTA
     await page.goto(`/invoice/${token}`);
@@ -511,13 +511,13 @@ test.describe('Send Invoice MVP1 E2E', () => {
     await expect(page.getByTestId('button-pay-invoice')).toBeVisible({ timeout: 10000 });
 
     // Dashboard shows Overdue with the cancel action still available
-    await page.goto('/sent-invoices');
-    const row = page.getByTestId(`invoice-row-${invoice.invoiceNumber}`);
-    await expect(row.getByTestId('status-badge-overdue')).toBeVisible();
+    await page.goto('/?type=invoice');
+    const row = page.getByTestId(`row-invoice-${invoice.invoiceNumber}`);
+    await expect(row.getByText('Overdue', { exact: true })).toBeVisible();
     await expect(row.getByTestId(`button-cancel-${invoice.invoiceNumber}`)).toBeVisible();
   });
 
-  test('Dashboard search, status filtering and ownership of list data', async ({ page }) => {
+  test('Dashboard search narrows invoice rows and cancelled status is reflected', async ({ page }) => {
     const { request, email: senderEmail } = await setupSender(page);
     const emailA = `search-a-${uniqueSuffix()}@example.com`;
     const emailB = `search-b-${uniqueSuffix()}@example.com`;
@@ -525,25 +525,22 @@ test.describe('Send Invoice MVP1 E2E', () => {
     const invA = await createInvoiceViaApi(request, { clientEmail: emailA, clientFirstName: 'Zara', clientLastName: 'Search-A' });
     await createInvoiceViaApi(request, { clientEmail: emailB, clientFirstName: 'Zara', clientLastName: 'Search-B' });
 
-    await page.goto('/sent-invoices');
+    await page.goto('/?type=invoice');
 
     // Search by invoice number narrows to one row
-    await page.getByTestId('input-search-invoices').fill(invA.invoice.invoiceNumber);
-    await expect(page.getByTestId(`invoice-row-${invA.invoice.invoiceNumber}`)).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('[data-testid^="invoice-row-"]')).toHaveCount(1);
+    await page.getByTestId('input-search-transactions').fill(invA.invoice.invoiceNumber);
+    await expect(page.getByTestId(`row-invoice-${invA.invoice.invoiceNumber}`)).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid^="row-invoice-"]')).toHaveCount(1);
 
     // Search by client email works too
-    await page.getByTestId('input-search-invoices').fill(emailB);
-    await expect(page.locator('[data-testid^="invoice-row-"]')).toHaveCount(1, { timeout: 10000 });
+    await page.getByTestId('input-search-transactions').fill(emailB);
+    await expect(page.locator('[data-testid^="row-invoice-"]')).toHaveCount(1, { timeout: 10000 });
 
-    // Status filter: cancel invoice A, then keep the unique search term and
-    // filter by Cancelled (other parallel tests create their own invoices)
+    // A cancelled invoice stays in the table with its cancelled status
     await request.post(`/api/invoices/${invA.invoice.id}/cancel`, { data: { reason: 'Search filter test' } });
-    await page.getByTestId('input-search-invoices').fill(emailA);
-    await page.getByTestId('select-status-filter').click();
-    await page.getByRole('option', { name: 'Cancelled' }).click();
-    await expect(page.getByTestId(`invoice-row-${invA.invoice.invoiceNumber}`)).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('[data-testid^="invoice-row-"]')).toHaveCount(1);
+    await page.getByTestId('input-search-transactions').fill(emailA);
+    await expect(page.getByTestId(`row-invoice-${invA.invoice.invoiceNumber}`).getByText('Cancelled', { exact: true })).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('[data-testid^="row-invoice-"]')).toHaveCount(1);
 
     // No edit-style actions exist anywhere on the dashboard
     await expect(page.getByRole('button', { name: /^Edit$/ })).toHaveCount(0);

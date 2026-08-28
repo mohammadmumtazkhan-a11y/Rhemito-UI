@@ -78,8 +78,8 @@ export default function SentInvoiceDetails() {
       <DashboardLayout>
         <div className="max-w-5xl mx-auto py-16 text-center space-y-4">
           <p className="text-muted-foreground">Invoice not found or you do not have access to it.</p>
-          <Button variant="outline" onClick={() => setLocation("/sent-invoices")} data-testid="button-back-to-list">
-            Back to Sent Invoices
+          <Button variant="outline" onClick={() => setLocation("/?type=invoice")} data-testid="button-back-to-list">
+            Back to Transactions
           </Button>
         </div>
       </DashboardLayout>
@@ -117,12 +117,12 @@ export default function SentInvoiceDetails() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <Button
             variant="ghost"
-            onClick={() => setLocation("/sent-invoices")}
+            onClick={() => setLocation("/?type=invoice")}
             className="mb-4 -ml-2"
             data-testid="button-back-to-list"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Sent Invoices
+            Back to Transactions
           </Button>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold font-display">{invoice.invoiceNumber}</h1>
