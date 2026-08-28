@@ -628,6 +628,7 @@ export const moneyRequests = pgTable("money_requests", {
   senderName: text("sender_name").notNull(),
   senderEmail: text("sender_email").notNull(),
   senderPhone: text("sender_phone"),
+  senderDob: text("sender_dob"),
   purpose: text("purpose").notNull(),
   reference: text("reference"),
   // Dual secure link tokens
@@ -793,6 +794,7 @@ export const createMoneyRequestSchema = z
     senderName: z.string().trim().min(2, "Sender name is required."),
     senderEmail: z.string().email("Please enter a valid email address."),
     senderPhone: z.string().trim().optional(),
+    senderDob: isoDate.optional(),
     purpose: z.enum(PAYMENT_PURPOSES, {
       errorMap: () => ({ message: "Select a purpose for this payment." }),
     }),

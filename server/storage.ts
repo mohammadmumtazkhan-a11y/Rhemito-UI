@@ -458,6 +458,7 @@ export class MemStorage implements IStorage {
         senderName: r.senderName,
         senderEmail: r.senderEmail,
         senderPhone: null,
+        senderDob: null,
         purpose: "invoice_payment",
         reference: null,
         status: r.status,

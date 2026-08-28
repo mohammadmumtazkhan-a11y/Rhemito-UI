@@ -269,6 +269,7 @@ export async function createMoneyRequest(params: {
     senderName: payload.senderName,
     senderEmail: payload.senderEmail.toLowerCase(),
     senderPhone: payload.senderPhone ?? null,
+    senderDob: payload.senderDob ?? null,
     purpose: payload.purpose,
     reference: payload.reference ?? null,
     status: "active",

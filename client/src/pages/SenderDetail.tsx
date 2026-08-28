@@ -7,15 +7,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { WaysToGetPaidModal } from "@/components/modals/WaysToGetPaidModal";
 import { knownSenders, resolveNarration } from "@/data/knownSenders";
+import { useContacts } from "@/contexts/ContactsContext";
+import { toKnownSender } from "@/data/contacts";
 
 export default function SenderDetail() {
   const [, setLocation] = useLocation();
   const params = useParams<{ email: string }>();
   const [showWaysModal, setShowWaysModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { getContactByEmail, deleteContactRole } = useContacts();
 
   const email = decodeURIComponent(params.email || "");
-  const sender = knownSenders.find(s => s.email === email);
+  const contact = getContactByEmail(email);
+  const sender = contact ? toKnownSender(contact) : knownSenders.find(s => s.email.toLowerCase() === email.toLowerCase());
 
   if (!sender) {
     return (
@@ -123,6 +127,12 @@ export default function SenderDetail() {
                     <p className="text-xs text-muted-foreground">Email</p>
                     <p className="font-medium">{sender.email}</p>
                   </div>
+                  {sender.senderType === "individual" && sender.dob && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Date of Birth</p>
+                      <p className="font-medium">{sender.dob}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -236,6 +246,7 @@ export default function SenderDetail() {
                       variant="destructive" 
                       className="flex-1"
                       onClick={() => {
+                        deleteContactRole(email, "sender");
                         setShowDeleteConfirm(false);
                         setLocation("/senders-recipients?tab=senders");
                       }}

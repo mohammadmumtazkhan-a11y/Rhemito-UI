@@ -131,6 +131,7 @@ export interface CreateRequestInput {
   senderName: string;
   senderEmail: string;
   senderPhone?: string;
+  senderDob?: string;
   purpose: PaymentPurpose;
   reference?: string;
   /** Default true — requester absorbs the 3% fee. */

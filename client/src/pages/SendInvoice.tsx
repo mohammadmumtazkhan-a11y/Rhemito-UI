@@ -63,7 +63,6 @@ interface FormData {
   countryCode: string;
   recipientPhone: string;
   dueDate: string;
-  notes: string;
   expiryPeriod: ExpiryPeriod;
   customExpiryDate: string;
 }
@@ -82,7 +81,6 @@ const initialFormData: FormData = {
   countryCode: "+44",
   recipientPhone: "",
   dueDate: "",
-  notes: "",
   expiryPeriod: "30",
   customExpiryDate: "",
 };

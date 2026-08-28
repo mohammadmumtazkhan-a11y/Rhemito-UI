@@ -444,6 +444,7 @@ export default function RequestPayment() {
             : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" "),
         senderEmail: formData.senderEmail,
         senderPhone: formData.senderPhone ? `${formData.senderCountryCode} ${formData.senderPhone}` : undefined,
+        senderDob: formData.senderType === "individual" && formData.senderDob ? formData.senderDob : undefined,
         purpose: formData.reason as never,
         reference: [
           preferredLabel ? `Preferred: ${preferredLabel}` : null,

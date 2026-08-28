@@ -169,4 +169,42 @@ test.describe('Recipients page', () => {
         await expect(page).toHaveURL(/\/send-money/);
     });
 
+    test('Add Sender creates a new sender and viewing shows their detail page with full info and DOB', async ({ page }) => {
+        await page.goto('/senders-recipients?tab=senders');
+
+        await page.getByTestId('button-add-sender').click();
+        await expect(page.getByTestId('input-new-first-name')).toBeVisible();
+
+        await page.getByTestId('input-new-first-name').fill('Sarah');
+        await page.getByTestId('input-new-last-name').fill('Connor');
+        await page.getByTestId('input-new-email').fill('sarah.connor@test.com');
+        await page.getByTestId('input-new-phone').fill('7123456789');
+        await page.getByTestId('input-new-dob').fill('1985-02-28');
+
+        await page.getByTestId('button-confirm-add-sender').click();
+        await expect(page.getByText('Sender added successfully!')).toBeVisible();
+
+        // New sender appears in table
+        const senderRow = page.locator('tr:has-text("Sarah Connor")');
+        await expect(senderRow).toBeVisible();
+
+        // Click View on newly created sender
+        await page.getByTestId('button-view-sarah-connor-test-com').click();
+        await expect(page).toHaveURL(/\/senders\/sarah\.connor%40test\.com$/);
+
+        // Verify full sender detail view with DOB
+        await expect(page.getByText('SARAH CONNOR')).toBeVisible();
+        await expect(page.getByText('sarah.connor@test.com')).toBeVisible();
+        await expect(page.getByText('1985-02-28')).toBeVisible();
+
+        // Delete sender from detail view
+        await page.getByTestId('button-delete').click();
+        await expect(page.getByText('Delete Sender?')).toBeVisible();
+        await page.getByTestId('button-confirm-delete').click();
+
+        // Back on senders list and sender is removed
+        await expect(page).toHaveURL(/\/senders-recipients\?tab=senders/);
+        await expect(page.locator('tr:has-text("Sarah Connor")')).toHaveCount(0);
+    });
+
 });
