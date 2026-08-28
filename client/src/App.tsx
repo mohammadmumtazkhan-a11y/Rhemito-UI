@@ -18,6 +18,7 @@ import Senders from "@/pages/Senders";
 import SenderDetail from "@/pages/SenderDetail";
 import PayoutAccounts from "@/pages/PayoutAccounts";
 import SendMoney from "@/pages/SendMoney";
+import Recipients from "@/pages/Recipients";
 import BonusAndDiscounts from "@/pages/BonusAndDiscounts";
 import Marketing from "@/pages/Marketing";
 import GroupPayDashboard from "@/pages/GroupPay/GroupPayDashboard";
@@ -78,6 +79,7 @@ function Router() {
       <Route path="/show-qr-code"><Redirect to="/request-payment" /></Route>
       <Route path="/payments" component={Payments} />
       <Route path="/send-money" component={SendMoney} />
+      <Route path="/recipients" component={Recipients} />
       <Route path="/senders" component={Senders} />
       <Route path="/senders/:email" component={SenderDetail} />
       <Route path="/payout-accounts" component={PayoutAccounts} />
