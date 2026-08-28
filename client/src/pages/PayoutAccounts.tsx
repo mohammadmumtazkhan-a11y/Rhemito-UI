@@ -10,6 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -35,7 +44,6 @@ export interface PayoutAccount {
   institutionNumber?: string;
   transitNumber?: string;
   bankAccountType?: string;
-  nickname?: string;
   payout: string;
   activated: boolean;
   isDefault?: boolean;
@@ -49,7 +57,7 @@ const initialAccounts: PayoutAccount[] = [
     currency: "NGN",
     bank: "Access Bank Nigeria Plc",
     bankCode: "044",
-    accountNumber: "12312300011",
+    accountNumber: "1231230001",
     routingNumber: "N/A",
     payout: "NGN 10000",
     activated: true,
@@ -122,7 +130,7 @@ export default function PayoutAccounts() {
   const [caBankName, setCaBankName] = useState<string>("Royal Bank of Canada");
   const [accountNumber, setAccountNumber] = useState<string>("");
   const [confirmAccountNumber, setConfirmAccountNumber] = useState<string>("");
-  const [accountNickname, setAccountNickname] = useState<string>("");
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [ownershipDeclared, setOwnershipDeclared] = useState<boolean>(false);
 
   // Field touch states for inline error display
@@ -221,7 +229,6 @@ export default function PayoutAccounts() {
     setTransitNumber("");
     setAccountNumber("");
     setConfirmAccountNumber("");
-    setAccountNickname("");
     setOwnershipDeclared(false);
     setResolutionStatus("idle");
     setResolvedAccountName("");
@@ -269,13 +276,22 @@ export default function PayoutAccounts() {
     setTransitNumber("");
     setAccountNumber("");
     setConfirmAccountNumber("");
-    setAccountNickname("");
     setOwnershipDeclared(false);
     setResolutionStatus("idle");
     setResolvedAccountName("");
     setResolutionError("");
     setTouched({});
     setEditingId(null);
+  };
+
+  const handleOpenAddModal = () => {
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    resetForm();
+    setIsModalOpen(false);
   };
 
   const handleSaveAccount = async () => {
@@ -313,7 +329,6 @@ export default function PayoutAccounts() {
                 institutionNumber: cleanInstNumber,
                 transitNumber: cleanTransitNumber,
                 bankAccountType: countryCode === "US" ? bankAccountType : undefined,
-                nickname: accountNickname.trim() || undefined,
               };
             }
             return acc;
@@ -338,7 +353,6 @@ export default function PayoutAccounts() {
           institutionNumber: cleanInstNumber,
           transitNumber: cleanTransitNumber,
           bankAccountType: countryCode === "US" ? bankAccountType : undefined,
-          nickname: accountNickname.trim() || undefined,
           payout: `${currentCurrency} 0`,
           activated: true,
         };
@@ -351,6 +365,7 @@ export default function PayoutAccounts() {
       }
 
       resetForm();
+      setIsModalOpen(false);
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 4000);
     } catch (error) {
@@ -392,13 +407,11 @@ export default function PayoutAccounts() {
 
     setAccountNumber(account.accountNumber);
     setConfirmAccountNumber(account.accountNumber);
-    setAccountNickname(account.nickname || "");
     setOwnershipDeclared(true);
     setResolutionStatus("idle");
     setResolutionError("");
     setTouched({});
-
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setIsModalOpen(true);
   };
 
   const handleDeleteAccount = (id: string) => {
@@ -437,24 +450,37 @@ export default function PayoutAccounts() {
             <p className="text-sm text-muted-foreground">Home / Manage Collections Accounts</p>
             <h1 className="text-2xl font-bold font-display mt-1">Collections</h1>
           </div>
+          <Button
+            onClick={handleOpenAddModal}
+            className="gap-2 bg-primary"
+            data-testid="button-open-add-payout-account"
+          >
+            <Plus className="w-4 h-4" />
+            Add Payout Account
+          </Button>
         </div>
 
-        {/* Dynamic Payout Bank Account Form */}
-        <Card className="border border-border/80 shadow-sm">
-          <CardContent className="p-6 md:p-8">
-            <div className="mb-6">
-              <h2 className="text-xl font-bold font-display text-foreground">
+        {/* Add / Edit Payout Bank Account Dialog */}
+        <Dialog
+          open={isModalOpen}
+          onOpenChange={(open) => {
+            if (!open) handleCloseModal();
+          }}
+        >
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold font-display text-foreground">
                 {editingId ? "Edit payout bank account" : "Add payout bank account"}
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
                 Add a bank account to receive payouts from your wallet. The bank account must be held in your name or
                 your registered business name.
-              </p>
-            </div>
+              </DialogDescription>
+            </DialogHeader>
 
             {/* Missing verified name warning */}
             {isProfileNameMissing && (
-              <div className="mb-6 bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl flex items-start gap-3">
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <p className="text-sm">
                   Your verified account-holder name is unavailable. Please complete or update your profile before adding a
@@ -840,23 +866,7 @@ export default function PayoutAccounts() {
                 </div>
               )}
 
-              {/* 5. Optional Account Nickname */}
-              <div className="space-y-2">
-                <Label htmlFor="accountNickname" className="font-medium flex items-center justify-between">
-                  <span>Account nickname</span>
-                  <span className="text-xs text-muted-foreground font-normal">Optional</span>
-                </Label>
-                <Input
-                  id="accountNickname"
-                  placeholder="For example, My UK Account"
-                  value={accountNickname}
-                  onChange={(e) => setAccountNickname(e.target.value)}
-                  maxLength={50}
-                  data-testid="input-payout-nickname"
-                />
-              </div>
-
-              {/* 6. Ownership Declaration Checkbox */}
+              {/* 5. Ownership Declaration Checkbox */}
               <div className="pt-2">
                 <div className="flex items-start space-x-3 p-4 bg-muted/30 rounded-xl border border-border/60">
                   <Checkbox
@@ -886,13 +896,13 @@ export default function PayoutAccounts() {
                 )}
               </div>
 
-              {/* 7. Action Button */}
-              <div className="flex justify-end gap-3 pt-2">
-                {editingId && (
-                  <Button variant="outline" onClick={resetForm} disabled={isSubmitting}>
+              {/* Dialog Footer Actions */}
+              <DialogFooter className="gap-2 sm:gap-0 pt-4 border-t border-border mt-4">
+                <DialogClose asChild>
+                  <Button variant="outline" onClick={handleCloseModal} disabled={isSubmitting} data-testid="button-cancel-payout-modal">
                     Cancel
                   </Button>
-                )}
+                </DialogClose>
                 <Button
                   onClick={handleSaveAccount}
                   disabled={!isFormValid || isSubmitting}
@@ -902,7 +912,7 @@ export default function PayoutAccounts() {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Adding account…</span>
+                      <span>{editingId ? "Saving changes…" : "Adding account…"}</span>
                     </>
                   ) : editingId ? (
                     <>
@@ -916,10 +926,10 @@ export default function PayoutAccounts() {
                     </>
                   )}
                 </Button>
-              </div>
+              </DialogFooter>
             </div>
-          </CardContent>
-        </Card>
+          </DialogContent>
+        </Dialog>
 
         {/* Accounts Table */}
         <div>
