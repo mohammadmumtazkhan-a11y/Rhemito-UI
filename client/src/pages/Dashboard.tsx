@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useLocation } from "wouter";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useLocation, useSearch } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -327,6 +327,7 @@ const itemVariants = {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
+  const searchParams = useSearch();
   const queryClient = useQueryClient();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   // Bonus State - Hardcoded for Prototype
@@ -339,6 +340,7 @@ export default function Dashboard() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const transactionsSectionRef = useRef<HTMLDivElement>(null);
 
   const requestsQuery = useQuery({
     queryKey: ["/api/request-money/requests"],
@@ -404,6 +406,22 @@ export default function Dashboard() {
   const safePage = Math.min(page, totalPages);
   const pageRows = visibleRows.slice((safePage - 1) * TRANSACTIONS_PAGE_SIZE, safePage * TRANSACTIONS_PAGE_SIZE);
   const anyQueryLoading = requestsQuery.isLoading || invoicesQuery.isLoading || campaignsQuery.isLoading || sendMoneyQuery.isLoading;
+
+  // Sidebar "Transactions" deep link (/?type=<filter>): apply the matching
+  // type filter and center the transactions table in the viewport. Re-runs
+  // on query changes, so it also works when the Dashboard is already open,
+  // and waits for the table data so the centered position is final.
+  useEffect(() => {
+    const type = new URLSearchParams(searchParams).get("type");
+    if (!TYPE_FILTERS.some((filter) => filter.value === type)) return;
+    setTypeFilter(type as TypeFilter);
+    setPage(1);
+    if (anyQueryLoading) return;
+    const timer = window.setTimeout(() => {
+      transactionsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchParams, anyQueryLoading]);
 
   const handlePaymentOptionSelect = (option: "request" | "invoice" | "funding") => {
     setShowPaymentModal(false);
@@ -679,7 +697,7 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-        <motion.div variants={itemVariants}>
+        <motion.div variants={itemVariants} ref={transactionsSectionRef} data-testid="section-transactions">
           <Card className="border-gray-100/80 shadow-xl shadow-gray-100/50 overflow-hidden">
             <CardContent className="p-0">
               <div>
