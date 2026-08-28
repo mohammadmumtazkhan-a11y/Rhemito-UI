@@ -38,6 +38,8 @@ interface NavItemData {
 
 const overviewItem: NavItemData = { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true, gradient: "from-blue-500 to-indigo-600" };
 
+const transactionsItem: NavItemData = { icon: ArrowLeftRight, label: "Transactions", href: "/transactions", enabled: true, gradient: "from-blue-500 to-indigo-600" };
+
 // Consolidated people directory — senders and recipients live on one page.
 const sendersRecipientsItem: NavItemData = { icon: Users, label: "Senders & Recipients", href: "/senders-recipients", enabled: true, gradient: "from-blue-500 to-indigo-600" };
 
@@ -149,6 +151,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto">
         <NavItem item={overviewItem} />
+        <NavItem item={transactionsItem} />
 
         {/* Consolidated people directory — main item, not a sub-option */}
         <NavItem item={sendersRecipientsItem} />
