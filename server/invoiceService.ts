@@ -578,6 +578,18 @@ export async function cancelInvoice(params: {
 
   await queueClientEmail(updated, cancellationEmail(updated), `${invoiceId}:cancellation`);
 
+  await dispatchNotification({
+    userId,
+    type: "invoice_cancelled",
+    data: {
+      invoiceNumber: updated.invoiceNumber,
+      clientName: clientDisplayName(updated),
+      amount: updated.amount,
+      currency: updated.currency,
+      reason,
+    },
+  });
+
   return { invoice: updated, alreadyCancelled: false };
 }
 

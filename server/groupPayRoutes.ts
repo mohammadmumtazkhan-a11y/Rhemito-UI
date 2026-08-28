@@ -13,6 +13,7 @@ import { randomBytes } from "crypto";
 import { storage } from "./storage";
 import { serverConfig } from "./config";
 import { rateLimit, clientIpOf } from "./rateLimit";
+import { dispatchNotification } from "./notificationService";
 import {
   createGroupPayCampaignSchema,
   updateGroupPayCampaignSchema,
@@ -159,6 +160,18 @@ export function registerGroupPayRoutes(app: Express): void {
       }
 
       const updated = await storage.updateGroupPayCampaign(req.params.id, patch);
+
+      if (toggleStatus && patch.status) {
+        await dispatchNotification({
+          userId: campaign.ownerId,
+          type: "campaign_status_changed",
+          data: {
+            campaignName: campaign.name,
+            status: patch.status,
+          },
+        });
+      }
+
       return res.json({ data: updated });
     } catch (err) {
       console.error("[groupPayRoutes] update campaign error:", err);
@@ -235,8 +248,36 @@ export function registerGroupPayRoutes(app: Express): void {
         paymentDate: new Date(),
         status: contributionStatusForPaymentMethod(parsed.data.paymentMethod),
       });
+
+      const summary = await campaignSummary(campaign.id);
+
+      if (contribution.status === "completed") {
+        await dispatchNotification({
+          userId: campaign.ownerId,
+          type: "campaign_contribution_received",
+          data: {
+            campaignName: campaign.name,
+            contributorName: parsed.data.name || "A contributor",
+            amount: parsed.data.amount.toFixed(2),
+            currency: campaign.currency,
+          },
+        });
+        if (summary.totalRaised >= campaign.targetAmount) {
+          await dispatchNotification({
+            userId: campaign.ownerId,
+            type: "campaign_target_reached",
+            data: {
+              campaignName: campaign.name,
+              targetAmount: campaign.targetAmount.toFixed(2),
+              currency: campaign.currency,
+              contributorCount: String(summary.contributorCount),
+            },
+          });
+        }
+      }
+
       return res.status(201).json({
-        data: { contribution, summary: await campaignSummary(campaign.id) },
+        data: { contribution, summary },
       });
     } catch (err) {
       console.error("[groupPayRoutes] add contribution error:", err);
@@ -262,8 +303,33 @@ export function registerGroupPayRoutes(app: Express): void {
           return res.status(409).json({ error: { code: "INVALID_STATE", message: "Only pending contributions can be marked as received." } });
         }
         const updated = await storage.updateGroupPayContribution(contribution.id, { status: "completed" });
+        const summary = await campaignSummary(campaign.id);
+
+        await dispatchNotification({
+          userId: campaign.ownerId,
+          type: "campaign_contribution_received",
+          data: {
+            campaignName: campaign.name,
+            contributorName: contribution.name || "A contributor",
+            amount: contribution.amount.toFixed(2),
+            currency: campaign.currency,
+          },
+        });
+        if (summary.totalRaised >= campaign.targetAmount) {
+          await dispatchNotification({
+            userId: campaign.ownerId,
+            type: "campaign_target_reached",
+            data: {
+              campaignName: campaign.name,
+              targetAmount: campaign.targetAmount.toFixed(2),
+              currency: campaign.currency,
+              contributorCount: String(summary.contributorCount),
+            },
+          });
+        }
+
         return res.json({
-          data: { contribution: updated, summary: await campaignSummary(campaign.id) },
+          data: { contribution: updated, summary },
         });
       } catch (err) {
         console.error("[groupPayRoutes] confirm contribution error:", err);

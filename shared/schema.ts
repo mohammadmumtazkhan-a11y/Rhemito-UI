@@ -195,8 +195,18 @@ export const NOTIFICATION_TYPES = [
   "funding_allocated_partial",
   // Send Invoice MVP1 — sender-facing invoice lifecycle events
   "invoice_paid",
+  "invoice_cancelled",
   "invoice_expired",
   "invoice_new_link_requested",
+  // Receive Money Link (Money Request) events
+  "money_request_paid",
+  "money_request_cancelled",
+  "money_request_expired",
+  "money_request_new_link_requested",
+  // Funding Campaigns (GroupPay) events
+  "campaign_contribution_received",
+  "campaign_target_reached",
+  "campaign_status_changed",
 ] as const;
 
 export type NotificationEventType = (typeof NOTIFICATION_TYPES)[number];

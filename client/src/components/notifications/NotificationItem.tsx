@@ -148,6 +148,64 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
     iconClass: "text-amber",
     urgent: true,
   },
+  // Send Invoice MVP1
+  invoice_paid: {
+    icon: CheckCircle2,
+    containerClass: "bg-teal/10",
+    iconClass: "text-teal",
+  },
+  invoice_cancelled: {
+    icon: XCircle,
+    containerClass: "bg-destructive/10",
+    iconClass: "text-destructive",
+  },
+  invoice_expired: {
+    icon: Clock,
+    containerClass: "bg-amber/10",
+    iconClass: "text-amber",
+  },
+  invoice_new_link_requested: {
+    icon: FileCheck,
+    containerClass: "bg-primary/10",
+    iconClass: "text-primary",
+  },
+  // Receive Money Link (Money Request)
+  money_request_paid: {
+    icon: CheckCircle2,
+    containerClass: "bg-teal/10",
+    iconClass: "text-teal",
+  },
+  money_request_cancelled: {
+    icon: XCircle,
+    containerClass: "bg-destructive/10",
+    iconClass: "text-destructive",
+  },
+  money_request_expired: {
+    icon: Clock,
+    containerClass: "bg-amber/10",
+    iconClass: "text-amber",
+  },
+  money_request_new_link_requested: {
+    icon: FileCheck,
+    containerClass: "bg-primary/10",
+    iconClass: "text-primary",
+  },
+  // Funding Campaigns (GroupPay)
+  campaign_contribution_received: {
+    icon: Banknote,
+    containerClass: "bg-teal/10",
+    iconClass: "text-teal",
+  },
+  campaign_target_reached: {
+    icon: CheckCircle2,
+    containerClass: "bg-teal/10",
+    iconClass: "text-teal",
+  },
+  campaign_status_changed: {
+    icon: Settings,
+    containerClass: "bg-primary/10",
+    iconClass: "text-primary",
+  },
 };
 
 // ─── Relative timestamp ───────────────────────────────────────────────────────

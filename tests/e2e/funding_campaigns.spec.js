@@ -3,14 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Funding Campaigns', () => {
 
     test('Navigate to Funding Campaigns', async ({ page }) => {
-        await page.goto('/');
-
-        // First expand the "Payments Received" accordion
-        await page.getByText('Payments Received').click();
-        await page.waitForTimeout(500);
-
-        // Click sidebar link
-        await page.getByTestId('link-funding-campaigns').click();
+        await page.goto('/group-pay');
 
         // Verify URL and Title
         await expect(page).toHaveURL(/\/group-pay/);

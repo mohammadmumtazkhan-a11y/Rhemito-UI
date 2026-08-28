@@ -56,6 +56,20 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
   funding_allocated_single: { icon: Banknote, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Funds Allocated" },
   funding_allocated_multi: { icon: Banknote, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Funds Allocated" },
   funding_allocated_partial: { icon: AlertTriangle, containerClass: "bg-amber/10", iconClass: "text-amber", label: "Partial Allocation — Payment Required" },
+  // Send Invoice MVP1
+  invoice_paid: { icon: CheckCircle2, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Invoice Paid" },
+  invoice_cancelled: { icon: XCircle, containerClass: "bg-destructive/10", iconClass: "text-destructive", label: "Invoice Cancelled" },
+  invoice_expired: { icon: Clock, containerClass: "bg-amber/10", iconClass: "text-amber", label: "Invoice Expired" },
+  invoice_new_link_requested: { icon: FileCheck, containerClass: "bg-primary/10", iconClass: "text-primary", label: "New Payment Link Requested" },
+  // Receive Money Link (Money Request)
+  money_request_paid: { icon: CheckCircle2, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Money Request Paid" },
+  money_request_cancelled: { icon: XCircle, containerClass: "bg-destructive/10", iconClass: "text-destructive", label: "Money Request Cancelled" },
+  money_request_expired: { icon: Clock, containerClass: "bg-amber/10", iconClass: "text-amber", label: "Money Request Expired" },
+  money_request_new_link_requested: { icon: FileCheck, containerClass: "bg-primary/10", iconClass: "text-primary", label: "New Payment Link Requested" },
+  // Funding Campaigns (GroupPay)
+  campaign_contribution_received: { icon: Banknote, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Campaign Contribution Received" },
+  campaign_target_reached: { icon: CheckCircle2, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Campaign Target Reached" },
+  campaign_status_changed: { icon: Settings, containerClass: "bg-primary/10", iconClass: "text-primary", label: "Campaign Status Updated" },
 };
 
 // ─── Format timestamp — full (not relative) ──────────────────────────────────
@@ -213,18 +227,52 @@ export default function NotificationDetail(): React.JSX.Element {
             </div>
 
             {/* Footer actions */}
-            <div className="flex items-center justify-end gap-2 px-5 md:px-6 py-4 border-t border-border bg-muted/30">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDismiss}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                Dismiss
-              </Button>
-              <Button variant="default" size="sm" onClick={handleBack}>
-                Back
-              </Button>
+            <div className="flex items-center justify-between gap-2 px-5 md:px-6 py-4 border-t border-border bg-muted/30">
+              <div>
+                {notification.type.startsWith("money_request_") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/transactions?type=receive_money")}
+                    data-testid="button-view-receive-money"
+                  >
+                    View in Transactions
+                  </Button>
+                )}
+                {notification.type.startsWith("invoice_") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/invoices")}
+                    data-testid="button-view-invoices"
+                  >
+                    View Invoices
+                  </Button>
+                )}
+                {notification.type.startsWith("campaign_") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/group-pay")}
+                    data-testid="button-view-campaigns"
+                  >
+                    View Campaigns
+                  </Button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDismiss}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  Dismiss
+                </Button>
+                <Button variant="default" size="sm" onClick={handleBack}>
+                  Back
+                </Button>
+              </div>
             </div>
           </div>
         )}

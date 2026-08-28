@@ -24,6 +24,7 @@ import {
   type PayinWebhookEvent,
 } from "./providers";
 import { postFundingEntries, postPayoutEntry } from "./walletService";
+import { dispatchNotification } from "./notificationService";
 import { findCorridor, validateCorridor, type CorridorConfig } from "./corridors";
 import {
   toMinorUnits,
@@ -797,6 +798,17 @@ export async function requestNewPaymentLink(
     }
   }
 
+  await dispatchNotification({
+    userId: request.requesterId,
+    type: "money_request_new_link_requested",
+    data: {
+      requestNumber: request.requestNumber,
+      payerName: normalizedPayerEmail,
+      amount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
+      currency: request.payInCurrency,
+    },
+  });
+
   return { success: true, message: "A notification has been sent to the requester to issue a new payment link." };
 }
 
@@ -872,6 +884,17 @@ export async function processPayinWebhook(rawBody: Buffer, signature: string): P
         `Your payment request has been paid successfully.`, `${request.id}:requester:paid`,
       );
     }
+
+    await dispatchNotification({
+      userId: request.requesterId,
+      type: "money_request_paid",
+      data: {
+        requestNumber: request.requestNumber,
+        payerName: request.payerName ?? "Payer",
+        amount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
+        currency: request.payInCurrency,
+      },
+    });
 
     // Payout eligibility passed (single-tier prototype): submit to the payout provider.
     const payout = await devPayoutProvider.submitPayout({
@@ -1012,6 +1035,17 @@ export async function cancelRequest(userId: string, requestId: string): Promise<
     `${request.requesterName} cancelled this payment request. No payment can be submitted.`,
     `${request.id}:cancelled:${email}`,
   )));
+
+  await dispatchNotification({
+    userId,
+    type: "money_request_cancelled",
+    data: {
+      requestNumber: request.requestNumber,
+      senderName: request.senderName,
+      amount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
+      currency: request.payInCurrency,
+    },
+  });
 }
 
 export async function extendExpiry(userId: string, requestId: string): Promise<Date> {

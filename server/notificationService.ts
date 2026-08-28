@@ -73,8 +73,18 @@ const EVENT_CATEGORY_MAP: Record<NotificationEventType, EventCategory> = {
   funding_allocated_partial: "paymentEvents",
   // Send Invoice MVP1 — invoice lifecycle events for the sender
   invoice_paid: "paymentEvents",
+  invoice_cancelled: "paymentEvents",
   invoice_expired: "paymentEvents",
   invoice_new_link_requested: "paymentEvents",
+  // Receive Money Link (Money Request) events
+  money_request_paid: "paymentEvents",
+  money_request_cancelled: "paymentEvents",
+  money_request_expired: "paymentEvents",
+  money_request_new_link_requested: "paymentEvents",
+  // Funding Campaigns (GroupPay) events
+  campaign_contribution_received: "paymentEvents",
+  campaign_target_reached: "paymentEvents",
+  campaign_status_changed: "paymentEvents",
 };
 
 // ─── Refund ETA by method (AC 11.2) ─────────────────────────────────────────
@@ -125,6 +135,16 @@ export function buildNotificationContent(
   const expiredDate = String(data.expiredDate ?? "");
   const originalExpiryDate = String(data.originalExpiryDate ?? "");
   const requestDate = String(data.requestDate ?? "");
+  // Receive Money Link (Money Request) fields
+  const requestNumber = String(data.requestNumber ?? "");
+  const senderName = String(data.senderName ?? data.payerName ?? "Sender");
+  const payerName = String(data.payerName ?? data.senderName ?? "Payer");
+  // Funding Campaign (GroupPay) fields
+  const campaignName = String(data.campaignName ?? "Campaign");
+  const contributorName = String(data.contributorName ?? "A contributor");
+  const contributorCount = String(data.contributorCount ?? "");
+  const targetAmount = String(data.targetAmount ?? "");
+  const campaignStatus = String(data.status ?? "");
 
   const templates: Record<NotificationEventType, NotificationContent> = {
     payment_received: {
@@ -230,6 +250,10 @@ export function buildNotificationContent(
       title: "Invoice Paid",
       body: `Payment of ${amount} ${currency} for invoice ${invoiceNumber} from ${clientName} has been completed successfully.`,
     },
+    invoice_cancelled: {
+      title: "Invoice Cancelled",
+      body: `Invoice ${invoiceNumber} sent to ${clientName} for ${amount} ${currency} has been cancelled.`,
+    },
     invoice_expired: {
       title: "Invoice Expired",
       body: `Invoice ${invoiceNumber} sent to ${clientName} expired without payment on ${expiredDate}.`,
@@ -237,6 +261,36 @@ export function buildNotificationContent(
     invoice_new_link_requested: {
       title: "New Payment Link Requested",
       body: `${clientName} has requested a new payment link for expired invoice ${invoiceNumber}. To accept the request, create and send a new invoice.${clientEmail ? ` Client email: ${clientEmail}.` : ""}${originalExpiryDate ? ` Original expiry date: ${originalExpiryDate}.` : ""}${requestDate ? ` Requested on ${requestDate}.` : ""}`,
+    },
+    // ─── Receive Money Link (Money Request) events ────────────────────────
+    money_request_paid: {
+      title: "Money Request Paid",
+      body: `Great news! ${payerName} has paid ${amount} ${currency} for money request ${requestNumber}. Your payout is now being processed.`,
+    },
+    money_request_cancelled: {
+      title: "Money Request Cancelled",
+      body: `Money request ${requestNumber} to ${senderName} for ${amount} ${currency} has been cancelled.`,
+    },
+    money_request_expired: {
+      title: "Money Request Expired",
+      body: `Money request ${requestNumber} to ${senderName} expired on ${expiredDate}.`,
+    },
+    money_request_new_link_requested: {
+      title: "New Payment Link Requested",
+      body: `${payerName} has requested a new payment link for expired money request ${requestNumber}.`,
+    },
+    // ─── Funding Campaigns (GroupPay) events ──────────────────────────────
+    campaign_contribution_received: {
+      title: "New Campaign Contribution",
+      body: `${contributorName} contributed ${amount} ${currency} to your campaign '${campaignName}'.`,
+    },
+    campaign_target_reached: {
+      title: "Campaign Goal Reached! 🎉",
+      body: `Congratulations! Your campaign '${campaignName}' reached its target of ${targetAmount} ${currency}${contributorCount ? ` with ${contributorCount} contributors` : ""}.`,
+    },
+    campaign_status_changed: {
+      title: "Campaign Status Updated",
+      body: `Your campaign '${campaignName}' status is now ${campaignStatus}.`,
     },
   };
 
@@ -406,6 +460,50 @@ const DEMO_NOTIFICATIONS: Array<{
       unallocatedBalance: "120.00",
     },
     ageMinutes: 30,
+  },
+  {
+    id: "demo-notification-5",
+    type: "money_request_paid",
+    data: {
+      requestNumber: "RM-202608-00001",
+      amount: "300.70",
+      currency: "GBP",
+      payerName: "Ngozi Okafor",
+    },
+    ageMinutes: 15,
+  },
+  {
+    id: "demo-notification-6",
+    type: "invoice_paid",
+    data: {
+      invoiceNumber: "INV-202608-00001",
+      clientName: "Dev Patel",
+      amount: "750.00",
+      currency: "GBP",
+    },
+    ageMinutes: 60,
+  },
+  {
+    id: "demo-notification-7",
+    type: "campaign_contribution_received",
+    data: {
+      campaignName: "Wedding Gift Fund",
+      contributorName: "Samuel Jackson",
+      amount: "150.00",
+      currency: "GBP",
+    },
+    ageMinutes: 120,
+  },
+  {
+    id: "demo-notification-8",
+    type: "campaign_target_reached",
+    data: {
+      campaignName: "Community Soccer Team",
+      targetAmount: "1,500.00",
+      currency: "GBP",
+      contributorCount: "12",
+    },
+    ageMinutes: 280,
   },
 ];
 

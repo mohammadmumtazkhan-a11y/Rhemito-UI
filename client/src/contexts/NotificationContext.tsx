@@ -33,7 +33,21 @@ export type NotificationType =
   | "funding_received_unmatched"
   | "funding_allocated_single"
   | "funding_allocated_multi"
-  | "funding_allocated_partial";
+  | "funding_allocated_partial"
+  // Send Invoice MVP1
+  | "invoice_paid"
+  | "invoice_cancelled"
+  | "invoice_expired"
+  | "invoice_new_link_requested"
+  // Receive Money Link (Money Request)
+  | "money_request_paid"
+  | "money_request_cancelled"
+  | "money_request_expired"
+  | "money_request_new_link_requested"
+  // Funding Campaigns (GroupPay)
+  | "campaign_contribution_received"
+  | "campaign_target_reached"
+  | "campaign_status_changed";
 
 export interface Notification {
   id: string;
