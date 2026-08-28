@@ -14,8 +14,8 @@ test.describe('Rhemito Navigation', () => {
 
     test('Sidebar logo always navigates to dashboard', async ({ page }) => {
         // Start on a page other than the dashboard
-        await page.goto('/senders');
-        await expect(page).toHaveURL(/\/senders/);
+        await page.goto('/group-pay');
+        await expect(page).toHaveURL(/\/group-pay/);
 
         // Click the Rhemito logo
         await page.getByTestId('link-logo-home').click();
@@ -24,50 +24,59 @@ test.describe('Rhemito Navigation', () => {
         await expect(page).toHaveURL('/');
     });
 
-    test('Payments Received pages are consolidated into the dashboard table', async ({ page }) => {
+    test('Payments Received and Money Sent accordions are removed from sidebar', async ({ page }) => {
         await page.goto('/');
 
-        // Expand the "Payments Received" accordion
-        await page.getByText('Payments Received').click();
-        await page.waitForTimeout(500);
+        // Payments Received & Money Sent accordions are removed from sidebar.
+        await expect(page.getByText('Payments Received')).toHaveCount(0);
+        await expect(page.getByText('Money Sent')).toHaveCount(0);
 
-        // Received Payments, Money Requests and Sent Invoices no longer have
-        // their own sidebar entries — their data lives in the Transactions table.
-        await expect(page.getByTestId('link-received-payments')).toHaveCount(0);
-        await expect(page.getByTestId('link-money-requests')).toHaveCount(0);
-        await expect(page.getByTestId('link-sent-invoices')).toHaveCount(0);
-
-        // The remaining Payments Received entries are still navigable.
-        await page.getByTestId('link-senders').click();
-        await expect(page).toHaveURL(/\/senders/);
+        // Standalone main items are directly visible.
+        await expect(page.getByTestId('link-senders-&-recipients')).toBeVisible();
+        await expect(page.getByTestId('link-collections-accounts')).toBeVisible();
     });
 
-    test('Sidebar navigation - Senders (via accordion)', async ({ page }) => {
+    test('Sidebar navigation - Senders & Recipients (main item)', async ({ page }) => {
         await page.goto('/');
 
-        // First expand the "Payments Received" accordion
-        await page.getByText('Payments Received').click();
+        // Senders & Recipients is a main sidebar entry — no accordion needed.
+        await page.getByTestId('link-senders-&-recipients').click();
 
-        // Wait for accordion to expand
-        await page.waitForTimeout(500);
+        // Verify navigation to the consolidated page; Senders is the default tab
+        await expect(page).toHaveURL(/\/senders-recipients/);
+        await expect(page.getByTestId('panel-senders')).toBeVisible();
+        await expect(page.getByTestId('input-search-senders')).toBeVisible();
 
-        // Click Senders link
-        await page.getByTestId('link-senders').click();
-
-        // Verify navigation
-        await expect(page).toHaveURL(/\/senders/);
+        // Switching to the Recipients tab reveals the recipients table
+        await page.getByTestId('tab-recipients').click();
+        await expect(page.getByTestId('panel-recipients')).toBeVisible();
+        await expect(page.getByTestId('table-recipients')).toBeVisible();
     });
 
-    test('Sidebar navigation - Collections Accounts (via accordion)', async ({ page }) => {
+    test('Senders tab deep link and sender detail round-trip', async ({ page }) => {
+        // ?tab=recipients lands directly on the recipients list
+        await page.goto('/senders-recipients?tab=recipients');
+        await expect(page.getByTestId('panel-recipients')).toBeVisible();
+        await expect(page.getByTestId('table-recipients')).toBeVisible();
+        await expect(page.getByTestId('panel-senders')).not.toBeVisible();
+
+        // ?tab=senders shows the senders list; View opens the detail page
+        // (row testids sanitise @ and . to -, and the URL encodes the email)
+        await page.goto('/senders-recipients?tab=senders');
+        await page.getByTestId('button-view-john-adeyemi-email-com').click();
+        await expect(page).toHaveURL(/\/senders\/john\.adeyemi%40email\.com$/);
+        await expect(page.getByTestId('button-back')).toBeVisible();
+
+        // Back returns to the consolidated page on the senders tab
+        await page.getByTestId('button-back').click();
+        await expect(page).toHaveURL(/\/senders-recipients\?tab=senders/);
+        await expect(page.getByTestId('panel-senders')).toBeVisible();
+    });
+
+    test('Sidebar navigation - Collections Accounts (main item)', async ({ page }) => {
         await page.goto('/');
 
-        // First expand the "Payments Received" accordion
-        await page.getByText('Payments Received').click();
-
-        // Wait for accordion to expand
-        await page.waitForTimeout(500);
-
-        // Click Collections Accounts link
+        // Click Collections Accounts link (main item)
         await page.getByTestId('link-collections-accounts').click();
 
         // Verify navigation
@@ -77,8 +86,8 @@ test.describe('Rhemito Navigation', () => {
     test('Sidebar navigation - Bonus & Discounts', async ({ page }) => {
         await page.goto('/');
 
-        // Click Bonus & Discounts link (it's a highlighted item, not in accordion)
-        await page.getByText('Bonus & Discounts').first().click();
+        // Click Bonus & Discounts link
+        await page.locator('a[href="/bonus-discounts"]').first().click();
 
         // Verify navigation
         await expect(page).toHaveURL(/\/bonus-discounts/);

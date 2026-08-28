@@ -1,5 +1,7 @@
 export interface KnownRecipient {
   id: string;
+  email?: string;
+  isSender?: boolean;
   recipientType: "individual" | "business";
   firstName: string;
   lastName: string;

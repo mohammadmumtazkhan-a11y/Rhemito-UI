@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   ArrowLeftRight,
   Users,
-  UserCheck,
   Shield,
   HelpCircle,
   Settings,
@@ -39,20 +38,11 @@ interface NavItemData {
 
 const overviewItem: NavItemData = { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true, gradient: "from-blue-500 to-indigo-600" };
 
-const moneySentItems: NavItemData[] = [
-  // Deep link: opens the Dashboard with the transactions table filtered to
-  // Send Money records and scrolled into view (handled in Dashboard.tsx).
-  { icon: ArrowLeftRight, label: "Transactions", href: "/?type=send_money", enabled: true },
-  { icon: Users, label: "Recipients", href: "/recipients", enabled: true },
-];
+// Consolidated people directory — senders and recipients live on one page.
+const sendersRecipientsItem: NavItemData = { icon: Users, label: "Senders & Recipients", href: "/senders-recipients", enabled: true, gradient: "from-blue-500 to-indigo-600" };
 
-const paymentsReceivedItems: NavItemData[] = [
-  // Received Payments, Money Requests and Sent Invoices live in the Dashboard
-  // Transactions table (filtered via /?type=<filter>) — no dedicated pages.
-  { icon: UserCheck, label: "Senders", href: "/senders", enabled: true },
-  { icon: UsersRound, label: "Funding Campaigns", href: "/group-pay", enabled: true, tooltip: "Funding campaigns", gradient: "from-blue-500 to-indigo-600" },
-  { icon: Building2, label: "Collections Accounts", href: "/payout-accounts", enabled: true, tooltip: "You receive money here" },
-];
+// Collections Accounts — standalone top-level entry
+const collectionsAccountsItem: NavItemData = { icon: Building2, label: "Collections Accounts", href: "/payout-accounts", enabled: true, tooltip: "You receive money here", gradient: "from-blue-500 to-indigo-600" };
 
 const otherNavItems: NavItemData[] = [
   { icon: Shield, label: "Compliance", href: "/compliance", enabled: true },
@@ -160,47 +150,11 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto">
         <NavItem item={overviewItem} />
 
-        {/* Money Sent Accordion */}
-        <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value="money-sent" className="border-none">
-            <AccordionTrigger className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100/80 hover:no-underline transition-all duration-200 group">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center shadow-md shadow-teal-200/50">
-                  <Send className="w-4 h-4 text-white" />
-                </div>
-                <span className="font-medium">Money Sent</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="pb-1 pt-1">
-              <div className="ml-5 mt-1 border-l-2 border-gradient-to-b from-teal-200 to-emerald-200 pl-3 space-y-1">
-                {moneySentItems.map((item) => (
-                  <NavItem key={item.href} item={item} />
-                ))}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        {/* Consolidated people directory — main item, not a sub-option */}
+        <NavItem item={sendersRecipientsItem} />
 
-        {/* Payments Received Accordion */}
-        <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value="payments-received" className="border-none">
-            <AccordionTrigger className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100/80 hover:no-underline transition-all duration-200 group">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center shadow-md shadow-violet-200/50">
-                  <Inbox className="w-4 h-4 text-white" />
-                </div>
-                <span className="font-medium">Payments Received</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="pb-1 pt-1">
-              <div className="ml-5 mt-1 border-l-2 border-violet-200 pl-3 space-y-1">
-                {paymentsReceivedItems.map((item) => (
-                  <NavItem key={item.href} item={item} />
-                ))}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        {/* Collections Accounts — main item, not a sub-option */}
+        <NavItem item={collectionsAccountsItem} />
 
         {/* Divider */}
         <div className="py-2">

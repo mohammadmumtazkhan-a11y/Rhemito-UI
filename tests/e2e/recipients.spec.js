@@ -1,22 +1,27 @@
 import { test, expect } from '@playwright/test';
 
+// Senders and Recipients were consolidated into one page: the sidebar's
+// top-level "Senders & Recipients" entry opens /senders-recipients and the
+// recipients list lives behind the Recipients tab (?tab=recipients).
+const RECIPIENTS_URL = '/senders-recipients?tab=recipients';
+
 test.describe('Recipients page', () => {
 
-    test('Sidebar Recipients link navigates to /recipients (via Money Sent accordion)', async ({ page }) => {
+    test('Sidebar Senders & Recipients link opens the consolidated page and shows recipients under its tab', async ({ page }) => {
         await page.goto('/');
 
-        // Expand the "Money Sent" accordion first
-        await page.getByText('Money Sent').click();
-        await page.waitForTimeout(500);
+        await page.getByTestId('link-senders-&-recipients').click();
 
-        await page.getByTestId('link-recipients').click();
-
-        await expect(page).toHaveURL(/\/recipients$/);
+        await expect(page).toHaveURL(/\/senders-recipients$/);
+        // Senders is the default tab; switching shows the recipients table
+        await expect(page.getByTestId('panel-senders')).toBeVisible();
+        await page.getByTestId('tab-recipients').click();
+        await expect(page).toHaveURL(/tab=recipients/);
         await expect(page.getByTestId('table-recipients')).toBeVisible();
     });
 
     test('Renders seeded recipients with name, unique code and account number', async ({ page }) => {
-        await page.goto('/recipients');
+        await page.goto(RECIPIENTS_URL);
 
         await expect(page.getByTestId('table-recipients')).toBeVisible();
         const firstRow = page.getByTestId('row-recipient-rec-001');
@@ -29,7 +34,7 @@ test.describe('Recipients page', () => {
     });
 
     test('Search filters recipients by name and by country', async ({ page }) => {
-        await page.goto('/recipients');
+        await page.goto(RECIPIENTS_URL);
 
         const search = page.getByTestId('input-search-recipients');
         await search.fill('Ngozi');
@@ -47,7 +52,7 @@ test.describe('Recipients page', () => {
     });
 
     test('Sorting by full name reorders the table', async ({ page }) => {
-        await page.goto('/recipients');
+        await page.goto(RECIPIENTS_URL);
 
         await page.getByTestId('button-sort-name').click();
 
@@ -60,7 +65,7 @@ test.describe('Recipients page', () => {
     });
 
     test('Pagination pages through recipients and respects the page size selector', async ({ page }) => {
-        await page.goto('/recipients');
+        await page.goto(RECIPIENTS_URL);
 
         // 12 seeded recipients at 10 per page → 2 pages
         await expect(page.locator('[data-testid^="row-recipient-"]')).toHaveCount(10);
@@ -85,13 +90,14 @@ test.describe('Recipients page', () => {
     });
 
     test('Add Recipient flow creates a new row with a Nigeria narration rule', async ({ page }) => {
-        await page.goto('/recipients');
+        await page.goto(RECIPIENTS_URL);
 
         await page.getByTestId('button-add-recipient').click();
         await expect(page.getByTestId('input-new-first-name')).toBeVisible();
 
         await page.getByTestId('input-new-first-name').fill('Test');
         await page.getByTestId('input-new-last-name').fill('Recipient');
+        await page.getByTestId('input-new-recipient-email').fill('test.recipient@example.com');
 
         // Choosing Nigeria makes narration mandatory
         await page.getByTestId('select-new-country').click();
@@ -114,8 +120,25 @@ test.describe('Recipients page', () => {
         await expect(page.getByText('Recipient added', { exact: true })).toBeVisible();
     });
 
+    test('Consolidates sender and recipient by email as a single record with dual-role badge', async ({ page }) => {
+        // Fatima Hassan is seeded in both senders and recipients with email fatima.h@company.ng
+        await page.goto('/senders-recipients?tab=recipients');
+
+        // Search for Fatima in recipients panel
+        await page.getByTestId('input-search-recipients').fill('Fatima');
+        const fatimaRecipientRow = page.getByTestId('panel-recipients').locator('tr:has-text("Fatima Hassan")');
+        await expect(fatimaRecipientRow).toBeVisible();
+        await expect(fatimaRecipientRow).toContainText('Sender & Recipient');
+
+        // Switch to senders tab
+        await page.getByTestId('tab-senders').click();
+        const fatimaSenderRow = page.getByTestId('panel-senders').locator('tr:has-text("Fatima Hassan")');
+        await expect(fatimaSenderRow).toBeVisible();
+        await expect(fatimaSenderRow).toContainText('Sender & Recipient');
+    });
+
     test('Delete Recipient flow removes the row after confirmation', async ({ page }) => {
-        await page.goto('/recipients');
+        await page.goto(RECIPIENTS_URL);
 
         await page.getByTestId('button-delete-rec-002').click();
         await expect(page.getByText('Delete Recipient?')).toBeVisible();
@@ -127,7 +150,7 @@ test.describe('Recipients page', () => {
     });
 
     test('View Recipient modal shows full details and send action navigates', async ({ page }) => {
-        await page.goto('/recipients');
+        await page.goto(RECIPIENTS_URL);
 
         await page.getByTestId('button-view-rec-002').click();
         const modal = page.getByTestId('modal-view-recipient');
@@ -140,7 +163,7 @@ test.describe('Recipients page', () => {
     });
 
     test('Row send action navigates to Send Money', async ({ page }) => {
-        await page.goto('/recipients');
+        await page.goto(RECIPIENTS_URL);
 
         await page.getByTestId('button-send-rec-001').click();
         await expect(page).toHaveURL(/\/send-money/);

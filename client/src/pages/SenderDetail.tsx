@@ -22,8 +22,8 @@ export default function SenderDetail() {
       <DashboardLayout>
         <div className="text-center py-12">
           <p className="text-muted-foreground">Sender not found</p>
-          <Button variant="outline" className="mt-4" onClick={() => setLocation("/senders")}>
-            Back to Senders
+          <Button variant="outline" className="mt-4" onClick={() => setLocation("/senders-recipients?tab=senders")}>
+            Back to Senders &amp; Recipients
           </Button>
         </div>
       </DashboardLayout>
@@ -49,7 +49,7 @@ export default function SenderDetail() {
     <DashboardLayout>
       <div className="space-y-6">
         <button
-          onClick={() => setLocation("/senders")}
+          onClick={() => setLocation("/senders-recipients?tab=senders")}
           className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
           data-testid="button-back"
         >
@@ -237,7 +237,7 @@ export default function SenderDetail() {
                       className="flex-1"
                       onClick={() => {
                         setShowDeleteConfirm(false);
-                        setLocation("/senders");
+                        setLocation("/senders-recipients?tab=senders");
                       }}
                       data-testid="button-confirm-delete"
                     >

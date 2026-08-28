@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Plus, Send, Eye, Trash2, User, Building2, CheckCircle2 } from "lucide-react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WaysToGetPaidModal } from "@/components/modals/WaysToGetPaidModal";
-import { knownSenders, resolveNarration, type KnownSender } from "@/data/knownSenders";
+import { useContacts } from "@/contexts/ContactsContext";
+import { toKnownSender } from "@/data/contacts";
+import { resolveNarration, type KnownSender } from "@/data/knownSenders";
 
 const COUNTRY_CODES = [
   { code: "+234", country: "Nigeria", flag: "🇳🇬" },
@@ -24,10 +25,15 @@ const COUNTRIES = [
   "Nigeria", "United Kingdom", "United States", "Germany", "France", "Kenya", "Ghana"
 ];
 
-export default function Senders() {
+/**
+ * Senders panel — rendered inside the consolidated SendersRecipients page.
+ * Connected to unified ContactsContext so senders & recipients are unified by email.
+ */
+export function SendersPanel() {
   const [, setLocation] = useLocation();
+  const { senders: contactsSenders, upsertSender, deleteContactRole } = useContacts();
   const [searchQuery, setSearchQuery] = useState("");
-  const [senders, setSenders] = useState<KnownSender[]>(knownSenders);
+  const senders: KnownSender[] = contactsSenders.map(toKnownSender);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showWaysModal, setShowWaysModal] = useState(false);
@@ -64,13 +70,13 @@ export default function Senders() {
   };
 
   const handleDeleteSender = (email: string) => {
-    setSenders(prev => prev.filter(s => s.email !== email));
+    deleteContactRole(email, "sender");
     setShowDeleteConfirm(null);
   };
 
   const handleAddSender = () => {
-    const sender: KnownSender = {
-      senderType: newSender.senderType,
+    upsertSender({
+      contactType: newSender.senderType,
       firstName: newSender.firstName,
       middleName: newSender.middleName,
       lastName: newSender.lastName,
@@ -82,16 +88,7 @@ export default function Senders() {
       country: newSender.country,
       currency: newSender.country === "Nigeria" ? "NGN" : newSender.country === "United Kingdom" ? "GBP" : "USD",
       relationship: "Personal",
-      createdAt: new Date().toISOString().split('T')[0],
-      bankName: "",
-      accountNumber: "",
-      sortCode: "",
-      iban: "",
-      swift: "",
-      narration: "",
-      serviceType: "Bank Deposit",
-    };
-    setSenders(prev => [...prev, sender]);
+    });
     setShowAddModal(false);
     setNewSender({
       senderType: "individual",
@@ -110,7 +107,7 @@ export default function Senders() {
   };
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6">
         <AnimatePresence>
           {showSuccessMessage && (
@@ -127,7 +124,7 @@ export default function Senders() {
         </AnimatePresence>
 
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold font-display">Senders</h1>
+          <h2 className="text-lg font-semibold font-display">Senders</h2>
           <Button onClick={() => setShowAddModal(true)} className="gap-2" data-testid="button-add-sender">
             <Plus className="w-4 h-4" />
             Add Sender
@@ -181,7 +178,17 @@ export default function Senders() {
                               )}
                             </div>
                             <div className="flex flex-col min-w-0">
-                              <span className="font-medium">{displayName}</span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-medium">{displayName}</span>
+                                {sender.isRecipient && (
+                                  <span
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                    data-testid={`badge-dual-role-${sender.email.replace(/[@.]/g, '-')}`}
+                                  >
+                                    Sender &amp; Recipient
+                                  </span>
+                                )}
+                              </div>
                               {sender.senderType === "business" && (
                                 <span className="text-xs text-muted-foreground">Business</span>
                               )}
@@ -225,6 +232,21 @@ export default function Senders() {
                         <td className="py-4 px-4 text-muted-foreground">Collection</td>
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-2">
+                            {sender.isRecipient && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => setLocation(`/send-money?recipientEmail=${encodeURIComponent(sender.email)}`)}
+                                    className="w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center transition-colors text-emerald-600"
+                                    data-testid={`button-send-money-dual-${sender.email.replace(/[@.]/g, '-')}`}
+                                  >
+                                    <Send className="w-4 h-4" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Send Money (Recipient)</TooltipContent>
+                              </Tooltip>
+                            )}
+
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <button
@@ -516,6 +538,6 @@ export default function Senders() {
           </>
         )}
       </AnimatePresence>
-    </DashboardLayout>
+    </>
   );
 }

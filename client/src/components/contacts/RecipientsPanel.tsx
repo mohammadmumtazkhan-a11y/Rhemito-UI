@@ -18,7 +18,6 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +40,9 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { countries } from "@/data/countries";
-import { knownRecipients, type KnownRecipient } from "@/data/recipients";
+import { useContacts } from "@/contexts/ContactsContext";
+import { toKnownRecipient } from "@/data/contacts";
+import { type KnownRecipient } from "@/data/recipients";
 import {
   SERVICE_TYPES,
   bankFieldsFor,
@@ -62,6 +63,7 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
 interface NewRecipientForm {
   recipientType: "individual" | "business";
+  email: string;
   firstName: string;
   lastName: string;
   businessName: string;
@@ -77,6 +79,7 @@ interface NewRecipientForm {
 
 const emptyNewRecipient: NewRecipientForm = {
   recipientType: "individual",
+  email: "",
   firstName: "",
   lastName: "",
   businessName: "",
@@ -98,12 +101,25 @@ function formatDate(isoDate: string): string {
   });
 }
 
-export default function Recipients() {
+/**
+ * Recipients panel — rendered inside the consolidated SendersRecipients page.
+ * Connected to unified ContactsContext with dual-role and email consolidation.
+ */
+export function RecipientsPanel() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { recipients: contactsRecipients, upsertRecipient, deleteContactRole } = useContacts();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [recipients, setRecipients] = useState<KnownRecipient[]>(knownRecipients);
+  const recipients: KnownRecipient[] = useMemo(
+    () =>
+      contactsRecipients.map((c) => ({
+        ...toKnownRecipient(c),
+        email: c.email,
+        isSender: c.isSender,
+      })),
+    [contactsRecipients]
+  );
   const [sortField, setSortField] = useState<RecipientSortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
@@ -157,6 +173,7 @@ export default function Recipients() {
   const narrationRequired = requiresNarration(newRecipient.country);
 
   const newRecipientIsValid =
+    Boolean(newRecipient.email.trim()) &&
     (newRecipient.recipientType === "individual"
       ? Boolean(newRecipient.firstName.trim() && newRecipient.lastName.trim())
       : Boolean(newRecipient.businessName.trim())) &&
@@ -164,9 +181,9 @@ export default function Recipients() {
     (!narrationRequired || Boolean(newRecipient.narration.trim()));
 
   const handleAddRecipient = () => {
-    const recipient: KnownRecipient = {
-      id: `rec-${Date.now()}`,
-      recipientType: newRecipient.recipientType,
+    const created = upsertRecipient({
+      email: newRecipient.email.trim(),
+      contactType: newRecipient.recipientType,
       firstName: newRecipient.firstName.trim(),
       lastName: newRecipient.lastName.trim(),
       businessName: newRecipient.businessName.trim(),
@@ -178,25 +195,23 @@ export default function Recipients() {
       iban: newFormBankFields.iban ? newRecipient.iban.trim() : "",
       swift: newFormBankFields.swift ? newRecipient.swift.trim() : "",
       serviceType: newRecipient.serviceType,
-      uniqueCode: generateUniqueCode(recipients.map((r) => r.uniqueCode)),
       narration: newRecipient.narration.trim(),
       relationship: "Personal",
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-    setRecipients((prev) => [recipient, ...prev]);
+    });
+
     setShowAddModal(false);
     setNewRecipient(emptyNewRecipient);
     setPage(1);
     toast({
       title: "Recipient added",
-      description: `${displayName(recipient)} is ready to receive payouts.`,
+      description: `${displayName(toKnownRecipient(created))} is ready to receive payouts.`,
     });
   };
 
   const handleDeleteRecipient = () => {
     if (!deletingRecipient) return;
     const removedName = displayName(deletingRecipient);
-    setRecipients((prev) => prev.filter((r) => r.id !== deletingRecipient.id));
+    deleteContactRole(deletingRecipient.email || deletingRecipient.id, "recipient");
     setDeletingRecipient(null);
     toast({
       title: "Recipient deleted",
@@ -241,7 +256,7 @@ export default function Recipients() {
   );
 
   return (
-    <DashboardLayout>
+    <>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -250,7 +265,7 @@ export default function Recipients() {
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold font-display">Recipients</h1>
+            <h2 className="text-lg font-semibold font-display">Recipients</h2>
             <p className="text-sm text-muted-foreground mt-1">
               Manage the beneficiaries you send money to.
             </p>
@@ -330,7 +345,17 @@ export default function Recipients() {
                               )}
                             </div>
                             <div className="flex flex-col min-w-0">
-                              <span className="font-medium truncate">{name}</span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-medium truncate">{name}</span>
+                                {recipient.isSender && (
+                                  <span
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                    data-testid={`badge-dual-role-${recipient.id}`}
+                                  >
+                                    Sender &amp; Recipient
+                                  </span>
+                                )}
+                              </div>
                               {recipient.recipientType === "business" && (
                                 <span className="text-xs text-muted-foreground">Business</span>
                               )}
@@ -369,6 +394,22 @@ export default function Recipients() {
                         </TableCell>
                         <TableCell className="py-4 px-4">
                           <div className="flex items-center justify-end gap-2">
+                            {recipient.isSender && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => setLocation(`/senders/${encodeURIComponent(recipient.email || "")}`)}
+                                    className="w-8 h-8 rounded-lg bg-indigo-50 hover:bg-indigo-100 flex items-center justify-center transition-colors text-indigo-600"
+                                    aria-label={`View Sender profile for ${name}`}
+                                    data-testid={`button-view-sender-dual-${recipient.id}`}
+                                  >
+                                    <User className="w-4 h-4" aria-hidden="true" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Sender Profile</TooltipContent>
+                              </Tooltip>
+                            )}
+
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <button
@@ -643,6 +684,22 @@ export default function Recipients() {
                         />
                       </div>
                     )}
+
+                    <div className="space-y-2">
+                      <Label>Email Address *</Label>
+                      <Input
+                        type="email"
+                        value={newRecipient.email}
+                        onChange={(e) =>
+                          setNewRecipient((prev) => ({ ...prev, email: e.target.value }))
+                        }
+                        placeholder="e.g. name@example.com"
+                        data-testid="input-new-recipient-email"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Used to uniquely identify contacts across senders and recipients.
+                      </p>
+                    </div>
 
                     <div className="space-y-2">
                       <Label>Country *</Label>
@@ -1029,6 +1086,6 @@ export default function Recipients() {
           </>
         )}
       </AnimatePresence>
-    </DashboardLayout>
+    </>
   );
 }

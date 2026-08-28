@@ -5,17 +5,17 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NotificationContextProvider } from "@/contexts/NotificationContext";
+import { ContactsProvider } from "@/contexts/ContactsContext";
 import Dashboard from "@/pages/Dashboard";
 import RequestPayment from "@/pages/RequestPayment";
 import RequestCheckout from "@/pages/RequestCheckout";
 import SendInvoice from "@/pages/SendInvoice";
 import SentInvoiceDetails from "@/pages/SentInvoiceDetails";
 import InvoiceView from "@/pages/InvoiceView";
-import Senders from "@/pages/Senders";
 import SenderDetail from "@/pages/SenderDetail";
+import SendersRecipients from "@/pages/SendersRecipients";
 import PayoutAccounts from "@/pages/PayoutAccounts";
 import SendMoney from "@/pages/SendMoney";
-import Recipients from "@/pages/Recipients";
 import BonusAndDiscounts from "@/pages/BonusAndDiscounts";
 import Marketing from "@/pages/Marketing";
 import GroupPayDashboard from "@/pages/GroupPay/GroupPayDashboard";
@@ -75,8 +75,9 @@ function Router() {
       <Route path="/sent-invoices/:id" component={SentInvoiceDetails} />
       <Route path="/show-qr-code"><Redirect to="/request-payment" /></Route>
       <Route path="/send-money" component={SendMoney} />
-      <Route path="/recipients" component={Recipients} />
-      <Route path="/senders" component={Senders} />
+      {/* Senders and Recipients were consolidated into one page; the sender
+          detail view keeps its own route. */}
+      <Route path="/senders-recipients" component={SendersRecipients} />
       <Route path="/senders/:email" component={SenderDetail} />
       <Route path="/payout-accounts" component={PayoutAccounts} />
       <Route path="/pay/e/:id" component={RequestCheckout} />
@@ -106,10 +107,12 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <NotificationContextProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
+          <ContactsProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </ContactsProvider>
         </NotificationContextProvider>
       </QueryClientProvider>
     </ErrorBoundary>

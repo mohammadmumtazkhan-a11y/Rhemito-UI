@@ -1,4 +1,7 @@
 export interface KnownSender {
+  id?: string;
+  isRecipient?: boolean;
+  uniqueCode?: string;
   senderType: "individual" | "business";
   firstName: string;
   middleName: string;
