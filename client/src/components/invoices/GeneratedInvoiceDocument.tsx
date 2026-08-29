@@ -8,7 +8,7 @@
 import { Printer, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatHumanDate, type InvoiceTotals } from "@shared/invoice-logic";
+import { formatHumanDate, itemDiscountAmount, type InvoiceTotals } from "@shared/invoice-logic";
 import type { InvoiceItem } from "@shared/schema";
 
 interface GeneratedInvoiceDocumentProps {
@@ -134,6 +134,15 @@ export function GeneratedInvoiceDocument({
               <p className="text-xs text-slate-400 mt-0.5 sm:hidden">
                 {item.quantity} × {currencySymbol}{item.unitAmount.toFixed(2)}
               </p>
+              {itemDiscountAmount(item) > 0 && (
+                <p
+                  className="text-xs font-medium text-teal mt-0.5"
+                  data-testid={`generated-invoice-item-discount-${index}`}
+                >
+                  Discount{item.discountType === "percent" && item.discountValue ? ` (${item.discountValue}%)` : ""}:{" "}
+                  -{currencySymbol}{itemDiscountAmount(item).toFixed(2)}
+                </p>
+              )}
             </div>
             <span className="hidden sm:block text-right text-sm text-slate-600">{item.quantity}</span>
             <span className="hidden sm:block text-right text-sm text-slate-600">
@@ -159,6 +168,14 @@ export function GeneratedInvoiceDocument({
               {currencySymbol}{totals.subtotal.toFixed(2)} {currency}
             </span>
           </div>
+          {totals.itemsDiscountTotal > 0 && (
+            <div className="flex justify-between text-teal-700" data-testid="generated-invoice-items-discount">
+              <span>Items discount</span>
+              <span>
+                -{currencySymbol}{totals.itemsDiscountTotal.toFixed(2)} {currency}
+              </span>
+            </div>
+          )}
           {totals.discountAmount > 0 && (
             <div className="flex justify-between text-teal-700" data-testid="generated-invoice-discount">
               <span>

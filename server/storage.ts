@@ -587,7 +587,14 @@ export class MemStorage implements IStorage {
         items: [
           { name: "Brand strategy workshop", description: "Two-day onsite workshop including materials", quantity: 1, unitAmount: 1200 },
           { name: "Design system audit", description: null, quantity: 1, unitAmount: 640 },
-          { name: "Follow-up consulting", description: "Remote sessions, billed hourly", quantity: 6, unitAmount: 95 },
+          {
+            name: "Follow-up consulting",
+            description: "Remote sessions, billed hourly",
+            quantity: 6,
+            unitAmount: 95,
+            discountType: "fixed",
+            discountValue: 45,
+          },
         ],
         taxRate: "20",
         discountType: "percent",

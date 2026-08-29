@@ -27,6 +27,7 @@ import {
   newBuilderItem,
   builderTotals,
   areItemsValid,
+  itemDiscountOf,
   type BuilderItem,
   type BuilderDiscountType,
 } from "@/components/invoices/InvoiceItemsBuilder";
@@ -463,6 +464,9 @@ export default function SendInvoice() {
               description: item.description.trim() || undefined,
               quantity: parseFloat(item.quantity),
               unitAmount: parseFloat(item.unitAmount),
+              ...(item.discountType !== "none"
+                ? { discountType: item.discountType, discountValue: parseFloat(item.discountValue) }
+                : {}),
             })),
             ...(generateData.taxRate.trim()
               ? { taxRate: parseFloat(generateData.taxRate) }
@@ -605,6 +609,13 @@ export default function SendInvoice() {
               value: `${sym}${generateTotals.subtotal.toFixed(2)} ${formData.currency}`,
               testId: "review-subtotal",
             },
+            ...(generateTotals.itemsDiscountTotal > 0
+              ? [{
+                  label: "Items Discount",
+                  value: `-${sym}${generateTotals.itemsDiscountTotal.toFixed(2)} ${formData.currency}`,
+                  testId: "review-items-discount",
+                }]
+              : []),
             ...(generateTotals.discountAmount > 0
               ? [{
                   label: `Discount${generateData.discountType === "percent" && generateData.discountValue ? ` (${generateData.discountValue}%)` : ""}`,
@@ -747,6 +758,11 @@ export default function SendInvoice() {
                             <p className="text-xs text-muted-foreground mt-1">
                               {item.quantity} × {sym}{parseFloat(item.unitAmount || "0").toFixed(2)}
                             </p>
+                            {itemDiscountOf(item) > 0 && (
+                              <p className="text-xs font-medium text-teal mt-0.5" data-testid={`review-item-discount-${index}`}>
+                                Discount: -{sym}{itemDiscountOf(item).toFixed(2)}
+                              </p>
+                            )}
                           </div>
                           <p className="text-sm font-semibold text-foreground shrink-0" data-testid={`review-item-amount-${index}`}>
                             {sym}
@@ -1436,6 +1452,14 @@ export default function SendInvoice() {
                             {sym}{generateTotals.subtotal.toFixed(2)} {formData.currency}
                           </span>
                         </div>
+                        {generateTotals.itemsDiscountTotal > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Items Discount:</span>
+                            <span className="font-medium text-teal">
+                              -{sym}{generateTotals.itemsDiscountTotal.toFixed(2)} {formData.currency}
+                            </span>
+                          </div>
+                        )}
                         {generateTotals.discountAmount > 0 && (
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Discount:</span>

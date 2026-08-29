@@ -328,13 +328,16 @@ export type InvoiceSource = (typeof INVOICE_SOURCES)[number];
 
 /**
  * Line item on a generated invoice ("generate on the go"). Stored as jsonb on
- * the invoice; line amount is always quantity × unitAmount.
+ * the invoice; line amount is always quantity × unitAmount minus the optional
+ * per-item discount.
  */
 export interface InvoiceItem {
   name: string;
   description: string | null;
   quantity: number;
   unitAmount: number;
+  discountType?: "percent" | "fixed" | null;
+  discountValue?: number | null;
 }
 
 export const invoices = pgTable("invoices", {
@@ -481,28 +484,60 @@ export type PayoutAccountPayload = z.infer<typeof payoutAccountSchema>;
 const hasAtMostTwoDecimals = (n: number) => Math.round(n * 100) === n * 100;
 
 /** Line item payload for a generated invoice ("generate on the go"). */
-export const invoiceItemInputSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Enter a name for every invoice item.")
-    .max(100, "Item names must be 100 characters or fewer."),
-  description: z
-    .string()
-    .trim()
-    .max(500, "Item descriptions must be 500 characters or fewer.")
-    .optional(),
-  quantity: z
-    .number()
-    .positive("Enter a quantity greater than zero for every item.")
-    .max(1_000_000, "Quantities must be 1,000,000 or lower.")
-    .refine(hasAtMostTwoDecimals, "Quantities support up to 2 decimal places."),
-  unitAmount: z
-    .number()
-    .positive("Enter a unit price greater than zero for every item.")
-    .max(10_000_000, "Unit prices must be 10,000,000 or lower.")
-    .refine(hasAtMostTwoDecimals, "Unit prices support up to 2 decimal places."),
-});
+export const invoiceItemInputSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Enter a name for every invoice item.")
+      .max(100, "Item names must be 100 characters or fewer."),
+    description: z
+      .string()
+      .trim()
+      .max(500, "Item descriptions must be 500 characters or fewer.")
+      .optional(),
+    quantity: z
+      .number()
+      .positive("Enter a quantity greater than zero for every item.")
+      .max(1_000_000, "Quantities must be 1,000,000 or lower.")
+      .refine(hasAtMostTwoDecimals, "Quantities support up to 2 decimal places."),
+    unitAmount: z
+      .number()
+      .positive("Enter a unit price greater than zero for every item.")
+      .max(10_000_000, "Unit prices must be 10,000,000 or lower.")
+      .refine(hasAtMostTwoDecimals, "Unit prices support up to 2 decimal places."),
+    // Optional per-item discount (percentage of the line, or a fixed amount)
+    discountType: z.enum(["percent", "fixed"]).optional(),
+    discountValue: z
+      .number()
+      .positive("Enter the item discount value.")
+      .max(10_000_000, "Item discount values must be 10,000,000 or lower.")
+      .refine(hasAtMostTwoDecimals, "Item discount values support up to 2 decimal places.")
+      .optional(),
+  })
+  .superRefine((item, ctx) => {
+    if (item.discountType !== undefined && item.discountValue === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discountValue"],
+        message: "Enter the item discount value.",
+      });
+    }
+    if (item.discountType === undefined && item.discountValue !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discountType"],
+        message: "Choose whether the item discount is a percentage or a fixed amount.",
+      });
+    }
+    if (item.discountType === "percent" && (item.discountValue ?? 0) > 100) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discountValue"],
+        message: "Item discount percentages must be 100 or lower.",
+      });
+    }
+  });
 export type InvoiceItemInput = z.infer<typeof invoiceItemInputSchema>;
 
 const percentInput = (label: string) =>

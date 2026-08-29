@@ -150,7 +150,14 @@ export interface UploadInvoicePayload extends ConfirmInvoiceBasePayload {
 /** Generate mode — line items; the server computes the total authoritatively. */
 export interface GenerateInvoicePayload extends ConfirmInvoiceBasePayload {
   source: "generated";
-  items: Array<{ name: string; description?: string; quantity: number; unitAmount: number }>;
+  items: Array<{
+    name: string;
+    description?: string;
+    quantity: number;
+    unitAmount: number;
+    discountType?: "percent" | "fixed";
+    discountValue?: number;
+  }>;
   taxRate?: number;
   discountType?: "percent" | "fixed";
   discountValue?: number;

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { computeInvoiceTotals, type InvoiceTotals } from "@shared/invoice-logic";
+import { computeInvoiceTotals, itemDiscountAmount, type InvoiceTotals } from "@shared/invoice-logic";
 
 export interface BuilderItem {
   id: string;
@@ -22,6 +22,8 @@ export interface BuilderItem {
   description: string;
   quantity: string;
   unitAmount: string;
+  discountType: BuilderDiscountType;
+  discountValue: string;
 }
 
 export type BuilderDiscountType = "none" | "percent" | "fixed";
@@ -33,6 +35,8 @@ export function newBuilderItem(): BuilderItem {
     description: "",
     quantity: "1",
     unitAmount: "",
+    discountType: "none",
+    discountValue: "",
   };
 }
 
@@ -46,14 +50,31 @@ const hasAtMostTwoDecimals = (value: string): boolean => {
   return Number.isFinite(parsed) && Math.round(parsed * 100) === parsed * 100;
 };
 
-/** A row only counts when it has a name and a positive quantity × unit price. */
+/** Optional per-item discount amount (percentage of the line, or fixed). */
+export function itemDiscountOf(item: BuilderItem): number {
+  return itemDiscountAmount({
+    quantity: toNumber(item.quantity),
+    unitAmount: toNumber(item.unitAmount),
+    discountType: item.discountType === "none" ? null : item.discountType,
+    discountValue: toNumber(item.discountValue),
+  });
+}
+
+const isItemDiscountValid = (item: BuilderItem): boolean =>
+  item.discountType === "none" ||
+  (toNumber(item.discountValue) > 0 &&
+    hasAtMostTwoDecimals(item.discountValue) &&
+    (item.discountType !== "percent" || toNumber(item.discountValue) <= 100));
+
+/** A row only counts when it has a name, a positive quantity × unit price and a valid discount. */
 export function isItemComplete(item: BuilderItem): boolean {
   return Boolean(
     item.name.trim() &&
     toNumber(item.quantity) > 0 &&
     toNumber(item.unitAmount) > 0 &&
     hasAtMostTwoDecimals(item.quantity) &&
-    hasAtMostTwoDecimals(item.unitAmount),
+    hasAtMostTwoDecimals(item.unitAmount) &&
+    isItemDiscountValid(item),
   );
 }
 
@@ -76,6 +97,8 @@ export function builderTotals(
     items: items.map((item) => ({
       quantity: toNumber(item.quantity),
       unitAmount: toNumber(item.unitAmount),
+      discountType: item.discountType === "none" ? null : item.discountType,
+      discountValue: item.discountType === "none" ? null : toNumber(item.discountValue),
     })),
     taxRate: taxRate.trim() ? toNumber(taxRate) : null,
     discountType: discountType === "none" ? null : discountType,
@@ -178,19 +201,57 @@ export function InvoiceItemsBuilder({
               </Button>
             </div>
 
-            <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-end">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Quantity</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="1"
-                  value={item.quantity}
-                  onChange={(e) => updateItem(index, { quantity: e.target.value })}
-                  className="bg-white"
-                  data-testid={`input-item-qty-${index}`}
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+              <div className="space-y-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Quantity</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="1"
+                    value={item.quantity}
+                    onChange={(e) => updateItem(index, { quantity: e.target.value })}
+                    className="bg-white"
+                    data-testid={`input-item-qty-${index}`}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Discount (Optional)</Label>
+                  <div className="flex gap-1.5">
+                    <Select
+                      value={item.discountType}
+                      onValueChange={(value) =>
+                        updateItem(index, { discountType: value as BuilderDiscountType })
+                      }
+                    >
+                      <SelectTrigger className="w-[64px] bg-white px-2" data-testid={`select-item-discount-type-${index}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">—</SelectItem>
+                        <SelectItem value="percent">%</SelectItem>
+                        <SelectItem value="fixed">{currencySymbol}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0"
+                      value={item.discountValue}
+                      onChange={(e) => updateItem(index, { discountValue: e.target.value })}
+                      disabled={item.discountType === "none"}
+                      className="bg-white flex-1 disabled:bg-slate-100/60 disabled:text-muted-foreground"
+                      data-testid={`input-item-discount-${index}`}
+                    />
+                  </div>
+                  {item.discountType !== "none" && !isItemDiscountValid(item) && (
+                    <p className="text-[10px] text-destructive" data-testid={`error-item-discount-${index}`}>
+                      {item.discountType === "percent" ? "Enter a percentage between 0 and 100." : "Enter a discount amount."}
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Unit Price ({currency})</Label>
@@ -216,6 +277,12 @@ export function InvoiceItemsBuilder({
                   {currencySymbol}
                   {itemLineAmount(item).toFixed(2)}
                 </p>
+                {itemDiscountOf(item) > 0 && (
+                  <p className="text-[11px] font-medium text-teal" data-testid={`text-item-discount-${index}`}>
+                    −{currencySymbol}
+                    {itemDiscountOf(item).toFixed(2)}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -349,6 +416,14 @@ export function InvoiceItemsBuilder({
             {currencySymbol}{totals.subtotal.toFixed(2)} {currency}
           </span>
         </div>
+        {totals.itemsDiscountTotal > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Items Discount:</span>
+            <span className="font-medium text-teal" data-testid="text-items-discount-total">
+              -{currencySymbol}{totals.itemsDiscountTotal.toFixed(2)} {currency}
+            </span>
+          </div>
+        )}
         {totals.discountAmount > 0 && (
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">

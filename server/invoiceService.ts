@@ -523,6 +523,8 @@ export async function confirmAndSendInvoice(params: {
           description: item.description ?? null,
           quantity: item.quantity,
           unitAmount: item.unitAmount,
+          discountType: item.discountType ?? null,
+          discountValue: item.discountValue ?? null,
         }))
       : null,
     taxRate: isGenerated && payload.taxRate !== undefined ? String(payload.taxRate) : null,

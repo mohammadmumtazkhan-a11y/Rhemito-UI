@@ -133,6 +133,81 @@ test.describe('Invoices — generation and management', () => {
     expect(json.error.message).toContain('cannot include an attached document');
   });
 
+  test('Per-item discount reduces its line and combines with the invoice-level discount', async ({ page }) => {
+    const { request, email: senderEmail } = await setupSender(page);
+    await addVerifiedAccount(request);
+    const clientEmail = `itemdisc-${uniqueSuffix()}@example.com`;
+
+    await page.goto('/send-invoice');
+    await expect(page.getByTestId('invoice-items-builder')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('payout-account-card')).toBeVisible({ timeout: 10000 });
+
+    // One item: 1 × £400 with a fixed £50 item discount
+    await page.getByTestId('input-item-name-0').fill('Training workshop');
+    await page.getByTestId('input-item-qty-0').fill('1');
+    await page.getByTestId('input-item-unit-0').fill('400');
+    await page.getByTestId('select-item-discount-type-0').click();
+    await page.getByRole('option', { name: '£', exact: true }).click();
+    await page.getByTestId('input-item-discount-0').fill('50');
+
+    // Gross line amount with the discount shown beneath it
+    await expect(page.getByTestId('text-item-amount-0')).toContainText('£400.00');
+    await expect(page.getByTestId('text-item-discount-0')).toContainText('£50.00');
+
+    // Totals: subtotal 400, items discount 50, total 350 (no invoice discount/tax yet)
+    await expect(page.getByTestId('text-subtotal')).toContainText('£400.00');
+    await expect(page.getByTestId('text-items-discount-total')).toContainText('£50.00');
+    await expect(page.getByTestId('text-invoice-total')).toContainText('£350.00');
+
+    // Add a 10% invoice-level discount on the net-of-item-discount base (350 → 35)
+    await page.getByTestId('select-discount-type').click();
+    await page.getByRole('option', { name: 'Percentage' }).click();
+    await page.getByTestId('input-discount-value').fill('10');
+    await expect(page.getByTestId('text-discount-amount')).toContainText('£35.00');
+    await expect(page.getByTestId('text-invoice-total')).toContainText('£315.00');
+
+    // Client
+    await page.getByTestId('input-recipient-first-name').fill('Nadia');
+    await page.getByTestId('input-recipient-last-name').fill('Rahman');
+    await page.getByTestId('input-recipient-email').fill(clientEmail);
+
+    // Review shows the full discount breakdown
+    await page.getByTestId('button-review-invoice').click();
+    await expect(page.getByTestId('review-subtotal')).toContainText('£400.00');
+    await expect(page.getByTestId('review-items-discount')).toContainText('£50.00');
+    await expect(page.getByTestId('review-discount')).toContainText('£35.00');
+    await expect(page.getByTestId('review-amount')).toContainText('£315.00');
+    await expect(page.getByTestId('review-client-pays')).toContainText('£324.45'); // 3% fee added
+    await expect(page.getByTestId('review-item-discount-0')).toContainText('£50.00');
+
+    // Send and verify the stored authoritative math
+    await page.getByTestId('button-confirm-send-invoice').click();
+    await expect(page.getByText('Invoice Sent!')).toBeVisible({ timeout: 15000 });
+    const list = await (await request.get(`/api/invoices?search=${clientEmail}`)).json();
+    expect(list.meta.total).toBe(1);
+    const inv = list.data[0];
+    expect(inv.amount).toBe('315.00');
+    expect(inv.items[0].discountType).toBe('fixed');
+    expect(inv.items[0].discountValue).toBe(50);
+    expect(inv.totals.subtotal).toBe(400);
+    expect(inv.totals.itemsDiscountTotal).toBe(50);
+    expect(inv.totals.discountAmount).toBe(35);
+    expect(inv.totals.total).toBe(315);
+
+    // The payer page renders the per-item discount and the totals breakdown
+    const paymentLink = await page.getByTestId('input-invoice-link').inputValue();
+    await page.goto(paymentLink);
+    await page.getByTestId('input-payer-email').fill(senderEmail);
+    await page.getByTestId('button-check-email').click();
+    await expect(page.getByTestId('input-payer-password')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('input-payer-password').fill('Passw0rd!x');
+    await page.getByTestId('button-signin-pay').click();
+    await expect(page.getByTestId('generated-invoice-document')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('generated-invoice-item-discount-0')).toContainText('£50.00');
+    await expect(page.getByTestId('generated-invoice-items-discount')).toContainText('£50.00');
+    await expect(page.getByTestId('generated-invoice-total')).toContainText('£315.00');
+  });
+
   test('Generate invoice end-to-end: builder → review → send → Invoices page → payer document', async ({ page }) => {
     const { request, email: senderEmail } = await setupSender(page);
     await addVerifiedAccount(request);

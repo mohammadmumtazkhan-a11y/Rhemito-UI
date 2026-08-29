@@ -90,6 +90,53 @@ describe("computeInvoiceTotals", () => {
     expect(totals.subtotal).toBe(0);
     expect(totals.total).toBe(0);
   });
+
+  it("applies a per-item percentage discount to its own line", () => {
+    const totals = computeInvoiceTotals({
+      items: [
+        { quantity: 2, unitAmount: 150 },
+        { quantity: 1, unitAmount: 100, discountType: "percent", discountValue: 10 },
+      ],
+    });
+    expect(totals.subtotal).toBe(400); // gross subtotal
+    expect(totals.itemsDiscountTotal).toBe(10); // 10% of the £100 line
+    expect(totals.total).toBe(390);
+  });
+
+  it("caps a per-item fixed discount at the line amount", () => {
+    const totals = computeInvoiceTotals({
+      items: [{ quantity: 1, unitAmount: 50, discountType: "fixed", discountValue: 80 }],
+    });
+    expect(totals.itemsDiscountTotal).toBe(50);
+    expect(totals.total).toBe(0);
+  });
+
+  it("stacks item discounts before the invoice-level discount and tax", () => {
+    const totals = computeInvoiceTotals({
+      items: [{ quantity: 1, unitAmount: 400, discountType: "fixed", discountValue: 50 }],
+      discountType: "percent",
+      discountValue: 10,
+      taxRate: "20",
+    });
+    // item discount 50 → base 350; invoice discount 10% = 35; tax 20% of 315 = 63
+    expect(totals.subtotal).toBe(400);
+    expect(totals.itemsDiscountTotal).toBe(50);
+    expect(totals.discountAmount).toBe(35);
+    expect(totals.taxAmount).toBe(63);
+    expect(totals.total).toBe(378);
+  });
+
+  it("keeps the legacy behaviour when no item discounts exist", () => {
+    const totals = computeInvoiceTotals({
+      items: [{ quantity: 1, unitAmount: 395.5 }],
+      discountType: "percent",
+      discountValue: "10",
+      taxRate: "20",
+    });
+    expect(totals.itemsDiscountTotal).toBe(0);
+    expect(totals.discountAmount).toBe(39.55);
+    expect(totals.total).toBe(427.14);
+  });
 });
 
 describe("sendInvoiceSchema — generate vs upload exclusivity", () => {
@@ -240,6 +287,35 @@ describe("sendInvoiceSchema — generate vs upload exclusivity", () => {
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
       expect(parsed.error.issues.some((i) => i.message.includes("total must be greater than zero"))).toBe(true);
+    }
+  });
+
+  it("accepts items with a valid per-item discount", () => {
+    const parsed = sendInvoiceSchema.safeParse({
+      ...base,
+      source: "generated",
+      items: [
+        { name: "Consulting", quantity: 1, unitAmount: 400, discountType: "fixed", discountValue: 50 },
+        { name: "Design", quantity: 1, unitAmount: 100, discountType: "percent", discountValue: 10 },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects per-item discounts that are incomplete or out of range", () => {
+    const cases = [
+      { name: "X", quantity: 1, unitAmount: 100, discountType: "percent" }, // type without value
+      { name: "X", quantity: 1, unitAmount: 100, discountValue: 10 }, // value without type
+      { name: "X", quantity: 1, unitAmount: 100, discountType: "percent", discountValue: 150 }, // percent > 100
+      { name: "X", quantity: 1, unitAmount: 100, discountType: "fixed", discountValue: 10.999 }, // 3 decimals
+    ];
+    for (const item of cases) {
+      const parsed = sendInvoiceSchema.safeParse({
+        ...base,
+        source: "generated",
+        items: [item],
+      });
+      expect(parsed.success, `expected item to be rejected: ${JSON.stringify(item)}`).toBe(false);
     }
   });
 });
