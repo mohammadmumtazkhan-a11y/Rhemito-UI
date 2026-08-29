@@ -44,6 +44,8 @@ import {
   type PublicInvoice,
 } from "@/lib/invoices";
 import { formatHumanDate } from "@shared/invoice-logic";
+import { computeInvoiceTotals } from "@shared/invoice-logic";
+import { GeneratedInvoiceDocument } from "@/components/invoices/GeneratedInvoiceDocument";
 
 const CURRENCY_SYMBOLS: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", NGN: "₦" };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -861,7 +863,33 @@ export default function InvoiceView() {
               </p>
             </div>
           </div>
-          {invoice.hasDocument && (
+          {invoice.source === "generated" && invoice.items && invoice.items.length > 0 ? (
+            <div className="max-h-[420px] overflow-y-auto">
+              <GeneratedInvoiceDocument
+                invoiceNumber={invoice.invoiceNumber}
+                senderName={invoice.senderName}
+                clientName={
+                  invoice.clientType === "business"
+                    ? (invoice.clientBusinessName ?? "")
+                    : [invoice.clientFirstName, invoice.clientMiddleName, invoice.clientLastName]
+                        .filter(Boolean)
+                        .join(" ")
+                }
+                clientType={invoice.clientType}
+                items={invoice.items}
+                currency={invoice.currency}
+                currencySymbol={sym}
+                totals={invoice.totals ?? computeInvoiceTotals(invoice)}
+                taxRate={invoice.taxRate}
+                discountType={invoice.discountType}
+                discountValue={invoice.discountValue}
+                notes={invoice.notes}
+                dueDate={invoice.dueDate}
+                expiryDate={invoice.expiryDate}
+                showPrintAction
+              />
+            </div>
+          ) : invoice.hasDocument && (
             <Button
               variant="outline"
               className="h-12 w-full justify-between border-slate-200 px-4 text-slate-800 hover:bg-slate-50"

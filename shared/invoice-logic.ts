@@ -234,6 +234,56 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+// ─── Generated invoice totals ("generate on the go") ──────────────────────────
+
+export interface InvoiceTotalsInput {
+  items: ReadonlyArray<{ quantity: number | string; unitAmount: number | string }> | null;
+  taxRate?: string | number | null;
+  discountType?: string | null; // "percent" | "fixed" | null
+  discountValue?: string | number | null;
+}
+
+export interface InvoiceTotals {
+  subtotal: number; // Σ round2(quantity × unitAmount)
+  discountAmount: number; // fixed capped at subtotal; percent of subtotal
+  taxAmount: number; // taxRate % of (subtotal − discountAmount)
+  total: number; // authoritative invoice amount
+}
+
+function num(value: string | number | null | undefined): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+/**
+ * Totals for a generated invoice. Accepts both the API payload shape (numbers)
+ * and the stored invoice shape (text columns), so the server, the payment page
+ * and the sender detail view share one authoritative calculation.
+ */
+export function computeInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals {
+  const subtotal = round2(
+    (input.items ?? []).reduce((sum, item) => sum + round2(num(item.quantity) * num(item.unitAmount)), 0),
+  );
+
+  let discountAmount = 0;
+  if (input.discountType === "percent") {
+    discountAmount = round2(subtotal * Math.min(Math.max(num(input.discountValue), 0), 100) / 100);
+  } else if (input.discountType === "fixed") {
+    discountAmount = Math.min(round2(Math.max(num(input.discountValue), 0)), subtotal);
+  }
+
+  const taxableBase = round2(subtotal - discountAmount);
+  const taxAmount = input.taxRate != null && input.taxRate !== ""
+    ? round2(taxableBase * Math.min(Math.max(num(input.taxRate), 0), 100) / 100)
+    : 0;
+
+  return { subtotal, discountAmount, taxAmount, total: round2(taxableBase + taxAmount) };
+}
+
 // ─── Reminder eligibility ─────────────────────────────────────────────────────
 
 /** Reminders fire at 9 a.m. local time on the relevant calendar day. */

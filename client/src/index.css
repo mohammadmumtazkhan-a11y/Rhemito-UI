@@ -225,3 +225,27 @@
     animation: bounceBlinkRight 1.4s ease-in-out infinite;
   }
 }
+/* ── Generated invoice print (public payment page: Print / Save as PDF) ────── */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-invoice-area,
+  .print-invoice-area * {
+    visibility: visible;
+  }
+
+  .print-invoice-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .print-invoice-actions {
+    display: none !important;
+  }
+}

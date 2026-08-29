@@ -7,6 +7,7 @@ import {
   type InsertAuthUser,
   type OtpCode,
   type Invoice,
+  type InvoiceItem,
   type InvoiceDocument,
   type InvoiceEvent,
   type ClientEmail,
@@ -26,7 +27,7 @@ import {
 import type { SendMoneyTransaction } from "@shared/sendMoney";
 import bcrypt from "bcryptjs";
 import { randomUUID, randomBytes, createHash } from "crypto";
-import { deriveInvoiceStatus, clientDisplayName, formatDocumentNumber } from "@shared/invoice-logic";
+import { deriveInvoiceStatus, clientDisplayName, computeInvoiceTotals, formatDocumentNumber } from "@shared/invoice-logic";
 import { maskAccountNumber, maskEmail } from "@shared/money";
 
 export interface InvoiceListQuery {
@@ -542,6 +543,12 @@ export class MemStorage implements IStorage {
         token,
         tokenHash,
         documentId: null,
+        source: "uploaded",
+        items: null,
+        taxRate: null,
+        discountType: null,
+        discountValue: null,
+        notes: null,
         sentAt: createdAt,
         paidAt: inv.paidDaysAgo !== undefined ? daysAgo(inv.paidDaysAgo) : null,
         expiredAt: null,
@@ -553,6 +560,113 @@ export class MemStorage implements IStorage {
         newLinkRequestedAt: null,
         newLinkRequestedBy: null,
         idempotencyKey: `demo-seed-inv-${i + 1}`,
+        createdAt,
+      } satisfies Invoice);
+    });
+
+    // Generated ("generate on the go") demo invoices — line items with an
+    // optional discount/tax, rendered as the invoice document on the public
+    // payment page.
+    const demoGeneratedInvoices: Array<{
+      clientFirst: string;
+      clientLast: string;
+      clientEmail: string;
+      items: InvoiceItem[];
+      taxRate: string | null;
+      discountType: "percent" | "fixed" | null;
+      discountValue: string | null;
+      notes: string | null;
+      status: string;
+      createdDaysAgo: number;
+      paidDaysAgo?: number;
+    }> = [
+      {
+        clientFirst: "Maya",
+        clientLast: "Chen",
+        clientEmail: "maya.chen@northwind.example",
+        items: [
+          { name: "Brand strategy workshop", description: "Two-day onsite workshop including materials", quantity: 1, unitAmount: 1200 },
+          { name: "Design system audit", description: null, quantity: 1, unitAmount: 640 },
+          { name: "Follow-up consulting", description: "Remote sessions, billed hourly", quantity: 6, unitAmount: 95 },
+        ],
+        taxRate: "20",
+        discountType: "percent",
+        discountValue: "5",
+        notes: "Thank you for partnering with us — payment by the due date is appreciated.",
+        status: "sent",
+        createdDaysAgo: 1,
+      },
+      {
+        clientFirst: "Omar",
+        clientLast: "Haddad",
+        clientEmail: "omar.haddad@brightco.example",
+        items: [
+          { name: "Monthly retainer — August", description: null, quantity: 1, unitAmount: 450 },
+          { name: "Ad campaign management", description: "Meta + Google, month of August", quantity: 1, unitAmount: 300 },
+        ],
+        taxRate: null,
+        discountType: "fixed",
+        discountValue: "50",
+        notes: null,
+        status: "paid",
+        createdDaysAgo: 4,
+        paidDaysAgo: 3,
+      },
+    ];
+
+    demoGeneratedInvoices.forEach((inv, i) => {
+      this.invoiceSequence += 1;
+      const createdAt = daysAgo(inv.createdDaysAgo, i + 3);
+      const { token, tokenHash } = tokenPair();
+      const totals = computeInvoiceTotals(inv);
+      this.invoicesMap.set(`demo_gen_inv_${i + 1}`, {
+        id: `demo_gen_inv_${i + 1}`,
+        invoiceNumber: formatDocumentNumber("INV", this.invoiceSequence, yearMonthOf(createdAt)),
+        senderId: "user_123",
+        senderName: "John Doe",
+        clientType: "individual",
+        clientFirstName: inv.clientFirst,
+        clientMiddleName: null,
+        clientLastName: inv.clientLast,
+        clientBusinessName: null,
+        clientEmail: inv.clientEmail,
+        clientPhoneCode: null,
+        clientPhoneNumber: null,
+        amount: totals.total.toFixed(2),
+        currency: "GBP",
+        absorbFee: true,
+        payoutAccountBank: "Barclays Bank",
+        payoutAccountNumber: "12345678",
+        payoutAccountName: "John Doe",
+        payoutAccountCurrency: "GBP",
+        paymentInitiatedAt: null,
+        paymentMethod: null,
+        payerUserId: null,
+        dueDate: null,
+        expiresAt: daysAgo(inv.createdDaysAgo - 60),
+        expiryTimezone: "Europe/London",
+        status: inv.status,
+        paymentRef: inv.status === "paid" ? `PAY-DEMOGEN${i + 1}` : null,
+        token,
+        tokenHash,
+        documentId: null,
+        source: "generated",
+        items: inv.items,
+        taxRate: inv.taxRate,
+        discountType: inv.discountType,
+        discountValue: inv.discountValue,
+        notes: inv.notes,
+        sentAt: createdAt,
+        paidAt: inv.paidDaysAgo !== undefined ? daysAgo(inv.paidDaysAgo) : null,
+        expiredAt: null,
+        cancelledAt: null,
+        cancellationReason: null,
+        cancelledBy: null,
+        dueReminderSentAt: null,
+        expiryReminderSentAt: null,
+        newLinkRequestedAt: null,
+        newLinkRequestedBy: null,
+        idempotencyKey: `demo-seed-gen-inv-${i + 1}`,
         createdAt,
       } satisfies Invoice);
     });

@@ -10,7 +10,7 @@ import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, Download, FilePlus2, XCircle, Mail, Clock, User, Building2, CalendarDays, Receipt,
+  ArrowLeft, Download, FilePlus2, XCircle, Mail, Clock, User, Building2, CalendarDays, Receipt, FileText,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,8 +18,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { InvoiceStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
 import { CancelInvoiceDialog } from "@/components/invoices/CancelInvoiceDialog";
+import { GeneratedInvoiceDocument } from "@/components/invoices/GeneratedInvoiceDocument";
 import { resendInvoiceNotificationRequest, type InvoiceDetails } from "@/lib/invoices";
-import { formatHumanDate, formatShortDate } from "@shared/invoice-logic";
+import { formatHumanDate, formatShortDate, computeInvoiceTotals } from "@shared/invoice-logic";
 
 const CURRENCY_SYMBOLS: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", NGN: "₦" };
 
@@ -165,6 +166,38 @@ export default function SentInvoiceDetails() {
             </p>
           )}
         </div>
+
+        {/* Generated invoice document — rendered inline (no uploaded file to download) */}
+        {invoice.source === "generated" && invoice.items && invoice.items.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="font-display text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5 text-primary" />
+                Generated Invoice
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <GeneratedInvoiceDocument
+                invoiceNumber={invoice.invoiceNumber}
+                senderName={invoice.senderName}
+                clientName={invoice.clientName}
+                clientType={invoice.clientType}
+                items={invoice.items}
+                currency={invoice.currency}
+                currencySymbol={sym}
+                totals={invoice.totals ?? computeInvoiceTotals(invoice)}
+                taxRate={invoice.taxRate}
+                discountType={invoice.discountType}
+                discountValue={invoice.discountValue}
+                notes={invoice.notes}
+                dueDate={invoice.dueDate}
+                expiryDate={invoice.expiryDate}
+                issuedOn={invoice.sentAt ? formatHumanDate(isoToDateStr(invoice.sentAt)) : null}
+                showPrintAction
+              />
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Invoice & amounts */}

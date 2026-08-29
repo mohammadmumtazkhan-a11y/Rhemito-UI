@@ -2,6 +2,9 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, boolean, timestamp, jsonb, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+// Runtime import is one-directional (invoice-logic only type-imports from this
+// module), so there is no runtime cycle.
+import { computeInvoiceTotals } from "./invoice-logic";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -320,6 +323,20 @@ export const CLIENT_EMAIL_TYPES = [
 ] as const;
 export type ClientEmailType = (typeof CLIENT_EMAIL_TYPES)[number];
 
+export const INVOICE_SOURCES = ["generated", "uploaded"] as const;
+export type InvoiceSource = (typeof INVOICE_SOURCES)[number];
+
+/**
+ * Line item on a generated invoice ("generate on the go"). Stored as jsonb on
+ * the invoice; line amount is always quantity × unitAmount.
+ */
+export interface InvoiceItem {
+  name: string;
+  description: string | null;
+  quantity: number;
+  unitAmount: number;
+}
+
 export const invoices = pgTable("invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceNumber: text("invoice_number").notNull().unique(),
@@ -356,6 +373,16 @@ export const invoices = pgTable("invoices", {
   token: text("token").notNull(),
   tokenHash: text("token_hash").notNull().unique(), // sha-256 of the public payment token
   documentId: varchar("document_id"),
+  // Invoice generation ("generate on the go") — an invoice is either generated
+  // from line items (source = "generated") or created from an uploaded document
+  // (source = "uploaded"); the two modes are mutually exclusive. Null on
+  // pre-existing rows means "uploaded".
+  source: varchar("source"),
+  items: jsonb("items").$type<InvoiceItem[]>(), // generated invoice line items
+  taxRate: text("tax_rate"), // percentage stored as text (e.g. "20"), like amount
+  discountType: varchar("discount_type"), // "percent" | "fixed"
+  discountValue: text("discount_value"), // percentage or fixed amount, stored as text
+  notes: text("notes"), // optional note to the client on a generated invoice
   sentAt: timestamp("sent_at").defaultNow(),
   paidAt: timestamp("paid_at"),
   expiredAt: timestamp("expired_at"),
@@ -451,13 +478,67 @@ export const payoutAccountSchema = z.object({
 });
 export type PayoutAccountPayload = z.infer<typeof payoutAccountSchema>;
 
+const hasAtMostTwoDecimals = (n: number) => Math.round(n * 100) === n * 100;
+
+/** Line item payload for a generated invoice ("generate on the go"). */
+export const invoiceItemInputSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Enter a name for every invoice item.")
+    .max(100, "Item names must be 100 characters or fewer."),
+  description: z
+    .string()
+    .trim()
+    .max(500, "Item descriptions must be 500 characters or fewer.")
+    .optional(),
+  quantity: z
+    .number()
+    .positive("Enter a quantity greater than zero for every item.")
+    .max(1_000_000, "Quantities must be 1,000,000 or lower.")
+    .refine(hasAtMostTwoDecimals, "Quantities support up to 2 decimal places."),
+  unitAmount: z
+    .number()
+    .positive("Enter a unit price greater than zero for every item.")
+    .max(10_000_000, "Unit prices must be 10,000,000 or lower.")
+    .refine(hasAtMostTwoDecimals, "Unit prices support up to 2 decimal places."),
+});
+export type InvoiceItemInput = z.infer<typeof invoiceItemInputSchema>;
+
+const percentInput = (label: string) =>
+  z
+    .number()
+    .positive(`Enter the ${label} percentage.`)
+    .max(100, `${label} percentages must be 100 or lower.`)
+    .refine(hasAtMostTwoDecimals, `${label} percentages support up to 2 decimal places.`);
+
+export const invoiceAmountInput = z
+  .string()
+  .regex(/^\d+(\.\d{1,2})?$/, "Enter a valid invoice amount.")
+  .refine((v) => parseFloat(v) > 0, "Enter a valid invoice amount.");
+
+/**
+ * Invoice creation payload. Two mutually exclusive modes:
+ * - `source: "generated"` — line items (with optional tax/discount/notes); the
+ *   total is computed server-side. `documentId`/`invoiceAmount` are forbidden.
+ * - no `source` (the original MVP1 contract) — an uploaded document plus a
+ *   manual amount. `items`/`taxRate`/`discount*`/`notes` are forbidden.
+ */
 export const sendInvoiceSchema = z
   .object({
-    documentId: z.string().min(1, "An invoice document must be attached before sending."),
-    invoiceAmount: z
-      .string()
-      .regex(/^\d+(\.\d{1,2})?$/, "Enter a valid invoice amount.")
-      .refine((v) => parseFloat(v) > 0, "Enter a valid invoice amount."),
+    source: z.literal("generated").optional(),
+    documentId: z.string().min(1, "An invoice document must be attached before sending.").optional(),
+    invoiceAmount: invoiceAmountInput.optional(),
+    items: z.array(invoiceItemInputSchema).max(100, "Invoices support up to 100 items.").optional(),
+    taxRate: percentInput("Tax").optional(),
+    discountType: z.enum(["percent", "fixed"]).optional(),
+    discountValue: z
+      .number()
+      .positive("Enter the discount value.")
+      .max(10_000_000, "Discount values must be 10,000,000 or lower.")
+      .refine(hasAtMostTwoDecimals, "Discount values support up to 2 decimal places.")
+      .optional(),
+    notes: z.string().trim().max(500, "Notes must be 500 characters or fewer.").optional(),
     currency: z.enum(INVOICE_CURRENCIES),
     absorbFee: z.boolean(),
     // Server-owned verified account reference — raw bank details are never
@@ -489,6 +570,83 @@ export const sendInvoiceSchema = z
         path: ["clientBusinessName"],
         message: "Business name is required for a business client.",
       });
+    }
+
+    if (data.source === "generated") {
+      if (data.documentId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["documentId"],
+          message: "A generated invoice cannot include an attached document. Remove the document or send an uploaded invoice instead.",
+        });
+      }
+      if (!data.items || data.items.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["items"],
+          message: "Add at least one invoice item to generate the invoice.",
+        });
+      }
+    } else {
+      if (!data.documentId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["documentId"],
+          message: "An invoice document must be attached before sending.",
+        });
+      }
+      if (!data.invoiceAmount) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["invoiceAmount"],
+          message: "Enter a valid invoice amount.",
+        });
+      }
+      if (data.items && data.items.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["items"],
+          message: "An uploaded invoice cannot include generated items. Generate the invoice on the go instead, or upload a document.",
+        });
+      }
+    }
+
+    if (data.discountType !== undefined && data.discountValue === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discountValue"],
+        message: "Enter the discount value.",
+      });
+    }
+    if (data.discountType === undefined && data.discountValue !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discountType"],
+        message: "Choose whether the discount is a percentage or a fixed amount.",
+      });
+    }
+    if (data.discountType === "percent" && (data.discountValue ?? 0) > 100) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discountValue"],
+        message: "Discount percentages must be 100 or lower.",
+      });
+    }
+
+    if (data.items && data.items.length > 0) {
+      const totals = computeInvoiceTotals({
+        items: data.items,
+        taxRate: data.taxRate,
+        discountType: data.discountType,
+        discountValue: data.discountValue,
+      });
+      if (totals.total <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["items"],
+          message: "The invoice total must be greater than zero.",
+        });
+      }
     }
   });
 
