@@ -178,7 +178,7 @@ export function PayoutAccountSelector({
       }
 
       toast({
-        title: "Settlement Account Added",
+        title: "Settlement Bank Account Added",
         description: `${newAccountData.bank} (${newAccountData.currency}) in the name of ${requesterName} was added, verified and selected.`,
       });
 
@@ -222,7 +222,7 @@ export function PayoutAccountSelector({
         data-testid="payout-accounts-loading"
       >
         <Loader2 className="w-4 h-4 animate-spin" />
-        Checking your settlement accounts…
+        Checking your settlement bank accounts…
       </div>
     );
   }
@@ -270,7 +270,7 @@ export function PayoutAccountSelector({
             </div>
             <div className="space-y-1">
               <h4 className="font-bold text-sm text-amber-950 flex items-center gap-2">
-                <span>Settlement Account Required</span>
+                <span>Settlement Bank Account Required</span>
                 <Badge variant="outline" className="text-[10px] border-amber-300 bg-amber-100/60 text-amber-800 font-semibold">
                   Mandatory
                 </Badge>
@@ -295,7 +295,7 @@ export function PayoutAccountSelector({
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3" data-testid="payout-account-card">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Receiving Settlement Account</span>
+              <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Receiving Settlement Bank Account</span>
               {selectedAccount?.isDefault && (
                 <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary hover:bg-primary/10">
                   Default

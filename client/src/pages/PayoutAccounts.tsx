@@ -360,7 +360,7 @@ export default function PayoutAccounts() {
         setSuccessText("Settlement bank account added successfully.");
         toast({
           title: "Account Added",
-          description: `${selectedBank} (${currentCurrency}) was added to your settlement accounts.`,
+          description: `${selectedBank} (${currentCurrency}) was added to your settlement bank accounts.`,
         });
       }
 
@@ -372,7 +372,7 @@ export default function PayoutAccounts() {
       console.error("Save account error:", error);
       toast({
         title: "Error",
-        description: "Failed to save settlement account. Please try again.",
+        description: "Failed to save settlement bank account. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -423,7 +423,7 @@ export default function PayoutAccounts() {
     setTimeout(() => setShowSuccessMessage(false), 4000);
     toast({
       title: "Account Removed",
-      description: `${target?.bank || "Settlement account"} (${target?.currency || ""}) has been deleted.`,
+      description: `${target?.bank || "Settlement bank account"} (${target?.currency || ""}) has been deleted.`,
     });
   };
 
@@ -456,7 +456,7 @@ export default function PayoutAccounts() {
             data-testid="button-open-add-payout-account"
           >
             <Plus className="w-4 h-4" />
-            Add Settlement Account
+            Add Settlement Bank Account
           </Button>
         </div>
 
@@ -563,7 +563,7 @@ export default function PayoutAccounts() {
                 >
                   <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div className="text-sm">
-                    <p className="font-semibold">Settlement account already exists for {currentCurrency}</p>
+                    <p className="font-semibold">Settlement bank account already exists for {currentCurrency}</p>
                     <p className="mt-0.5">
                       A settlement bank account has already been added for this currency. Edit the existing account if you need
                       to change its details.
@@ -922,7 +922,7 @@ export default function PayoutAccounts() {
                   ) : (
                     <>
                       <Plus className="w-4 h-4" />
-                      <span>Add settlement account</span>
+                      <span>Add settlement bank account</span>
                     </>
                   )}
                 </Button>
@@ -1018,7 +1018,7 @@ export default function PayoutAccounts() {
 
             {accounts.length === 0 && (
               <div className="text-center py-12 bg-white rounded-lg">
-                <p className="text-muted-foreground">No settlement accounts added yet</p>
+                <p className="text-muted-foreground">No settlement bank accounts added yet</p>
               </div>
             )}
           </div>
@@ -1049,7 +1049,7 @@ export default function PayoutAccounts() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">Delete Account?</h3>
                   <p className="text-muted-foreground text-sm mb-6">
-                    Are you sure you want to delete this settlement account? This action cannot be undone.
+                    Are you sure you want to delete this settlement bank account? This action cannot be undone.
                   </p>
                   <div className="flex gap-3">
                     <Button variant="outline" className="flex-1" onClick={() => setShowDeleteConfirm(null)}>
