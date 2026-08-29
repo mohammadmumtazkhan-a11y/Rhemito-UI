@@ -482,8 +482,8 @@ export default function RequestPayment() {
     if (currentStep === 1) {
       if (!selectedPayoutAccount || selectedPayoutAccount.verificationStatus !== "verified") {
         toast({
-          title: "Active Payout Account Required",
-          description: "Please add or select a verified destination payout account before proceeding.",
+          title: "Active Settlement Account Required",
+          description: "Please add or select a verified destination settlement account before proceeding.",
           variant: "destructive",
         });
         return;
@@ -886,9 +886,9 @@ export default function RequestPayment() {
                         <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 font-medium" data-testid="alert-payout-account-required">
                           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                           <div>
-                            <p className="font-semibold text-amber-950">Active Destination Payout Account Required</p>
+                            <p className="font-semibold text-amber-950">Active Destination Settlement Account Required</p>
                             <p className="text-[11px] text-amber-900/80 mt-0.5">
-                              You cannot proceed with a money request without an active, verified destination payout account. Please select or add an account above.
+                              You cannot proceed with a money request without an active, verified destination settlement account. Please select or add an account above.
                             </p>
                           </div>
                         </div>
@@ -938,10 +938,10 @@ export default function RequestPayment() {
                           </p>
                           {parsedAmount > 0 && !corridorForSelection && (
                             <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5" data-testid="corridor-unavailable">
-                              This sender currency / payout account combination has no enabled corridor.{" "}
+                              This sender currency / settlement account combination has no enabled corridor.{" "}
                               {(() => {
                                 const disabled = (corridorsQuery.data ?? []).find(c => !c.enabled && c.payInCurrency === senderCurrency && c.payoutCurrency === payoutCurrency);
-                                return disabled?.unavailabilityReason ?? "Try a different currency or payout account.";
+                                return disabled?.unavailabilityReason ?? "Try a different currency or settlement account.";
                               })()}
                             </p>
                           )}
@@ -1439,7 +1439,7 @@ export default function RequestPayment() {
                         )}
 
                         <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-muted-foreground">Destination Payout Account:</span>
+                          <span className="text-muted-foreground">Destination Settlement Account:</span>
                           <span className="font-semibold text-slate-800">
                             {selectedPayoutAccount?.bankName} ({payoutCurrency})
                           </span>
@@ -1561,7 +1561,7 @@ export default function RequestPayment() {
               <div className="flex items-start gap-2.5">
                 <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <p className="text-xs text-amber-900 leading-relaxed font-medium">
-                  As your payout account currency (<strong>{payoutCurrency}</strong>) is different from the requested amount currency (<strong>{senderCurrency}</strong>), the FX conversion will be done on the <strong>FX Spot rates at the time of payout</strong>.
+                  As your settlement account currency (<strong>{payoutCurrency}</strong>) is different from the requested amount currency (<strong>{senderCurrency}</strong>), the FX conversion will be done on the <strong>FX Spot rates at the time of payout</strong>.
                 </p>
               </div>
             </div>
@@ -1582,7 +1582,7 @@ export default function RequestPayment() {
                 <span className="font-semibold text-slate-800">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
               </div>
               <div className="flex justify-between pt-1 border-t border-slate-200/60">
-                <span className="text-muted-foreground">Destination Payout Account:</span>
+                <span className="text-muted-foreground">Destination Settlement Account:</span>
                 <span className="font-semibold text-slate-800">{selectedPayoutAccount?.bankName} ({payoutCurrency})</span>
               </div>
             </div>

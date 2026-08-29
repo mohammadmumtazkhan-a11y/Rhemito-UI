@@ -98,7 +98,7 @@ export function MoneyRequestDetailsDialog({
                 {request.absorbFee ? `after ${request.feeAmount} fee` : `${request.feeAmount} fee charged to sender`}
               </span>
             </DetailRow>
-            <DetailRow label="Payout Account">
+            <DetailRow label="Settlement Account">
               <span>
                 {request.payoutAccount.bankName}
                 <span className="block text-xs font-normal text-muted-foreground">{request.payoutAccount.maskedNumber}</span>

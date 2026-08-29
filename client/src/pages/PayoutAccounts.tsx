@@ -357,10 +357,10 @@ export default function PayoutAccounts() {
           activated: true,
         };
         setAccounts((prev) => [...prev, newAcc]);
-        setSuccessText("Payout bank account added successfully.");
+        setSuccessText("Settlement bank account added successfully.");
         toast({
           title: "Account Added",
-          description: `${selectedBank} (${currentCurrency}) was added to your payout accounts.`,
+          description: `${selectedBank} (${currentCurrency}) was added to your settlement accounts.`,
         });
       }
 
@@ -372,7 +372,7 @@ export default function PayoutAccounts() {
       console.error("Save account error:", error);
       toast({
         title: "Error",
-        description: "Failed to save payout account. Please try again.",
+        description: "Failed to save settlement account. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -418,12 +418,12 @@ export default function PayoutAccounts() {
     const target = accounts.find((a) => a.id === id);
     setAccounts((prev) => prev.filter((a) => a.id !== id));
     setShowDeleteConfirm(null);
-    setSuccessText("Payout bank account deleted successfully.");
+    setSuccessText("Settlement bank account deleted successfully.");
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 4000);
     toast({
       title: "Account Removed",
-      description: `${target?.bank || "Payout account"} (${target?.currency || ""}) has been deleted.`,
+      description: `${target?.bank || "Settlement account"} (${target?.currency || ""}) has been deleted.`,
     });
   };
 
@@ -456,7 +456,7 @@ export default function PayoutAccounts() {
             data-testid="button-open-add-payout-account"
           >
             <Plus className="w-4 h-4" />
-            Add Payout Account
+            Add Settlement Account
           </Button>
         </div>
 
@@ -470,10 +470,10 @@ export default function PayoutAccounts() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold font-display text-foreground">
-                {editingId ? "Edit payout bank account" : "Add payout bank account"}
+                {editingId ? "Edit settlement bank account" : "Add settlement bank account"}
               </DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-                Add a bank account to receive payouts from your wallet. The bank account must be held in your name or
+                Add a bank account to receive settlements from your wallet. The bank account must be held in your name or
                 your registered business name.
               </DialogDescription>
             </DialogHeader>
@@ -563,9 +563,9 @@ export default function PayoutAccounts() {
                 >
                   <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div className="text-sm">
-                    <p className="font-semibold">Payout account already exists for {currentCurrency}</p>
+                    <p className="font-semibold">Settlement account already exists for {currentCurrency}</p>
                     <p className="mt-0.5">
-                      A payout bank account has already been added for this currency. Edit the existing account if you need
+                      A settlement bank account has already been added for this currency. Edit the existing account if you need
                       to change its details.
                     </p>
                   </div>
@@ -922,7 +922,7 @@ export default function PayoutAccounts() {
                   ) : (
                     <>
                       <Plus className="w-4 h-4" />
-                      <span>Add payout account</span>
+                      <span>Add settlement account</span>
                     </>
                   )}
                 </Button>
@@ -1018,7 +1018,7 @@ export default function PayoutAccounts() {
 
             {accounts.length === 0 && (
               <div className="text-center py-12 bg-white rounded-lg">
-                <p className="text-muted-foreground">No payout accounts added yet</p>
+                <p className="text-muted-foreground">No settlement accounts added yet</p>
               </div>
             )}
           </div>
@@ -1049,7 +1049,7 @@ export default function PayoutAccounts() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">Delete Account?</h3>
                   <p className="text-muted-foreground text-sm mb-6">
-                    Are you sure you want to delete this payout account? This action cannot be undone.
+                    Are you sure you want to delete this settlement account? This action cannot be undone.
                   </p>
                   <div className="flex gap-3">
                     <Button variant="outline" className="flex-1" onClick={() => setShowDeleteConfirm(null)}>

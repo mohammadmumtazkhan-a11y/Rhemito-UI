@@ -665,7 +665,7 @@ export default function SendInvoice() {
         testId: "review-fee-treatment",
       },
       {
-        label: "Receiving Payout Account",
+        label: "Receiving Settlement Account",
         value: selectedPayoutAccount
           ? `${selectedPayoutAccount.bankName} (${selectedPayoutAccount.maskedNumber}) • ${selectedPayoutAccount.holderName} • ${selectedPayoutAccount.currency}`
           : "—",
@@ -981,7 +981,7 @@ export default function SendInvoice() {
                   <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl" data-testid="fx-conversion-notice">
                     <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-900 leading-relaxed">
-                      Your payout account is in <strong>{selectedPayoutAccount?.currency}</strong>, but this invoice
+                      Your settlement account is in <strong>{selectedPayoutAccount?.currency}</strong>, but this invoice
                       is in <strong>{formData.currency}</strong>. The payout amount will be converted to{" "}
                       {selectedPayoutAccount?.currency} at live FX spot rates when the payment is completed.
                     </p>
