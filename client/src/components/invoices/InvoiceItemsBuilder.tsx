@@ -201,57 +201,19 @@ export function InvoiceItemsBuilder({
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-              <div className="space-y-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Quantity</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="1"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(index, { quantity: e.target.value })}
-                    className="bg-white"
-                    data-testid={`input-item-qty-${index}`}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Discount (Optional)</Label>
-                  <div className="flex gap-1.5">
-                    <Select
-                      value={item.discountType}
-                      onValueChange={(value) =>
-                        updateItem(index, { discountType: value as BuilderDiscountType })
-                      }
-                    >
-                      <SelectTrigger className="w-[64px] bg-white px-2" data-testid={`select-item-discount-type-${index}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">—</SelectItem>
-                        <SelectItem value="percent">%</SelectItem>
-                        <SelectItem value="fixed">{currencySymbol}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0"
-                      value={item.discountValue}
-                      onChange={(e) => updateItem(index, { discountValue: e.target.value })}
-                      disabled={item.discountType === "none"}
-                      className="bg-white flex-1 disabled:bg-slate-100/60 disabled:text-muted-foreground"
-                      data-testid={`input-item-discount-${index}`}
-                    />
-                  </div>
-                  {item.discountType !== "none" && !isItemDiscountValid(item) && (
-                    <p className="text-[10px] text-destructive" data-testid={`error-item-discount-${index}`}>
-                      {item.discountType === "percent" ? "Enter a percentage between 0 and 100." : "Enter a discount amount."}
-                    </p>
-                  )}
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Quantity</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="1"
+                  value={item.quantity}
+                  onChange={(e) => updateItem(index, { quantity: e.target.value })}
+                  className="bg-white"
+                  data-testid={`input-item-qty-${index}`}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Unit Price ({currency})</Label>
@@ -271,9 +233,45 @@ export function InvoiceItemsBuilder({
                   />
                 </div>
               </div>
-              <div className="text-right pb-2 min-w-24" data-testid={`text-item-amount-${index}`}>
-                <p className="text-xs text-muted-foreground">Amount</p>
-                <p className="text-sm font-semibold text-slate-900">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Discount (Optional)</Label>
+                <div className="flex gap-1.5">
+                  <Select
+                    value={item.discountType}
+                    onValueChange={(value) =>
+                      updateItem(index, { discountType: value as BuilderDiscountType })
+                    }
+                  >
+                    <SelectTrigger className="w-[64px] bg-white px-2" data-testid={`select-item-discount-type-${index}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">—</SelectItem>
+                      <SelectItem value="percent">%</SelectItem>
+                      <SelectItem value="fixed">{currencySymbol}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0"
+                    value={item.discountValue}
+                    onChange={(e) => updateItem(index, { discountValue: e.target.value })}
+                    disabled={item.discountType === "none"}
+                    className="bg-white flex-1 disabled:bg-slate-100/60 disabled:text-muted-foreground"
+                    data-testid={`input-item-discount-${index}`}
+                  />
+                </div>
+                {item.discountType !== "none" && !isItemDiscountValid(item) && (
+                  <p className="text-[10px] text-destructive" data-testid={`error-item-discount-${index}`}>
+                    {item.discountType === "percent" ? "Enter a percentage between 0 and 100." : "Enter a discount amount."}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5 text-right sm:text-right" data-testid={`text-item-amount-${index}`}>
+                <Label className="text-xs text-muted-foreground">Amount</Label>
+                <p className="text-base font-semibold text-slate-900 leading-9">
                   {currencySymbol}
                   {itemLineAmount(item).toFixed(2)}
                 </p>
