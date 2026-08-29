@@ -972,6 +972,27 @@ export default function SendInvoice() {
                   </div>
                 )}
 
+                {/* Currency comes first in generate mode — items are priced in the selected currency */}
+                {isGenerateMode && (
+                  <div className="space-y-2">
+                    <Label htmlFor="currency">Currency</Label>
+                    <Select
+                      value={formData.currency}
+                      onValueChange={(value) => handleInputChange("currency", value)}
+                    >
+                      <SelectTrigger data-testid="select-currency">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GBP">GBP (£)</SelectItem>
+                        <SelectItem value="USD">USD ($)</SelectItem>
+                        <SelectItem value="EUR">EUR (€)</SelectItem>
+                        <SelectItem value="NGN">NGN (₦)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 {isGenerateMode ? (
                   <InvoiceItemsBuilder
                     currency={formData.currency}
@@ -1076,38 +1097,38 @@ export default function SendInvoice() {
                 </div>
                 )}
 
-                <div className={isGenerateMode ? "space-y-2" : "grid grid-cols-2 gap-4"}>
-                  {!isGenerateMode && (
-                  <div className="space-y-2">
-                    <Label htmlFor="invoiceAmount">Invoice Amount *</Label>
-                    <Input
-                      id="invoiceAmount"
-                      type="number"
-                      placeholder="0.00"
-                      value={formData.invoiceAmount}
-                      onChange={(e) => handleInputChange("invoiceAmount", e.target.value)}
-                      data-testid="input-invoice-amount"
-                    />
+                {!isGenerateMode && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="invoiceAmount">Invoice Amount *</Label>
+                      <Input
+                        id="invoiceAmount"
+                        type="number"
+                        placeholder="0.00"
+                        value={formData.invoiceAmount}
+                        onChange={(e) => handleInputChange("invoiceAmount", e.target.value)}
+                        data-testid="input-invoice-amount"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="currency">Currency</Label>
+                      <Select
+                        value={formData.currency}
+                        onValueChange={(value) => handleInputChange("currency", value)}
+                      >
+                        <SelectTrigger data-testid="select-currency">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GBP">GBP (£)</SelectItem>
+                          <SelectItem value="USD">USD ($)</SelectItem>
+                          <SelectItem value="EUR">EUR (€)</SelectItem>
+                          <SelectItem value="NGN">NGN (₦)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  )}
-                  <div className="space-y-2">
-                    <Label htmlFor="currency">Currency</Label>
-                    <Select
-                      value={formData.currency}
-                      onValueChange={(value) => handleInputChange("currency", value)}
-                    >
-                      <SelectTrigger data-testid="select-currency">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="GBP">GBP (£)</SelectItem>
-                        <SelectItem value="USD">USD ($)</SelectItem>
-                        <SelectItem value="EUR">EUR (€)</SelectItem>
-                        <SelectItem value="NGN">NGN (₦)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                )}
 
                 {/* Fee Absorption Checkbox */}
                 <div className="flex items-start space-x-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors">
