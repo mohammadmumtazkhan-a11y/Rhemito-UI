@@ -715,39 +715,37 @@ export default function Dashboard() {
                   </Button>
                 </motion.div>
 
-                {/* Direct entries for the other get-paid services — smaller
-                    than the primary buttons so the hierarchy stays clear. */}
+                {/* Direct entries for the other get-paid services — compact
+                    centered tiles, clearly secondary to the primary buttons. */}
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                     <button
                       type="button"
                       onClick={() => setLocation("/send-invoice")}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left h-[56px]"
+                      className="group w-full h-[64px] flex flex-col items-center justify-center gap-1 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all"
                       data-testid="button-send-invoice"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                        <FileText className="w-4 h-4" />
+                      <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        <FileText className="w-3.5 h-3.5" />
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-slate-800 leading-tight">Send Invoice</p>
-                        <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Bill a client</p>
-                      </div>
+                      <p className="text-[11px] font-semibold text-slate-600 group-hover:text-slate-800 leading-none text-center">
+                        Send Invoice
+                      </p>
                     </button>
                   </motion.div>
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                     <button
                       type="button"
                       onClick={() => setLocation("/group-pay/create")}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-300 transition-all text-left h-[56px]"
+                      className="group w-full h-[64px] flex flex-col items-center justify-center gap-1 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-300 transition-all"
                       data-testid="button-funding-campaigns"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                        <Users className="w-4 h-4" />
+                      <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                        <Users className="w-3.5 h-3.5" />
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-slate-800 leading-tight">Funding Campaigns</p>
-                        <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Group goals</p>
-                      </div>
+                      <p className="text-[11px] font-semibold text-slate-600 group-hover:text-slate-800 leading-none text-center">
+                        Funding Campaigns
+                      </p>
                     </button>
                   </motion.div>
                 </div>
