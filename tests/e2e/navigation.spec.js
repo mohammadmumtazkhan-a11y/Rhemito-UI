@@ -73,14 +73,15 @@ test.describe('Rhemito Navigation', () => {
         await expect(page.getByTestId('panel-senders')).toBeVisible();
     });
 
-    test('Sidebar navigation - Collections Accounts (main item)', async ({ page }) => {
+    test('Sidebar navigation - Settlement bank account (main item)', async ({ page }) => {
         await page.goto('/');
 
-        // Click Collections Accounts link (main item)
-        await page.getByTestId('link-collections-accounts').click();
+        // Click Settlement bank account link (main item)
+        await page.getByTestId('link-settlement-bank-account').click();
 
-        // Verify navigation
+        // Verify navigation and page heading
         await expect(page).toHaveURL(/\/payout-accounts/);
+        await expect(page.getByRole('heading', { name: 'Settlement bank account', exact: true })).toBeVisible();
 
         // Verify "Add Payout Account" opens the popup modal
         await page.getByTestId('button-open-add-payout-account').click();

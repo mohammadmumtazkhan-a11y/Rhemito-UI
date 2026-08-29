@@ -447,8 +447,8 @@ export default function PayoutAccounts() {
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-muted-foreground">Home / Manage Collections Accounts</p>
-            <h1 className="text-2xl font-bold font-display mt-1">Collections</h1>
+            <p className="text-sm text-muted-foreground">Home / Manage Settlement Bank Account</p>
+            <h1 className="text-2xl font-bold font-display mt-1">Settlement bank account</h1>
           </div>
           <Button
             onClick={handleOpenAddModal}
