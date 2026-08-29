@@ -180,6 +180,13 @@ export class MemStorage implements IStorage {
     otps: any[],
     groupPayCampaigns: any[] = [],
     groupPayContributions: any[] = [],
+    invoices: any[] = [],
+    invoiceDocuments: any[] = [],
+    invoiceEvents: any[] = [],
+    clientEmails: any[] = [],
+    moneyRequests: any[] = [],
+    payoutAccounts: any[] = [],
+    sequences: { invoice?: number; moneyRequest?: number } = {},
   ): void {
     // Demo seeds are re-created at boot with current credentials — never let a
     // stale dev snapshot resurrect old demo accounts over them.
@@ -199,6 +206,43 @@ export class MemStorage implements IStorage {
       if (!ct?.id) continue;
       this.groupPayContributionsMap.set(ct.id, ct as GroupPayContribution);
     }
+
+    // Receive-money continuity — restore real (non-demo) invoices and their
+    // satellite records, money requests and payout accounts. Demo rows are
+    // skipped because the seeds are re-created at boot with fresh tokens.
+    const isDemoInvoiceId = (id: string) => id.startsWith("demo_inv_") || id.startsWith("demo_gen_inv_");
+    for (const inv of invoices) {
+      if (!inv?.id || isDemoInvoiceId(String(inv.id))) continue;
+      this.invoicesMap.set(inv.id, inv as Invoice);
+      if (inv.tokenHash) this.invoicesByTokenHash.set(inv.tokenHash, inv.id);
+      if (inv.idempotencyKey) this.invoicesByIdempotency.set(`${inv.senderId}:${inv.idempotencyKey}`, inv.id);
+    }
+    for (const doc of invoiceDocuments) {
+      if (!doc?.id) continue;
+      this.invoiceDocumentsMap.set(doc.id, doc as InvoiceDocument);
+    }
+    for (const ev of invoiceEvents) {
+      if (!ev?.id) continue;
+      this.invoiceEventsMap.set(ev.id, ev as InvoiceEvent);
+    }
+    for (const mail of clientEmails) {
+      if (!mail?.id) continue;
+      this.clientEmailsMap.set(mail.id, mail as ClientEmail);
+    }
+    for (const req of moneyRequests) {
+      if (!req?.id || String(req.id).startsWith("demo_req_")) continue;
+      this.moneyRequestsMap.set(req.id, req as MoneyRequest);
+      if (req.tokenHash) this.moneyRequestsByTokenHash.set(req.tokenHash, req.id);
+      if (req.emailTokenHash) this.moneyRequestsByEmailTokenHash.set(req.emailTokenHash, req.id);
+      if (req.idempotencyKey) this.moneyRequestsByIdempotency.set(`${req.requesterId}:${req.idempotencyKey}`, req.id);
+    }
+    for (const acc of payoutAccounts) {
+      if (!acc?.id || acc.id === "acc_demo_gbp") continue;
+      this.payoutAccountsMap.set(acc.id, acc as PayoutAccountRecord);
+    }
+    // Numbering continues past everything the snapshot ever issued.
+    this.invoiceSequence = Math.max(this.invoiceSequence, sequences.invoice ?? 0);
+    this.moneyRequestSequence = Math.max(this.moneyRequestSequence, sequences.moneyRequest ?? 0);
   }
 
   private persistDevSnapshot(): void {
@@ -210,6 +254,13 @@ export class MemStorage implements IStorage {
         groupPayCampaigns: Array.from(this.groupPayCampaignsMap.values()).map((c) => ({ ...c })) as unknown as Array<Record<string, unknown>>,
         groupPayContributions: Array.from(this.groupPayContributionsMap.values()).map((c) => ({ ...c })) as unknown as Array<Record<string, unknown>>,
         sessions: {},
+        invoices: Array.from(this.invoicesMap.values()).map((i) => ({ ...i })) as unknown as Array<Record<string, unknown>>,
+        invoiceDocuments: Array.from(this.invoiceDocumentsMap.values()).map((d) => ({ ...d })) as unknown as Array<Record<string, unknown>>,
+        invoiceEvents: Array.from(this.invoiceEventsMap.values()).map((e) => ({ ...e })) as unknown as Array<Record<string, unknown>>,
+        clientEmails: Array.from(this.clientEmailsMap.values()).map((m) => ({ ...m })) as unknown as Array<Record<string, unknown>>,
+        moneyRequests: Array.from(this.moneyRequestsMap.values()).map((r) => ({ ...r })) as unknown as Array<Record<string, unknown>>,
+        payoutAccounts: Array.from(this.payoutAccountsMap.values()).map((a) => ({ ...a })) as unknown as Array<Record<string, unknown>>,
+        sequences: { invoice: this.invoiceSequence, moneyRequest: this.moneyRequestSequence },
       }));
     }).catch(() => { /* persistence is best-effort in dev */ });
   }
@@ -907,6 +958,7 @@ export class MemStorage implements IStorage {
     if (invoice.idempotencyKey) {
       this.invoicesByIdempotency.set(`${invoice.senderId}:${invoice.idempotencyKey}`, invoice.id);
     }
+    this.persistDevSnapshot();
     return invoice;
   }
 
@@ -932,6 +984,7 @@ export class MemStorage implements IStorage {
     if (!existing) return undefined;
     const updated = { ...existing, ...patch, id };
     this.invoicesMap.set(id, updated);
+    this.persistDevSnapshot();
     return updated;
   }
 
@@ -987,6 +1040,7 @@ export class MemStorage implements IStorage {
 
   async createInvoiceDocument(doc: InvoiceDocument): Promise<InvoiceDocument> {
     this.invoiceDocumentsMap.set(doc.id, doc);
+    this.persistDevSnapshot();
     return doc;
   }
 
@@ -998,11 +1052,13 @@ export class MemStorage implements IStorage {
     const doc = this.invoiceDocumentsMap.get(id);
     if (doc) {
       this.invoiceDocumentsMap.set(id, { ...doc, status: "associated", expiresAt: null });
+      this.persistDevSnapshot();
     }
   }
 
   async deleteInvoiceDocument(id: string): Promise<void> {
     this.invoiceDocumentsMap.delete(id);
+    this.persistDevSnapshot();
   }
 
   async listExpiredTempDocuments(): Promise<InvoiceDocument[]> {
@@ -1016,6 +1072,7 @@ export class MemStorage implements IStorage {
 
   async addInvoiceEvent(event: InvoiceEvent): Promise<InvoiceEvent> {
     this.invoiceEventsMap.set(event.id, event);
+    this.persistDevSnapshot();
     return event;
   }
 
@@ -1029,6 +1086,7 @@ export class MemStorage implements IStorage {
 
   async addClientEmail(email: ClientEmail): Promise<ClientEmail> {
     this.clientEmailsMap.set(email.id, email);
+    this.persistDevSnapshot();
     return email;
   }
 
@@ -1046,6 +1104,7 @@ export class MemStorage implements IStorage {
 
   async createPayoutAccount(account: PayoutAccountRecord): Promise<PayoutAccountRecord> {
     this.payoutAccountsMap.set(account.id, account);
+    this.persistDevSnapshot();
     return account;
   }
 
@@ -1067,6 +1126,7 @@ export class MemStorage implements IStorage {
     if (!existing) return undefined;
     const updated = { ...existing, ...patch, id };
     this.payoutAccountsMap.set(id, updated);
+    this.persistDevSnapshot();
     return updated;
   }
 
@@ -1081,6 +1141,7 @@ export class MemStorage implements IStorage {
     if (request.idempotencyKey) {
       this.moneyRequestsByIdempotency.set(`${request.requesterId}:${request.idempotencyKey}`, request.id);
     }
+    this.persistDevSnapshot();
     return request;
   }
 
@@ -1117,6 +1178,7 @@ export class MemStorage implements IStorage {
     if (patch.emailTokenHash) {
       this.moneyRequestsByEmailTokenHash.set(patch.emailTokenHash, id);
     }
+    this.persistDevSnapshot();
     return updated;
   }
 
@@ -1131,6 +1193,7 @@ export class MemStorage implements IStorage {
     if (!existing || !expectedStatuses.includes(existing.status)) return undefined;
     const updated = { ...existing, ...patch };
     this.moneyRequestsMap.set(id, updated);
+    this.persistDevSnapshot();
     return updated;
   }
 

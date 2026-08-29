@@ -81,8 +81,9 @@ async function main() {
   );
 
   // Development only: restore registered users / pending OTPs from the dev
-  // snapshot so restarts do not silently log everyone out. Production uses
-  // real persistence infrastructure instead.
+  // snapshot so restarts do not silently log everyone out. Invoices, money
+  // requests and payout accounts ride along so mid-test journeys survive
+  // restarts too. Production uses real persistence infrastructure instead.
   if (process.env.NODE_ENV !== "production") {
     const { loadSnapshot } = await import("./devPersistence");
     const snapshot = loadSnapshot();
@@ -92,8 +93,19 @@ async function main() {
         snapshot.otpCodes as never[],
         snapshot.groupPayCampaigns as never[],
         snapshot.groupPayContributions as never[],
+        snapshot.invoices as never[],
+        snapshot.invoiceDocuments as never[],
+        snapshot.invoiceEvents as never[],
+        snapshot.clientEmails as never[],
+        snapshot.moneyRequests as never[],
+        snapshot.payoutAccounts as never[],
+        snapshot.sequences,
       );
-      log(`[devPersistence] restored ${snapshot.authUsers.length} user(s), ${snapshot.groupPayCampaigns.length} campaign(s)`);
+      log(
+        `[devPersistence] restored ${snapshot.authUsers.length} user(s), ` +
+        `${snapshot.groupPayCampaigns.length} campaign(s), ${snapshot.invoices.length} invoice(s), ` +
+        `${snapshot.moneyRequests.length} money request(s)`,
+      );
     }
   }
 
