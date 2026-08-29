@@ -3,8 +3,7 @@ import { useLocation, useSearch } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Receipt, ArrowRight, Gift, Copy, Sparkles, Search, ArrowUpRight, ArrowDownLeft, ChevronLeft, ChevronRight, Mail, XCircle, FilePlus2 } from "lucide-react";
-import { RequestPaymentModal } from "@/components/RequestPaymentModal";
+import { Send, Receipt, ArrowRight, Gift, Copy, Sparkles, Search, ArrowUpRight, ArrowDownLeft, ChevronLeft, ChevronRight, Mail, XCircle, FilePlus2, FileText, Users } from "lucide-react";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
 import { CancelMoneyRequestDialog } from "@/components/transactions/CancelMoneyRequestDialog";
 import { MoneyRequestDetailsDialog } from "@/components/transactions/MoneyRequestDetailsDialog";
@@ -419,7 +418,6 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const searchParams = useSearch();
   const queryClient = useQueryClient();
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   // Bonus State - Hardcoded for Prototype
   const [bonusBalance] = useState(5);
   const [cancelTarget, setCancelTarget] = useState<TransactionDetails | null>(null);
@@ -518,21 +516,6 @@ export default function Dashboard() {
     return () => window.clearTimeout(timer);
   }, [searchParams, anyQueryLoading]);
 
-  const handlePaymentOptionSelect = (option: "request" | "invoice" | "funding") => {
-    setShowPaymentModal(false);
-    switch (option) {
-      case "request":
-        setLocation("/request-payment");
-        break;
-      case "invoice":
-        setLocation("/send-invoice");
-        break;
-      case "funding":
-        setLocation("/group-pay/create");
-        break;
-    }
-  };
-
   const handleCancelClick = (tx: SendMoneyTx): void => {
     setCancelTarget({
       id: tx.id,
@@ -626,11 +609,6 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <RequestPaymentModal
-        open={showPaymentModal}
-        onOpenChange={setShowPaymentModal}
-        onSelect={handlePaymentOptionSelect}
-      />
       <CancelTransactionModal
         open={cancelTarget !== null}
         transaction={cancelTarget}
@@ -721,7 +699,7 @@ export default function Dashboard() {
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                   <Button
                     className="group w-full justify-start gap-4 bg-[#1FC0A6] hover:bg-[#19a58e] text-white h-[72px] text-[15px] font-semibold rounded-2xl shadow-md hover:shadow-xl hover:shadow-teal-500/20 transition-all duration-300 border-none"
-                    onClick={() => setShowPaymentModal(true)}
+                    onClick={() => setLocation("/request-payment")}
                     data-testid="button-request-payment"
                   >
                     <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
@@ -729,13 +707,50 @@ export default function Dashboard() {
                     </div>
                     <div className="flex-1 flex flex-col items-start gap-0.5">
                       <span className="leading-none text-white">Receive Money</span>
-                      <span className="text-xs font-normal text-teal-50">Get paid fast</span>
+                      <span className="text-xs font-normal text-teal-50">Request a payment link</span>
                     </div>
                     <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
                       <ArrowRight className="w-4 h-4 text-white" />
                     </div>
                   </Button>
                 </motion.div>
+
+                {/* Direct entries for the other get-paid services — smaller
+                    than the primary buttons so the hierarchy stays clear. */}
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <button
+                      type="button"
+                      onClick={() => setLocation("/send-invoice")}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left h-[56px]"
+                      data-testid="button-send-invoice"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-slate-800 leading-tight">Send Invoice</p>
+                        <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Bill a client</p>
+                      </div>
+                    </button>
+                  </motion.div>
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <button
+                      type="button"
+                      onClick={() => setLocation("/group-pay/create")}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-300 transition-all text-left h-[56px]"
+                      data-testid="button-funding-campaigns"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-slate-800 leading-tight">Funding Campaigns</p>
+                        <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Group goals</p>
+                      </div>
+                    </button>
+                  </motion.div>
+                </div>
               </CardContent>
             </Card>
           </motion.div>
