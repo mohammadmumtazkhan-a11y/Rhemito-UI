@@ -17,10 +17,11 @@ export function Header({ userName, onMenuClick }: HeaderProps) {
     >
       <button 
         onClick={onMenuClick}
-        className="lg:hidden p-2 rounded-lg hover:bg-muted transition-colors -ml-1"
+        className="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 active:scale-95 transition-all -ml-1 text-slate-700"
         data-testid="button-mobile-menu"
+        aria-label="Open navigation menu"
       >
-        <Menu className="w-5 h-5 text-muted-foreground" />
+        <Menu className="w-5 h-5" />
       </button>
 
       <div className="flex items-center gap-2 md:gap-4 ml-auto">

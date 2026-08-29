@@ -467,7 +467,7 @@ export default function PayoutAccounts() {
             if (!open) handleCloseModal();
           }}
         >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[calc(100vw-1.5rem)] sm:w-full p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold font-display text-foreground">
                 {editingId ? "Edit settlement bank account" : "Add settlement bank account"}

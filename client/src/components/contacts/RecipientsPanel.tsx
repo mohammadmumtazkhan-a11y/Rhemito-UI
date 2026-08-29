@@ -569,7 +569,7 @@ export function RecipientsPanel() {
               className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-lg"
             >
               <Card>
-                <CardContent className="p-6 max-h-[85vh] overflow-y-auto">
+                <CardContent className="p-4 sm:p-6 max-h-[85vh] overflow-y-auto">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold font-display">Add New Recipient</h2>
                     <button
@@ -586,7 +586,7 @@ export function RecipientsPanel() {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label>Recipient Type *</Label>
-                      <div className="flex gap-3">
+                      <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
                         <button
                           type="button"
                           onClick={() =>
@@ -647,7 +647,7 @@ export function RecipientsPanel() {
                     </div>
 
                     {newRecipient.recipientType === "individual" ? (
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-2">
                           <Label>First Name *</Label>
                           <Input

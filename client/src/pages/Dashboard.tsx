@@ -717,12 +717,12 @@ export default function Dashboard() {
           <motion.div
             variants={itemVariants}
             whileHover={{ scale: 1.01, y: -1 }}
-            className="flex items-center gap-2.5 bg-gradient-to-r from-purple-50 via-pink-50/70 to-purple-50 text-purple-700 px-4 py-2 rounded-full border border-purple-200/70 shadow-xs backdrop-blur-sm self-start md:self-auto"
+            className="flex items-center gap-2.5 bg-gradient-to-r from-purple-50 via-pink-50/70 to-purple-50 text-purple-700 px-3.5 py-2.5 sm:px-4 sm:py-2 rounded-2xl sm:rounded-full border border-purple-200/70 shadow-xs backdrop-blur-sm self-start md:self-auto max-w-full"
           >
-            <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-xs">
+            <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-xs shrink-0">
               <Gift className="w-3.5 h-3.5 text-pink-500" />
             </div>
-            <span className="text-xs md:text-sm font-medium">
+            <span className="text-xs md:text-sm font-medium leading-snug">
               You have earned <span className="font-bold text-purple-900">£{bonusBalance.toFixed(2)} Referral Bonus Credit</span>. Create a Transaction to use it.
             </span>
           </motion.div>
@@ -746,18 +746,18 @@ export default function Dashboard() {
               <CardContent className="space-y-3 px-5 pb-5 pt-0 relative z-10">
                 <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.98 }}>
                   <Button
-                    className="group w-full justify-start gap-3.5 bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-[70px] text-[15px] font-semibold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/15 transition-all duration-200 border-none"
+                    className="group w-full justify-start gap-3 sm:gap-3.5 bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white min-h-[64px] sm:h-[70px] px-3.5 sm:px-4 py-2 text-sm sm:text-[15px] font-semibold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/15 transition-all duration-200 border-none"
                     onClick={() => setLocation("/send-money")}
                     data-testid="button-send-money"
                   >
-                    <div className="w-11 h-11 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/20 shrink-0">
+                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/20 shrink-0">
                       <Send className="w-5 h-5 text-white" />
                     </div>
-                    <div className="flex-1 flex flex-col items-start gap-0.5">
-                      <span className="leading-none text-white font-bold">Send Money</span>
-                      <span className="text-xs font-normal text-blue-100">Transfer globally with live rates</span>
+                    <div className="flex-1 flex flex-col items-start gap-0.5 min-w-0">
+                      <span className="leading-none text-white font-bold truncate max-w-full">Send Money</span>
+                      <span className="text-[11px] sm:text-xs font-normal text-blue-100 truncate max-w-full">Transfer globally with live rates</span>
                     </div>
-                    <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
+                    <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center group-hover:translate-x-0.5 transition-transform shrink-0">
                       <ArrowRight className="w-4 h-4 text-white" />
                     </div>
                   </Button>
@@ -765,18 +765,18 @@ export default function Dashboard() {
 
                 <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.98 }}>
                   <Button
-                    className="group w-full justify-start gap-3.5 bg-gradient-to-r from-teal to-emerald-600 hover:from-teal/90 hover:to-emerald-700 text-white h-[70px] text-[15px] font-semibold rounded-xl shadow-sm hover:shadow-md hover:shadow-teal/15 transition-all duration-200 border-none"
+                    className="group w-full justify-start gap-3 sm:gap-3.5 bg-gradient-to-r from-teal to-emerald-600 hover:from-teal/90 hover:to-emerald-700 text-white min-h-[64px] sm:h-[70px] px-3.5 sm:px-4 py-2 text-sm sm:text-[15px] font-semibold rounded-xl shadow-sm hover:shadow-md hover:shadow-teal/15 transition-all duration-200 border-none"
                     onClick={() => setLocation("/request-payment")}
                     data-testid="button-request-payment"
                   >
-                    <div className="w-11 h-11 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/20 shrink-0">
+                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/20 shrink-0">
                       <Receipt className="w-5 h-5 text-white" />
                     </div>
-                    <div className="flex-1 flex flex-col items-start gap-0.5">
-                      <span className="leading-none text-white font-bold">Receive Money</span>
-                      <span className="text-xs font-normal text-teal-100">Request instant payment link</span>
+                    <div className="flex-1 flex flex-col items-start gap-0.5 min-w-0">
+                      <span className="leading-none text-white font-bold truncate max-w-full">Receive Money</span>
+                      <span className="text-[11px] sm:text-xs font-normal text-teal-100 truncate max-w-full">Request instant payment link</span>
                     </div>
-                    <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
+                    <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center group-hover:translate-x-0.5 transition-transform shrink-0">
                       <ArrowRight className="w-4 h-4 text-white" />
                     </div>
                   </Button>
@@ -863,8 +863,8 @@ export default function Dashboard() {
                   <span className="font-semibold text-indigo-700">Invite friends</span> with your link and get <span className="font-bold text-emerald-600">£10 bonus credit</span> when they make their first transfer.
                 </p>
 
-                <div className="flex items-center gap-2 bg-white border border-indigo-200/70 rounded-xl p-2.5 hover:border-indigo-400 transition-colors shadow-2xs">
-                  <div className="flex-1 truncate text-xs font-mono font-semibold text-indigo-700 select-all pl-1">
+                <div className="flex items-center gap-2 bg-white border border-indigo-200/70 rounded-xl p-2 sm:p-2.5 hover:border-indigo-400 transition-colors shadow-2xs min-w-0">
+                  <div className="flex-1 min-w-0 truncate text-[11px] sm:text-xs font-mono font-semibold text-indigo-700 select-all pl-1">
                     rhemito.com/ref/OLAYINKA2025
                   </div>
                   <Button 
@@ -1018,7 +1018,7 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 px-5 md:px-6 py-3 border-b border-slate-100 bg-slate-50/40">
+                <div className="flex items-center gap-2 px-4 sm:px-6 py-3 border-b border-slate-100 bg-slate-50/40 overflow-x-auto no-scrollbar scroll-smooth">
                   {TYPE_FILTERS.map((filter) => (
                     <button
                       key={filter.value}
@@ -1029,7 +1029,7 @@ export default function Dashboard() {
                       }}
                       data-testid={`chip-type-${filter.value.replace(/_/g, "-")}`}
                       className={cn(
-                        "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all active:scale-95",
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all active:scale-95 shrink-0 whitespace-nowrap",
                         typeFilter === filter.value
                           ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20"
                           : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600 shadow-2xs"

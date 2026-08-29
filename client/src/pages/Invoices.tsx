@@ -224,23 +224,23 @@ export default function Invoices() {
         </div>
 
         {/* Summary cards per status */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
           {STATUS_FILTERS.filter((f) => f.value !== "all").map((filter) => (
             <button
               key={filter.value}
               type="button"
               onClick={() => setStatusFilter(statusFilter === filter.value ? "all" : filter.value)}
               className={cn(
-                "text-left p-4 rounded-xl border bg-white transition-all hover:shadow-md",
+                "text-left p-3 sm:p-4 rounded-xl border bg-white transition-all hover:shadow-md active:scale-[0.98]",
                 statusFilter === filter.value ? "border-primary/40 ring-2 ring-primary/20" : "border-border",
               )}
               data-testid={`summary-card-${filter.value}`}
             >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className={cn("w-2 h-2 rounded-full", filter.dot)} />
-                <span className="text-xs font-medium text-muted-foreground">{filter.label}</span>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={cn("w-2 h-2 rounded-full shrink-0", filter.dot)} />
+                <span className="text-xs font-medium text-muted-foreground truncate">{filter.label}</span>
               </div>
-              <p className="text-2xl font-bold font-display text-foreground">
+              <p className="text-xl sm:text-2xl font-bold font-display text-foreground">
                 {isLoading ? "—" : statusCounts[filter.value]}
               </p>
             </button>
@@ -263,7 +263,7 @@ export default function Invoices() {
                     data-testid="input-search-invoices"
                   />
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                   {SOURCE_FILTERS.map((filter) => (
                     <button
                       key={filter.value}
