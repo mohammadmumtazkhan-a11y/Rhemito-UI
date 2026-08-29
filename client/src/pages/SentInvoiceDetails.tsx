@@ -217,7 +217,7 @@ export default function SentInvoiceDetails() {
                 <Row label="Client Pays" value={`${sym}${invoice.fees.clientPays.toFixed(2)} ${invoice.currency}`} />
                 <Row label="You Receive" value={`${sym}${invoice.fees.senderReceives.toFixed(2)} ${invoice.currency}`} />
                 <Row
-                  label="Receiving Payout Account"
+                  label="Receiving Settlement Bank Account"
                   value={`${invoice.payoutAccountBank ?? "—"} (****${(invoice.payoutAccountNumber ?? "").slice(-4)}) • ${invoice.payoutAccountName ?? "—"} • ${invoice.payoutAccountCurrency ?? ""}`}
                 />
               </div>

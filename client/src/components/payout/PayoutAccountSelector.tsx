@@ -178,7 +178,7 @@ export function PayoutAccountSelector({
       }
 
       toast({
-        title: "Payout Account Added",
+        title: "Settlement Bank Account Added",
         description: `${newAccountData.bank} (${newAccountData.currency}) in the name of ${requesterName} was added, verified and selected.`,
       });
 
@@ -222,7 +222,7 @@ export function PayoutAccountSelector({
         data-testid="payout-accounts-loading"
       >
         <Loader2 className="w-4 h-4 animate-spin" />
-        Checking your payout accounts…
+        Checking your settlement bank accounts…
       </div>
     );
   }
@@ -242,7 +242,7 @@ export function PayoutAccountSelector({
           <div className="space-y-1">
             <h4 className="font-bold text-sm text-amber-950">Sign in required</h4>
             <p className="text-xs text-amber-800 leading-relaxed">
-              You must be signed in to add or select a payout bank account. Sign in or register to continue with your{" "}
+              You must be signed in to add or select a settlement bank account. Sign in or register to continue with your{" "}
               {context === "invoice" ? "invoice" : context === "campaign" || context === "group_pay" ? "funding campaign" : "money request"}.
             </p>
           </div>
@@ -270,14 +270,14 @@ export function PayoutAccountSelector({
             </div>
             <div className="space-y-1">
               <h4 className="font-bold text-sm text-amber-950 flex items-center gap-2">
-                <span>Payout Account Required</span>
+                <span>Settlement Bank Account Required</span>
                 <Badge variant="outline" className="text-[10px] border-amber-300 bg-amber-100/60 text-amber-800 font-semibold">
                   Mandatory
                 </Badge>
               </h4>
               <p className="text-xs text-amber-800 leading-relaxed">
                 You must first add a valid bank account in your name (<strong>{requesterName}</strong>) to receive
-                payouts from your {context === "invoice" ? "invoices" : context === "campaign" || context === "group_pay" ? "funding campaigns" : "money requests"}. The account holder name must match your registered name.
+                settlements from your {context === "invoice" ? "invoices" : context === "campaign" || context === "group_pay" ? "funding campaigns" : "money requests"}. The account holder name must match your registered name.
               </p>
             </div>
           </div>
@@ -295,7 +295,7 @@ export function PayoutAccountSelector({
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3" data-testid="payout-account-card">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Receiving Payout Account</span>
+              <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Receiving Settlement Bank Account</span>
               {selectedAccount?.isDefault && (
                 <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary hover:bg-primary/10">
                   Default
@@ -380,10 +380,10 @@ export function PayoutAccountSelector({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Building2 className="w-5 h-5 text-primary" />
-              <span>Add Payout Bank Account</span>
+              <span>Add Settlement Bank Account</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Add a bank account to receive payouts directly from your {context === "invoice" ? "invoices" : context === "campaign" || context === "group_pay" ? "funding campaigns" : "money requests"}.
+              Add a bank account to receive settlements directly from your {context === "invoice" ? "invoices" : context === "campaign" || context === "group_pay" ? "funding campaigns" : "money requests"}.
             </DialogDescription>
           </DialogHeader>
 
@@ -468,7 +468,7 @@ export function PayoutAccountSelector({
               <div className="flex items-start gap-1.5 text-[11px] text-amber-900 bg-amber-50 p-2.5 rounded-lg border border-amber-200/80">
                 <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
                 <span>
-                  The bank account name must strictly match your verified profile name (<strong>{requesterName}</strong>). Payouts cannot be made to third-party bank accounts.
+                  The bank account name must strictly match your verified profile name (<strong>{requesterName}</strong>). Settlements cannot be made to third-party bank accounts.
                 </span>
               </div>
             </div>
