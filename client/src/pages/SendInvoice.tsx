@@ -1231,36 +1231,36 @@ export default function SendInvoice() {
 
                 <div className="space-y-2">
                   <Label>Recipient Type *</Label>
-                  <div className="flex gap-4">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                     <button
                       type="button"
                       onClick={() => handleInputChange("recipientType", "individual")}
-                      className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${formData.recipientType === "individual"
+                      className={`flex-1 flex items-center justify-center sm:justify-start gap-3 p-3.5 sm:p-4 rounded-xl border-2 transition-all ${formData.recipientType === "individual"
                           ? "border-primary bg-primary/5"
                           : "border-border hover:border-muted-foreground/30"
                         }`}
                       data-testid="button-recipient-type-individual"
                     >
                       <User className={`w-5 h-5 ${formData.recipientType === "individual" ? "text-primary" : "text-muted-foreground"}`} />
-                      <span className={`font-medium ${formData.recipientType === "individual" ? "text-primary" : ""}`}>Individual</span>
+                      <span className={`font-medium ${formData.recipientType === "individual" ? "text-primary font-semibold" : ""}`}>Individual</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleInputChange("recipientType", "business")}
-                      className={`flex-1 flex items-center gap-3 p-4 rounded-lg border-2 transition-colors ${formData.recipientType === "business"
+                      className={`flex-1 flex items-center justify-center sm:justify-start gap-3 p-3.5 sm:p-4 rounded-xl border-2 transition-all ${formData.recipientType === "business"
                           ? "border-primary bg-primary/5"
                           : "border-border hover:border-muted-foreground/30"
                         }`}
                       data-testid="button-recipient-type-business"
                     >
                       <Building2 className={`w-5 h-5 ${formData.recipientType === "business" ? "text-primary" : "text-muted-foreground"}`} />
-                      <span className={`font-medium ${formData.recipientType === "business" ? "text-primary" : ""}`}>Business</span>
+                      <span className={`font-medium ${formData.recipientType === "business" ? "text-primary font-semibold" : ""}`}>Business</span>
                     </button>
                   </div>
                 </div>
 
                 {formData.recipientType === "individual" ? (
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor="recipientFirstName">First Name *</Label>
                       <Input
@@ -1324,7 +1324,7 @@ export default function SendInvoice() {
                       value={formData.countryCode}
                       onValueChange={(value) => handleInputChange("countryCode", value)}
                     >
-                      <SelectTrigger className="w-36" data-testid="select-country-code">
+                      <SelectTrigger className="w-28 sm:w-36 shrink-0" data-testid="select-country-code">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="max-h-72">

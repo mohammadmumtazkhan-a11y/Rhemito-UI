@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { countries } from "@/data/countries";
 import { useContacts } from "@/contexts/ContactsContext";
 import { toKnownRecipient } from "@/data/contacts";
@@ -108,6 +109,7 @@ function formatDate(isoDate: string): string {
 export function RecipientsPanel() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const { recipients: contactsRecipients, upsertRecipient, deleteContactRole } = useContacts();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -298,180 +300,302 @@ export function RecipientsPanel() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <Table data-testid="table-recipients">
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <SortableHeader field="name" label="Full Name" testId="button-sort-name" />
-                    <SortableHeader field="country" label="Country" testId="button-sort-country" />
-                    <SortableHeader
-                      field="serviceType"
-                      label="Service Type"
-                      className="hidden sm:table-cell"
-                      testId="button-sort-service-type"
-                    />
-                    <TableHead className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">
-                      Unique Code
-                    </TableHead>
-                    <TableHead className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">
-                      Account Number
-                    </TableHead>
-                    <TableHead className="text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Actions
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pagination.rows.map((recipient) => {
-                    const name = displayName(recipient);
-                    const style = serviceTypeStyle(recipient.serviceType);
-                    const countryMeta = countries.find((c) => c.name === recipient.country);
+            <div className="overflow-x-auto" data-testid="table-recipients">
+              {isMobile ? (
+                <div className="p-2 space-y-3">
+                  {pagination.rows.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground" data-testid="empty-recipients">
+                      <Users className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" aria-hidden="true" />
+                      <p className="text-muted-foreground">No recipients found</p>
+                      <p className="text-xs text-muted-foreground/70 mt-1">
+                        Try a different name or country, or add a new recipient.
+                      </p>
+                    </div>
+                  ) : (
+                    pagination.rows.map((recipient) => {
+                      const name = displayName(recipient);
+                      const style = serviceTypeStyle(recipient.serviceType);
+                      const countryMeta = countries.find((c) => c.name === recipient.country);
 
-                    return (
-                      <TableRow
-                        key={recipient.id}
-                        className="hover:bg-blue-50/50 transition-colors"
-                        data-testid={`row-recipient-${recipient.id}`}
-                      >
-                        <TableCell className="py-4 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                              {recipient.recipientType === "business" ? (
-                                <Building2 className="w-4 h-4 text-primary" aria-hidden="true" />
-                              ) : (
-                                <span className="text-xs font-medium text-primary">
-                                  {initials(recipient)}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-medium truncate">{name}</span>
-                                {recipient.isSender && (
-                                  <span
-                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
-                                    data-testid={`badge-dual-role-${recipient.id}`}
-                                  >
-                                    Sender &amp; Recipient
+                      return (
+                        <div
+                          key={recipient.id}
+                          className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3"
+                          data-testid={`row-recipient-${recipient.id}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                {recipient.recipientType === "business" ? (
+                                  <Building2 className="w-4 h-4 text-primary" aria-hidden="true" />
+                                ) : (
+                                  <span className="text-xs font-bold text-primary">
+                                    {initials(recipient)}
                                   </span>
                                 )}
                               </div>
-                              {recipient.recipientType === "business" && (
-                                <span className="text-xs text-muted-foreground">Business</span>
-                              )}
-                              {recipient.bankName && (
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {recipient.bankName}
-                                </span>
-                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-slate-900 text-sm truncate">{name}</span>
+                                  {recipient.isSender && (
+                                    <span
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                      data-testid={`badge-dual-role-${recipient.id}`}
+                                    >
+                                      Sender &amp; Recipient
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+                                  <span className="inline-flex items-center gap-1 text-slate-600">
+                                    <span aria-hidden="true">{countryMeta?.flag ?? "🌍"}</span>
+                                    {recipient.country}
+                                  </span>
+                                  <span className="text-slate-300">•</span>
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${style.pillClass}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${style.dotClass}`} />
+                                    {recipient.serviceType}
+                                  </span>
+                                </div>
+                                {(recipient.bankName || recipient.accountNumber) && (
+                                  <div className="mt-1 text-xs text-slate-400 font-mono truncate">
+                                    {recipient.bankName ? `${recipient.bankName} • ` : ""}
+                                    {recipient.accountNumber}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell className="py-4 px-4">
-                          <span className="inline-flex items-center gap-2 text-muted-foreground whitespace-nowrap">
-                            <span aria-hidden="true">{countryMeta?.flag ?? "🌍"}</span>
-                            {recipient.country}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-4 px-4 hidden sm:table-cell">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${style.pillClass}`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${style.dotClass}`}
-                              aria-hidden="true"
-                            />
-                            {recipient.serviceType}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-4 px-4 hidden lg:table-cell">
-                          <span className="font-mono text-sm text-muted-foreground">
-                            {recipient.uniqueCode}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-4 px-4 hidden md:table-cell">
-                          <span className="font-mono text-sm">{recipient.accountNumber}</span>
-                        </TableCell>
-                        <TableCell className="py-4 px-4">
-                          <div className="flex items-center justify-end gap-2">
+
+                          <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 justify-end flex-wrap">
+                            <Button
+                              size="sm"
+                              onClick={() => setLocation("/send-money")}
+                              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 px-3 text-xs font-medium rounded-lg shadow-sm active:scale-95 transition-all"
+                              data-testid={`button-send-${recipient.id}`}
+                              aria-label={`Send money to ${name}`}
+                            >
+                              <Send className="w-3.5 h-3.5 mr-1" />
+                              Send Money
+                            </Button>
+
                             {recipient.isSender && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setLocation(`/senders/${encodeURIComponent(recipient.email || "")}`)}
+                                className="h-8 px-2.5 text-xs text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 active:scale-95"
+                                data-testid={`button-view-sender-dual-${recipient.id}`}
+                                aria-label={`View Sender profile for ${name}`}
+                              >
+                                <User className="w-3.5 h-3.5 mr-1" />
+                                Sender
+                              </Button>
+                            )}
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setViewingRecipient(recipient)}
+                              className="h-8 px-2.5 text-xs active:scale-95"
+                              data-testid={`button-view-${recipient.id}`}
+                              aria-label={`View ${name}`}
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              View
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setDeletingRecipient(recipient)}
+                              className="h-8 px-2.5 text-xs text-red-600 hover:bg-red-50 border-red-200 active:scale-95"
+                              data-testid={`button-delete-${recipient.id}`}
+                              aria-label={`Delete ${name}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <SortableHeader field="name" label="Full Name" testId="button-sort-name" />
+                      <SortableHeader field="country" label="Country" testId="button-sort-country" />
+                      <SortableHeader
+                        field="serviceType"
+                        label="Service Type"
+                        className="hidden sm:table-cell"
+                        testId="button-sort-service-type"
+                      />
+                      <TableHead className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">
+                        Unique Code
+                      </TableHead>
+                      <TableHead className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">
+                        Account Number
+                      </TableHead>
+                      <TableHead className="text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Actions
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagination.rows.map((recipient) => {
+                      const name = displayName(recipient);
+                      const style = serviceTypeStyle(recipient.serviceType);
+                      const countryMeta = countries.find((c) => c.name === recipient.country);
+
+                      return (
+                        <TableRow
+                          key={recipient.id}
+                          className="hover:bg-blue-50/50 transition-colors"
+                          data-testid={`row-recipient-${recipient.id}`}
+                        >
+                          <TableCell className="py-4 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                {recipient.recipientType === "business" ? (
+                                  <Building2 className="w-4 h-4 text-primary" aria-hidden="true" />
+                                ) : (
+                                  <span className="text-xs font-medium text-primary">
+                                    {initials(recipient)}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-medium truncate">{name}</span>
+                                  {recipient.isSender && (
+                                    <span
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                      data-testid={`badge-dual-role-${recipient.id}`}
+                                    >
+                                      Sender &amp; Recipient
+                                    </span>
+                                  )}
+                                </div>
+                                {recipient.recipientType === "business" && (
+                                  <span className="text-xs text-muted-foreground">Business</span>
+                                )}
+                                {recipient.bankName && (
+                                  <span className="text-xs text-muted-foreground truncate">
+                                    {recipient.bankName}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4 px-4">
+                            <span className="inline-flex items-center gap-2 text-muted-foreground whitespace-nowrap">
+                              <span aria-hidden="true">{countryMeta?.flag ?? "🌍"}</span>
+                              {recipient.country}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-4 px-4 hidden sm:table-cell">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${style.pillClass}`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${style.dotClass}`}
+                                aria-hidden="true"
+                              />
+                              {recipient.serviceType}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-4 px-4 hidden lg:table-cell">
+                            <span className="font-mono text-sm text-muted-foreground">
+                              {recipient.uniqueCode}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-4 px-4 hidden md:table-cell">
+                            <span className="font-mono text-sm">{recipient.accountNumber}</span>
+                          </TableCell>
+                          <TableCell className="py-4 px-4">
+                            <div className="flex items-center justify-end gap-2">
+                              {recipient.isSender && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={() => setLocation(`/senders/${encodeURIComponent(recipient.email || "")}`)}
+                                      className="w-8 h-8 rounded-lg bg-indigo-50 hover:bg-indigo-100 flex items-center justify-center transition-colors text-indigo-600"
+                                      aria-label={`View Sender profile for ${name}`}
+                                      data-testid={`button-view-sender-dual-${recipient.id}`}
+                                    >
+                                      <User className="w-4 h-4" aria-hidden="true" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Sender Profile</TooltipContent>
+                                </Tooltip>
+                              )}
+
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <button
-                                    onClick={() => setLocation(`/senders/${encodeURIComponent(recipient.email || "")}`)}
-                                    className="w-8 h-8 rounded-lg bg-indigo-50 hover:bg-indigo-100 flex items-center justify-center transition-colors text-indigo-600"
-                                    aria-label={`View Sender profile for ${name}`}
-                                    data-testid={`button-view-sender-dual-${recipient.id}`}
+                                    onClick={() => setLocation("/send-money")}
+                                    className="w-8 h-8 rounded-lg bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
+                                    aria-label={`Send money to ${name}`}
+                                    data-testid={`button-send-${recipient.id}`}
                                   >
-                                    <User className="w-4 h-4" aria-hidden="true" />
+                                    <Send className="w-4 h-4 text-primary" aria-hidden="true" />
                                   </button>
                                 </TooltipTrigger>
-                                <TooltipContent>Sender Profile</TooltipContent>
+                                <TooltipContent>Send Money</TooltipContent>
                               </Tooltip>
-                            )}
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() => setLocation("/send-money")}
-                                  className="w-8 h-8 rounded-lg bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
-                                  aria-label={`Send money to ${name}`}
-                                  data-testid={`button-send-${recipient.id}`}
-                                >
-                                  <Send className="w-4 h-4 text-primary" aria-hidden="true" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>Send Money</TooltipContent>
-                            </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => setViewingRecipient(recipient)}
+                                    className="w-8 h-8 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors"
+                                    aria-label={`View ${name}`}
+                                    data-testid={`button-view-${recipient.id}`}
+                                  >
+                                    <Eye className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>View Recipient</TooltipContent>
+                              </Tooltip>
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() => setViewingRecipient(recipient)}
-                                  className="w-8 h-8 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors"
-                                  aria-label={`View ${name}`}
-                                  data-testid={`button-view-${recipient.id}`}
-                                >
-                                  <Eye className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>View Recipient</TooltipContent>
-                            </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => setDeletingRecipient(recipient)}
+                                    className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors"
+                                    aria-label={`Delete ${name}`}
+                                    data-testid={`button-delete-${recipient.id}`}
+                                  >
+                                    <Trash2 className="w-4 h-4 text-red-500" aria-hidden="true" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Delete Recipient</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() => setDeletingRecipient(recipient)}
-                                  className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors"
-                                  aria-label={`Delete ${name}`}
-                                  data-testid={`button-delete-${recipient.id}`}
-                                >
-                                  <Trash2 className="w-4 h-4 text-red-500" aria-hidden="true" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>Delete Recipient</TooltipContent>
-                            </Tooltip>
+                    {pagination.rows.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-12" data-testid="empty-recipients">
+                          <div className="text-center">
+                            <Users className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" aria-hidden="true" />
+                            <p className="text-muted-foreground">No recipients found</p>
+                            <p className="text-xs text-muted-foreground/70 mt-1">
+                              Try a different name or country, or add a new recipient.
+                            </p>
                           </div>
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
-
-                  {pagination.rows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-12" data-testid="empty-recipients">
-                        <div className="text-center">
-                          <Users className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" aria-hidden="true" />
-                          <p className="text-muted-foreground">No recipients found</p>
-                          <p className="text-xs text-muted-foreground/70 mt-1">
-                            Try a different name or country, or add a new recipient.
-                          </p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </div>
 
             <div
@@ -569,7 +693,7 @@ export function RecipientsPanel() {
               className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-lg"
             >
               <Card>
-                <CardContent className="p-6 max-h-[85vh] overflow-y-auto">
+                <CardContent className="p-4 sm:p-6 max-h-[85vh] overflow-y-auto">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold font-display">Add New Recipient</h2>
                     <button
@@ -586,7 +710,7 @@ export function RecipientsPanel() {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label>Recipient Type *</Label>
-                      <div className="flex gap-3">
+                      <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
                         <button
                           type="button"
                           onClick={() =>
@@ -647,7 +771,7 @@ export function RecipientsPanel() {
                     </div>
 
                     {newRecipient.recipientType === "individual" ? (
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-2">
                           <Label>First Name *</Label>
                           <Input

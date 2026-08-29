@@ -826,29 +826,29 @@ export default function RequestPayment() {
         </motion.div>
 
         {/* Step Indicator */}
-        <div className="flex items-center justify-between mb-6 md:mb-8 overflow-x-auto pb-2">
+        <div className="flex items-center justify-between mb-6 md:mb-8 overflow-x-auto pb-2 no-scrollbar">
           {steps.map((step, index) => (
             <div key={step.id} className="flex items-center flex-shrink-0">
-              <div className="flex items-center gap-2 md:gap-3">
+              <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3">
                 <motion.div
                   initial={false}
                   animate={{
                     backgroundColor: currentStep >= step.id ? "hsl(var(--primary))" : "hsl(var(--muted))",
                     color: currentStep >= step.id ? "white" : "hsl(var(--muted-foreground))",
                   }}
-                  className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-semibold"
+                  className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-semibold shrink-0"
                 >
                   {currentStep > step.id ? <Check className="w-3.5 h-3.5 md:w-4 md:h-4" /> : step.id}
                 </motion.div>
                 <div>
-                  <p className={`text-xs md:text-sm font-medium ${currentStep >= step.id ? "text-foreground" : "text-muted-foreground"}`}>
+                  <p className={`text-xs md:text-sm font-medium leading-tight ${currentStep >= step.id ? "text-foreground" : "text-muted-foreground"}`}>
                     {step.title}
                   </p>
                   <p className="hidden sm:block text-[11px] text-muted-foreground">{step.description}</p>
                 </div>
               </div>
               {index < steps.length - 1 && (
-                <div className={`w-8 md:w-16 h-0.5 mx-2 md:mx-4 ${currentStep > step.id ? "bg-primary" : "bg-muted"}`} />
+                <div className={`w-4 sm:w-8 md:w-16 h-0.5 mx-1 sm:mx-2 md:mx-4 ${currentStep > step.id ? "bg-primary" : "bg-muted"}`} />
               )}
             </div>
           ))}

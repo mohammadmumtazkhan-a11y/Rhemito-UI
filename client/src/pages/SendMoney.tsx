@@ -417,15 +417,15 @@ export default function SendMoney() {
                 </div>
 
                 {/* Stepper */}
-                <div className="flex items-center justify-between mb-8 px-4 md:px-12 relative">
-                    <div className="absolute left-0 top-1/2 w-full h-0.5 bg-gray-200 -z-10" />
+                <div className="flex items-center justify-between mb-6 sm:mb-8 px-1 sm:px-4 md:px-12 relative overflow-hidden">
+                    <div className="absolute left-6 right-6 top-4 h-0.5 bg-gray-200 -z-10" />
                     {steps.map((step) => (
-                        <div key={step.id} className="flex flex-col items-center bg-background px-2">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold mb-2 transition-colors ${currentStep >= step.id ? "bg-primary text-white" : "bg-gray-100 text-gray-400"
+                        <div key={step.id} className="flex flex-col items-center bg-background px-1 sm:px-2 z-10">
+                            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-semibold mb-1.5 transition-colors ${currentStep >= step.id ? "bg-primary text-white shadow-xs" : "bg-gray-100 text-gray-400"
                                 }`}>
-                                {currentStep > step.id ? <Check className="w-4 h-4" /> : step.id}
+                                {currentStep > step.id ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : step.id}
                             </div>
-                            <span className={`text-xs ${currentStep >= step.id ? "text-primary font-medium" : "text-gray-400"}`}>
+                            <span className={`text-[11px] sm:text-xs text-center leading-tight ${currentStep >= step.id ? "text-primary font-medium" : "text-gray-400"}`}>
                                 {step.title}
                             </span>
                         </div>
@@ -446,17 +446,17 @@ export default function SendMoney() {
                                 <div className="lg:col-span-3 space-y-8">
                                     <div className="space-y-2">
                                         <Label className="text-gray-500">You Send</Label>
-                                        <div className="flex bg-white border rounded-lg overflow-hidden h-14 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
-                                            <div className="flex items-center gap-2 px-4 bg-gray-50 border-r min-w-[120px]">
-                                                <img src="https://flagcdn.com/w40/gb.png" alt="GBP" className="w-8 h-6 object-cover rounded shadow-sm" />
-                                                <span className="font-semibold text-lg">GBP</span>
-                                                <ChevronDown className="w-4 h-4 text-gray-400 ml-auto" />
+                                        <div className="flex bg-white border rounded-xl overflow-hidden h-14 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
+                                            <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
+                                                <img src="https://flagcdn.com/w40/gb.png" alt="GBP" className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
+                                                <span className="font-semibold text-base sm:text-lg">GBP</span>
+                                                <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
                                             </div>
                                             <input
                                                 type="number"
                                                 value={amount}
                                                 onChange={e => setAmount(e.target.value)}
-                                                className="flex-1 px-4 text-lg font-medium outline-none"
+                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base sm:text-lg font-medium outline-none bg-transparent"
                                                 placeholder="0.00"
                                             />
                                         </div>
@@ -464,24 +464,23 @@ export default function SendMoney() {
 
                                     <div className="space-y-2">
                                         <Label className="text-gray-500">They Receive</Label>
-                                        <div className="flex bg-white border rounded-lg overflow-hidden h-14 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
-                                            <div className="flex items-center gap-2 px-4 bg-gray-50 border-r min-w-[120px]">
-                                                <img src="https://flagcdn.com/w40/ng.png" alt="NGN" className="w-8 h-6 object-cover rounded shadow-sm" />
-                                                <span className="font-semibold text-lg">NGN</span>
-                                                <ChevronDown className="w-4 h-4 text-gray-400 ml-auto" />
+                                        <div className="flex bg-white border rounded-xl overflow-hidden h-14 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
+                                            <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
+                                                <img src="https://flagcdn.com/w40/ng.png" alt="NGN" className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
+                                                <span className="font-semibold text-base sm:text-lg">NGN</span>
+                                                <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
                                             </div>
                                             <input
                                                 readOnly
                                                 value={receiveAmount}
-                                                className="flex-1 px-4 text-lg font-medium outline-none bg-gray-50 text-gray-500"
+                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base sm:text-lg font-medium outline-none bg-gray-50/70 text-gray-500"
                                             />
                                         </div>
                                     </div>
 
-
                                     <div className="space-y-4">
-                                        <h3 className="font-semibold text-lg">How will they receive the money?</h3>
-                                        <div className="flex flex-wrap gap-4">
+                                        <h3 className="font-semibold text-base sm:text-lg">How will they receive the money?</h3>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                                             {[
                                                 { id: "bank_deposit", label: "Bank Deposit", icon: Landmark },
                                                 { id: "mobile_money", label: "Mobile Money", icon: Smartphone },
@@ -491,14 +490,14 @@ export default function SendMoney() {
                                                     key={method.id}
                                                     onClick={() => setDeliveryMethod(method.id)}
                                                     className={`
-                                                        flex items-center gap-2 px-6 py-3 rounded-full cursor-pointer transition-all font-medium
+                                                        flex items-center justify-center sm:justify-start gap-2.5 px-4 py-3 rounded-xl cursor-pointer transition-all font-medium text-sm active:scale-[0.98]
                                                         ${deliveryMethod === method.id
-                                                            ? "bg-blue-50 text-blue-600 border border-blue-200 shadow-sm"
-                                                            : "text-gray-500 hover:bg-gray-50 border border-transparent"}
+                                                            ? "bg-blue-50 text-blue-600 border border-blue-200 shadow-2xs"
+                                                            : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"}
                                                     `}
                                                 >
-                                                    <method.icon className={`w-5 h-5 ${deliveryMethod === method.id ? "text-blue-600" : "text-gray-400"}`} />
-                                                    {method.label}
+                                                    <method.icon className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${deliveryMethod === method.id ? "text-blue-600" : "text-gray-400"}`} />
+                                                    <span className="truncate">{method.label}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -624,16 +623,16 @@ export default function SendMoney() {
                                         </div>
 
                                         {/* Search and New Recipient */}
-                                        <div className="flex gap-4">
+                                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                                             <div className="relative flex-1">
                                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                                 <input
                                                     type="text"
                                                     placeholder="Search recipient"
-                                                    className="w-full h-10 pl-10 pr-4 rounded-lg border focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                                                    className="w-full h-11 pl-10 pr-4 rounded-xl border focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"
                                                 />
                                             </div>
-                                            <Button variant="outline" className="gap-2 h-10 whitespace-nowrap bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-sm" onClick={() => { setSelectedRecipient(null); handleNext(); }}>
+                                            <Button variant="outline" className="gap-2 h-11 whitespace-nowrap bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-xs rounded-xl" onClick={() => { setSelectedRecipient(null); handleNext(); }}>
                                                 <UserPlus className="w-4 h-4" />
                                                 New Recipient
                                             </Button>
@@ -757,7 +756,7 @@ export default function SendMoney() {
                                             <CardTitle className="text-lg">Recipient Details</CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                                 <div className="space-y-2">
                                                     <Label>First Name</Label>
                                                     <Input
@@ -774,7 +773,7 @@ export default function SendMoney() {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                                 <div className="space-y-2">
                                                     <Label>Relationship</Label>
                                                     <Select defaultValue="family">
@@ -873,7 +872,7 @@ export default function SendMoney() {
                                             {/* UK (GBP): account number + sort code */}
                                             {recipientDetails.currency === "GBP" && (
                                                 <>
-                                                    <div className="grid grid-cols-2 gap-4">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                                         <div className="space-y-2">
                                                             <Label>Account Number <span className="text-red-500">*</span></Label>
                                                             <Input

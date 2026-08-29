@@ -224,6 +224,27 @@
   .animate-bounce-blink-right {
     animation: bounceBlinkRight 1.4s ease-in-out infinite;
   }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Prevent automatic iOS Safari zoom-in on input focus by ensuring 16px font on small viewports */
+  @media (max-width: 768px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 /* ── Generated invoice print (public payment page: Print / Save as PDF) ────── */
 @media print {

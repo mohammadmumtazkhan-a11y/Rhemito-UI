@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   COUNTRY_OPTIONS,
   SUPPORTED_COUNTRIES,
@@ -92,6 +93,7 @@ const initialAccounts: PayoutAccount[] = [
 export default function PayoutAccounts() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [accounts, setAccounts] = useState<PayoutAccount[]>(initialAccounts);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -467,7 +469,7 @@ export default function PayoutAccounts() {
             if (!open) handleCloseModal();
           }}
         >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[calc(100vw-1.5rem)] sm:w-full p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold font-display text-foreground">
                 {editingId ? "Edit settlement bank account" : "Add settlement bank account"}
@@ -931,97 +933,183 @@ export default function PayoutAccounts() {
           </DialogContent>
         </Dialog>
 
-        {/* Accounts Table */}
+        {/* Accounts Table or Mobile Cards */}
         <div>
           <h2 className="text-lg font-semibold mb-4">Accounts</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full bg-white rounded-lg overflow-hidden shadow-sm">
-              <thead className="bg-primary text-white">
-                <tr>
-                  <th className="py-3 px-4 text-left text-sm font-medium">Ref No</th>
-                  <th className="py-3 px-4 text-left text-sm font-medium">Account Holder</th>
-                  <th className="py-3 px-4 text-left text-sm font-medium">Currency</th>
-                  <th className="py-3 px-4 text-left text-sm font-medium">Bank</th>
-                  <th className="py-3 px-4 text-left text-sm font-medium">Account Number</th>
-                  <th className="py-3 px-4 text-left text-sm font-medium">Bank Details</th>
-                  <th className="py-3 px-4 text-left text-sm font-medium">Payout</th>
-                  <th className="py-3 px-4 text-left text-sm font-medium">Activated</th>
-                  <th className="py-3 px-4 text-left text-sm font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((account) => (
-                  <tr key={account.id} className="border-b border-border last:border-b-0 hover:bg-muted/20 transition-colors">
-                    <td className="py-4 px-4 font-medium">{account.refNo}</td>
-                    <td className="py-4 px-4 font-medium text-foreground">{account.name}</td>
-                    <td className="py-4 px-4">
-                      <span className="font-semibold text-primary">{account.currency}</span>
-                    </td>
-                    <td className="py-4 px-4 text-muted-foreground">{account.bank}</td>
-                    <td className="py-4 px-4 font-mono text-sm">
-                      <div className="flex items-center gap-2">
-                        <span>{maskAccountNumber(account.accountNumber)}</span>
-                        {account.isDefault && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
-                            Default
-                          </Badge>
+          {isMobile ? (
+            <div className="space-y-3">
+              {accounts.map((account) => (
+                <div
+                  key={account.id}
+                  className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                        <Building2 className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-slate-900 text-sm truncate">{account.bank}</div>
+                        <div className="text-xs text-slate-500 truncate">{account.name}</div>
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 flex-wrap">
+                          <span className="font-mono text-[11px] text-blue-600 font-semibold">{account.refNo}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="font-mono text-[11px] text-slate-600">{maskAccountNumber(account.accountNumber)}</span>
+                          {account.isDefault && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                              Default
+                            </Badge>
+                          )}
+                        </div>
+                        {formatBankDetailsDisplay(account) && (
+                          <div className="mt-0.5 text-[11px] text-slate-400 font-mono">
+                            {formatBankDetailsDisplay(account)}
+                          </div>
                         )}
                       </div>
-                    </td>
-                    <td className="py-4 px-4 font-mono text-sm text-muted-foreground">
-                      {formatBankDetailsDisplay(account)}
-                    </td>
-                    <td className="py-4 px-4 font-medium">{account.payout}</td>
-                    <td className="py-4 px-4">
-                      <span
-                        className={`w-3 h-3 rounded-full inline-block ${
-                          account.activated ? "bg-green-500 ring-4 ring-green-100" : "bg-gray-300"
-                        }`}
-                        title={account.activated ? "Activated" : "Inactive"}
-                      />
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={() => handleStartEdit(account)}
-                              className="w-7 h-7 rounded bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
-                              data-testid={`button-edit-${account.id}`}
-                              aria-label={`Edit account ${account.refNo}`}
-                            >
-                              <Edit2 className="w-3.5 h-3.5 text-primary" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>Edit</TooltipContent>
-                        </Tooltip>
+                    </div>
 
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={() => setShowDeleteConfirm(account.id)}
-                              className="w-7 h-7 rounded bg-red-100 hover:bg-red-200 flex items-center justify-center transition-colors"
-                              data-testid={`button-delete-${account.id}`}
-                              aria-label={`Delete account ${account.refNo}`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-red-600" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete</TooltipContent>
-                        </Tooltip>
+                    <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                      <span className="font-bold text-xs text-blue-700 bg-blue-50 border border-blue-200/60 px-2 py-0.5 rounded-full">
+                        {account.currency}
+                      </span>
+                      <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500 mt-1">
+                        <span
+                          className={`w-2 h-2 rounded-full inline-block ${
+                            account.activated ? "bg-green-500 animate-pulse" : "bg-gray-300"
+                          }`}
+                        />
+                        {account.activated ? "Active" : "Inactive"}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      {account.payout && (
+                        <span className="text-[11px] text-slate-400 font-medium">{account.payout}</span>
+                      )}
+                    </div>
+                  </div>
 
-            {accounts.length === 0 && (
-              <div className="text-center py-12 bg-white rounded-lg">
-                <p className="text-muted-foreground">No settlement bank accounts added yet</p>
-              </div>
-            )}
-          </div>
+                  <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleStartEdit(account)}
+                      className="h-8 px-3 text-xs font-medium rounded-lg text-blue-700 bg-blue-50/50 hover:bg-blue-100 border-blue-200 active:scale-95"
+                      data-testid={`button-edit-${account.id}`}
+                      aria-label={`Edit account ${account.refNo}`}
+                    >
+                      <Edit2 className="w-3.5 h-3.5 mr-1" />
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowDeleteConfirm(account.id)}
+                      className="h-8 px-3 text-xs font-medium rounded-lg text-red-600 hover:bg-red-50 hover:border-red-200 active:scale-95"
+                      data-testid={`button-delete-${account.id}`}
+                      aria-label={`Delete account ${account.refNo}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1" />
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+
+              {accounts.length === 0 && (
+                <div className="text-center py-12 bg-white rounded-2xl border border-slate-100">
+                  <p className="text-slate-400 text-sm">No settlement bank accounts added yet</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full bg-white rounded-lg overflow-hidden shadow-sm">
+                <thead className="bg-primary text-white">
+                  <tr>
+                    <th className="py-3 px-4 text-left text-sm font-medium">Ref No</th>
+                    <th className="py-3 px-4 text-left text-sm font-medium">Account Holder</th>
+                    <th className="py-3 px-4 text-left text-sm font-medium">Currency</th>
+                    <th className="py-3 px-4 text-left text-sm font-medium">Bank</th>
+                    <th className="py-3 px-4 text-left text-sm font-medium">Account Number</th>
+                    <th className="py-3 px-4 text-left text-sm font-medium">Bank Details</th>
+                    <th className="py-3 px-4 text-left text-sm font-medium">Payout</th>
+                    <th className="py-3 px-4 text-left text-sm font-medium">Activated</th>
+                    <th className="py-3 px-4 text-left text-sm font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accounts.map((account) => (
+                    <tr key={account.id} className="border-b border-border last:border-b-0 hover:bg-muted/20 transition-colors">
+                      <td className="py-4 px-4 font-medium">{account.refNo}</td>
+                      <td className="py-4 px-4 font-medium text-foreground">{account.name}</td>
+                      <td className="py-4 px-4">
+                        <span className="font-semibold text-primary">{account.currency}</span>
+                      </td>
+                      <td className="py-4 px-4 text-muted-foreground">{account.bank}</td>
+                      <td className="py-4 px-4 font-mono text-sm">
+                        <div className="flex items-center gap-2">
+                          <span>{maskAccountNumber(account.accountNumber)}</span>
+                          {account.isDefault && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                              Default
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 font-mono text-sm text-muted-foreground">
+                        {formatBankDetailsDisplay(account)}
+                      </td>
+                      <td className="py-4 px-4 font-medium">{account.payout}</td>
+                      <td className="py-4 px-4">
+                        <span
+                          className={`w-3 h-3 rounded-full inline-block ${
+                            account.activated ? "bg-green-500 ring-4 ring-green-100" : "bg-gray-300"
+                          }`}
+                          title={account.activated ? "Activated" : "Inactive"}
+                        />
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => handleStartEdit(account)}
+                                className="w-7 h-7 rounded bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
+                                data-testid={`button-edit-${account.id}`}
+                                aria-label={`Edit account ${account.refNo}`}
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-primary" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => setShowDeleteConfirm(account.id)}
+                                className="w-7 h-7 rounded bg-red-100 hover:bg-red-200 flex items-center justify-center transition-colors"
+                                data-testid={`button-delete-${account.id}`}
+                                aria-label={`Delete account ${account.refNo}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {accounts.length === 0 && (
+                <div className="text-center py-12 bg-white rounded-lg">
+                  <p className="text-muted-foreground">No settlement bank accounts added yet</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

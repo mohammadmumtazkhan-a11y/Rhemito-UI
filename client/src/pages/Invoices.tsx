@@ -14,8 +14,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   Search, Plus, Eye, Mail, XCircle, ChevronLeft, ChevronRight,
-  Sparkles, Upload, FileText, RefreshCw,
+  Sparkles, Upload, FileText, RefreshCw, FilePlus2,
 } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,11 +101,116 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
+function MobileInvoiceCard({
+  invoice,
+  onResend,
+  onCancel,
+  resendingInvoiceId,
+  setLocation,
+}: {
+  invoice: InvoiceListItem;
+  onResend: (invoice: InvoiceListItem) => void;
+  onCancel: (invoice: InvoiceListItem) => void;
+  resendingInvoiceId: string | null;
+  setLocation: (loc: string) => void;
+}) {
+  return (
+    <div
+      data-testid={`row-invoice-${invoice.id}`}
+      className="p-4 rounded-2xl bg-white transition-all my-2 border border-slate-200/80 shadow-2xs hover:shadow-xs space-y-3"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+            <FileText className="w-5 h-5 text-blue-600" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-bold text-slate-900 text-sm truncate">{invoice.clientName || "—"}</div>
+            {invoice.clientEmail && (
+              <div className="text-xs text-slate-400 truncate">{invoice.clientEmail}</div>
+            )}
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 flex-wrap">
+              <span className="font-mono text-[11px] text-blue-600 font-semibold">{invoice.invoiceNumber}</span>
+              <span className="text-slate-300">•</span>
+              <SourceBadge source={invoice.source} />
+              {invoice.dueDate && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-[11px] text-slate-400">Due {formatShortDate(invoice.dueDate.slice(0, 10))}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="text-right shrink-0 flex flex-col items-end gap-1">
+          <span className="font-bold text-base text-slate-900 tracking-tight whitespace-nowrap">
+            {CURRENCY_SYMBOLS[invoice.currency] ?? ""}
+            {invoice.fees.invoiceAmount.toFixed(2)}{" "}
+            <span className="text-xs font-normal text-slate-500">{invoice.currency}</span>
+          </span>
+          <InvoiceStatusBadge status={invoice.status} />
+        </div>
+      </div>
+
+      <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 justify-end flex-wrap">
+        <Button
+          size="sm"
+          onClick={() => setLocation(`/sent-invoices/${invoice.id}`)}
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 px-3 text-xs font-medium rounded-lg shadow-sm active:scale-95 transition-all"
+          data-testid={`button-view-${invoice.id}`}
+        >
+          <Eye className="w-3.5 h-3.5 mr-1" />
+          View
+        </Button>
+        {invoiceActionable(invoice.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-50 border-slate-200 active:scale-95"
+            disabled={resendingInvoiceId === invoice.id}
+            onClick={() => void onResend(invoice)}
+            data-testid={`button-resend-${invoice.id}`}
+          >
+            <Mail className="w-3.5 h-3.5 mr-1" />
+            Resend
+          </Button>
+        )}
+        {invoiceActionable(invoice.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs font-medium rounded-lg text-red-600 hover:bg-red-50 border-red-200 active:scale-95"
+            onClick={() => onCancel(invoice)}
+            data-testid={`button-cancel-${invoice.id}`}
+          >
+            <XCircle className="w-3.5 h-3.5 mr-1" />
+            Cancel
+          </Button>
+        )}
+        {invoice.status === "expired" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs font-medium rounded-lg border-gray-200 hover:border-blue-300 hover:text-blue-600 active:scale-95"
+            data-testid={`button-create-new-${invoice.id}`}
+            onClick={() => setLocation("/send-invoice")}
+          >
+            <FilePlus2 className="w-3.5 h-3.5 mr-1.5" />
+            Create New
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Invoices() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const searchParams = useSearch();
+  const isMobile = useIsMobile();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -224,23 +330,23 @@ export default function Invoices() {
         </div>
 
         {/* Summary cards per status */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
           {STATUS_FILTERS.filter((f) => f.value !== "all").map((filter) => (
             <button
               key={filter.value}
               type="button"
               onClick={() => setStatusFilter(statusFilter === filter.value ? "all" : filter.value)}
               className={cn(
-                "text-left p-4 rounded-xl border bg-white transition-all hover:shadow-md",
+                "text-left p-3 sm:p-4 rounded-xl border bg-white transition-all hover:shadow-md active:scale-[0.98]",
                 statusFilter === filter.value ? "border-primary/40 ring-2 ring-primary/20" : "border-border",
               )}
               data-testid={`summary-card-${filter.value}`}
             >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className={cn("w-2 h-2 rounded-full", filter.dot)} />
-                <span className="text-xs font-medium text-muted-foreground">{filter.label}</span>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={cn("w-2 h-2 rounded-full shrink-0", filter.dot)} />
+                <span className="text-xs font-medium text-muted-foreground truncate">{filter.label}</span>
               </div>
-              <p className="text-2xl font-bold font-display text-foreground">
+              <p className="text-xl sm:text-2xl font-bold font-display text-foreground">
                 {isLoading ? "—" : statusCounts[filter.value]}
               </p>
             </button>
@@ -263,7 +369,7 @@ export default function Invoices() {
                     data-testid="input-search-invoices"
                   />
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                   {SOURCE_FILTERS.map((filter) => (
                     <button
                       key={filter.value}
@@ -318,122 +424,148 @@ export default function Invoices() {
               </div>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
-              <Table data-testid="table-invoices">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice No.</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead className="hidden md:table-cell">Source</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="hidden sm:table-cell">Sent</TableHead>
-                    <TableHead className="hidden lg:table-cell">Due Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            {/* Table or Mobile Cards */}
+            <div className="overflow-x-auto" data-testid="table-invoices">
+              {isMobile ? (
+                <div className="p-3 space-y-2">
                   {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-10 text-muted-foreground" data-testid="loading-invoices">
-                        Loading invoices…
-                      </TableCell>
-                    </TableRow>
+                    <div className="text-center py-10 text-muted-foreground" data-testid="loading-invoices">
+                      Loading invoices…
+                    </div>
                   ) : pageRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-10 text-muted-foreground" data-testid="empty-invoices">
-                        No invoices match your search or filters.
-                      </TableCell>
-                    </TableRow>
+                    <div className="text-center py-10 text-muted-foreground" data-testid="empty-invoices">
+                      No invoices match your search or filters.
+                    </div>
                   ) : (
                     pageRows.map((invoice) => (
-                      <TableRow key={invoice.id} data-testid={`row-invoice-${invoice.id}`}>
-                        <TableCell className="font-medium text-foreground">
-                          {invoice.invoiceNumber}
-                        </TableCell>
-                        <TableCell>
-                          <p className="font-medium text-foreground text-sm">{invoice.clientName || "—"}</p>
-                          <p className="text-xs text-muted-foreground">{invoice.clientEmail}</p>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <SourceBadge source={invoice.source} />
-                        </TableCell>
-                        <TableCell className="text-right font-semibold text-foreground">
-                          {CURRENCY_SYMBOLS[invoice.currency] ?? ""}
-                          {invoice.fees.invoiceAmount.toFixed(2)}{" "}
-                          <span className="text-xs font-normal text-muted-foreground">{invoice.currency}</span>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
-                          {invoice.sentAt ? formatShortDate(invoice.sentAt.slice(0, 10)) : "—"}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                          {invoice.dueDate ? formatShortDate(invoice.dueDate.slice(0, 10)) : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <InvoiceStatusBadge status={invoice.status} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              size="sm"
-                              onClick={() => setLocation(`/sent-invoices/${invoice.id}`)}
-                              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8"
-                              data-testid={`button-view-${invoice.id}`}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            {invoiceActionable(invoice.status) && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 w-8 p-0"
-                                    disabled={resendingInvoiceId === invoice.id}
-                                    onClick={() => void handleResend(invoice)}
-                                    data-testid={`button-resend-${invoice.id}`}
-                                  >
-                                    <Mail className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Resend Notification</TooltipContent>
-                              </Tooltip>
-                            )}
-                            {invoiceActionable(invoice.status) && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:border-destructive/40"
-                                    onClick={() => setInvoiceToCancel(invoice)}
-                                    data-testid={`button-cancel-${invoice.id}`}
-                                  >
-                                    <XCircle className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Cancel Invoice</TooltipContent>
-                              </Tooltip>
-                            )}
-                            {invoice.status === "expired" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8"
-                                onClick={() => setLocation("/send-invoice")}
-                                data-testid={`button-recreate-${invoice.id}`}
-                              >
-                                Create New Invoice
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      <MobileInvoiceCard
+                        key={invoice.id}
+                        invoice={invoice}
+                        onResend={handleResend}
+                        onCancel={setInvoiceToCancel}
+                        resendingInvoiceId={resendingInvoiceId}
+                        setLocation={setLocation}
+                      />
                     ))
                   )}
-                </TableBody>
-              </Table>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice No.</TableHead>
+                      <TableHead>Client</TableHead>
+                      <TableHead className="hidden md:table-cell">Source</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="hidden sm:table-cell">Sent</TableHead>
+                      <TableHead className="hidden lg:table-cell">Due Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground" data-testid="loading-invoices">
+                          Loading invoices…
+                        </TableCell>
+                      </TableRow>
+                    ) : pageRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground" data-testid="empty-invoices">
+                          No invoices match your search or filters.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pageRows.map((invoice) => (
+                        <TableRow key={invoice.id} data-testid={`row-invoice-${invoice.id}`}>
+                          <TableCell className="font-medium text-foreground">
+                            {invoice.invoiceNumber}
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-medium text-foreground text-sm">{invoice.clientName || "—"}</p>
+                            <p className="text-xs text-muted-foreground">{invoice.clientEmail}</p>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <SourceBadge source={invoice.source} />
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-foreground">
+                            {CURRENCY_SYMBOLS[invoice.currency] ?? ""}
+                            {invoice.fees.invoiceAmount.toFixed(2)}{" "}
+                            <span className="text-xs font-normal text-muted-foreground">{invoice.currency}</span>
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
+                            {invoice.sentAt ? formatShortDate(invoice.sentAt.slice(0, 10)) : "—"}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                            {invoice.dueDate ? formatShortDate(invoice.dueDate.slice(0, 10)) : "—"}
+                          </TableCell>
+                          <TableCell>
+                            <InvoiceStatusBadge status={invoice.status} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                onClick={() => setLocation(`/sent-invoices/${invoice.id}`)}
+                                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8"
+                                data-testid={`button-view-${invoice.id}`}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              {invoiceActionable(invoice.status) && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 w-8 p-0"
+                                      disabled={resendingInvoiceId === invoice.id}
+                                      onClick={() => void handleResend(invoice)}
+                                      data-testid={`button-resend-${invoice.id}`}
+                                    >
+                                      <Mail className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Resend Notification</TooltipContent>
+                                </Tooltip>
+                              )}
+                              {invoiceActionable(invoice.status) && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:border-destructive/40"
+                                      onClick={() => setInvoiceToCancel(invoice)}
+                                      data-testid={`button-cancel-${invoice.id}`}
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Cancel Invoice</TooltipContent>
+                                </Tooltip>
+                              )}
+                              {invoice.status === "expired" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-2 text-xs"
+                                  onClick={() => setLocation("/send-invoice")}
+                                  data-testid={`button-create-new-${invoice.id}`}
+                                >
+                                  <FilePlus2 className="w-3.5 h-3.5 mr-1" />
+                                  Create New
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </div>
 
             {/* Pagination */}
