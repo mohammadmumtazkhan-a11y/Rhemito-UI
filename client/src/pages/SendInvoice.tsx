@@ -848,49 +848,96 @@ export default function SendInvoice() {
               : "Upload an invoice and send it to your client"}
           </p>
 
-          {/* Mode tabs — generate on the go OR upload a document, never both */}
-          <div className="mt-5 space-y-2">
-            <div
-              className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200"
-              role="tablist"
-              aria-label="Invoice creation mode"
-              data-testid="invoice-mode-tabs"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={isGenerateMode}
-                onClick={() => setMode("generate")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  isGenerateMode
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                data-testid="tab-generate-invoice"
-              >
-                <Sparkles className="w-4 h-4" />
-                Generate Invoice
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={!isGenerateMode}
-                onClick={() => setMode("upload")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  !isGenerateMode
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                data-testid="tab-upload-document"
-              >
-                <Upload className="w-4 h-4" />
-                Upload Document
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground" data-testid="text-mode-hint">
-              Generate an invoice on the go with line items, or attach a ready-made document — you can do one or the other, not both.
-            </p>
+          {/* Mode cards — generate on the go OR upload a document, never both */}
+          <div
+            className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3"
+            role="tablist"
+            aria-label="Invoice creation mode"
+            data-testid="invoice-mode-tabs"
+          >
+            {([
+              {
+                id: "generate" as const,
+                testId: "tab-generate-invoice",
+                icon: Sparkles,
+                title: "Generate Invoice",
+                description: "Build line items on the go — items, discount and tax, totalled for you.",
+              },
+              {
+                id: "upload" as const,
+                testId: "tab-upload-document",
+                icon: Upload,
+                title: "Upload Document",
+                description: "Attach a ready PDF, PNG or JPG invoice and send it to your client.",
+              },
+            ]).map((option) => {
+              const active = mode === option.id;
+              const Icon = option.icon;
+              return (
+                <motion.button
+                  key={option.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.985 }}
+                  onClick={() => setMode(option.id)}
+                  className={`group relative text-left rounded-2xl p-[1.5px] transition-all duration-200 ${
+                    active
+                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-primary/25"
+                      : "bg-border hover:bg-slate-300"
+                  }`}
+                  data-testid={option.testId}
+                >
+                  <div
+                    className={`flex items-start gap-3.5 rounded-[calc(1rem-1.5px)] p-4 h-full transition-all duration-200 ${
+                      active
+                        ? "bg-gradient-to-br from-blue-50 via-white to-indigo-50"
+                        : "bg-white group-hover:bg-slate-50"
+                    }`}
+                  >
+                    <div
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 ${
+                        active
+                          ? "bg-gradient-to-br from-blue-600 to-indigo-600 shadow-md shadow-primary/30"
+                          : "bg-slate-100 group-hover:bg-slate-200"
+                      }`}
+                    >
+                      <Icon
+                        className={`w-5 h-5 transition-colors duration-200 ${
+                          active ? "text-white" : "text-slate-500 group-hover:text-slate-700"
+                        }`}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-sm font-bold transition-colors duration-200 ${
+                          active ? "text-primary" : "text-slate-800"
+                        }`}
+                      >
+                        {option.title}
+                      </p>
+                      <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                        {option.description}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5 transition-all duration-200 ${
+                        active
+                          ? "bg-gradient-to-br from-blue-600 to-indigo-600 scale-100 opacity-100"
+                          : "bg-slate-200 scale-75 opacity-0"
+                      }`}
+                    >
+                      <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                    </span>
+                  </div>
+                </motion.button>
+              );
+            })}
           </div>
+          <p className="text-xs text-muted-foreground mt-3" data-testid="text-mode-hint">
+            Generate an invoice on the go with line items, or attach a ready-made document — you can do one or the other, not both.
+          </p>
         </motion.div>
 
         <Card>
