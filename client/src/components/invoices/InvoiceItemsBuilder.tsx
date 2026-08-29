@@ -129,27 +129,13 @@ export function InvoiceItemsBuilder({
 
   return (
     <div className="space-y-4" data-testid="invoice-items-builder">
-      <div className="flex items-center justify-between">
-        <div>
-          <Label className="text-sm font-semibold text-foreground">
-            Invoice Items <span className="text-destructive">*</span>
-          </Label>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Describe each item or service — the invoice total is calculated automatically.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addItem}
-          disabled={items.length >= 100}
-          className="bg-white shadow-sm shrink-0"
-          data-testid="button-add-item"
-        >
-          <Plus className="w-4 h-4 mr-1" />
-          Add Item
-        </Button>
+      <div>
+        <Label className="text-sm font-semibold text-foreground">
+          Invoice Items <span className="text-destructive">*</span>
+        </Label>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Describe each item or service — the invoice total is calculated automatically.
+        </p>
       </div>
 
       <div className="space-y-3">
@@ -242,6 +228,18 @@ export function InvoiceItemsBuilder({
           Every item needs a description, a quantity and a unit price before the invoice can be reviewed.
         </p>
       )}
+
+      {/* Add item — directly under the last item row (PayPal-style) */}
+      <button
+        type="button"
+        onClick={addItem}
+        disabled={items.length >= 100}
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 text-sm font-semibold text-primary transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        data-testid="button-add-item"
+      >
+        <Plus className="w-4 h-4" />
+        Add Item
+      </button>
 
       {/* Discount and Tax */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
