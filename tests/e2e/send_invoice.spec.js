@@ -117,7 +117,7 @@ test.describe('Send Invoice MVP1 E2E', () => {
 
     // The verified server-owned account becomes the receiving payout account
     await expect(page.getByTestId('payout-account-card')).toBeVisible();
-    await expect(page.getByTestId('payout-account-card')).toContainText('Receiving Payout Account');
+    await expect(page.getByTestId('payout-account-card')).toContainText('Receiving Settlement Account');
     await expect(page.getByTestId('payout-account-card')).toContainText('NatWest');
     await expect(page.getByTestId('payout-account-card')).toContainText('John Doe');
     await expect(page.getByTestId('payout-account-card')).toContainText('Default');
@@ -139,10 +139,10 @@ test.describe('Send Invoice MVP1 E2E', () => {
     // Upload mode — "Generate Invoice" (generate on the go) is the default tab
     await page.getByTestId('tab-upload-document').click();
 
-    // Receiving Payout Account — default verified account preselected, same
+    // Receiving Settlement Account — default verified account preselected, same
     // flow as Request Payment
     await expect(page.getByTestId('payout-account-card')).toBeVisible();
-    await expect(page.getByTestId('payout-account-card')).toContainText('Receiving Payout Account');
+    await expect(page.getByTestId('payout-account-card')).toContainText('Receiving Settlement Account');
     await expect(page.getByTestId('payout-account-card')).toContainText('Barclays');
     await expect(page.getByTestId('payout-account-card')).toContainText('Default');
     await expect(page.getByTestId('button-toggle-change-payout')).toBeVisible();

@@ -85,7 +85,7 @@ test.describe('Rhemito Navigation', () => {
         // Verify "Add Payout Account" opens the popup modal
         await page.getByTestId('button-open-add-payout-account').click();
         await expect(page.getByRole('dialog')).toBeVisible();
-        await expect(page.getByRole('heading', { name: 'Add payout bank account' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Add settlement bank account' })).toBeVisible();
 
         // Verify account nickname field is removed
         await expect(page.getByTestId('input-payout-nickname')).toHaveCount(0);
@@ -97,7 +97,7 @@ test.describe('Rhemito Navigation', () => {
         // Verify clicking edit on an account row opens the edit dialog
         await page.getByTestId('button-edit-1').click();
         await expect(page.getByRole('dialog')).toBeVisible();
-        await expect(page.getByRole('heading', { name: 'Edit payout bank account' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Edit settlement bank account' })).toBeVisible();
 
         // Cancel closes the dialog
         await page.getByTestId('button-cancel-payout-modal').click();
