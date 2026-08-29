@@ -29,6 +29,7 @@ import {
   type UnifiedTransactionRow,
 } from "@/lib/unifiedTransactions";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -430,6 +431,277 @@ function UnifiedRow({
   );
 }
 
+function MobileSendMoneyCard({
+  tx,
+  scheduled,
+  onCancel,
+}: {
+  tx: SendMoneyTx;
+  scheduled?: boolean;
+  onCancel: (tx: SendMoneyTx) => void;
+}) {
+  const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
+  const isTerminal = (TERMINAL_STATUSES as readonly string[]).includes(tx.status);
+  const canCancel = tx.status === "awaiting_payment";
+
+  return (
+    <div
+      data-testid={scheduled ? `row-scheduled-${tx.id}` : `row-transaction-${tx.id}`}
+      className={cn(
+        "p-4 rounded-2xl bg-white transition-all my-2 border border-slate-200/80 shadow-2xs hover:shadow-xs space-y-3",
+        tx.status === "awaiting_payment" && "border-l-4 border-l-amber-400 bg-amber-50/10"
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-10 h-10 rounded-full bg-blue-100/80 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+            {tx.recipient.slice(0, 2).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-bold text-slate-900 text-sm truncate">{tx.recipient}</div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500 flex-wrap">
+              <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                <span className={cn("w-1.5 h-1.5 rounded-full", TYPE_BADGES.send_money.dot)} />
+                {TYPE_BADGES.send_money.label}
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="font-mono text-[11px] text-blue-600 font-semibold">{tx.id}</span>
+              {tx.date && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-[11px] text-slate-400">{tx.date}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="text-right shrink-0 flex flex-col items-end gap-1">
+          <span className="font-bold text-base text-slate-900 tracking-tight whitespace-nowrap">
+            {tx.amount}
+          </span>
+          {scheduled ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+              Scheduled
+            </span>
+          ) : tx.status === "cancelled" ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+              Cancelled
+            </span>
+          ) : tx.status === "completed" ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Completed
+            </span>
+          ) : tx.status === "awaiting_payment" ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+              </span>
+              Awaiting Payment
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              Pending
+            </span>
+          )}
+        </div>
+      </div>
+
+      {(scheduled || isTerminal || canCancel) && (
+        <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 justify-end">
+          {scheduled ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-4 text-xs font-medium rounded-lg border-slate-200 text-red-600 hover:bg-red-50 hover:border-red-200 active:scale-95 transition-all w-full"
+              data-testid={`button-cancel-${tx.id}`}
+            >
+              Cancel
+            </Button>
+          ) : (
+            <>
+              {isTerminal && (
+                <Button
+                  size="sm"
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 flex-1 text-xs font-medium rounded-lg shadow-sm transition-all active:scale-95"
+                  data-testid={`button-resend-${tx.id}`}
+                >
+                  Resend
+                </Button>
+              )}
+              {canCancel && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 flex-1 text-xs font-medium rounded-lg text-red-500 border border-red-200 bg-white hover:bg-red-50 hover:border-red-300 hover:text-red-600 active:scale-95 transition-all"
+                  data-testid={`button-cancel-${tx.id}`}
+                  onClick={() => onCancel(tx)}
+                >
+                  Cancel
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MobileUnifiedCard({
+  row,
+  onView,
+  onRequestDetails,
+  onRequestResend,
+  onRequestCopyLink,
+  onRequestCancel,
+  onInvoiceResend,
+  onInvoiceCancel,
+  resendingInvoiceId,
+}: UnifiedRowProps) {
+  const badge = TYPE_BADGES[row.type];
+  const req = row.moneyRequest;
+  const invoice = row.invoice;
+
+  return (
+    <div
+      data-testid={`row-${row.type}-${row.ref}`}
+      className="p-4 rounded-2xl bg-white transition-all my-2 border border-slate-200/80 shadow-2xs hover:shadow-xs space-y-3"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-10 h-10 rounded-full bg-teal/10 text-teal font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+            {row.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-bold text-slate-900 text-sm truncate">{row.name}</div>
+            {row.email ? <div className="text-xs text-slate-400 truncate">{row.email}</div> : null}
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500 flex-wrap">
+              <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                <span className={cn("w-1.5 h-1.5 rounded-full", badge.dot)} />
+                {badge.label}
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="font-mono text-[11px] text-blue-600 font-semibold">{row.ref}</span>
+              {row.dateLabel && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-[11px] text-slate-400">{row.dateLabel}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="text-right shrink-0 flex flex-col items-end gap-1">
+          <span className="font-bold text-base text-slate-900 tracking-tight whitespace-nowrap">
+            {row.amountLabel}
+          </span>
+          <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border shadow-2xs", row.statusClass)}>
+            <span className={cn("w-1.5 h-1.5 rounded-full", row.dotClass)} />
+            {row.statusLabel}
+          </span>
+        </div>
+      </div>
+
+      <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 flex-wrap justify-end">
+        <Button
+          size="sm"
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 px-4 text-xs font-medium rounded-lg shadow-sm transition-all active:scale-95"
+          data-testid={`button-view-${row.ref}`}
+          onClick={() => (req ? onRequestDetails(req) : onView(row.viewHref))}
+        >
+          View
+        </Button>
+
+        {req && moneyRequestAwaiting(req.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-50 border-slate-200 active:scale-95"
+            data-testid={`button-resend-${row.ref}`}
+            onClick={() => onRequestResend(req)}
+          >
+            <Mail className="w-3.5 h-3.5 mr-1" />
+            Resend
+          </Button>
+        )}
+
+        {req && moneyRequestLinkShareable(req.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs font-medium rounded-lg text-blue-600 hover:bg-blue-50 border-blue-200 active:scale-95"
+            data-testid={`button-copy-link-${row.ref}`}
+            onClick={() => onRequestCopyLink(req)}
+          >
+            <Copy className="w-3.5 h-3.5 mr-1" />
+            Copy Link
+          </Button>
+        )}
+
+        {req && moneyRequestAwaiting(req.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs font-medium rounded-lg text-red-600 hover:bg-red-50 border-red-200 active:scale-95"
+            data-testid={`button-cancel-${row.ref}`}
+            onClick={() => onRequestCancel(req)}
+          >
+            <XCircle className="w-3.5 h-3.5 mr-1" />
+            Cancel
+          </Button>
+        )}
+
+        {invoice && invoiceActionable(invoice.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-50 border-slate-200 active:scale-95"
+            data-testid={`button-resend-${row.ref}`}
+            disabled={resendingInvoiceId === invoice.id}
+            onClick={() => onInvoiceResend(invoice)}
+          >
+            <Mail className="w-3.5 h-3.5 mr-1" />
+            Resend
+          </Button>
+        )}
+
+        {invoice && invoiceActionable(invoice.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs font-medium rounded-lg text-red-600 hover:bg-red-50 border-red-200 active:scale-95"
+            data-testid={`button-cancel-${row.ref}`}
+            onClick={() => onInvoiceCancel(invoice)}
+          >
+            <XCircle className="w-3.5 h-3.5 mr-1" />
+            Cancel
+          </Button>
+        )}
+
+        {invoice?.status === "expired" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-xs font-medium rounded-lg border-gray-200 hover:border-blue-300 hover:text-blue-600 active:scale-95"
+            data-testid={`button-create-new-${row.ref}`}
+            onClick={() => onView("/send-invoice")}
+          >
+            <FilePlus2 className="w-3.5 h-3.5 mr-1.5" />
+            Create New Invoice
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -466,6 +738,7 @@ export default function Dashboard() {
   const [invoiceToCancel, setInvoiceToCancel] = useState<InvoiceListItem | null>(null);
   const [resendingInvoiceId, setResendingInvoiceId] = useState<string | null>(null);
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   // Unified Transactions table — server-backed money-in records (money
   // requests, invoices, campaigns) merged with the send-money prototype rows.
@@ -1043,7 +1316,60 @@ export default function Dashboard() {
                   ))}
                 </div>
                 <div className="overflow-x-auto" data-testid="table-transactions">
-                  <Table>
+                  {isMobile ? (
+                    <div className="p-3 space-y-2">
+                      {visibleRows.length === 0 && !anyQueryLoading ? (
+                        <div className="py-12 text-center text-sm text-slate-400" data-testid="empty-transactions">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
+                              <Search className="w-5 h-5" />
+                            </div>
+                            <span className="font-medium text-slate-600">No transactions match your search or filters.</span>
+                            {(search || typeFilter !== "all") && (
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 text-xs mt-1 rounded-lg"
+                                onClick={() => {
+                                  setSearch("");
+                                  setTypeFilter("all");
+                                  setPage(1);
+                                }}
+                              >
+                                Reset filters
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        pageRows.map((row) =>
+                          row.kind === "send_money" ? (
+                            <MobileSendMoneyCard key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} />
+                          ) : (
+                            <MobileUnifiedCard
+                              key={row.row.key}
+                              row={row.row}
+                              onView={setLocation}
+                              onRequestDetails={setRequestDetails}
+                              onRequestResend={handleResendRequestEmail}
+                              onRequestCopyLink={handleCopyRequestLink}
+                              onRequestCancel={handleRequestCancel}
+                              onInvoiceResend={handleInvoiceResend}
+                              onInvoiceCancel={setInvoiceToCancel}
+                              resendingInvoiceId={resendingInvoiceId}
+                            />
+                          )
+                        )
+                      )}
+                      {anyQueryLoading && (
+                        <div className="py-2 space-y-2">
+                          <Skeleton className="h-20 w-full rounded-2xl" />
+                          <Skeleton className="h-20 w-full rounded-2xl" />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Table>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent bg-slate-50/80 border-b border-slate-100">
                           <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-[90px] sm:w-[130px] py-3.5 pl-4 sm:pl-6">Ref No.</TableHead>
@@ -1110,7 +1436,8 @@ export default function Dashboard() {
                         )}
                       </TableBody>
                     </Table>
-                  </div>
+                  )}
+                </div>
                   {visibleRows.length > 0 && (
                     <div
                       className="flex flex-col sm:flex-row items-center justify-between gap-2 px-5 md:px-6 py-3.5 border-t border-slate-100 bg-slate-50/30"

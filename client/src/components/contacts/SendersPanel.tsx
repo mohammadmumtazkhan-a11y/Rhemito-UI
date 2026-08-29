@@ -12,6 +12,7 @@ import { WaysToGetPaidModal } from "@/components/modals/WaysToGetPaidModal";
 import { useContacts } from "@/contexts/ContactsContext";
 import { toKnownSender } from "@/data/contacts";
 import { resolveNarration, type KnownSender } from "@/data/knownSenders";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const COUNTRY_CODES = [
   { code: "+234", country: "Nigeria", flag: "🇳🇬" },
@@ -31,6 +32,7 @@ const COUNTRIES = [
  */
 export function SendersPanel() {
   const [, setLocation] = useLocation();
+  const isMobile = useIsMobile();
   const { senders: contactsSenders, upsertSender, deleteContactRole } = useContacts();
   const [searchQuery, setSearchQuery] = useState("");
   const senders: KnownSender[] = contactsSenders.map(toKnownSender);
@@ -146,154 +148,270 @@ export function SendersPanel() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Full Name</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Country</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Account Details</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Service Type</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSenders.map((sender) => {
-                    const displayName = sender.senderType === "business" 
-                      ? sender.businessName 
-                      : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim();
-                    const initials = sender.senderType === "business" 
-                      ? sender.businessName.substring(0, 2).toUpperCase()
-                      : `${sender.firstName[0]}${sender.lastName[0]}`.toUpperCase();
-                    
-                    return (
-                      <tr key={sender.email} className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
-                        <td className="py-4 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                              {sender.senderType === "business" ? (
-                                <Building2 className="w-4 h-4 text-primary" />
-                              ) : (
-                                <span className="text-xs font-medium text-primary">{initials}</span>
-                              )}
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-medium">{displayName}</span>
-                                {sender.isRecipient && (
-                                  <span
-                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
-                                    data-testid={`badge-dual-role-${sender.email.replace(/[@.]/g, '-')}`}
-                                  >
-                                    Sender &amp; Recipient
-                                  </span>
+            <div className="overflow-x-auto" data-testid="table-senders">
+              {isMobile ? (
+                <div className="p-2 space-y-3">
+                  {filteredSenders.length === 0 ? (
+                    <div className="text-center py-12" data-testid="empty-senders">
+                      <User className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
+                      <p className="text-muted-foreground">No senders found</p>
+                    </div>
+                  ) : (
+                    filteredSenders.map((sender) => {
+                      const displayName = sender.senderType === "business" 
+                        ? sender.businessName 
+                        : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim();
+                      const initials = sender.senderType === "business" 
+                        ? sender.businessName.substring(0, 2).toUpperCase()
+                        : `${sender.firstName[0]}${sender.lastName[0]}`.toUpperCase();
+
+                      return (
+                        <div
+                          key={sender.email}
+                          className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3"
+                          data-testid={`row-sender-${sender.email.replace(/[@.]/g, '-')}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                {sender.senderType === "business" ? (
+                                  <Building2 className="w-4 h-4 text-primary" />
+                                ) : (
+                                  <span className="text-xs font-bold text-primary">{initials}</span>
                                 )}
                               </div>
-                              {sender.senderType === "business" && (
-                                <span className="text-xs text-muted-foreground">Business</span>
-                              )}
-                              {sender.bankName && (
-                                <span className="text-xs text-muted-foreground">{sender.bankName}</span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4 px-4 text-muted-foreground">{sender.country}</td>
-                        {/* Account Details column */}
-                        <td className="py-4 px-4">
-                          <div className="flex flex-col gap-1">
-                            {sender.accountNumber && (
-                              <div className="flex flex-wrap gap-1">
-                                <span className="inline-flex items-center text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">
-                                  Acct: {sender.accountNumber}
-                                </span>
-                                {sender.sortCode && (
-                                  <span className="inline-flex items-center text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-mono">
-                                    Sort: {sender.sortCode}
-                                  </span>
-                                )}
-                                {sender.iban && (
-                                  <span className="inline-flex items-center text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-mono">
-                                    IBAN: {sender.iban.slice(0, 12)}…
-                                  </span>
-                                )}
-                                {sender.swift && (
-                                  <span className="inline-flex items-center text-xs bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full font-mono">
-                                    SWIFT: {sender.swift}
-                                  </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-slate-900 text-sm truncate">{displayName}</span>
+                                  {sender.isRecipient && (
+                                    <span
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                      data-testid={`badge-dual-role-${sender.email.replace(/[@.]/g, '-')}`}
+                                    >
+                                      Sender &amp; Recipient
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-slate-400 truncate">{sender.email}</div>
+                                <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+                                  <span>{sender.country}</span>
+                                  {sender.accountNumber && (
+                                    <>
+                                      <span className="text-slate-300">•</span>
+                                      <span className="font-mono text-[11px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                        Acct: {sender.accountNumber}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                                {sender.narration && (
+                                  <div className="mt-1 text-xs text-slate-400 italic">
+                                    "{resolveNarration(sender.narration, sender.relationship)}"
+                                  </div>
                                 )}
                               </div>
-                            )}
-                            <span className="text-xs text-muted-foreground italic">
-                              "{resolveNarration(sender.narration, sender.relationship)}"
-                            </span>
+                            </div>
                           </div>
-                        </td>
-                        <td className="py-4 px-4 text-muted-foreground">Collection</td>
-                        <td className="py-4 px-4">
-                          <div className="flex items-center gap-2">
+
+                          <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 justify-end flex-wrap">
+                            <Button
+                              size="sm"
+                              onClick={() => handleRequestPayment(sender.email)}
+                              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 px-3 text-xs font-medium rounded-lg shadow-sm active:scale-95 transition-all"
+                              data-testid={`button-request-${sender.email.replace(/[@.]/g, '-')}`}
+                            >
+                              <Send className="w-3.5 h-3.5 mr-1" />
+                              Receive Money
+                            </Button>
+
                             {sender.isRecipient && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setLocation(`/send-money?recipientEmail=${encodeURIComponent(sender.email)}`)}
+                                className="h-8 px-2.5 text-xs text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 active:scale-95"
+                                data-testid={`button-send-money-dual-${sender.email.replace(/[@.]/g, '-')}`}
+                              >
+                                <Send className="w-3.5 h-3.5 mr-1" />
+                                Send
+                              </Button>
+                            )}
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewSender(sender.email)}
+                              className="h-8 px-2.5 text-xs active:scale-95"
+                              data-testid={`button-view-${sender.email.replace(/[@.]/g, '-')}`}
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              View
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowDeleteConfirm(sender.email)}
+                              className="h-8 px-2.5 text-xs text-red-600 hover:bg-red-50 border-red-200 active:scale-95"
+                              data-testid={`button-delete-${sender.email.replace(/[@.]/g, '-')}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Full Name</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Country</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Account Details</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Service Type</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSenders.map((sender) => {
+                      const displayName = sender.senderType === "business" 
+                        ? sender.businessName 
+                        : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim();
+                      const initials = sender.senderType === "business" 
+                        ? sender.businessName.substring(0, 2).toUpperCase()
+                        : `${sender.firstName[0]}${sender.lastName[0]}`.toUpperCase();
+                      
+                      return (
+                        <tr key={sender.email} className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                {sender.senderType === "business" ? (
+                                  <Building2 className="w-4 h-4 text-primary" />
+                                ) : (
+                                  <span className="text-xs font-medium text-primary">{initials}</span>
+                                )}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-medium">{displayName}</span>
+                                  {sender.isRecipient && (
+                                    <span
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                      data-testid={`badge-dual-role-${sender.email.replace(/[@.]/g, '-')}`}
+                                    >
+                                      Sender &amp; Recipient
+                                    </span>
+                                  )}
+                                </div>
+                                {sender.senderType === "business" && (
+                                  <span className="text-xs text-muted-foreground">Business</span>
+                                )}
+                                {sender.bankName && (
+                                  <span className="text-xs text-muted-foreground">{sender.bankName}</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 text-muted-foreground">{sender.country}</td>
+                          {/* Account Details column */}
+                          <td className="py-4 px-4">
+                            <div className="flex flex-col gap-1">
+                              {sender.accountNumber && (
+                                <div className="flex flex-wrap gap-1">
+                                  <span className="inline-flex items-center text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">
+                                    Acct: {sender.accountNumber}
+                                  </span>
+                                  {sender.sortCode && (
+                                    <span className="inline-flex items-center text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-mono">
+                                      Sort: {sender.sortCode}
+                                    </span>
+                                  )}
+                                  {sender.iban && (
+                                    <span className="inline-flex items-center text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-mono">
+                                      IBAN: {sender.iban.slice(0, 12)}…
+                                    </span>
+                                  )}
+                                  {sender.swift && (
+                                    <span className="inline-flex items-center text-xs bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full font-mono">
+                                      SWIFT: {sender.swift}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              <span className="text-xs text-muted-foreground italic">
+                                "{resolveNarration(sender.narration, sender.relationship)}"
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 text-muted-foreground">Collection</td>
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-2">
+                              {sender.isRecipient && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={() => setLocation(`/send-money?recipientEmail=${encodeURIComponent(sender.email)}`)}
+                                      className="w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center transition-colors text-emerald-600"
+                                      data-testid={`button-send-money-dual-${sender.email.replace(/[@.]/g, '-')}`}
+                                    >
+                                      <Send className="w-4 h-4" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Send Money (Recipient)</TooltipContent>
+                                </Tooltip>
+                              )}
+
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <button
-                                    onClick={() => setLocation(`/send-money?recipientEmail=${encodeURIComponent(sender.email)}`)}
-                                    className="w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center transition-colors text-emerald-600"
-                                    data-testid={`button-send-money-dual-${sender.email.replace(/[@.]/g, '-')}`}
+                                    onClick={() => handleRequestPayment(sender.email)}
+                                    className="w-8 h-8 rounded-lg bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
+                                    data-testid={`button-request-${sender.email.replace(/[@.]/g, '-')}`}
                                   >
-                                    <Send className="w-4 h-4" />
+                                    <Send className="w-4 h-4 text-primary" />
                                   </button>
                                 </TooltipTrigger>
-                                <TooltipContent>Send Money (Recipient)</TooltipContent>
+                                <TooltipContent>Receive Money</TooltipContent>
                               </Tooltip>
-                            )}
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() => handleRequestPayment(sender.email)}
-                                  className="w-8 h-8 rounded-lg bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
-                                  data-testid={`button-request-${sender.email.replace(/[@.]/g, '-')}`}
-                                >
-                                  <Send className="w-4 h-4 text-primary" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>Receive Money</TooltipContent>
-                            </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => handleViewSender(sender.email)}
+                                    className="w-8 h-8 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors"
+                                    data-testid={`button-view-${sender.email.replace(/[@.]/g, '-')}`}
+                                  >
+                                    <Eye className="w-4 h-4 text-muted-foreground" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>View Sender</TooltipContent>
+                              </Tooltip>
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() => handleViewSender(sender.email)}
-                                  className="w-8 h-8 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors"
-                                  data-testid={`button-view-${sender.email.replace(/[@.]/g, '-')}`}
-                                >
-                                  <Eye className="w-4 h-4 text-muted-foreground" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>View Sender</TooltipContent>
-                            </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => setShowDeleteConfirm(sender.email)}
+                                    className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors"
+                                    data-testid={`button-delete-${sender.email.replace(/[@.]/g, '-')}`}
+                                  >
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Delete Sender</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() => setShowDeleteConfirm(sender.email)}
-                                  className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors"
-                                  data-testid={`button-delete-${sender.email.replace(/[@.]/g, '-')}`}
-                                >
-                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>Delete Sender</TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {filteredSenders.length === 0 && (
+              {filteredSenders.length === 0 && !isMobile && (
                 <div className="text-center py-12">
                   <User className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
                   <p className="text-muted-foreground">No senders found</p>
