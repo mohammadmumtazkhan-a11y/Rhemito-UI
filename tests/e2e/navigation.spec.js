@@ -115,6 +115,19 @@ test.describe('Rhemito Navigation', () => {
         await expect(page.getByTestId('section-transactions-page')).toBeVisible();
     });
 
+    test('Sidebar navigation - Invoices', async ({ page }) => {
+        await page.goto('/');
+
+        // Click Invoices link
+        await page.getByTestId('link-invoices').click();
+
+        // Verify navigation to the dedicated Invoices management page
+        await expect(page).toHaveURL(/\/invoices/);
+        await expect(page.getByTestId('section-invoices-page')).toBeVisible();
+        await expect(page.getByTestId('table-invoices')).toBeVisible();
+        await expect(page.getByTestId('button-create-invoice')).toBeVisible();
+    });
+
     test('Sidebar navigation - Bonus & Discounts', async ({ page }) => {
         await page.goto('/');
 

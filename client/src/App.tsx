@@ -8,6 +8,7 @@ import { NotificationContextProvider } from "@/contexts/NotificationContext";
 import { ContactsProvider } from "@/contexts/ContactsContext";
 import Dashboard from "@/pages/Dashboard";
 import Transactions from "@/pages/Transactions";
+import Invoices from "@/pages/Invoices";
 import RequestPayment from "@/pages/RequestPayment";
 import RequestCheckout from "@/pages/RequestCheckout";
 import SendInvoice from "@/pages/SendInvoice";
@@ -70,6 +71,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/transactions" component={Transactions} />
+      <Route path="/invoices" component={Invoices} />
       <Route path="/request-payment" component={RequestPayment} />
       <Route path="/send-invoice" component={SendInvoice} />
       {/* /payments, /payment-requests and /sent-invoices were consolidated

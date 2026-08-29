@@ -234,6 +234,96 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+// ─── Generated invoice totals ("generate on the go") ──────────────────────────
+
+export interface InvoiceTotalsInput {
+  items: ReadonlyArray<{
+    quantity: number | string;
+    unitAmount: number | string;
+    discountType?: string | null; // "percent" | "fixed" | null (per-item)
+    discountValue?: number | string | null;
+  }> | null;
+  taxRate?: string | number | null;
+  discountType?: string | null; // "percent" | "fixed" | null (invoice-level)
+  discountValue?: string | number | null;
+}
+
+export interface InvoiceTotals {
+  subtotal: number; // Σ gross line amounts (quantity × unitAmount)
+  itemsDiscountTotal: number; // Σ per-item discounts
+  discountAmount: number; // invoice-level discount (percent/fixed of the net-of-item-discounts base)
+  taxAmount: number; // taxRate % of (subtotal − itemsDiscountTotal − discountAmount)
+  total: number; // authoritative invoice amount
+}
+
+function num(value: string | number | null | undefined): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+/** Gross line amount before any discount. */
+export function lineGrossAmount(item: {
+  quantity: number | string;
+  unitAmount: number | string;
+}): number {
+  return round2(num(item.quantity) * num(item.unitAmount));
+}
+
+/** Per-item discount: percentage of the gross line, or a fixed amount capped at it. */
+export function itemDiscountAmount(item: {
+  quantity: number | string;
+  unitAmount: number | string;
+  discountType?: string | null;
+  discountValue?: number | string | null;
+}): number {
+  const gross = lineGrossAmount(item);
+  if (item.discountType === "percent") {
+    return round2(gross * Math.min(Math.max(num(item.discountValue), 0), 100) / 100);
+  }
+  if (item.discountType === "fixed") {
+    return Math.min(round2(Math.max(num(item.discountValue), 0)), gross);
+  }
+  return 0;
+}
+
+/**
+ * Totals for a generated invoice. Accepts both the API payload shape (numbers)
+ * and the stored invoice shape (text columns), so the server, the payment page
+ * and the sender detail view share one authoritative calculation.
+ *
+ * Discounts stack in a fixed order: per-item discounts reduce their own line
+ * first, then the invoice-level discount applies to the net-of-item-discounts
+ * base (a percentage of that base, or a fixed amount capped at it). Tax is
+ * charged on what remains after both.
+ */
+export function computeInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals {
+  const lines = (input.items ?? []).map((item) => ({
+    gross: lineGrossAmount(item),
+    discount: itemDiscountAmount(item),
+  }));
+  const subtotal = round2(lines.reduce((sum, line) => sum + line.gross, 0));
+  const itemsDiscountTotal = round2(lines.reduce((sum, line) => sum + line.discount, 0));
+
+  const invoiceDiscountBase = round2(subtotal - itemsDiscountTotal);
+  let discountAmount = 0;
+  if (input.discountType === "percent") {
+    discountAmount = round2(invoiceDiscountBase * Math.min(Math.max(num(input.discountValue), 0), 100) / 100);
+  } else if (input.discountType === "fixed") {
+    discountAmount = Math.min(round2(Math.max(num(input.discountValue), 0)), invoiceDiscountBase);
+  }
+
+  const taxableBase = round2(invoiceDiscountBase - discountAmount);
+  const taxAmount = input.taxRate != null && input.taxRate !== ""
+    ? round2(taxableBase * Math.min(Math.max(num(input.taxRate), 0), 100) / 100)
+    : 0;
+
+  return { subtotal, itemsDiscountTotal, discountAmount, taxAmount, total: round2(taxableBase + taxAmount) };
+}
+
 // ─── Reminder eligibility ─────────────────────────────────────────────────────
 
 /** Reminders fire at 9 a.m. local time on the relevant calendar day. */

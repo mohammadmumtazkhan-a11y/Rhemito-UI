@@ -35,15 +35,34 @@ test.describe('Rhemito Dashboard', () => {
         await expect(page).toHaveURL(/\/send-money/);
     });
 
-    test('Quick Services - Request Payment opens modal', async ({ page }) => {
+    test('Quick Services - Receive Money opens the payment link flow directly', async ({ page }) => {
         await page.goto('/');
 
-        // Click Request Payment button
+        // The button leads straight to the Receive Money link flow (no modal)
         await page.getByTestId('button-request-payment').click();
+        await expect(page).toHaveURL(/\/request-payment/);
+        await expect(page.getByRole('heading', { name: 'Receive Money' })).toBeVisible();
+    });
 
-        // Wait for modal content to appear - use specific test ID for modal buttons
-        await expect(page.getByTestId('button-request')).toBeVisible({ timeout: 5000 });
-        await expect(page.getByTestId('button-invoice')).toBeVisible();
+    test('Quick Services - Send Invoice and Funding Campaigns have direct buttons', async ({ page }) => {
+        await page.goto('/');
+
+        // Smaller direct entries sit on the card beside the primary buttons
+        const sendInvoice = page.getByTestId('button-send-invoice');
+        const funding = page.getByTestId('button-funding-campaigns');
+        await expect(sendInvoice).toBeVisible();
+        await expect(funding).toBeVisible();
+
+        // The modal no longer exists on the dashboard
+        await expect(page.getByText('Ways to get paid')).toHaveCount(0);
+
+        await sendInvoice.click();
+        await expect(page).toHaveURL(/\/send-invoice/);
+        await expect(page.getByRole('heading', { name: 'Send Invoice' })).toBeVisible();
+
+        await page.goto('/');
+        await funding.click();
+        await expect(page).toHaveURL(/\/group-pay\/create/);
     });
 
     test('Unified Transactions table displays data', async ({ page }) => {

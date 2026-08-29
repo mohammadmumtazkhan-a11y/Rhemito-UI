@@ -22,6 +22,16 @@ export interface DevSnapshot {
   groupPayCampaigns: Array<Record<string, unknown>>;
   groupPayContributions: Array<Record<string, unknown>>;
   sessions: Record<string, Record<string, unknown>>;
+  // Receive-money continuity: invoices (with their documents, events and
+  // client emails), money requests and payout accounts survive restarts so
+  // mid-test journeys are not lost. Sequence counters keep numbering stable.
+  invoices: Array<Record<string, unknown>>;
+  invoiceDocuments: Array<Record<string, unknown>>;
+  invoiceEvents: Array<Record<string, unknown>>;
+  clientEmails: Array<Record<string, unknown>>;
+  moneyRequests: Array<Record<string, unknown>>;
+  payoutAccounts: Array<Record<string, unknown>>;
+  sequences: { invoice: number; moneyRequest: number };
 }
 
 /** Date-valued fields per collection (revived on load). */
@@ -30,6 +40,18 @@ const DATE_FIELDS: Record<string, string[]> = {
   otpCodes: ["expiresAt", "createdAt"],
   groupPayCampaigns: ["createdAt"],
   groupPayContributions: ["paymentDate"],
+  invoices: [
+    "paymentInitiatedAt", "expiresAt", "sentAt", "paidAt", "expiredAt", "cancelledAt",
+    "dueReminderSentAt", "expiryReminderSentAt", "newLinkRequestedAt", "createdAt",
+  ],
+  invoiceDocuments: ["uploadedAt", "expiresAt"],
+  invoiceEvents: ["createdAt"],
+  clientEmails: ["lastAttemptAt", "createdAt"],
+  moneyRequests: [
+    "expiresAt", "viewedAt", "sessionExpiresAt", "paymentInitiatedAt", "fundedAt",
+    "payoutSubmittedAt", "paidOutAt", "cancelledAt", "createdAt",
+  ],
+  payoutAccounts: ["createdAt", "verifiedAt"],
 };
 
 function revive(collection: string, row: Record<string, unknown>): Record<string, unknown> {
@@ -54,6 +76,16 @@ export function loadSnapshot(): DevSnapshot | null {
       groupPayCampaigns: (raw.groupPayCampaigns ?? []).map((r) => revive("groupPayCampaigns", r)),
       groupPayContributions: (raw.groupPayContributions ?? []).map((r) => revive("groupPayContributions", r)),
       sessions: raw.sessions ?? {},
+      invoices: (raw.invoices ?? []).map((r) => revive("invoices", r)),
+      invoiceDocuments: (raw.invoiceDocuments ?? []).map((r) => revive("invoiceDocuments", r)),
+      invoiceEvents: (raw.invoiceEvents ?? []).map((r) => revive("invoiceEvents", r)),
+      clientEmails: (raw.clientEmails ?? []).map((r) => revive("clientEmails", r)),
+      moneyRequests: (raw.moneyRequests ?? []).map((r) => revive("moneyRequests", r)),
+      payoutAccounts: (raw.payoutAccounts ?? []).map((r) => revive("payoutAccounts", r)),
+      sequences: {
+        invoice: Number(raw.sequences?.invoice ?? 0) || 0,
+        moneyRequest: Number(raw.sequences?.moneyRequest ?? 0) || 0,
+      },
     };
   } catch (err) {
     console.warn("[devPersistence] snapshot load failed (starting fresh):", err instanceof Error ? err.message : err);

@@ -44,6 +44,8 @@ import {
   type PublicInvoice,
 } from "@/lib/invoices";
 import { formatHumanDate } from "@shared/invoice-logic";
+import { computeInvoiceTotals } from "@shared/invoice-logic";
+import { GeneratedInvoiceDocument } from "@/components/invoices/GeneratedInvoiceDocument";
 
 const CURRENCY_SYMBOLS: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", NGN: "₦" };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -834,7 +836,7 @@ export default function InvoiceView() {
     }
     if (payStep === "landing") {
       return (
-        <div className="flex h-full flex-col">
+        <div className="flex flex-col">
           <div>
             <p className="text-xs font-semibold uppercase text-slate-500">Secure checkout</p>
             <h1 className="mt-2 text-2xl font-bold text-slate-950 font-display">Complete your payment</h1>
@@ -861,7 +863,31 @@ export default function InvoiceView() {
               </p>
             </div>
           </div>
-          {invoice.hasDocument && (
+          {invoice.source === "generated" && invoice.items && invoice.items.length > 0 ? (
+            <GeneratedInvoiceDocument
+                invoiceNumber={invoice.invoiceNumber}
+                senderName={invoice.senderName}
+                clientName={
+                  invoice.clientType === "business"
+                    ? (invoice.clientBusinessName ?? "")
+                    : [invoice.clientFirstName, invoice.clientMiddleName, invoice.clientLastName]
+                        .filter(Boolean)
+                        .join(" ")
+                }
+                clientType={invoice.clientType}
+                items={invoice.items}
+                currency={invoice.currency}
+                currencySymbol={sym}
+                totals={invoice.totals ?? computeInvoiceTotals(invoice)}
+                taxRate={invoice.taxRate}
+                discountType={invoice.discountType}
+                discountValue={invoice.discountValue}
+                notes={invoice.notes}
+                dueDate={invoice.dueDate}
+                expiryDate={invoice.expiryDate}
+                showPrintAction
+              />
+          ) : invoice.hasDocument && (
             <Button
               variant="outline"
               className="h-12 w-full justify-between border-slate-200 px-4 text-slate-800 hover:bg-slate-50"
@@ -875,7 +901,7 @@ export default function InvoiceView() {
           </div>
           <Button
             onClick={() => setPayStep("choose_method")}
-            className="mt-auto h-14 w-full justify-between bg-blue-600 px-5 text-base hover:bg-blue-700"
+            className="mt-6 h-14 w-full justify-between bg-blue-600 px-5 text-base hover:bg-blue-700"
             size="lg"
             data-testid="button-pay-invoice"
           >

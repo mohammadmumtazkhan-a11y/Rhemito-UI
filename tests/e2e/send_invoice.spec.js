@@ -136,6 +136,9 @@ test.describe('Send Invoice MVP1 E2E', () => {
     await page.goto('/send-invoice');
     await expect(page.getByRole('heading', { name: 'Send Invoice' })).toBeVisible();
 
+    // Upload mode — "Generate Invoice" (generate on the go) is the default tab
+    await page.getByTestId('tab-upload-document').click();
+
     // Receiving Payout Account — default verified account preselected, same
     // flow as Request Payment
     await expect(page.getByTestId('payout-account-card')).toBeVisible();
@@ -233,6 +236,9 @@ test.describe('Send Invoice MVP1 E2E', () => {
     await addVerifiedAccount(request);
 
     await page.goto('/send-invoice');
+
+    // Upload mode — "Generate Invoice" (generate on the go) is the default tab
+    await page.getByTestId('tab-upload-document').click();
 
     await page.locator('input[type="file"]').setInputFiles({
       name: 'invoice.pdf',
@@ -485,6 +491,7 @@ test.describe('Send Invoice MVP1 E2E', () => {
     // Create New Invoice opens a fresh, unsaved Send Invoice process
     await page.getByTestId('button-create-new-detail').click();
     await expect(page.getByRole('heading', { name: 'Send Invoice' })).toBeVisible();
+    await page.getByTestId('tab-upload-document').click();
     await expect(page.getByTestId('input-invoice-amount')).toHaveValue('');
   });
 

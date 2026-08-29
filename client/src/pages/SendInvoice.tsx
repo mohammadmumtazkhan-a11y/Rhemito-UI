@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Upload, FileText, X, Check, Copy, CheckCircle2, Send, Search,
-  User, Building2, AlertCircle, Loader2, ShieldAlert, CalendarClock,
+  User, Building2, AlertCircle, Loader2, ShieldAlert, CalendarClock, Sparkles,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -22,6 +22,15 @@ import { DIALING_CODES } from "@/data/dialing-codes";import {
   confirmAndSendInvoice,
   type ConfirmInvoicePayload,
 } from "@/lib/invoices";
+import {
+  InvoiceItemsBuilder,
+  newBuilderItem,
+  builderTotals,
+  areItemsValid,
+  itemDiscountOf,
+  type BuilderItem,
+  type BuilderDiscountType,
+} from "@/components/invoices/InvoiceItemsBuilder";
 import {
   EXPIRY_TIMEZONE,
   EXPIRY_TIMEZONE_LABEL,
@@ -88,11 +97,40 @@ const initialFormData: FormData = {
 const ALLOWED_DOC_TYPES = ["application/pdf", "image/png", "image/jpeg"];
 const MAX_DOC_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Two mutually exclusive ways to create an invoice: generate it on the go from
+ * line items (PayPal-style), or upload a ready-made document. The active tab
+ * decides which fields render and which payload is sent — the API rejects any
+ * request that mixes the two.
+ */
+type InvoiceMode = "generate" | "upload";
+
+interface GenerateData {
+  items: BuilderItem[];
+  taxRate: string;
+  discountType: BuilderDiscountType;
+  discountValue: string;
+  notes: string;
+}
+
+const createInitialGenerateData = (): GenerateData => ({
+  items: [newBuilderItem()],
+  taxRate: "",
+  discountType: "none",
+  discountValue: "",
+  notes: "",
+});
+
 export default function SendInvoice() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [formData, setFormData] = useState<FormData>(initialFormData);
+  const [mode, setMode] = useState<InvoiceMode>("generate");
+  const [generateData, setGenerateData] = useState<GenerateData>(createInitialGenerateData);
+  const isGenerateMode = mode === "generate";
+  const handleGenerateChange = (patch: Partial<GenerateData>) =>
+    setGenerateData((prev) => ({ ...prev, ...patch }));
 
   // Receiving payout account — same selection rules as Request Payment:
   // activated accounts only, default preselected, holder name locked to the
@@ -163,8 +201,13 @@ export default function SendInvoice() {
     }
   }, [formData.dueDate, expiryTouched]);
 
+  // Baseline for dirty-checking the generate tab (its default item row carries
+  // a fresh random id per journey).
+  const [generateInitialState, setGenerateInitialState] = useState(createInitialGenerateData);
+
   const isDirty =
-    JSON.stringify(formData) !== JSON.stringify(initialFormData) || documentId !== null;
+    JSON.stringify(formData) !== JSON.stringify(initialFormData) || documentId !== null ||
+    JSON.stringify(generateData) !== JSON.stringify(generateInitialState);
 
   // Unsaved-change warning for the incomplete journey (refresh / close / leave).
   useEffect(() => {
@@ -326,7 +369,29 @@ export default function SendInvoice() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const fees = computeInvoiceFees(formData.invoiceAmount || "0", formData.absorbFee);
+  // Generated-invoice totals — live, shared authoritative math.
+  const generateTotals = useMemo(
+    () => builderTotals(generateData.items, generateData.taxRate, generateData.discountType, generateData.discountValue),
+    [generateData],
+  );
+  const parsePositive = (value: string): number => {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  };
+  const generateExtrasInvalid =
+    (generateData.taxRate.trim() !== "" &&
+      (parsePositive(generateData.taxRate) <= 0 || parsePositive(generateData.taxRate) > 100)) ||
+    (generateData.discountType !== "none" &&
+      (generateData.discountValue.trim() === "" ||
+        parsePositive(generateData.discountValue) <= 0 ||
+        (generateData.discountType === "percent" && parsePositive(generateData.discountValue) > 100)));
+  const generateValid =
+    areItemsValid(generateData.items) && generateTotals.total > 0 && !generateExtrasInvalid;
+
+  // The effective invoice amount: the computed total when generating, the manual
+  // amount when uploading. Feeds the fee model and the summary card in both modes.
+  const effectiveAmount = isGenerateMode ? String(generateTotals.total) : formData.invoiceAmount;
+  const fees = computeInvoiceFees(effectiveAmount || "0", formData.absorbFee);
   const sym = CURRENCY_SYMBOLS[formData.currency] || "£";
   const payoutCurrencyMismatch = Boolean(
     selectedPayoutAccount && selectedPayoutAccount.currency !== formData.currency,
@@ -336,10 +401,10 @@ export default function SendInvoice() {
     : [formData.recipientFirstName, formData.recipientMiddleName, formData.recipientLastName].filter(Boolean).join(" ");
 
   const canReview = Boolean(
-    documentId &&
     selectedPayoutAccount &&
-    formData.invoiceAmount &&
-    parseFloat(formData.invoiceAmount) > 0 &&
+    (isGenerateMode
+      ? generateValid
+      : documentId && formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0) &&
     formData.recipientEmail &&
     (formData.recipientType === "individual" ? formData.recipientFirstName : formData.recipientBusinessName) &&
     Object.keys(dateErrors).length === 0
@@ -362,6 +427,8 @@ export default function SendInvoice() {
     setIsSuccess(false);
     setCreatedInvoice(null);
     setExpiryTouched(false);
+    setGenerateData(createInitialGenerateData());
+    setGenerateInitialState(createInitialGenerateData());
     idempotencyKeyRef.current = crypto.randomUUID();
   };
 
@@ -370,9 +437,7 @@ export default function SendInvoice() {
     setIsSubmitting(true);
     try {
       // Revalidated end-to-end on the backend (authoritative).
-      const payload: ConfirmInvoicePayload = {
-        documentId: documentId!,
-        invoiceAmount: formData.invoiceAmount,
+      const commonPayload = {
         currency: formData.currency,
         absorbFee: formData.absorbFee,
         payoutAccountId: selectedPayoutAccount!.id,
@@ -388,6 +453,38 @@ export default function SendInvoice() {
         expiry: expirySelection,
         idempotencyKey: idempotencyKeyRef.current,
       };
+
+      // The active mode decides the payload — a generated invoice carries line
+      // items and no document, an uploaded invoice the reverse (never both).
+      const payload: ConfirmInvoicePayload = isGenerateMode
+        ? {
+            source: "generated",
+            items: generateData.items.map((item) => ({
+              name: item.name.trim(),
+              description: item.description.trim() || undefined,
+              quantity: parseFloat(item.quantity),
+              unitAmount: parseFloat(item.unitAmount),
+              ...(item.discountType !== "none"
+                ? { discountType: item.discountType, discountValue: parseFloat(item.discountValue) }
+                : {}),
+            })),
+            ...(generateData.taxRate.trim()
+              ? { taxRate: parseFloat(generateData.taxRate) }
+              : {}),
+            ...(generateData.discountType !== "none"
+              ? {
+                  discountType: generateData.discountType,
+                  discountValue: parseFloat(generateData.discountValue),
+                }
+              : {}),
+            ...(generateData.notes.trim() ? { notes: generateData.notes.trim() } : {}),
+            ...commonPayload,
+          }
+        : {
+            documentId: documentId!,
+            invoiceAmount: formData.invoiceAmount,
+            ...commonPayload,
+          };
 
       const result = await confirmAndSendInvoice(payload);
       setCreatedInvoice({
@@ -500,16 +597,57 @@ export default function SendInvoice() {
 
   if (step === "review") {
     const rows: Array<{ label: string; value: React.ReactNode; testId: string }> = [
-      {
-        label: "Invoice Document",
-        value: formData.invoiceFile?.name ?? "—",
-        testId: "review-document",
-      },
-      {
-        label: "Invoice Amount",
-        value: `${sym}${fees.invoiceAmount.toFixed(2)} ${formData.currency}`,
-        testId: "review-amount",
-      },
+      ...(isGenerateMode
+        ? [
+            {
+              label: "Invoice Items",
+              value: `${generateData.items.length} item${generateData.items.length === 1 ? "" : "s"}`,
+              testId: "review-items",
+            },
+            {
+              label: "Subtotal",
+              value: `${sym}${generateTotals.subtotal.toFixed(2)} ${formData.currency}`,
+              testId: "review-subtotal",
+            },
+            ...(generateTotals.itemsDiscountTotal > 0
+              ? [{
+                  label: "Items Discount",
+                  value: `-${sym}${generateTotals.itemsDiscountTotal.toFixed(2)} ${formData.currency}`,
+                  testId: "review-items-discount",
+                }]
+              : []),
+            ...(generateTotals.discountAmount > 0
+              ? [{
+                  label: `Discount${generateData.discountType === "percent" && generateData.discountValue ? ` (${generateData.discountValue}%)` : ""}`,
+                  value: `-${sym}${generateTotals.discountAmount.toFixed(2)} ${formData.currency}`,
+                  testId: "review-discount",
+                }]
+              : []),
+            ...(generateTotals.taxAmount > 0
+              ? [{
+                  label: `Tax (${generateData.taxRate}%)`,
+                  value: `${sym}${generateTotals.taxAmount.toFixed(2)} ${formData.currency}`,
+                  testId: "review-tax",
+                }]
+              : []),
+            {
+              label: "Invoice Amount",
+              value: `${sym}${generateTotals.total.toFixed(2)} ${formData.currency}`,
+              testId: "review-amount",
+            },
+          ]
+        : [
+            {
+              label: "Invoice Document",
+              value: formData.invoiceFile?.name ?? "—",
+              testId: "review-document",
+            },
+            {
+              label: "Invoice Amount",
+              value: `${sym}${fees.invoiceAmount.toFixed(2)} ${formData.currency}`,
+              testId: "review-amount",
+            },
+          ]),
       ...(payoutCurrencyMismatch
         ? [{
             label: "FX Conversion",
@@ -604,6 +742,45 @@ export default function SendInvoice() {
                 <CardDescription>The invoice has not been created yet — nothing is saved until you confirm</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {isGenerateMode && (
+                  <div className="rounded-xl border border-border overflow-hidden" data-testid="review-items-table">
+                    <div className="px-4 py-3 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Invoice Items
+                    </div>
+                    <div className="divide-y divide-border">
+                      {generateData.items.map((item, index) => (
+                        <div key={item.id} className="flex items-start justify-between gap-4 px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
+                            {item.description && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {item.quantity} × {sym}{parseFloat(item.unitAmount || "0").toFixed(2)}
+                            </p>
+                            {itemDiscountOf(item) > 0 && (
+                              <p className="text-xs font-medium text-teal mt-0.5" data-testid={`review-item-discount-${index}`}>
+                                Discount: -{sym}{itemDiscountOf(item).toFixed(2)}
+                              </p>
+                            )}
+                          </div>
+                          <p className="text-sm font-semibold text-foreground shrink-0" data-testid={`review-item-amount-${index}`}>
+                            {sym}
+                            {(Math.round(parseFloat(item.quantity || "0") * parseFloat(item.unitAmount || "0") * 100) / 100).toFixed(2)}{" "}
+                            {formData.currency}
+                          </p>
+                        </div>
+                      ))}
+                      {generateData.notes.trim() && (
+                        <div className="px-4 py-3 bg-muted/30">
+                          <p className="text-xs font-semibold text-muted-foreground mb-1">Notes to Client</p>
+                          <p className="text-sm text-foreground whitespace-pre-wrap">{generateData.notes.trim()}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl" data-testid="alert-immutability-warning">
                   <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-sm text-amber-900 leading-relaxed">
@@ -681,13 +858,112 @@ export default function SendInvoice() {
           </Button>
 
           <h1 className="text-2xl font-bold font-display">Send Invoice</h1>
-          <p className="text-muted-foreground mt-1">Upload an invoice and send it to your client</p>
+          <p className="text-muted-foreground mt-1">
+            {isGenerateMode
+              ? "Create a professional invoice on the go and send it to your client"
+              : "Upload an invoice and send it to your client"}
+          </p>
+
+          {/* Mode cards — generate on the go OR upload a document, never both */}
+          <div
+            className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3"
+            role="tablist"
+            aria-label="Invoice creation mode"
+            data-testid="invoice-mode-tabs"
+          >
+            {([
+              {
+                id: "generate" as const,
+                testId: "tab-generate-invoice",
+                icon: Sparkles,
+                title: "Generate Invoice",
+                description: "Build line items on the go — items, discount and tax, totalled for you.",
+              },
+              {
+                id: "upload" as const,
+                testId: "tab-upload-document",
+                icon: Upload,
+                title: "Upload Document",
+                description: "Attach a ready PDF, PNG or JPG invoice and send it to your client.",
+              },
+            ]).map((option) => {
+              const active = mode === option.id;
+              const Icon = option.icon;
+              return (
+                <motion.button
+                  key={option.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.985 }}
+                  onClick={() => setMode(option.id)}
+                  className={`group relative text-left rounded-2xl p-[1.5px] transition-all duration-200 ${
+                    active
+                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-primary/25"
+                      : "bg-border hover:bg-slate-300"
+                  }`}
+                  data-testid={option.testId}
+                >
+                  <div
+                    className={`flex items-start gap-3.5 rounded-[calc(1rem-1.5px)] p-4 h-full transition-all duration-200 ${
+                      active
+                        ? "bg-gradient-to-br from-blue-50 via-white to-indigo-50"
+                        : "bg-white group-hover:bg-slate-50"
+                    }`}
+                  >
+                    <div
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 ${
+                        active
+                          ? "bg-gradient-to-br from-blue-600 to-indigo-600 shadow-md shadow-primary/30"
+                          : "bg-slate-100 group-hover:bg-slate-200"
+                      }`}
+                    >
+                      <Icon
+                        className={`w-5 h-5 transition-colors duration-200 ${
+                          active ? "text-white" : "text-slate-500 group-hover:text-slate-700"
+                        }`}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-sm font-bold transition-colors duration-200 ${
+                          active ? "text-primary" : "text-slate-800"
+                        }`}
+                      >
+                        {option.title}
+                      </p>
+                      <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                        {option.description}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5 transition-all duration-200 ${
+                        active
+                          ? "bg-gradient-to-br from-blue-600 to-indigo-600 scale-100 opacity-100"
+                          : "bg-slate-200 scale-75 opacity-0"
+                      }`}
+                    >
+                      <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                    </span>
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3" data-testid="text-mode-hint">
+            Generate an invoice on the go with line items, or attach a ready-made document — you can do one or the other, not both.
+          </p>
         </motion.div>
 
         <Card>
           <CardHeader>
             <CardTitle className="font-display">Invoice Details</CardTitle>
-            <CardDescription>Upload your invoice and enter payment details</CardDescription>
+            <CardDescription>
+              {isGenerateMode
+                ? "Build your invoice items and enter payment details"
+                : "Upload your invoice and enter payment details"}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -712,6 +988,43 @@ export default function SendInvoice() {
                   </div>
                 )}
 
+                {/* Currency comes first in generate mode — items are priced in the selected currency */}
+                {isGenerateMode && (
+                  <div className="space-y-2">
+                    <Label htmlFor="currency">Currency</Label>
+                    <Select
+                      value={formData.currency}
+                      onValueChange={(value) => handleInputChange("currency", value)}
+                    >
+                      <SelectTrigger data-testid="select-currency">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GBP">GBP (£)</SelectItem>
+                        <SelectItem value="USD">USD ($)</SelectItem>
+                        <SelectItem value="EUR">EUR (€)</SelectItem>
+                        <SelectItem value="NGN">NGN (₦)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {isGenerateMode ? (
+                  <InvoiceItemsBuilder
+                    currency={formData.currency}
+                    currencySymbol={sym}
+                    items={generateData.items}
+                    onItemsChange={(items) => handleGenerateChange({ items })}
+                    taxRate={generateData.taxRate}
+                    onTaxRateChange={(taxRate) => handleGenerateChange({ taxRate })}
+                    discountType={generateData.discountType}
+                    onDiscountTypeChange={(discountType) => handleGenerateChange({ discountType })}
+                    discountValue={generateData.discountValue}
+                    onDiscountValueChange={(discountValue) => handleGenerateChange({ discountValue })}
+                    notes={generateData.notes}
+                    onNotesChange={(notes) => handleGenerateChange({ notes })}
+                  />
+                ) : (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-semibold text-foreground">
@@ -798,37 +1111,40 @@ export default function SendInvoice() {
                     </p>
                   ) : null}
                 </div>
+                )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="invoiceAmount">Invoice Amount *</Label>
-                    <Input
-                      id="invoiceAmount"
-                      type="number"
-                      placeholder="0.00"
-                      value={formData.invoiceAmount}
-                      onChange={(e) => handleInputChange("invoiceAmount", e.target.value)}
-                      data-testid="input-invoice-amount"
-                    />
+                {!isGenerateMode && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="invoiceAmount">Invoice Amount *</Label>
+                      <Input
+                        id="invoiceAmount"
+                        type="number"
+                        placeholder="0.00"
+                        value={formData.invoiceAmount}
+                        onChange={(e) => handleInputChange("invoiceAmount", e.target.value)}
+                        data-testid="input-invoice-amount"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="currency">Currency</Label>
+                      <Select
+                        value={formData.currency}
+                        onValueChange={(value) => handleInputChange("currency", value)}
+                      >
+                        <SelectTrigger data-testid="select-currency">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GBP">GBP (£)</SelectItem>
+                          <SelectItem value="USD">USD ($)</SelectItem>
+                          <SelectItem value="EUR">EUR (€)</SelectItem>
+                          <SelectItem value="NGN">NGN (₦)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="currency">Currency</Label>
-                    <Select
-                      value={formData.currency}
-                      onValueChange={(value) => handleInputChange("currency", value)}
-                    >
-                      <SelectTrigger data-testid="select-currency">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="GBP">GBP (£)</SelectItem>
-                        <SelectItem value="USD">USD ($)</SelectItem>
-                        <SelectItem value="EUR">EUR (€)</SelectItem>
-                        <SelectItem value="NGN">NGN (₦)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                )}
 
                 {/* Fee Absorption Checkbox */}
                 <div className="flex items-start space-x-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors">
@@ -847,7 +1163,8 @@ export default function SendInvoice() {
                       Absorb the 3% transaction fee
                     </Label>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      The client pays the exact invoice amount requested ({CURRENCY_SYMBOLS[formData.currency] || "£"}{formData.invoiceAmount && parseFloat(formData.invoiceAmount) > 0 ? parseFloat(formData.invoiceAmount).toFixed(2) : "0.00"}), and the 3% fee is deducted from your received balance.
+                      The client pays the exact invoice amount requested ({sym}
+                      {fees.invoiceAmount > 0 ? fees.invoiceAmount.toFixed(2) : "0.00"}), and the 3% fee is deducted from your received balance.
                     </p>
                   </div>
                 </div>
@@ -1127,6 +1444,41 @@ export default function SendInvoice() {
                   <h3 className="font-semibold text-lg text-slate-900">Amount Summary</h3>
 
                   <div className="space-y-3">
+                    {isGenerateMode && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Items Subtotal:</span>
+                          <span className="font-medium text-slate-800">
+                            {sym}{generateTotals.subtotal.toFixed(2)} {formData.currency}
+                          </span>
+                        </div>
+                        {generateTotals.itemsDiscountTotal > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Items Discount:</span>
+                            <span className="font-medium text-teal">
+                              -{sym}{generateTotals.itemsDiscountTotal.toFixed(2)} {formData.currency}
+                            </span>
+                          </div>
+                        )}
+                        {generateTotals.discountAmount > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Discount:</span>
+                            <span className="font-medium text-teal">
+                              -{sym}{generateTotals.discountAmount.toFixed(2)} {formData.currency}
+                            </span>
+                          </div>
+                        )}
+                        {generateTotals.taxAmount > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Tax ({generateData.taxRate}%):</span>
+                            <span className="font-medium text-slate-800">
+                              +{sym}{generateTotals.taxAmount.toFixed(2)} {formData.currency}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Invoice Amount:</span>
                       <span className="font-medium text-slate-800">

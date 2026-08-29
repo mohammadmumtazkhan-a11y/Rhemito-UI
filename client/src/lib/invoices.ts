@@ -6,13 +6,14 @@
  */
 
 import { apiRequest } from "@/lib/queryClient";
-import type { InvoiceExpiry } from "@shared/schema";
+import type { InvoiceExpiry, InvoiceItem } from "@shared/schema";
+import type { InvoiceTotals } from "@shared/invoice-logic";
 
 export interface InvoiceFees {
   invoiceAmount: number;
   fee: number;
-  clientPays: number;
   senderReceives: number;
+  clientPays: number;
 }
 
 export interface PayoutAccountSnapshot {
@@ -21,6 +22,8 @@ export interface PayoutAccountSnapshot {
   name: string;
   currency: string;
 }
+
+export type { InvoiceItem, InvoiceTotals };
 
 export interface InvoiceListItem {
   id: string;
@@ -42,6 +45,14 @@ export interface InvoiceListItem {
   expiryTimezone: string;
   status: string;
   paymentRef: string | null;
+  documentId: string | null;
+  source: string; // "generated" | "uploaded"
+  items: InvoiceItem[] | null;
+  taxRate: string | null;
+  discountType: string | null;
+  discountValue: string | null;
+  notes: string | null;
+  totals: InvoiceTotals | null;
   sentAt: string | null;
   paidAt: string | null;
   cancelledAt: string | null;
@@ -102,11 +113,17 @@ export interface PublicInvoice {
   cancelledAt: string | null;
   cancellationReason: string | null;
   newLinkRequestedAt: string | null;
+  // Generated-invoice document rendered on the payment page
+  source: string; // "generated" | "uploaded"
+  items: InvoiceItem[] | null;
+  taxRate: string | null;
+  discountType: string | null;
+  discountValue: string | null;
+  notes: string | null;
+  totals: InvoiceTotals | null;
 }
 
-export interface ConfirmInvoicePayload {
-  documentId: string;
-  invoiceAmount: string;
+interface ConfirmInvoiceBasePayload {
   currency: string;
   absorbFee: boolean;
   /** Server-owned verified account — raw bank details never come from the browser. */
@@ -123,6 +140,31 @@ export interface ConfirmInvoicePayload {
   expiry: InvoiceExpiry;
   idempotencyKey: string;
 }
+
+/** Upload mode — attach a document, manual amount (the original MVP1 contract). */
+export interface UploadInvoicePayload extends ConfirmInvoiceBasePayload {
+  documentId: string;
+  invoiceAmount: string;
+}
+
+/** Generate mode — line items; the server computes the total authoritatively. */
+export interface GenerateInvoicePayload extends ConfirmInvoiceBasePayload {
+  source: "generated";
+  items: Array<{
+    name: string;
+    description?: string;
+    quantity: number;
+    unitAmount: number;
+    discountType?: "percent" | "fixed";
+    discountValue?: number;
+  }>;
+  taxRate?: number;
+  discountType?: "percent" | "fixed";
+  discountValue?: number;
+  notes?: string;
+}
+
+export type ConfirmInvoicePayload = UploadInvoicePayload | GenerateInvoicePayload;
 
 export interface CreateInvoiceResponse {
   data: {

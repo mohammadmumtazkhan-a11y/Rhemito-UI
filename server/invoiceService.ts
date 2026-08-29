@@ -18,9 +18,11 @@ import type {
   ClientEmail,
   SendInvoicePayload,
 } from "@shared/schema";
+import type { InvoiceTotals } from "@shared/invoice-logic";
 import {
   EXPIRY_TIMEZONE,
   computeInvoiceFees,
+  computeInvoiceTotals,
   clientDisplayName,
   dateInTz,
   deriveInvoiceStatus,
@@ -121,6 +123,9 @@ function invoiceSentEmail(inv: Invoice, link: string, doc: InvoiceDocument | nul
   const due = inv.dueDate
     ? `Due Date: ${formatHumanDate(inv.dueDate)}\n`
     : "";
+  const attachmentLine = doc
+    ? `The invoice document is attached to this email. You can also view and pay this invoice securely here:\n${link}\n\n`
+    : `You can view and pay this invoice securely here:\n${link}\n\n`;
   return {
     type: "invoice_sent",
     subject: `Invoice ${inv.invoiceNumber} from ${inv.senderName}: ${inv.currency} ${inv.amount}`,
@@ -130,7 +135,7 @@ function invoiceSentEmail(inv: Invoice, link: string, doc: InvoiceDocument | nul
       `${due}` +
       `Payment Link Expiry Date: ${formatHumanDate(invoiceExpiryDate(inv))} ` +
       `(payment can be started until 11:59 p.m. on this date).\n\n` +
-      `The invoice document is attached to this email. You can also view and pay this invoice securely here:\n${link}\n\n` +
+      attachmentLine +
       `— Rhemito`,
     attachment: doc
       ? { fileName: doc.fileName, mimeType: doc.mimeType, size: Number(doc.size) }
@@ -243,6 +248,14 @@ export interface InvoiceJSON {
   status: string; // derived display status
   paymentRef: string | null;
   documentId: string | null;
+  // Invoice generation ("generate on the go") — additive fields
+  source: string; // "generated" | "uploaded"
+  items: Invoice["items"];
+  taxRate: string | null;
+  discountType: string | null;
+  discountValue: string | null;
+  notes: string | null;
+  totals: InvoiceTotals | null; // authoritative breakdown for generated invoices
   sentAt: string | null;
   paidAt: string | null;
   expiredAt: string | null;
@@ -286,6 +299,13 @@ export function toInvoiceJSON(inv: Invoice): InvoiceJSON {
     status: deriveInvoiceStatus(inv, now),
     paymentRef: inv.paymentRef ?? null,
     documentId: inv.documentId ?? null,
+    source: inv.source ?? "uploaded",
+    items: inv.items ?? null,
+    taxRate: inv.taxRate ?? null,
+    discountType: inv.discountType ?? null,
+    discountValue: inv.discountValue ?? null,
+    notes: inv.notes ?? null,
+    totals: inv.items && inv.items.length > 0 ? computeInvoiceTotals(inv) : null,
     sentAt: inv.sentAt?.toISOString() ?? null,
     paidAt: inv.paidAt?.toISOString() ?? null,
     expiredAt: inv.expiredAt?.toISOString() ?? null,
@@ -325,6 +345,15 @@ export function toPublicInvoiceJSON(inv: Invoice) {
     cancelledAt: inv.cancelledAt?.toISOString() ?? null,
     cancellationReason: inv.cancellationReason ?? null,
     newLinkRequestedAt: inv.newLinkRequestedAt?.toISOString() ?? null,
+    // Generated-invoice document — the payer sees the full invoice rendered on
+    // this page instead of an uploaded document download.
+    source: inv.source ?? "uploaded",
+    items: inv.items ?? null,
+    taxRate: inv.taxRate ?? null,
+    discountType: inv.discountType ?? null,
+    discountValue: inv.discountValue ?? null,
+    notes: inv.notes ?? null,
+    totals: inv.items && inv.items.length > 0 ? computeInvoiceTotals(inv) : null,
   };
 }
 
@@ -427,7 +456,28 @@ export async function confirmAndSendInvoice(params: {
     throw new InvoiceError(400, "VALIDATION_ERROR", errors[0]);
   }
 
-  const doc = await assertDocumentAttachable(payload.documentId, senderId);
+  // Two mutually exclusive creation modes: a generated invoice is built from
+  // line items (total computed here, server-side), an uploaded invoice from an
+  // attached document plus a manual amount.
+  const isGenerated = payload.source === "generated";
+  const totals = isGenerated
+    ? computeInvoiceTotals({
+        items: payload.items ?? [],
+        taxRate: payload.taxRate,
+        discountType: payload.discountType,
+        discountValue: payload.discountValue,
+      })
+    : null;
+  if (totals && totals.total <= 0) {
+    throw new InvoiceError(400, "VALIDATION_ERROR", "The invoice total must be greater than zero.");
+  }
+  if (!isGenerated && !payload.invoiceAmount) {
+    throw new InvoiceError(400, "VALIDATION_ERROR", "Enter a valid invoice amount.");
+  }
+
+  const doc = isGenerated
+    ? null
+    : await assertDocumentAttachable(payload.documentId ?? "", senderId);
 
   const sequence = await storage.nextInvoiceSequence();
   // Month prefix follows the invoice timezone, not UTC.
@@ -448,7 +498,7 @@ export async function confirmAndSendInvoice(params: {
     clientEmail: payload.clientEmail.toLowerCase(),
     clientPhoneCode: payload.clientPhoneCode ?? null,
     clientPhoneNumber: payload.clientPhoneNumber ?? null,
-    amount: payload.invoiceAmount,
+    amount: isGenerated ? (totals ? totals.total.toFixed(2) : "0.00") : payload.invoiceAmount!,
     currency: payload.currency,
     absorbFee: payload.absorbFee,
     payoutAccountBank: payoutAccount.bankName,
@@ -465,7 +515,22 @@ export async function confirmAndSendInvoice(params: {
     paymentRef: null,
     token,
     tokenHash,
-    documentId: doc.id,
+    documentId: doc ? doc.id : null,
+    source: isGenerated ? "generated" : "uploaded",
+    items: isGenerated
+      ? (payload.items ?? []).map((item) => ({
+          name: item.name,
+          description: item.description ?? null,
+          quantity: item.quantity,
+          unitAmount: item.unitAmount,
+          discountType: item.discountType ?? null,
+          discountValue: item.discountValue ?? null,
+        }))
+      : null,
+    taxRate: isGenerated && payload.taxRate !== undefined ? String(payload.taxRate) : null,
+    discountType: isGenerated ? (payload.discountType ?? null) : null,
+    discountValue: isGenerated && payload.discountValue !== undefined ? String(payload.discountValue) : null,
+    notes: isGenerated ? (payload.notes ?? null) : null,
     sentAt: now,
     paidAt: null,
     expiredAt: null,
@@ -481,23 +546,28 @@ export async function confirmAndSendInvoice(params: {
   };
 
   await storage.createInvoice(invoice);
-  await storage.associateInvoiceDocument(doc.id);
+  if (doc) {
+    await storage.associateInvoiceDocument(doc.id);
+  }
 
   await storage.addInvoiceEvent(invoiceEvent(invoice.id, "invoice_generated", {
     invoiceNumber: invoice.invoiceNumber,
     amount: invoice.amount,
     currency: invoice.currency,
+    source: invoice.source,
+    itemCount: invoice.items ? invoice.items.length : null,
     expiresAt: invoice.expiresAt.toISOString(),
   }, senderId));
 
-  // The invoice document travels with the client email that carries the link.
+  // For uploaded invoices the document travels with the client email that
+  // carries the link; generated invoices render on the payment page itself.
   const link = buildPaymentLink(invoice, baseUrl);
   await queueClientEmail(invoice, invoiceSentEmail(invoice, link, doc), `${invoice.id}:invoice_sent`);
   await storage.addInvoiceEvent(invoiceEvent(invoice.id, "notification_queued", {
     to: invoice.clientEmail,
     type: "invoice_sent",
     link,
-    attachment: doc.fileName,
+    attachment: doc ? doc.fileName : null,
   }, senderId));
 
   scheduleInvoiceTimers(invoice);
