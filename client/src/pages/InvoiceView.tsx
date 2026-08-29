@@ -836,7 +836,7 @@ export default function InvoiceView() {
     }
     if (payStep === "landing") {
       return (
-        <div className="flex h-full flex-col">
+        <div className="flex flex-col">
           <div>
             <p className="text-xs font-semibold uppercase text-slate-500">Secure checkout</p>
             <h1 className="mt-2 text-2xl font-bold text-slate-950 font-display">Complete your payment</h1>
@@ -864,8 +864,7 @@ export default function InvoiceView() {
             </div>
           </div>
           {invoice.source === "generated" && invoice.items && invoice.items.length > 0 ? (
-            <div className="max-h-[420px] overflow-y-auto">
-              <GeneratedInvoiceDocument
+            <GeneratedInvoiceDocument
                 invoiceNumber={invoice.invoiceNumber}
                 senderName={invoice.senderName}
                 clientName={
@@ -888,7 +887,6 @@ export default function InvoiceView() {
                 expiryDate={invoice.expiryDate}
                 showPrintAction
               />
-            </div>
           ) : invoice.hasDocument && (
             <Button
               variant="outline"
@@ -903,7 +901,7 @@ export default function InvoiceView() {
           </div>
           <Button
             onClick={() => setPayStep("choose_method")}
-            className="mt-auto h-14 w-full justify-between bg-blue-600 px-5 text-base hover:bg-blue-700"
+            className="mt-6 h-14 w-full justify-between bg-blue-600 px-5 text-base hover:bg-blue-700"
             size="lg"
             data-testid="button-pay-invoice"
           >
