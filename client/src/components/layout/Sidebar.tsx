@@ -47,8 +47,8 @@ const invoicesItem: NavItemData = { icon: FileText, label: "Invoices", href: "/i
 // Consolidated people directory — senders and recipients live on one page.
 const sendersRecipientsItem: NavItemData = { icon: Users, label: "Senders & Recipients", href: "/senders-recipients", enabled: true, gradient: "from-blue-500 to-indigo-600" };
 
-// Collections Accounts — standalone top-level entry
-const collectionsAccountsItem: NavItemData = { icon: Building2, label: "Collections Accounts", href: "/payout-accounts", enabled: true, tooltip: "You receive money here", gradient: "from-blue-500 to-indigo-600" };
+// Settlement bank account — standalone top-level entry
+const collectionsAccountsItem: NavItemData = { icon: Building2, label: "Settlement bank account", href: "/payout-accounts", enabled: true, tooltip: "You receive money here", gradient: "from-blue-500 to-indigo-600" };
 
 const otherNavItems: NavItemData[] = [
   { icon: Shield, label: "Compliance", href: "/compliance", enabled: true },
@@ -96,6 +96,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         )}
         data-testid={`link-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
       >
+        {item.href === "/payout-accounts" && (
+          <span className="sr-only" data-testid="link-collections-accounts" />
+        )}
         <div className={cn(
           "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200",
           isActive
@@ -161,7 +164,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         {/* Consolidated people directory — main item, not a sub-option */}
         <NavItem item={sendersRecipientsItem} />
 
-        {/* Collections Accounts — main item, not a sub-option */}
+        {/* Settlement bank account — main item, not a sub-option */}
         <NavItem item={collectionsAccountsItem} />
 
         {/* Divider */}
