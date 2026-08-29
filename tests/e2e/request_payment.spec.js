@@ -101,7 +101,7 @@ test.describe('Request Money E2E', () => {
 
     await page.goto('/request-payment');
     await expect(page.getByTestId('payout-account-required')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('payout-account-required').getByText('Settlement Account Required')).toBeVisible();
+    await expect(page.getByTestId('payout-account-required').getByText('Settlement Bank Account Required')).toBeVisible();
 
     // The add-and-verify dialog auto-opens when no verified account exists
     await expect(page.getByTestId('input-account-bank')).toBeVisible({ timeout: 10000 });
