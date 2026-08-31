@@ -632,19 +632,19 @@ export default function RequestPayment() {
               </div>
 
               <div className="p-4 bg-muted/40 rounded-xl space-y-2 text-left border border-border">
-                <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex flex-col gap-0.5 text-xs text-muted-foreground md:flex-row md:justify-between md:gap-6">
                   <span>Requested Amount:</span>
                   <span className="font-medium text-foreground">{senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}</span>
                 </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex flex-col gap-0.5 text-xs text-muted-foreground md:flex-row md:justify-between md:gap-6">
                   <span>Sender Pays:</span>
                   <span className="font-medium text-foreground">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span>
                 </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex flex-col gap-0.5 text-xs text-muted-foreground md:flex-row md:justify-between md:gap-6">
                   <span>Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
                   <span className="font-medium text-foreground">{formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
                 </div>
-                <div className="flex justify-between text-xs font-semibold pt-1 border-t border-border/60">
+                <div className="flex flex-col gap-0.5 text-xs font-semibold pt-1 border-t border-border/60 md:flex-row md:justify-between md:gap-6">
                   <span className="text-primary">You Receive in Bank:</span>
                   <span className="text-primary font-bold">
                     {senderCurrency === payoutCurrency
@@ -1002,27 +1002,27 @@ export default function RequestPayment() {
                         <h3 className="font-semibold text-base text-slate-900 border-b pb-2">Calculation Breakdown</h3>
 
                         <div className="space-y-3 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Sender Pays:</span>
+                          <div className="flex flex-col gap-0.5 md:flex-row md:justify-between md:gap-6">
+                            <span className="text-xs text-muted-foreground md:text-sm">Sender Pays:</span>
                             <span className="font-bold text-slate-800" data-testid="breakdown-sender-pays">
                               {senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}
                             </span>
                           </div>
 
-                          <div className="flex justify-between text-muted-foreground">
-                            <span>Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
+                          <div className="flex flex-col gap-0.5 text-muted-foreground md:flex-row md:justify-between md:gap-6">
+                            <span className="text-xs md:text-sm">Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
                             <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
                               {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
                             </span>
                           </div>
 
-                          <div className="flex justify-between text-xs text-muted-foreground">
+                          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground md:flex-row md:justify-between md:gap-6">
                             <span>Net before FX:</span>
                             <span className="font-semibold text-slate-700">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
                           </div>
 
                           {senderCurrency !== payoutCurrency && (
-                            <div className="flex items-center justify-between text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900">
+                            <div className="flex flex-col gap-0.5 text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900 md:flex-row md:items-center md:justify-between md:gap-6">
                               <span className="font-medium">FX Conversion:</span>
                               <span className="font-semibold">Live Spot Rate at Payout</span>
                             </div>
@@ -1419,34 +1419,34 @@ export default function RequestPayment() {
                       </div>
 
                       <div className="space-y-2.5 text-sm">
-                        <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-muted-foreground">Platform Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
+                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                          <span className="text-xs text-muted-foreground md:text-sm">Platform Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
                           <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
                             {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
                           </span>
                         </div>
 
-                        <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-muted-foreground">Net Payout Amount:</span>
+                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                          <span className="text-xs text-muted-foreground md:text-sm">Net Payout Amount:</span>
                           <span className="font-semibold text-slate-800">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
                         </div>
 
                         {senderCurrency !== payoutCurrency && (
-                          <div className="flex justify-between py-1 border-b border-slate-100 text-amber-900 bg-amber-50/70 px-2 py-1.5 rounded">
+                          <div className="flex flex-col gap-0.5 py-1 border-b border-slate-100 text-amber-900 bg-amber-50/70 px-2 py-1.5 rounded md:flex-row md:justify-between md:gap-6">
                             <span className="font-medium text-xs">FX Conversion:</span>
                             <span className="font-semibold text-xs">Applied at live spot rate upon payout</span>
                           </div>
                         )}
 
-                        <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-muted-foreground">Destination Settlement Bank Account:</span>
+                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                          <span className="text-xs text-muted-foreground md:text-sm">Destination Settlement Bank Account:</span>
                           <span className="font-semibold text-slate-800">
                             {selectedPayoutAccount?.bankName} ({payoutCurrency})
                           </span>
                         </div>
 
-                        <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-muted-foreground">Sender:</span>
+                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                          <span className="text-xs text-muted-foreground md:text-sm">Sender:</span>
                           <span className="font-medium text-slate-800">
                             {formData.senderType === "business"
                               ? formData.senderBusinessName
@@ -1454,28 +1454,28 @@ export default function RequestPayment() {
                           </span>
                         </div>
 
-                        <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-muted-foreground">Sender Email:</span>
+                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                          <span className="text-xs text-muted-foreground md:text-sm">Sender Email:</span>
                           <span className="font-medium text-slate-800">{formData.senderEmail}</span>
                         </div>
 
                         {formData.senderPhone && (
-                          <div className="flex justify-between py-1 border-b border-slate-100">
-                            <span className="text-muted-foreground">Sender Phone:</span>
+                          <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                            <span className="text-xs text-muted-foreground md:text-sm">Sender Phone:</span>
                             <span className="font-medium">{formData.senderCountryCode} {formData.senderPhone}</span>
                           </div>
                         )}
 
                         {formData.senderType === "individual" && formData.senderDob && (
-                          <div className="flex justify-between py-1 border-b border-slate-100">
-                            <span className="text-muted-foreground">Sender DOB:</span>
+                          <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                            <span className="text-xs text-muted-foreground md:text-sm">Sender DOB:</span>
                             <span className="font-medium">{formData.senderDob}</span>
                           </div>
                         )}
 
                         {formData.reason && (
-                          <div className="flex justify-between py-1 border-b border-slate-100">
-                            <span className="text-muted-foreground">Reason:</span>
+                          <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                            <span className="text-xs text-muted-foreground md:text-sm">Reason:</span>
                             <span className="font-medium">
                               {formData.reason === "other" && formData.otherReason.trim()
                                 ? `Other (${formData.otherReason.trim()})`
@@ -1484,15 +1484,15 @@ export default function RequestPayment() {
                           </div>
                         )}
 
-                        <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-muted-foreground">Due Date:</span>
+                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                          <span className="text-xs text-muted-foreground md:text-sm">Due Date:</span>
                           <span className="font-medium" data-testid="review-due-date">
                             {formData.dueDate ? formatHumanDate(formData.dueDate) : "No due date"}
                           </span>
                         </div>
 
-                        <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-muted-foreground">Payment Link Expiry Date:</span>
+                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
+                          <span className="text-xs text-muted-foreground md:text-sm">Payment Link Expiry Date:</span>
                           <span className="font-medium" data-testid="review-expiry-date">
                             {computedExpiry
                               ? `${formatHumanDate(computedExpiry.expiryDate)} at 11:59 p.m. ${EXPIRY_TIMEZONE_LABEL} (${computedExpiry.expiryDate})`
@@ -1500,8 +1500,8 @@ export default function RequestPayment() {
                           </span>
                         </div>
 
-                        <div className="flex justify-between py-1">
-                          <span className="text-muted-foreground">Payment Method:</span>
+                        <div className="flex flex-col gap-0.5 py-1.5 md:flex-row md:justify-between md:gap-6 md:py-1">
+                          <span className="text-xs text-muted-foreground md:text-sm">Payment Method:</span>
                           <span className="font-medium capitalize">{formData.paymentMethod.replace("_", " ")}</span>
                         </div>
                       </div>
@@ -1567,21 +1567,21 @@ export default function RequestPayment() {
             </div>
 
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 text-xs">
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-0.5 md:flex-row md:justify-between md:gap-6">
                 <span className="text-muted-foreground">Requested Amount (Sender Pays):</span>
                 <span className="font-semibold text-slate-800">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-0.5 md:flex-row md:justify-between md:gap-6">
                 <span className="text-muted-foreground">Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
                 <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
                   {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-0.5 md:flex-row md:justify-between md:gap-6">
                 <span className="text-muted-foreground">Net Payout Amount:</span>
                 <span className="font-semibold text-slate-800">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
               </div>
-              <div className="flex justify-between pt-1 border-t border-slate-200/60">
+              <div className="flex flex-col gap-0.5 pt-1 border-t border-slate-200/60 md:flex-row md:justify-between md:gap-6">
                 <span className="text-muted-foreground">Destination Settlement Bank Account:</span>
                 <span className="font-semibold text-slate-800">{selectedPayoutAccount?.bankName} ({payoutCurrency})</span>
               </div>
