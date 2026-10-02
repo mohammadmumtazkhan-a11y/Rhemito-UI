@@ -137,9 +137,15 @@ export default function SendMoney() {
         ? (parseFloat(amount || "0") + fee) - (promoApplied ? promoDiscount : 0) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0)
         : (parseFloat(amount || "0") + effectiveFee) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0);
 
-    // Adjusted Receive Amount for Bonus "Send More"
-    const bonusReceiveParams = useBonus && bonusType === 'send_more' ? (bonusAmount * EXCHANGE_RATE) : 0;
-    const finalReceiveAmount = (parseFloat(receiveAmount || "0") + bonusReceiveParams).toFixed(2);
+    // Amount Summary rows:
+    //   You Send     = amount the customer entered (never includes fee or bonus)
+    //   Amount Sent  = GBP actually converted for the recipient
+    //                  (Pay Less: = You Send; Send More: = You Send + bonus)
+    //   They Receive = Amount Sent x rate
+    //   Total to Pay = You Send + fee - promo - (Pay Less bonus)
+    const youSendAmount = parseFloat(amount || "0");
+    const amountSentGBP = youSendAmount + (useBonus && bonusType === 'send_more' ? bonusAmount : 0);
+    const finalReceiveAmount = (amountSentGBP * EXCHANGE_RATE).toFixed(2);
 
 
 
@@ -282,7 +288,7 @@ export default function SendMoney() {
                 sendCurrency: "GBP",
                 sendAmount: parseFloat(amount || "0").toFixed(2),
                 receiveCurrency: recipientDetails.currency || "NGN",
-                receiveAmount: (parseFloat(receiveAmount || "0") || 0).toFixed(2),
+                receiveAmount: finalReceiveAmount,
                 fee: effectiveFee.toFixed(2),
                 exchangeRate: String(EXCHANGE_RATE),
                 ...(promoApplied && promoCode ? { promoCode } : {}),
@@ -1197,11 +1203,11 @@ export default function SendMoney() {
 
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">You Send</span>
-                                                    <span className="font-medium">{totalPay.toFixed(2)} GBP</span>
+                                                    <span className="font-medium">{youSendAmount.toFixed(2)} GBP</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Amount Sent</span>
-                                                    <span className="font-medium">{(parseFloat(amount)).toFixed(2)} GBP</span>
+                                                    <span className="font-medium">{amountSentGBP.toFixed(2)} GBP</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">They Receive</span>
@@ -1308,7 +1314,7 @@ export default function SendMoney() {
                                             <h3 className="text-lg font-bold text-green-900">Your transaction has been created!</h3>
                                             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
                                                 <span className="text-gray-600">Reference: <span className="font-semibold text-gray-900">#{transactionRef}</span></span>
-                                                <span className="text-gray-600">Amount: <span className="font-semibold text-green-700">NGN {receiveAmount}</span></span>
+                                                <span className="text-gray-600">Amount: <span className="font-semibold text-green-700">NGN {finalReceiveAmount}</span></span>
                                             </div>
                                             <p className="text-sm text-gray-600 mt-1">Please complete your payment below to finalise your transfer.</p>
                                         </div>

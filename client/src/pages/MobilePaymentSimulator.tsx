@@ -1613,7 +1613,7 @@ export default function MobilePaymentSimulator() {
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-slate-400 font-semibold">Amount Sent</span>
-                                                <span className="font-bold text-slate-800">£{parseFloat(sendAmount).toFixed(2)} GBP</span>
+                                                <span className="font-bold text-slate-800">£{(sendVal + bonusSendMoreAmount).toFixed(2)} GBP</span>
                                             </div>
                                             <div className="flex justify-between border-t border-dashed pt-2.5 border-slate-200">
                                                 <span className="text-slate-500 font-bold">Total Paid</span>
