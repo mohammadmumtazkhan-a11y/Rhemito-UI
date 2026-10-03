@@ -18,6 +18,9 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useRewards } from "@/hooks/use-rewards";
+import { balanceFor, bonusToApply, expiringSoon, formatMoney } from "@/lib/rewards";
+import { BonusRedemption, type BonusChoice } from "@/components/rewards/BonusRedemption";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
 import {
     cancelSendMoneyTransaction,
@@ -112,10 +115,15 @@ export default function SendMoney() {
     const [showExpiryPopup, setShowExpiryPopup] = useState(false);
     const [expiryCountdown, setExpiryCountdown] = useState(5);
 
-    // Bonus State - Hardcoded for Prototype
-    const [bonusBalance] = useState(5);
-    const [useBonus, setUseBonus] = useState(false);
-    const [bonusType, setBonusType] = useState<'pay_less' | 'send_more'>('pay_less');
+    // Referral bonus — live wallet from the rewards API (US-5.2 / US-5.3)
+    const rewards = useRewards();
+    const bonusWallet = balanceFor(rewards.data?.wallet, "GBP");
+    const bonusBalance = bonusWallet.available;
+    const bonusMinRedeem = rewards.data?.offer?.currency === "GBP" ? Number(rewards.data.offer.min_redeem_amount || 0) : 0;
+    const bonusExpiring = expiringSoon((rewards.data?.wallet.unused ?? []).filter((c) => c.currency === "GBP"))[0];
+    const [bonusChoice, setBonusChoiceState] = useState<BonusChoice>("none");
+    const useBonus = bonusChoice !== "none" && bonusBalance > 0;
+    const bonusType: 'pay_less' | 'send_more' = bonusChoice === "send_more" ? "send_more" : "pay_less";
 
     // Calculations
     const fee = parseFloat(amount || "0") * FEE_PERCENTAGE;
@@ -128,14 +136,21 @@ export default function SendMoney() {
     const effectiveFee = isAmountDiscount ? fee : Math.max(0, fee - (promoApplied ? promoDiscount : 0));
 
     // Bonus Calculations
-    const bonusAmount = useBonus ? Math.min(bonusBalance, parseFloat(amount || "0")) : 0;
+    const bonusAmount = useBonus ? bonusToApply(bonusBalance, parseFloat(amount || "0")) : 0;
+    const setBonusChoice = (choice: BonusChoice) => {
+        setBonusChoiceState(choice);
+        const value = bonusToApply(bonusBalance, parseFloat(amount || "0"));
+        if (choice === "pay_less") toast({ title: `${formatMoney(value, "GBP")} bonus applied`, description: `You'll pay ${formatMoney(value, "GBP")} less.` });
+        if (choice === "send_more") toast({ title: `${formatMoney(value, "GBP")} bonus added`, description: "Your recipient will get more." });
+    };
 
     // Total Pay:
     // If Amount Discount (SAVE20), subtract promoDiscount from (Amount + Fee).
     // If Bonus "Pay Less" is active, subtract bonusAmount.
-    const totalPay = isAmountDiscount
+    // Never below 0 (AC-5.2.7)
+    const totalPay = Math.max(0, isAmountDiscount
         ? (parseFloat(amount || "0") + fee) - (promoApplied ? promoDiscount : 0) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0)
-        : (parseFloat(amount || "0") + effectiveFee) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0);
+        : (parseFloat(amount || "0") + effectiveFee) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0));
 
     // Amount Summary rows:
     //   You Send     = amount the customer entered (never includes fee or bonus)
@@ -998,72 +1013,18 @@ export default function SendMoney() {
                                 {/* Left Column: Input Sections */}
                                 <div className="lg:col-span-3 space-y-6">
 
-                                    {/* Bonus Redemption Section */}
-                                    <Card className="border-green-100 bg-green-50/30">
-                                        <CardHeader className="pb-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-                                                    <Wallet className="w-4 h-4" />
-                                                </div>
-                                                <CardTitle className="text-base text-green-800">Referral Bonus Available</CardTitle>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="space-y-4">
-                                            <div className="flex items-start gap-3">
-                                                <Checkbox
-                                                    id="use-bonus"
-                                                    checked={useBonus}
-                                                    onCheckedChange={(checked) => setUseBonus(checked as boolean)}
-                                                    className="mt-1 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
-                                                />
-                                                <div className="space-y-1">
-                                                    <Label htmlFor="use-bonus" className="text-base font-medium cursor-pointer">
-                                                        Redeem your <span className="font-bold text-green-700">£{bonusBalance.toFixed(2)}</span> bonus
-                                                    </Label>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        You have earned this from referring friends!
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div className="pl-7 space-y-3 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                                                <p className="text-sm font-medium text-gray-700">How would you like to use it?</p>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    <div
-                                                        onClick={() => { setUseBonus(true); setBonusType('pay_less'); }}
-                                                        className={`
-                                                            cursor-pointer border rounded-lg p-3 flex items-center gap-3 transition-all
-                                                            ${useBonus && bonusType === 'pay_less' ? 'bg-green-100 border-green-300 ring-1 ring-green-300' : 'bg-white hover:bg-gray-50 border-gray-200'}
-                                                        `}
-                                                    >
-                                                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${useBonus && bonusType === 'pay_less' ? 'border-green-600' : 'border-gray-400'}`}>
-                                                            {useBonus && bonusType === 'pay_less' && <div className="w-2 h-2 rounded-full bg-green-600" />}
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-medium text-sm">Pay Less</div>
-                                                            <div className="text-xs text-muted-foreground">Save £{Math.min(bonusBalance, parseFloat(amount)).toFixed(2)} now</div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div
-                                                        onClick={() => { setUseBonus(true); setBonusType('send_more'); }}
-                                                        className={`
-                                                            cursor-pointer border rounded-lg p-3 flex items-center gap-3 transition-all
-                                                            ${useBonus && bonusType === 'send_more' ? 'bg-green-100 border-green-300 ring-1 ring-green-300' : 'bg-white hover:bg-gray-50 border-gray-200'}
-                                                        `}
-                                                    >
-                                                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${useBonus && bonusType === 'send_more' ? 'border-green-600' : 'border-gray-400'}`}>
-                                                            {useBonus && bonusType === 'send_more' && <div className="w-2 h-2 rounded-full bg-green-600" />}
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-medium text-sm">Send More</div>
-                                                            <div className="text-xs text-muted-foreground">Recipient gets +£{Math.min(bonusBalance, parseFloat(amount)).toFixed(2)}</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
+                                    {/* Bonus Redemption Section (spec §6) */}
+                                    <BonusRedemption
+                                        available={bonusBalance}
+                                        currency="GBP"
+                                        sendAmount={parseFloat(amount || "0")}
+                                        receiveCurrency="NGN"
+                                        exchangeRate={EXCHANGE_RATE}
+                                        minRedeem={bonusMinRedeem}
+                                        expiringCredit={bonusExpiring}
+                                        choice={bonusChoice}
+                                        onChoice={setBonusChoice}
+                                    />
 
                                     {/* Promo Code Section */}
                                     <Card>
@@ -1115,6 +1076,30 @@ export default function SendMoney() {
                                                 <div
                                                     key={method.id}
                                                     onClick={async () => {
+                                                        // Use the bonus first so a changed balance never takes payment (AC-5.2.9)
+                                                        if (useBonus && transactionId) {
+                                                            try {
+                                                                const res = await fetch("/api/rewards/apply", {
+                                                                    method: "POST",
+                                                                    headers: { "Content-Type": "application/json" },
+                                                                    credentials: "include",
+                                                                    body: JSON.stringify({ transactionId, amount: bonusAmount, mode: bonusType }),
+                                                                });
+                                                                if (!res.ok) {
+                                                                    const body = await res.json().catch(() => ({}));
+                                                                    const message = body?.error?.code === "ALREADY_APPLIED" ? null : (body?.error?.message ?? "Your bonus balance has changed. Please review your transfer.");
+                                                                    if (message) {
+                                                                        setBonusChoiceState("none");
+                                                                        void rewards.refetch();
+                                                                        toast({ title: "Bonus not applied", description: message, variant: "destructive" });
+                                                                        return;
+                                                                    }
+                                                                }
+                                                            } catch {
+                                                                toast({ title: "Bonus not applied", description: "Rewards are unavailable right now. Please try again or continue without the bonus.", variant: "destructive" });
+                                                                return;
+                                                            }
+                                                        }
                                                         setPaymentMethod(method.id);
                                                         // Record the payment method on the server-owned
                                                         // transaction (instant methods complete it).
@@ -1125,20 +1110,7 @@ export default function SendMoney() {
                                                                 console.error("Failed to record payment method", e);
                                                             }
                                                         }
-                                                        if (useBonus) {
-                                                            try {
-                                                                await fetch("/api/bonus/redeem", {
-                                                                    method: "POST",
-                                                                    headers: { "Content-Type": "application/json" },
-                                                                    body: JSON.stringify({
-                                                                        amount: Math.min(bonusBalance, parseFloat(amount)),
-                                                                        userId: "user_123"
-                                                                    }),
-                                                                });
-                                                            } catch (e) {
-                                                                console.error("Failed to redeem bonus", e);
-                                                            }
-                                                        }
+                                                        void rewards.refetch();
                                                         if (method.id === 'manual_transfer') {
                                                             setShowManualTransferConfirm(true);
                                                         } else {
@@ -1187,17 +1159,17 @@ export default function SendMoney() {
 
                                                 {/* Bonus Applied Row - Pay Less */}
                                                 {useBonus && bonusType === "pay_less" && (
-                                                    <div className="flex justify-between font-medium text-green-700 bg-green-50 px-2 py-1 -mx-2 rounded">
-                                                        <span>Referral Bonus</span>
-                                                        <span>- {Math.min(bonusBalance, parseFloat(amount)).toFixed(2)} GBP</span>
+                                                    <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus">
+                                                        <span>Referral bonus</span>
+                                                        <span>- {bonusAmount.toFixed(2)} GBP</span>
                                                     </div>
                                                 )}
 
                                                 {/* Bonus Applied Row - Send More */}
                                                 {useBonus && bonusType === "send_more" && (
-                                                    <div className="flex justify-between font-medium text-green-700 bg-green-50 px-2 py-1 -mx-2 rounded">
-                                                        <span>Referral Bonus (Recipient)</span>
-                                                        <span>+ {Math.min(bonusBalance, parseFloat(amount)).toFixed(2)} GBP</span>
+                                                    <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus">
+                                                        <span>Referral bonus (recipient)</span>
+                                                        <span>+ {bonusAmount.toFixed(2)} GBP</span>
                                                     </div>
                                                 )}
 
@@ -1236,7 +1208,7 @@ export default function SendMoney() {
                                                 <div className="pt-4 mt-2 border-t">
                                                     <div className="flex justify-between items-center pt-2">
                                                         <span className="text-gray-900 font-bold text-base">Total to Pay</span>
-                                                        <span className="font-bold text-lg text-gray-900">{totalPay.toFixed(2)} GBP</span>
+                                                        <span className="font-bold text-lg text-gray-900" data-testid="summary-total">{Math.max(0, totalPay).toFixed(2)} GBP</span>
                                                     </div>
                                                     {(promoApplied || useBonus) && (
                                                         <p className="text-xs text-green-600 font-medium mt-1">

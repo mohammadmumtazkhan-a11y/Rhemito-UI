@@ -29,6 +29,11 @@ import {
   type UnifiedTransactionRow,
 } from "@/lib/unifiedTransactions";
 import { useToast } from "@/hooks/use-toast";
+import { useRewards } from "@/hooks/use-rewards";
+import { balanceFor, formatMoney } from "@/lib/rewards";
+import { ReferEarnCard } from "@/components/rewards/ReferEarnCard";
+import { OfferBanner } from "@/components/rewards/OfferBanner";
+import { BonusCreditCard } from "@/components/rewards/BonusCreditCard";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -729,8 +734,16 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const searchParams = useSearch();
   const queryClient = useQueryClient();
-  // Bonus State - Hardcoded for Prototype
-  const [bonusBalance] = useState(5);
+  // Referral & Bonus — live offer, wallet and referrals from the rewards API
+  const rewards = useRewards();
+  const rewardsCurrency = rewards.data?.currency ?? "GBP";
+  const bonusBalance = balanceFor(rewards.data?.wallet, rewardsCurrency);
+  const [referHighlighted, setReferHighlighted] = useState(false);
+  const viewReferOffer = () => {
+    document.getElementById("refer-earn")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setReferHighlighted(true);
+    window.setTimeout(() => setReferHighlighted(false), 2000);
+  };
   const [cancelTarget, setCancelTarget] = useState<TransactionDetails | null>(null);
   // Money-request / invoice actions merged from the removed standalone pages.
   const [requestDetails, setRequestDetails] = useState<MoneyRequestView | null>(null);
@@ -919,27 +932,6 @@ export default function Dashboard() {
     }
   };
 
-  const [copiedReferral, setCopiedReferral] = useState(false);
-  const handleCopyReferral = () => {
-    navigator.clipboard.writeText("rhemito.com/ref/OLAYINKA2025").then(
-      () => {
-        setCopiedReferral(true);
-        toast({
-          title: "Referral link copied!",
-          description: "Share rhemito.com/ref/OLAYINKA2025 with friends to earn £10 bonus credit.",
-        });
-        setTimeout(() => setCopiedReferral(false), 2500);
-      },
-      () => {
-        toast({
-          title: "Copy failed",
-          description: "Please copy rhemito.com/ref/OLAYINKA2025 manually.",
-          variant: "destructive",
-        });
-      }
-    );
-  };
-
   return (
     <DashboardLayout>
       <CancelTransactionModal
@@ -987,19 +979,28 @@ export default function Dashboard() {
             </motion.p>
           </div>
 
-          <motion.div
-            variants={itemVariants}
-            whileHover={{ scale: 1.01, y: -1 }}
-            className="flex items-center gap-2.5 bg-gradient-to-r from-purple-50 via-pink-50/70 to-purple-50 text-purple-700 px-3.5 py-2.5 sm:px-4 sm:py-2 rounded-2xl sm:rounded-full border border-purple-200/70 shadow-xs backdrop-blur-sm self-start md:self-auto max-w-full"
-          >
-            <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-xs shrink-0">
-              <Gift className="w-3.5 h-3.5 text-pink-500" />
-            </div>
-            <span className="text-xs md:text-sm font-medium leading-snug">
-              You have earned <span className="font-bold text-purple-900">£{bonusBalance.toFixed(2)} Referral Bonus Credit</span>. Create a Transaction to use it.
-            </span>
-          </motion.div>
+          {bonusBalance.available > 0 && (
+            <motion.div
+              variants={itemVariants}
+              whileHover={{ scale: 1.01, y: -1 }}
+              data-testid="bonus-earned-pill"
+              className="flex items-center gap-2.5 bg-gradient-to-r from-purple-50 via-pink-50/70 to-purple-50 text-purple-700 px-3.5 py-2.5 sm:px-4 sm:py-2 rounded-2xl sm:rounded-full border border-purple-200/70 shadow-xs backdrop-blur-sm self-start md:self-auto max-w-full"
+            >
+              <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-xs shrink-0">
+                <Gift className="w-3.5 h-3.5 text-pink-500" />
+              </div>
+              <span className="text-xs md:text-sm font-medium leading-snug">
+                You have earned <span className="font-bold text-purple-900">{formatMoney(bonusBalance.available, bonusBalance.currency)} Referral Bonus Credit</span>.{" "}
+                <button type="button" onClick={() => setLocation("/send-money")} className="font-semibold underline underline-offset-2 hover:text-purple-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
+                  Create a Transaction
+                </button>{" "}
+                to use it.
+              </span>
+            </motion.div>
+          )}
         </div>
+
+        <OfferBanner latestOffer={rewards.data?.latestOffer ?? null} onView={viewReferOffer} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6">
           <motion.div variants={itemVariants}>
@@ -1092,79 +1093,16 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          <motion.div variants={itemVariants}>
-            <Card className="h-full rounded-2xl border border-indigo-100/80 bg-gradient-to-br from-indigo-50/50 via-purple-50/30 to-white shadow-[0_4px_24px_rgba(99,102,241,0.05)] hover:shadow-[0_8px_32px_rgba(99,102,241,0.08)] transition-all duration-300 overflow-hidden relative flex flex-col justify-between">
-              {/* Decorative background elements */}
-              <div className="absolute top-0 right-0 w-36 h-36 bg-indigo-200/20 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-28 h-28 bg-purple-200/20 rounded-full translate-y-1/2 -translate-x-1/2 blur-xl pointer-events-none" />
-
-              <CardHeader className="pb-3 px-5 pt-5 relative z-10">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-xs">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <CardTitle className="text-base font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent tracking-tight">Refer & Earn</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="px-5 pb-5 pt-0 space-y-3 relative z-10">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center justify-between bg-white/90 backdrop-blur-sm p-3.5 rounded-xl border border-indigo-100/80 shadow-2xs cursor-default hover:shadow-xs hover:border-indigo-200 transition-all duration-200">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-2xs">
-                          <Gift className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Bonus Credit</span>
-                          <p className="text-xl font-extrabold text-slate-900">£{bonusBalance.toFixed(2)}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          Ready to use
-                        </span>
-                      </div>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Create a Transaction to redeem your Bonus Credit</p>
-                  </TooltipContent>
-                </Tooltip>
-
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  <span className="font-semibold text-indigo-700">Invite friends</span> with your link and get <span className="font-bold text-emerald-600">£10 bonus credit</span> when they make their first transfer.
-                </p>
-
-                <div className="flex items-center gap-2 bg-white border border-indigo-200/70 rounded-xl p-2 sm:p-2.5 hover:border-indigo-400 transition-colors shadow-2xs min-w-0">
-                  <div className="flex-1 min-w-0 truncate text-[11px] sm:text-xs font-mono font-semibold text-indigo-700 select-all pl-1">
-                    rhemito.com/ref/OLAYINKA2025
-                  </div>
-                  <Button 
-                    size="sm" 
-                    onClick={handleCopyReferral}
-                    className={cn(
-                      "h-8 px-3 text-xs font-semibold shadow-xs transition-all active:scale-95",
-                      copiedReferral
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                        : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                    )}
-                  >
-                    {copiedReferral ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 mr-1" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5 mr-1" />
-                        Copy
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          <motion.div variants={itemVariants} className="flex flex-col gap-3 md:gap-4">
+            <ReferEarnCard
+              offer={rewards.data?.offer ?? null}
+              referrals={rewards.data?.referrals.data ?? []}
+              isLoading={rewards.isLoading}
+              isError={rewards.isError}
+              onRetry={() => rewards.refetch()}
+              highlighted={referHighlighted}
+            />
+            <BonusCreditCard balance={bonusBalance} unused={rewards.data?.wallet.unused ?? []} />
           </motion.div>
 
           <motion.div variants={itemVariants}>

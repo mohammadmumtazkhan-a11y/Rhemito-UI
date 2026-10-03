@@ -1,3 +1,4 @@
+import { loadReferral } from "@/lib/rewards";
 import React, { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -85,6 +86,7 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
 
     register.mutate({
       ...step1Data,
+      referralCode: loadReferral()?.code,
       directorName,
       dateOfBirth,
       gender,

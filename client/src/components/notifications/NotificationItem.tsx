@@ -16,6 +16,9 @@ import {
   Banknote,
   Wallet,
   X,
+  Gift,
+  Sparkles,
+  Users,
 } from "lucide-react";
 import type { Notification, NotificationType } from "@/contexts/NotificationContext";
 
@@ -206,6 +209,14 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
     containerClass: "bg-primary/10",
     iconClass: "text-primary",
   },
+  // Referral & Bonus — open Bonus & Discounts on click
+  reward_offer: { icon: Sparkles, containerClass: "bg-primary/10", iconClass: "text-primary" },
+  reward_friend_joined: { icon: Users, containerClass: "bg-primary/10", iconClass: "text-primary" },
+  reward_earned: { icon: Gift, containerClass: "bg-teal/10", iconClass: "text-teal" },
+  reward_bonus_used: { icon: Gift, containerClass: "bg-slate-100", iconClass: "text-slate-600" },
+  reward_bonus_expiring: { icon: Clock, containerClass: "bg-amber/10", iconClass: "text-amber" },
+  reward_bonus_expired: { icon: Clock, containerClass: "bg-slate-100", iconClass: "text-slate-600" },
+  reward_bonus_reversed: { icon: XCircle, containerClass: "bg-destructive/10", iconClass: "text-destructive" },
 };
 
 // ─── Relative timestamp ───────────────────────────────────────────────────────
@@ -254,6 +265,11 @@ export function NotificationItem({
   const handleClick = (): void => {
     if (!notification.isRead) {
       onRead(notification.id);
+    }
+    // Reward notifications deep-link to Bonus & Discounts (AC-6.2.2)
+    if (notification.type.startsWith("reward_")) {
+      navigate(notification.type === "reward_friend_joined" ? "/bonus-discounts?tab=referrals" : notification.type === "reward_offer" ? "/" : "/bonus-discounts");
+      return;
     }
     navigate(`/notifications/${notification.id}`);
   };

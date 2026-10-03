@@ -14,6 +14,7 @@ import {
   PROTOTYPE_MASTER_PASSWORD,
 } from "@shared/schema";
 import { log } from "./index";
+import { onCustomerVerified } from "./rewardsService";
 
 const RESET_PIN_TTL_MS = 10 * 60 * 1000;
 const RESET_PIN_RESEND_COOLDOWN_MS = 60_000;
@@ -23,6 +24,10 @@ const RESET_PIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 /** Per-email resend cooldown and failed-attempt tracking (single-process prototype). */
 const resetPinSentAt = new Map<string, number>();
 const resetPinFailures = new Map<string, { count: number; windowStart: number }>();
+
+/** Referral codes entered at registration, kept until the email is verified (US-3.1, US-3.2). */
+const pendingReferralCodes = new Map<string, string>();
+const REFERRAL_CODE_RE = /^[A-Z0-9]{6,12}$/;
 
 function enforceAuthRateLimit(req: Request, res: Response, name: keyof typeof serverConfig.rateLimits): boolean {
   const { limit, windowMs } = serverConfig.rateLimits[name];
@@ -105,7 +110,11 @@ export function registerAuthRoutes(app: Express) {
   // ─── Register ───────────────────────────────────────────────────
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const { confirmPassword, paymentRequestToken, isEmailLink, ...userData } = req.body;
+      const { confirmPassword, paymentRequestToken, isEmailLink, referralCode: rawReferralCode, ...userData } = req.body;
+      const referralCode = typeof rawReferralCode === "string" ? rawReferralCode.trim().toUpperCase() : "";
+      if (referralCode && !REFERRAL_CODE_RE.test(referralCode)) {
+        return res.status(400).json({ message: "Referral codes are 6–12 letters and numbers." });
+      }
       const payerVerification = req.session.paymentRequestVerification;
       const isVerifiedPayerRegistration = Boolean(paymentRequestToken);
       if (isVerifiedPayerRegistration && (
@@ -137,10 +146,13 @@ export function registerAuthRoutes(app: Express) {
         await storage.activateUser(userData.email);
         req.session.userId = user.id;
         delete req.session.paymentRequestVerification;
+        void onCustomerVerified(user.id, referralCode || null);
         const activated = await storage.getAuthUserById(user.id);
         const { password: _, ...safeUser } = activated ?? user;
         return res.json({ success: true, message: "Registration complete.", user: { ...safeUser, status: "active" } });
       }
+
+      if (referralCode) pendingReferralCodes.set(String(userData.email).toLowerCase(), referralCode);
 
       // Generate & store OTP (valid for 1 hour)
       const otpCode = generateOtp();
@@ -192,6 +204,11 @@ export function registerAuthRoutes(app: Express) {
       // Activate user and start session
       await storage.activateUser(email);
       req.session.userId = user.id;
+
+      // Referral: the referral is created once the email is verified (AC-3.1.5)
+      const pendingCode = pendingReferralCodes.get(email.toLowerCase()) ?? null;
+      pendingReferralCodes.delete(email.toLowerCase());
+      void onCustomerVerified(user.id, pendingCode);
 
       const { password: _, ...safeUser } = user;
       return res.json({

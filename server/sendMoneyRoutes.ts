@@ -12,6 +12,7 @@ import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { demoModeEnabled } from "./config";
 import { dispatchNotification } from "./notificationService";
+import { onTransferEvent } from "./rewardsService";
 import { toMinorUnits, fromMinorUnits } from "@shared/money";
 import { formatDocumentNumber } from "@shared/invoice-logic";
 import {
@@ -175,6 +176,9 @@ export function registerSendMoneyRoutes(app: Express): void {
       }
       if (status === "completed") {
         await dispatchNotification({ userId, type: "transaction_complete", data: notificationData(updated) });
+        // Referral programme: a completed transfer may qualify a referral (US-4.1)
+        const event = { reference: updated.reference, sendAmount: Number(fromMinorUnits(updated.sendAmountMinor, updated.sendCurrency)), sendCurrency: updated.sendCurrency, createdAt: updated.createdAt };
+        void onTransferEvent(userId, event, "PAID").then(() => onTransferEvent(userId, event, "COMPLETED"));
       }
       return res.json({ data: toView(updated) });
     } catch (err) {
@@ -197,6 +201,8 @@ export function registerSendMoneyRoutes(app: Express): void {
         throw new SendMoneyError(500, "INTERNAL_ERROR", "The transaction could not be cancelled. Please try again.");
       }
       await dispatchNotification({ userId, type: "transaction_cancelled_customer", data: notificationData(updated) });
+      // Releases any bonus used on this transfer (AC-5.2.10) and un-pends a referral (AC-4.4.1)
+      void onTransferEvent(userId, { reference: updated.reference, sendAmount: Number(fromMinorUnits(updated.sendAmountMinor, updated.sendCurrency)), sendCurrency: updated.sendCurrency, createdAt: updated.createdAt }, "CANCELLED");
       return res.json({ data: toView(updated) });
     } catch (err) {
       handleError(res, err);

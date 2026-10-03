@@ -47,7 +47,15 @@ export type NotificationType =
   // Funding Campaigns (GroupPay)
   | "campaign_contribution_received"
   | "campaign_target_reached"
-  | "campaign_status_changed";
+  | "campaign_status_changed"
+  // Referral & Bonus (Refer & Earn)
+  | "reward_offer"
+  | "reward_friend_joined"
+  | "reward_earned"
+  | "reward_bonus_used"
+  | "reward_bonus_expiring"
+  | "reward_bonus_expired"
+  | "reward_bonus_reversed";
 
 export interface Notification {
   id: string;

@@ -19,6 +19,7 @@ type CategoryFilter =
   | "transaction"
   | "refund"
   | "kyc"
+  | "rewards"
   | "system";
 
 const CATEGORY_LABELS: Record<CategoryFilter, string> = {
@@ -27,6 +28,7 @@ const CATEGORY_LABELS: Record<CategoryFilter, string> = {
   transaction: "Transaction",
   refund: "Refund",
   kyc: "KYC",
+  rewards: "Rewards",
   system: "System",
 };
 
@@ -59,6 +61,15 @@ function matchesCategory(n: Notification, cat: CategoryFilter): boolean {
     transaction: txnTypes,
     refund: refundTypes,
     kyc: kycTypes,
+    rewards: [
+      "reward_offer",
+      "reward_friend_joined",
+      "reward_earned",
+      "reward_bonus_used",
+      "reward_bonus_expiring",
+      "reward_bonus_expired",
+      "reward_bonus_reversed",
+    ],
     system: systemTypes,
   };
 
