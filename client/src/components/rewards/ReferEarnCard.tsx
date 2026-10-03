@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import { Check, Copy, Share2 } from "lucide-react";
+import { Check, Copy, RefreshCw, Share2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,9 +42,10 @@ export function ReferEarnCard({ offer, referrals, isLoading, isError, onRetry, h
 
   if (isLoading) {
     return (
-      <Card className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="refer-earn-loading">
-        <Skeleton className="h-5 w-32" />
-        <Skeleton className="h-4 w-full" />
+      <Card className="h-full rounded-2xl border border-slate-200 bg-white p-5 flex flex-col gap-4" data-testid="refer-earn-loading">
+        <Skeleton className="h-6 w-32" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-12 w-full" />
         <Skeleton className="h-12 w-full" />
       </Card>
     );
@@ -52,14 +53,19 @@ export function ReferEarnCard({ offer, referrals, isLoading, isError, onRetry, h
 
   if (isError) {
     return (
-      <Card className="rounded-2xl border border-slate-200 bg-white p-5" data-testid="refer-earn-error">
+      <Card className="h-full rounded-2xl border border-slate-200 bg-white p-5 flex flex-col" data-testid="refer-earn-error">
         <h2 className="font-display text-lg font-bold text-slate-900">Refer &amp; Earn</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          We couldn&apos;t load your referral details.{" "}
-          <button type="button" onClick={onRetry} className="font-semibold text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
-            Retry
-          </button>
-        </p>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6 text-center" role="alert">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+            <RefreshCw className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <p className="max-w-[240px] text-sm text-slate-600">
+            We couldn&apos;t load your referral details. Please check your connection and try again.
+          </p>
+          <Button type="button" variant="outline" onClick={onRetry} className="min-h-[44px] rounded-xl px-6 font-semibold">
+            Try again
+          </Button>
+        </div>
       </Card>
     );
   }
