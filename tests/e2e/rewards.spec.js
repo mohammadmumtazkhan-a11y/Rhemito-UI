@@ -100,6 +100,11 @@ test.describe('Refer & Earn on the Dashboard', () => {
         await page.route('**/api/rewards/summary**', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'REWARDS_UNAVAILABLE', message: 'Rewards are unavailable right now.' } }) }));
         await page.goto('/');
         await expect(page.getByTestId('refer-earn-error')).toContainText("We couldn't load your referral details.", { timeout: 15000 });
+        // Retry loads the card once rewards are available again
+        await page.unroute('**/api/rewards/summary**');
+        await mockRewards(page);
+        await page.getByRole('button', { name: 'Try again' }).click();
+        await expect(page.getByTestId('refer-earn-card')).toBeVisible();
     });
 });
 
