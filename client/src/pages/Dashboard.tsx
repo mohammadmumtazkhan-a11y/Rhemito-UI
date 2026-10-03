@@ -33,7 +33,6 @@ import { useRewards } from "@/hooks/use-rewards";
 import { balanceFor, formatMoney } from "@/lib/rewards";
 import { ReferEarnCard } from "@/components/rewards/ReferEarnCard";
 import { OfferBanner } from "@/components/rewards/OfferBanner";
-import { BonusCreditCard } from "@/components/rewards/BonusCreditCard";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -1004,7 +1003,7 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6">
           <motion.div variants={itemVariants}>
-            <Card className="h-full rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300 relative overflow-hidden flex flex-col justify-between">
+            <Card className="h-full rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300 relative overflow-hidden flex flex-col">
               {/* Subtle background mesh gradient */}
               <div className="absolute top-0 right-0 w-[240px] h-[240px] bg-blue-50/60 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
               <div className="absolute bottom-0 left-0 w-[180px] h-[180px] bg-teal/5 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
@@ -1017,7 +1016,7 @@ export default function Dashboard() {
                   <span className="tracking-tight">Quick Services</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 px-5 pb-5 pt-0 relative z-10">
+              <CardContent className="flex flex-1 flex-col justify-between gap-3 px-5 pb-5 pt-0 relative z-10">
                 <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.98 }}>
                   <Button
                     className="group w-full justify-start gap-3 sm:gap-3.5 bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white min-h-[64px] sm:h-[70px] px-3.5 sm:px-4 py-2 text-sm sm:text-[15px] font-semibold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/15 transition-all duration-200 border-none"
@@ -1093,7 +1092,7 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="flex flex-col gap-3 md:gap-4">
+          <motion.div variants={itemVariants} className="flex flex-col [&>*]:flex-1">
             <ReferEarnCard
               offer={rewards.data?.offer ?? null}
               referrals={rewards.data?.referrals.data ?? []}
@@ -1102,11 +1101,10 @@ export default function Dashboard() {
               onRetry={() => rewards.refetch()}
               highlighted={referHighlighted}
             />
-            <BonusCreditCard balance={bonusBalance} unused={rewards.data?.wallet.unused ?? []} />
           </motion.div>
 
           <motion.div variants={itemVariants}>
-            <Card className="h-full rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between">
+            <Card className="h-full rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col">
               <CardHeader className="pb-3 px-5 pt-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -1120,9 +1118,9 @@ export default function Dashboard() {
                   </span>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2.5 px-5 pb-5 pt-0">
+              <CardContent className="flex flex-1 flex-col gap-2.5 px-5 pb-5 pt-0">
                 {/* Sent Section */}
-                <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 hover:border-slate-200 transition-colors">
+                <div className="flex flex-1 flex-col justify-center p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 hover:border-slate-200 transition-colors">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                       <ArrowUpRight className="w-3.5 h-3.5 text-teal-600" />
@@ -1144,7 +1142,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Wallet Section */}
-                <div className="p-2.5 rounded-xl bg-blue-50/40 border border-blue-100/60 hover:border-blue-200/80 transition-colors">
+                <div className="flex flex-1 flex-col justify-center p-2.5 rounded-xl bg-blue-50/40 border border-blue-100/60 hover:border-blue-200/80 transition-colors">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
                       <Wallet className="w-3.5 h-3.5 text-blue-600" />
@@ -1166,7 +1164,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Collection Account Section */}
-                <div className="p-2.5 rounded-xl bg-purple-50/40 border border-purple-100/60 hover:border-purple-200/80 transition-colors">
+                <div className="flex flex-1 flex-col justify-center p-2.5 rounded-xl bg-purple-50/40 border border-purple-100/60 hover:border-purple-200/80 transition-colors">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-700">
                       <Building2 className="w-3.5 h-3.5 text-purple-600" />

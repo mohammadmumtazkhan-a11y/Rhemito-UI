@@ -96,7 +96,7 @@ export function ReferEarnCard({ offer, referrals, isLoading, isError, onRetry, h
       id="refer-earn"
       data-testid="refer-earn-card"
       className={cn(
-        "rounded-2xl border border-slate-200 bg-white p-5 flex flex-col gap-4 transition-shadow duration-300",
+        "h-full rounded-2xl border border-slate-200 bg-white p-5 flex flex-col gap-4 transition-shadow duration-300",
         highlighted && "ring-2 ring-primary ring-offset-2",
       )}
     >
