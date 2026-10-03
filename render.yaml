@@ -9,3 +9,7 @@ services:
         value: production
       - key: PORT
         value: 5000
+      # Live Mito Admin referral engine (PromoCode service). Without it the Refer & Earn card
+      # cannot load. Set the same value in Render > Rhemito-UI > Environment.
+      - key: MITO_API_URL
+        value: https://promocode-jcd8.onrender.com
