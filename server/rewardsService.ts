@@ -11,6 +11,7 @@
 
 import { storage } from "./storage";
 import { dispatchNotification } from "./notificationService";
+import { deviceForUser } from "./deviceId";
 import type { NotificationEventType } from "@shared/schema";
 
 export const MITO_API_URL = (process.env.MITO_API_URL ?? "http://localhost:5050").replace(/\/+$/, "");
@@ -78,6 +79,8 @@ export async function syncCustomer(userId: string): Promise<Json | null> {
       send_currency: currencyForCountry(user.country),
       kyc_status: user.kycStatus === "passed" ? "PASSED" : "PENDING",
       account_status: user.status === "blocked" ? "SUSPENDED" : "ACTIVE",
+      // Hashed device ID for the self-referral check; omitted when unknown so the engine keeps its last value
+      device_id: deviceForUser(user.id) ?? undefined,
     },
   });
   return result.data ?? null;

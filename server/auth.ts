@@ -15,6 +15,7 @@ import {
 } from "@shared/schema";
 import { log } from "./index";
 import { onCustomerVerified } from "./rewardsService";
+import { rememberDevice } from "./deviceId";
 
 const RESET_PIN_TTL_MS = 10 * 60 * 1000;
 const RESET_PIN_RESEND_COOLDOWN_MS = 60_000;
@@ -98,6 +99,7 @@ export function registerAuthRoutes(app: Express) {
 
       // Set session
       req.session.userId = user.id;
+      rememberDevice(user.id, req);
 
       const { password: _, ...safeUser } = user;
       return res.json({ user: safeUser });
@@ -146,6 +148,7 @@ export function registerAuthRoutes(app: Express) {
         await storage.activateUser(userData.email);
         req.session.userId = user.id;
         delete req.session.paymentRequestVerification;
+        rememberDevice(user.id, req);
         void onCustomerVerified(user.id, referralCode || null);
         const activated = await storage.getAuthUserById(user.id);
         const { password: _, ...safeUser } = activated ?? user;
@@ -208,6 +211,7 @@ export function registerAuthRoutes(app: Express) {
       // Referral: the referral is created once the email is verified (AC-3.1.5)
       const pendingCode = pendingReferralCodes.get(email.toLowerCase()) ?? null;
       pendingReferralCodes.delete(email.toLowerCase());
+      rememberDevice(user.id, req);
       void onCustomerVerified(user.id, pendingCode);
 
       const { password: _, ...safeUser } = user;

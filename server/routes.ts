@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { validatePromoCode, promoStorage, type PromoValidationRequest } from "./promocode";
 import { registerRewardsRoutes } from "./rewardsRoutes";
+import { captureDevice } from "./deviceId";
 import { registerAuthRoutes } from "./auth";
 import { registerInvoiceRoutes } from "./invoiceRoutes";
 import { registerRequestMoneyRoutes } from "./requestRoutes";
@@ -110,6 +111,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Remember each signed-in customer's device (used by the referral self-referral check)
+  app.use("/api", captureDevice);
   // Auth routes
   registerAuthRoutes(app);
   // Send Invoice MVP1 routes (also starts the invoice reminder/expiry sweep)
