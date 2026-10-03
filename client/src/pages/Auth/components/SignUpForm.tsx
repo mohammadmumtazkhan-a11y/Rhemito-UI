@@ -8,12 +8,16 @@ import { genderOptions } from "@/data/countries";
 import AccountTypeToggle from "./AccountTypeToggle";
 import PhoneInput from "./PhoneInput";
 import PasswordInput from "./PasswordInput";
+import { ReferralCodeField } from "@/components/rewards/ReferralSignup";
+import type { StoredReferral } from "@/lib/rewards";
 
 interface SignUpFormProps {
   email: string;
   onBack: () => void;
   onOtp: (email: string, devOtp?: string) => void;
   onBusinessStep2: (data: BusinessStep1Data) => void;
+  referral?: StoredReferral | null;
+  onReferralChange?: (referral: StoredReferral | null) => void;
 }
 
 export interface BusinessStep1Data {
@@ -26,7 +30,7 @@ export interface BusinessStep1Data {
   businessPhoneNumber: string;
 }
 
-export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2 }: SignUpFormProps) {
+export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, referral = null, onReferralChange = () => {} }: SignUpFormProps) {
   const { toast } = useToast();
   const [accountType, setAccountType] = useState<"individual" | "business">("individual");
 
@@ -110,6 +114,7 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2 }: Si
       mobileNumber,
       password,
       confirmPassword,
+      referralCode: referral?.code,
     });
   };
 
@@ -304,6 +309,11 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2 }: Si
                 placeholder="Confirm Password"
                 error={passwordError}
               />
+            </div>
+
+            {/* Referral code (US-3.2) */}
+            <div className="mt-4">
+              <ReferralCodeField referral={referral} onChange={onReferralChange} />
             </div>
 
             {/* Legal text */}

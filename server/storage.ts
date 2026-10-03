@@ -59,6 +59,7 @@ export interface IStorage {
   // Auth Users
   getAuthUserByEmail(email: string): Promise<AuthUser | undefined>;
   getAuthUserById(id: string): Promise<AuthUser | undefined>;
+  listAuthUsers(): Promise<AuthUser[]>;
   createAuthUser(user: InsertAuthUser): Promise<AuthUser>;
   activateUser(email: string): Promise<void>;
   updateAuthUserPassword(email: string, hashedPassword: string): Promise<AuthUser | undefined>;
@@ -864,6 +865,10 @@ export class MemStorage implements IStorage {
     this.authUsersMap.set(id, user);
     this.persistDevSnapshot();
     return user;
+  }
+
+  async listAuthUsers(): Promise<AuthUser[]> {
+    return Array.from(this.authUsersMap.values());
   }
 
   async activateUser(email: string): Promise<void> {

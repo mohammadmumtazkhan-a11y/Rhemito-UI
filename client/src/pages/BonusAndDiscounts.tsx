@@ -1,141 +1,334 @@
+import { useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
+import { Check, Circle, Copy, Loader2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-    Wallet,
-    TrendingUp,
-    Gift,
-    ArrowUpRight,
-    ArrowDownLeft,
-    Tag,
-    Send
-} from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useLocation } from "wouter";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { useRewards } from "@/hooks/use-rewards";
+import { cn } from "@/lib/utils";
+import {
+  CREDIT_STATUS_LABEL,
+  balanceFor,
+  expiryLabel,
+  daysUntil,
+  formatMoney,
+  formatUkDate,
+  referralHelpText,
+  type MyReferral,
+  type RewardsSummary,
+  type WalletCredit,
+} from "@/lib/rewards";
+
+type Tab = "overview" | "history" | "referrals";
+type HistoryFilter = "all" | "earned" | "used" | "expired" | "promo";
+
+const STATUS_PILL: Record<WalletCredit["status"], string> = {
+  UNUSED: "bg-teal-100 text-teal-800",
+  PARTLY_USED: "bg-amber-100 text-amber-800",
+  USED: "bg-slate-100 text-slate-700",
+  EXPIRED: "bg-slate-100 text-slate-700",
+  REVERSED: "bg-red-50 text-red-700",
+};
+
+const REFERRAL_PILL: Record<MyReferral["status"], { label: string; cls: string }> = {
+  REGISTERED: { label: "Joined", cls: "bg-slate-100 text-slate-700" },
+  PENDING: { label: "In progress", cls: "bg-blue-100 text-blue-800" },
+  REWARDED: { label: "Earned", cls: "bg-teal-100 text-teal-800" },
+  EXPIRED: { label: "Expired", cls: "bg-slate-100 text-slate-700" },
+  NOT_ELIGIBLE: { label: "Not eligible", cls: "bg-slate-100 text-slate-700" },
+  REVERSED: { label: "Reversed", cls: "bg-red-50 text-red-700" },
+};
+
+/** Customer-friendly wording for ledger notes written by the referral engine. */
+function describeCredit(notes: string | null, reason: string): string {
+  const n = notes ?? "";
+  if (/^Referrer reward – referred /.test(n)) return n.replace(/^Referrer reward – referred /, "Referral bonus – ");
+  if (/^Referee reward – invited by /.test(n)) return n.replace(/^Referee reward – invited by /, "Welcome bonus – invited by ").replace(/ \(approved by.*\)$/, "");
+  if (reason === "BONUS_RETURNED") return "Bonus returned – transfer cancelled";
+  return n || "Bonus credit";
+}
+
+interface HistoryRow {
+  id: string;
+  date: string;
+  description: string;
+  kind: Exclude<HistoryFilter, "all">;
+  amount: number;
+  currency: string;
+  status?: WalletCredit["status"];
+}
+
+function buildHistory(data: RewardsSummary, currency: string): HistoryRow[] {
+  const statusById = new Map(data.wallet.credits.map((c) => [c.id, c.status]));
+  const rows: HistoryRow[] = data.wallet.history
+    .filter((h) => h.currency === currency)
+    .map((h) => {
+      if (h.type === "EARNED") {
+        return { id: h.id, date: h.created_at, description: describeCredit(h.notes, h.reason_code), kind: "earned", amount: h.amount, currency: h.currency, status: statusById.get(h.id) };
+      }
+      if (h.type === "APPLIED") {
+        return { id: h.id, date: h.created_at, description: `Used on transfer ${h.transfer_id ?? ""}`.trim(), kind: "used", amount: h.amount, currency: h.currency };
+      }
+      return {
+        id: h.id, date: h.created_at, kind: "expired", amount: h.amount, currency: h.currency,
+        description: h.type === "VOIDED" ? "Referral bonus removed – transfer reversed" : "Bonus credit expired",
+      };
+    });
+  for (const p of data.wallet.promo_redemptions) {
+    if ((p.currency ?? currency) !== currency) continue;
+    rows.push({ id: p.id, date: p.created_at, description: `Promo code ${p.code}`, kind: "promo", amount: p.amount, currency });
+  }
+  return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+function StatTile({ label, value, sub, accent, children }: { label: string; value: string; sub: string; accent?: boolean; children?: React.ReactNode }) {
+  return (
+    <Card className="rounded-[14px] border border-slate-200 bg-white p-4 flex flex-col gap-1">
+      <span className="text-[13px] text-slate-500">{label}</span>
+      <span className={cn("font-display text-[22px] font-extrabold", accent ? "text-teal-700" : "text-slate-900")}>{value}</span>
+      <span className="text-xs text-slate-500">{sub}</span>
+      {children}
+    </Card>
+  );
+}
+
+function ReferralTimeline({ r }: { r: MyReferral }) {
+  const steps = [
+    { label: `Joined on ${formatUkDate(r.joined_on)}`, state: "done" as const },
+    { label: "Transfer is on its way", state: "current" as const },
+    { label: `You get ${formatMoney(r.reward, r.currency)} when it completes`, state: "upcoming" as const },
+  ];
+  return (
+    <ol className="flex flex-col gap-2.5" aria-label={`${r.friend} progress`}>
+      {steps.map((s) => (
+        <li key={s.label} className="flex items-center gap-2.5">
+          {s.state === "done" ? (
+            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-teal"><Check className="h-3 w-3 text-slate-900" strokeWidth={3} /></span>
+          ) : (
+            <span className={cn("h-[22px] w-[22px] rounded-full border-2", s.state === "current" ? "border-primary" : "border-slate-300")} />
+          )}
+          <span className={cn("text-sm", s.state === "upcoming" ? "text-slate-500" : "text-slate-800")}>{s.label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export default function BonusAndDiscounts() {
-    const [, setLocation] = useLocation();
-    // Mock Data for Prototype
-    const BONUS_BALANCE = 5.00;
-    const TOTAL_EARNED = 30.00; // Total lifetime earned
-    const TOTAL_REDEEMED = 25.00; // Total bonus used + Discount promo value
+  const [, setLocation] = useLocation();
+  const search = useSearch();
+  const { toast } = useToast();
+  const rewards = useRewards();
+  const initialTab = (new URLSearchParams(search).get("tab") as Tab) || "overview";
+  const [tab, setTab] = useState<Tab>(["overview", "history", "referrals"].includes(initialTab) ? initialTab : "overview");
+  const [filter, setFilter] = useState<HistoryFilter>("all");
+  const [pickedCurrency, setPickedCurrency] = useState<string | null>(null);
 
-    type Transaction = {
-        id: string;
-        date: string;
-        type: 'earned' | 'redeemed' | 'promo_code';
-        description: string;
-        amount: number;
-        status: 'completed' | 'pending';
-    };
+  const data = rewards.data;
+  const currencies = useMemo(() => {
+    const set = new Set<string>([data?.currency ?? "GBP", ...(data?.wallet.balances.map((b) => b.currency) ?? [])]);
+    return Array.from(set);
+  }, [data]);
+  const currency = pickedCurrency ?? data?.currency ?? "GBP";
+  const balance = balanceFor(data?.wallet, currency);
+  const unused = (data?.wallet.unused ?? []).filter((c) => c.currency === currency).sort((a, b) => String(a.expires_on).localeCompare(String(b.expires_on)));
+  const history = data ? buildHistory(data, currency) : [];
+  const filtered = filter === "all" ? history : history.filter((h) => h.kind === filter);
+  const promoSaved = (data?.wallet.promo_redemptions ?? []).filter((p) => (p.currency ?? currency) === currency).reduce((s, p) => s + Math.abs(p.amount), 0);
+  const referrals = data?.referrals.data ?? [];
+  const referralSummary = data?.referrals.summary;
 
-    const transactions: Transaction[] = [
-        { id: "TX101", date: "2024-05-15", type: 'earned', description: "Referral Bonus - John Doe", amount: 5.00, status: 'completed' },
-        { id: "TX102", date: "2024-05-18", type: 'redeemed', description: "Bonus Used on Transfer to Mom", amount: 5.00, status: 'completed' },
-        { id: "TX103", date: "2024-06-01", type: 'promo_code', description: "Promo Code 'WELCOME' Applied", amount: 10.00, status: 'completed' },
-        { id: "TX104", date: "2024-06-10", type: 'earned', description: "Referral Bonus - Sarah Smith", amount: 5.00, status: 'completed' },
-        { id: "TX105", date: "2024-06-20", type: 'redeemed', description: "Bonus Used on Bill Payment", amount: 5.00, status: 'completed' },
-        { id: "TX106", date: "2024-07-01", type: 'earned', description: "Referral Bonus - Mike Ross", amount: 5.00, status: 'completed' },
-    ];
+  const changeTab = (value: string) => {
+    setTab(value as Tab);
+    setLocation(value === "overview" ? "/bonus-discounts" : `/bonus-discounts?tab=${value}`, { replace: true });
+  };
 
-    return (
-        <DashboardLayout>
-            <div className="space-y-8 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-gray-900">Bonus & Discounts</h1>
-                    <p className="text-muted-foreground mt-2">Track your earnings and savings from bonuses and promo codes.</p>
-                </div>
+  const copyLink = async () => {
+    const link = data?.offer?.referral_link;
+    if (!link) {
+      toast({ title: "No referral offer right now", description: "There is no Refer & Earn offer for your currency at the moment." });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      toast({ title: "Referral link copied!", description: "Share it with friends to earn bonus credit." });
+    } catch {
+      toast({ title: "We couldn't copy the link", description: `Please copy it manually: ${link}`, variant: "destructive" });
+    }
+  };
 
-                {/* Overview Cards */}
-                <div className="grid gap-6 md:grid-cols-3">
-                    <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-green-700">Available Bonus Balance</CardTitle>
-                            <Wallet className="h-4 w-4 text-green-600" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-gray-900">£{BONUS_BALANCE.toFixed(2)}</div>
-                            <p className="text-xs text-muted-foreground mt-1 mb-4">Ready to use on next transfer</p>
-                            <Button
-                                size="sm"
-                                className="w-full bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white shadow-md hover:shadow-lg transition-all duration-300 group"
-                                onClick={() => setLocation("/send-money")}
-                            >
-                                <Send className="w-4 h-4 mr-2 group-hover:translate-x-1 transition-transform" />
-                                Send Money
-                            </Button>
-                        </CardContent>
-                    </Card>
+  return (
+    <DashboardLayout>
+      <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6 lg:p-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Bonus &amp; Discounts</h1>
+            <p className="mt-1 text-[15px] text-slate-600">Track your rewards, referrals and savings.</p>
+          </div>
+          {currencies.length > 1 && (
+            <Select value={currency} onValueChange={setPickedCurrency}>
+              <SelectTrigger className="h-11 w-[140px] rounded-full" aria-label="Currency">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {currencies.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
 
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Lifetime Earnings</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">£{TOTAL_EARNED.toFixed(2)}</div>
-                            <p className="text-xs text-muted-foreground mt-1">From all referrals</p>
-                        </CardContent>
-                    </Card>
+        <Tabs value={tab} onValueChange={changeTab}>
+          <TabsList className="grid h-12 w-full grid-cols-3 rounded-xl bg-slate-200 p-1 sm:max-w-md">
+            <TabsTrigger value="overview" className="h-10 rounded-[9px] text-sm font-semibold">Overview</TabsTrigger>
+            <TabsTrigger value="history" className="h-10 rounded-[9px] text-sm font-semibold">History</TabsTrigger>
+            <TabsTrigger value="referrals" className="h-10 rounded-[9px] text-sm font-semibold">My referrals</TabsTrigger>
+          </TabsList>
 
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Saved</CardTitle>
-                            <Tag className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">£{TOTAL_REDEEMED.toFixed(2)}</div>
-                            <p className="text-xs text-muted-foreground mt-1">Via Bonuses & Promo Codes</p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Transaction Ledger */}
-                <Card className="border-t-4 border-t-blue-500 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Gift className="w-5 h-5 text-blue-500" />
-                            Transaction History
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="rounded-md border">
-                            <div className="grid grid-cols-4 gap-4 p-4 font-medium text-sm bg-gray-50 border-b text-gray-500">
-                                <div>Date</div>
-                                <div>Description</div>
-                                <div>Type</div>
-                                <div className="text-right">Amount</div>
-                            </div>
-                            <div className="divide-y">
-                                {transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((tx) => (
-                                    <div key={tx.id} className="grid grid-cols-4 gap-4 p-4 text-sm items-center hover:bg-gray-50/50 transition-colors">
-                                        <div className="font-mono text-gray-600">{tx.date}</div>
-                                        <div className="font-medium text-gray-900">{tx.description}</div>
-                                        <div>
-                                            <Badge
-                                                variant="outline"
-                                                className={`
-                                                    ${tx.type === 'earned' ? 'bg-green-50 text-green-700 border-green-200' : ''}
-                                                    ${tx.type === 'redeemed' ? 'bg-orange-50 text-orange-700 border-orange-200' : ''}
-                                                    ${tx.type === 'promo_code' ? 'bg-blue-50 text-blue-700 border-blue-200' : ''}
-                                                `}
-                                            >
-                                                {tx.type === 'earned' && <ArrowUpRight className="w-3 h-3 mr-1" />}
-                                                {tx.type === 'redeemed' && <ArrowDownLeft className="w-3 h-3 mr-1" />}
-                                                {tx.type === 'promo_code' && <Tag className="w-3 h-3 mr-1" />}
-                                                {tx.type.replace('_', ' ').toUpperCase()}
-                                            </Badge>
-                                        </div>
-                                        <div className={`text-right font-bold ${tx.type === 'earned' ? 'text-green-600' : 'text-gray-900'}`}>
-                                            {tx.type === 'earned' ? '+' : '-'}£{tx.amount.toFixed(2)}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+          {rewards.isLoading ? (
+            <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="rewards-loading">
+              {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-28 rounded-[14px]" />)}
             </div>
-        </DashboardLayout>
-    );
+          ) : rewards.isError ? (
+            <Card className="mt-6 rounded-2xl border border-slate-200 p-6 text-center" data-testid="rewards-error">
+              <p className="text-[15px] text-slate-700">We couldn&apos;t load your rewards. Please try again.</p>
+              <Button className="mt-4 h-11 rounded-xl bg-blue-600 hover:bg-blue-700" onClick={() => rewards.refetch()} disabled={rewards.isFetching}>
+                {rewards.isFetching && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Retry
+              </Button>
+            </Card>
+          ) : (
+            <>
+              <TabsContent value="overview" className="mt-6 space-y-5">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="bonus-totals">
+                  <StatTile label="Available" value={formatMoney(balance.available, currency)} sub="Ready for your next transfer" accent>
+                    {balance.available > 0 ? (
+                      <Button className="mt-2 h-11 rounded-xl bg-blue-600 text-sm font-semibold hover:bg-blue-700" onClick={() => setLocation("/send-money")}>Send money</Button>
+                    ) : (
+                      <Button variant="outline" className="mt-2 h-11 rounded-xl text-sm font-semibold" onClick={copyLink}>Refer a friend</Button>
+                    )}
+                  </StatTile>
+                  <StatTile
+                    label="Total earned"
+                    value={formatMoney(balance.earned, currency)}
+                    sub={`From ${balance.referral_credit_count} referral${balance.referral_credit_count === 1 ? "" : "s"} and ${balance.other_credit_count} other bonus${balance.other_credit_count === 1 ? "" : "es"}`}
+                  />
+                  <StatTile label="Used" value={formatMoney(balance.used, currency)} sub={`Across ${balance.used_transfer_count} transfer${balance.used_transfer_count === 1 ? "" : "s"}`} />
+                  <StatTile label="Expired" value={formatMoney(balance.expired, currency)} sub="Use your bonus before it expires" />
+                </div>
+
+                <p className="text-sm text-slate-700" data-testid="total-saved">
+                  You&apos;ve saved <strong>{formatMoney(balance.used + promoSaved, currency)}</strong> in total with bonuses and promo codes.
+                </p>
+
+                <Card className="rounded-2xl border border-slate-200 bg-white px-4">
+                  <h2 className="mb-1 mt-3 text-[15px] font-bold text-slate-900">Unused bonus</h2>
+                  {unused.length === 0 ? (
+                    <p className="pb-4 pt-1 text-sm text-slate-600">No unused bonus. Invite friends to earn bonus credit.</p>
+                  ) : (
+                    <ul data-testid="unused-bonus">
+                      {unused.map((c, i) => {
+                        const left = daysUntil(c.expires_on);
+                        return (
+                          <li key={c.id} className={cn("flex items-center gap-3 py-3", i < unused.length - 1 && "border-b border-slate-100")}>
+                            <div className="flex flex-1 flex-col gap-1">
+                              <span className="text-[15px] font-semibold text-slate-900">{describeCredit(c.source, c.reason_code)}</span>
+                              {c.status === "PARTLY_USED" && <span className="text-[13px] text-slate-500">{formatMoney(c.remaining, c.currency)} left of {formatMoney(c.amount, c.currency)}</span>}
+                              <span className="text-[13px] text-slate-500">Earned {formatUkDate(c.earned_on)}{c.expires_on ? ` · expires ${formatUkDate(c.expires_on)}` : ""}</span>
+                              {left !== null && left <= 14 && (
+                                <span className="self-start rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">{expiryLabel(c.expires_on)}</span>
+                              )}
+                            </div>
+                            <span className="text-[15px] font-bold text-slate-900">{formatMoney(c.remaining, c.currency)}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="history" className="mt-6 space-y-4">
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Filter history">
+                  {([["all", "All"], ["earned", "Earned"], ["used", "Used"], ["expired", "Expired"], ["promo", "Promo codes"]] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={filter === key}
+                      onClick={() => setFilter(key)}
+                      className={cn(
+                        "h-9 rounded-full px-3.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                        filter === key ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <Card className="rounded-2xl border border-slate-200 bg-white px-4">
+                  {filtered.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-slate-600">
+                      {history.length === 0 ? "No rewards yet. Invite friends or use a promo code to start saving." : "Nothing to show for this filter."}
+                    </p>
+                  ) : (
+                    <ul data-testid="bonus-history">
+                      {filtered.map((h, i) => (
+                        <li key={h.id} className={cn("flex items-center gap-3 py-3.5", i < filtered.length - 1 && "border-b border-slate-100")}>
+                          <div className="flex flex-1 flex-col gap-1">
+                            <span className="text-[15px] font-semibold text-slate-900">{h.description}</span>
+                            <span className="text-[13px] text-slate-500">{formatUkDate(h.date)}</span>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className={cn("text-[15px] font-bold", h.amount >= 0 ? "text-teal-700" : "text-slate-900")}>
+                              {h.amount >= 0 ? "+" : ""}{formatMoney(h.amount, h.currency)}
+                            </span>
+                            {h.status && <span className={cn("rounded-full px-2 py-0.5 text-xs font-bold", STATUS_PILL[h.status])}>{CREDIT_STATUS_LABEL[h.status]}</span>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="referrals" className="mt-6 space-y-3.5">
+                {referrals.length === 0 ? (
+                  <Card className="rounded-2xl border border-slate-200 p-6 text-center">
+                    <p className="text-[15px] text-slate-700">No referrals yet. Share your link to start earning.</p>
+                    <Button className="mt-4 h-11 rounded-xl bg-blue-600 hover:bg-blue-700" onClick={copyLink}>
+                      <Copy className="mr-2 h-4 w-4" /> Copy referral link
+                    </Button>
+                  </Card>
+                ) : (
+                  <>
+                    <p className="text-sm text-slate-700" data-testid="referral-summary">
+                      Joined: {referralSummary?.joined ?? referrals.length} · Earned: {referralSummary?.earned_count ?? 0} · Total earned:{" "}
+                      {Object.entries(referralSummary?.total_earned ?? {}).map(([c, v]) => formatMoney(v, c)).join(", ") || formatMoney(0, currency)}
+                    </p>
+                    {referrals.map((r) => (
+                      <Card key={r.id} className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col gap-3" data-testid={`referral-card-${r.id}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-base font-bold text-slate-900">{r.friend}</span>
+                          <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-bold", REFERRAL_PILL[r.status].cls)}>{REFERRAL_PILL[r.status].label}</span>
+                        </div>
+                        {r.status === "PENDING" ? <ReferralTimeline r={r} /> : (
+                          <span className="flex items-center gap-2 text-sm text-slate-600">
+                            {r.status === "REWARDED" ? <Check className="h-4 w-4 text-teal-700" /> : <Circle className="h-3 w-3 text-slate-400" />}
+                            {referralHelpText(r)}
+                          </span>
+                        )}
+                      </Card>
+                    ))}
+                  </>
+                )}
+              </TabsContent>
+            </>
+          )}
+        </Tabs>
+      </div>
+    </DashboardLayout>
+  );
 }

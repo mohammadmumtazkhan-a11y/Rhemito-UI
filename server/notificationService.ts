@@ -85,7 +85,19 @@ const EVENT_CATEGORY_MAP: Record<NotificationEventType, EventCategory> = {
   campaign_contribution_received: "paymentEvents",
   campaign_target_reached: "paymentEvents",
   campaign_status_changed: "paymentEvents",
+  // Referral & Bonus — account activity, on by default. The offer itself is
+  // promotional: always shown in the bell, other channels only with marketing on.
+  reward_offer: "marketingEvents",
+  reward_friend_joined: "transactionEvents",
+  reward_earned: "transactionEvents",
+  reward_bonus_used: "transactionEvents",
+  reward_bonus_expiring: "transactionEvents",
+  reward_bonus_expired: "transactionEvents",
+  reward_bonus_reversed: "transactionEvents",
 };
+
+/** Promotional types that still appear in the bell when marketing is off (AC-6.1.6). */
+const IN_APP_EVEN_IF_CATEGORY_OFF: NotificationEventType[] = ["reward_offer"];
 
 // ─── Refund ETA by method (AC 11.2) ─────────────────────────────────────────
 
@@ -291,6 +303,37 @@ export function buildNotificationContent(
     campaign_status_changed: {
       title: "Campaign Status Updated",
       body: `Your campaign '${campaignName}' status is now ${campaignStatus}.`,
+    },
+    // ─── Referral & Bonus ─────────────────────────────────────────────────
+    reward_offer: {
+      title: String(data.title ?? "New offer: Refer & Earn"),
+      body: String(data.message ?? "Invite friends to Rhemito and earn bonus credit."),
+    },
+    reward_friend_joined: {
+      title: "A friend joined with your link",
+      body: data.reward
+        ? `${String(data.friendName ?? "Your friend")} joined Rhemito with your link. You'll earn ${String(data.reward)} when they send ${String(data.floor ?? "")} or more.`
+        : `${String(data.friendName ?? "Your friend")} joined Rhemito with your link.`,
+    },
+    reward_earned: {
+      title: `You've earned ${amount} bonus credit`,
+      body: `${String(data.message ?? "")} ${amount} bonus credit is ready to use on your next transfer${data.expires ? ` by ${String(data.expires)}` : ""}.`.trim(),
+    },
+    reward_bonus_used: {
+      title: "Bonus used",
+      body: `${amount} bonus credit was used on transfer ${txnId}.`,
+    },
+    reward_bonus_expiring: {
+      title: "Bonus expiring soon",
+      body: `Your ${amount} bonus credit expires on ${String(data.expires ?? "")}. Use it on your next transfer.`,
+    },
+    reward_bonus_expired: {
+      title: "Bonus expired",
+      body: `${amount} bonus credit expired on ${String(data.expires ?? "")}.`,
+    },
+    reward_bonus_reversed: {
+      title: "Referral bonus removed",
+      body: `Your ${amount} referral bonus has been removed because the related transfer was reversed.`,
     },
   };
 
@@ -558,6 +601,9 @@ export async function dispatchNotification(params: {
 
   // Suppress non-critical events if the category is disabled
   if (!isCritical && !categoryEnabled) {
+    if (IN_APP_EVEN_IF_CATEGORY_OFF.includes(type) && prefs.inAppEnabled) {
+      dispatchInApp(userId, type, content, metadata);
+    }
     return;
   }
 

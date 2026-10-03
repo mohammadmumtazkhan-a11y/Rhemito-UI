@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { validatePromoCode, promoStorage, type PromoValidationRequest } from "./promocode";
-import { bonusService } from "./bonus";
+import { registerRewardsRoutes } from "./rewardsRoutes";
 import { registerAuthRoutes } from "./auth";
 import { registerInvoiceRoutes } from "./invoiceRoutes";
 import { registerRequestMoneyRoutes } from "./requestRoutes";
@@ -120,6 +120,7 @@ export async function registerRoutes(
   registerGroupPayRoutes(app);
   // Send Money transactions (server-owned store behind the wizard + Dashboard)
   registerSendMoneyRoutes(app);
+  registerRewardsRoutes(app);
   // Received Payments (merged view of settled/in-flight money-in payments)
   registerPaymentsReceivedRoutes(app);
   // Promo Code Validation Endpoint
@@ -178,24 +179,7 @@ export async function registerRoutes(
     }
   });
 
-  // --- Bonus Redemption Endpoints ---
-
-  app.get("/api/bonus/balance", (req, res) => {
-    const userId = (req.query.userId as string) || "user_123";
-    const balance = bonusService.getBalance(userId);
-    res.json({ balance });
-  });
-
-  app.post("/api/bonus/redeem", (req, res) => {
-    const { amount, userId } = req.body;
-    const success = bonusService.redeem(parseFloat(amount), userId || "user_123");
-
-    if (success) {
-      res.json({ success: true, message: "Bonus redeemed successfully" });
-    } else {
-      res.status(400).json({ success: false, message: "Insufficient bonus balance" });
-    }
-  });
+  // --- Rewards (Refer & Earn, bonus wallet) — see rewardsRoutes.ts ---
 
   // --- Payout Provider & Bank Endpoints ---
 
@@ -325,7 +309,7 @@ export async function registerRoutes(
   /**
    * Auth guard — reusable inline helper.
    * Falls back to a default prototype user when no session is present,
-   * matching the pattern used by /api/promocodes/validate and /api/bonus/balance.
+   * matching the pattern used by /api/promocodes/validate and /api/rewards/summary.
    * Swap this for a strict check when the auth flow is wired end-to-end.
    */
   function requireAuth(req: Request, _res: Response): string | null {

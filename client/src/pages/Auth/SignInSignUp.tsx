@@ -8,6 +8,8 @@ import SignUpForm, { type BusinessStep1Data } from "./components/SignUpForm";
 import BusinessStep2 from "./components/BusinessStep2";
 import OtpStep from "./components/OtpStep";
 import ForgotPassword from "./components/ForgotPassword";
+import { ReferralInviteStrip } from "@/components/rewards/ReferralSignup";
+import { loadReferral, type StoredReferral } from "@/lib/rewards";
 
 type AuthStep = "email" | "signIn" | "signUp" | "businessStep2" | "otp" | "forgotPassword";
 
@@ -42,6 +44,8 @@ export default function SignInSignUp() {
   const [businessStep1Data, setBusinessStep1Data] = useState<BusinessStep1Data | null>(null);
   const [devOtp, setDevOtp] = useState<string | undefined>();
   const [, setLocation] = useLocation();
+  // Referral captured from a /ref link (or typed on the sign-up form)
+  const [referral, setReferral] = useState<StoredReferral | null>(() => loadReferral());
 
   const goTo = (newStep: AuthStep, dir: number = 1) => {
     setDirection(dir);
@@ -95,6 +99,7 @@ export default function SignInSignUp() {
 
   return (
     <AuthLayout heading={headings[step]}>
+      {(step === "email" || step === "signUp") && <ReferralInviteStrip referral={referral} />}
       <AnimatePresence mode="wait" custom={direction}>
         <motion.div
           key={step}
@@ -119,6 +124,8 @@ export default function SignInSignUp() {
               onBack={handleBackToEmail}
               onOtp={handleOtp}
               onBusinessStep2={handleBusinessStep2}
+              referral={referral}
+              onReferralChange={setReferral}
             />
           )}
 

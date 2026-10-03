@@ -1,3 +1,4 @@
+import { useRewards } from "@/hooks/use-rewards";
 import { Link, useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -68,6 +69,11 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const [location, setLocation] = useLocation();
+  // "Rewards waiting!" only when there is bonus to use or a fresh offer (AC-5.1.12)
+  const rewards = useRewards();
+  const rewardsWaiting = Boolean(
+    rewards.data && (rewards.data.wallet.balances.some((b) => b.available > 0) || rewards.data.latestOffer),
+  );
   const { toast } = useToast();
 
   const handleLogout = async () => {
@@ -196,9 +202,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               </div>
               <div className="flex-1">
                 <span className="block">Bonus & Discounts</span>
-                <span className="text-[10px] font-medium text-amber-600/80">Rewards waiting!</span>
+                {rewardsWaiting && <span className="text-[10px] font-medium text-amber-600/80">Rewards waiting!</span>}
               </div>
-              <div className="flex items-center gap-1">
+              {rewardsWaiting && <div className="flex items-center gap-1" data-testid="rewards-waiting-badge">
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-gradient-to-r from-amber-500 to-orange-500"></span>
@@ -206,7 +212,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
                   NEW
                 </span>
-              </div>
+              </div>}
             </div>
           </motion.div>
         </Link>

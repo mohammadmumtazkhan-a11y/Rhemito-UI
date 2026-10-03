@@ -19,6 +19,7 @@ import SendersRecipients from "@/pages/SendersRecipients";
 import PayoutAccounts from "@/pages/PayoutAccounts";
 import SendMoney from "@/pages/SendMoney";
 import BonusAndDiscounts from "@/pages/BonusAndDiscounts";
+import ReferralLanding from "@/pages/ReferralLanding";
 import Marketing from "@/pages/Marketing";
 import GroupPayDashboard from "@/pages/GroupPay/GroupPayDashboard";
 import CreateCampaign from "@/pages/GroupPay/CreateCampaign";
@@ -88,6 +89,7 @@ function Router() {
       <Route path="/pay/:id" component={RequestCheckout} />
       <Route path="/invoice/:id" component={InvoiceView} />
       <Route path="/bonus-discounts" component={BonusAndDiscounts} />
+      <Route path="/ref/:code" component={ReferralLanding} />
       <Route path="/marketing" component={Marketing} />
       <Route path="/group-pay" component={GroupPayDashboard} />
       <Route path="/group-pay/create" component={CreateCampaign} />

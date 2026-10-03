@@ -60,7 +60,7 @@ test.describe('Rhemito Send Money Flow', () => {
         await page.getByRole('button', { name: 'Continue' }).click();
 
         // Step 4: Payment Method
-        await expect(page.getByText('Referral Bonus Available')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByText('How would you like to pay?')).toBeVisible({ timeout: 15000 });
         await expect(page.getByText('Instant Pay By Bank')).toBeVisible();
     });
 
@@ -78,7 +78,7 @@ test.describe('Rhemito Send Money Flow', () => {
 
         // Step 3: Continue creates the real transaction (awaiting_payment)
         await page.getByRole('button', { name: 'Continue' }).click();
-        await expect(page.getByText('Referral Bonus Available')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByText('How would you like to pay?')).toBeVisible({ timeout: 15000 });
 
         // The Dashboard unified table shows the new TXN row
         await page.goto('/');

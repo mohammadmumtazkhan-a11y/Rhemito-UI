@@ -16,6 +16,9 @@ import {
   Banknote,
   Wallet,
   BellOff,
+  Gift,
+  Sparkles,
+  Users,
 } from "lucide-react";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -70,6 +73,13 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
   campaign_contribution_received: { icon: Banknote, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Campaign Contribution Received" },
   campaign_target_reached: { icon: CheckCircle2, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Campaign Target Reached" },
   campaign_status_changed: { icon: Settings, containerClass: "bg-primary/10", iconClass: "text-primary", label: "Campaign Status Updated" },
+  reward_offer: { icon: Sparkles, containerClass: "bg-primary/10", iconClass: "text-primary", label: "New Offer" },
+  reward_friend_joined: { icon: Users, containerClass: "bg-primary/10", iconClass: "text-primary", label: "Friend Joined" },
+  reward_earned: { icon: Gift, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Bonus Earned" },
+  reward_bonus_used: { icon: Gift, containerClass: "bg-slate-100", iconClass: "text-slate-600", label: "Bonus Used" },
+  reward_bonus_expiring: { icon: Clock, containerClass: "bg-amber/10", iconClass: "text-amber", label: "Bonus Expiring" },
+  reward_bonus_expired: { icon: Clock, containerClass: "bg-slate-100", iconClass: "text-slate-600", label: "Bonus Expired" },
+  reward_bonus_reversed: { icon: XCircle, containerClass: "bg-destructive/10", iconClass: "text-destructive", label: "Bonus Removed" },
 };
 
 // ─── Format timestamp — full (not relative) ──────────────────────────────────
