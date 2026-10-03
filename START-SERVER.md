@@ -40,5 +40,6 @@ npm run dev                            # uses MITO_API_URL=http://localhost:5050
 ```
 
 - Point Rhemito at another Mito Admin address with `MITO_API_URL` (for example on Render).
+- **On Render:** the Rhemito-UI service needs `MITO_API_URL=https://promocode-jcd8.onrender.com` (the live Mito Admin / PromoCode service). It is set in Render under Rhemito-UI > Environment and is also listed in `render.yaml`. If it is missing, the dashboard's Refer & Earn card shows "We couldn't load your referral details." Changing the value redeploys the service. Both services are on Render's free plan, so the first request after a quiet spell can take up to a minute while the engine wakes up.
 - Create an active GBP rule in Mito Admin → Growth Engine → Referral Settings, then open the Rhemito dashboard to see Refer & Earn.
 - If Mito Admin is not running, Rhemito keeps working: the Refer & Earn card shows a retry message and no bonus can be used.
