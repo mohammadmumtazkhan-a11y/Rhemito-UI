@@ -136,7 +136,7 @@ export async function onCustomerVerified(userId: string, referralCode?: string |
 /** Report a Send Money transaction status change to the engine (US-4.1, US-4.4). */
 export async function onTransferEvent(
   userId: string,
-  tx: { reference: string; sendAmount: number; sendCurrency: string; createdAt: Date | string },
+  tx: { reference: string; sendAmount: number; sendCurrency: string; receiveCurrency?: string; createdAt: Date | string },
   status: "PAID" | "COMPLETED" | "CANCELLED" | "FAILED" | "REFUNDED",
 ): Promise<void> {
   try {
@@ -148,10 +148,21 @@ export async function onTransferEvent(
         customer_id: userId,
         amount: tx.sendAmount,
         currency: tx.sendCurrency,
+        // The referral rule can be tied to a corridor (send → receive currency), so the engine needs to know where the money went
+        receive_currency: tx.receiveCurrency,
         status,
         created_at: new Date(tx.createdAt).toISOString(),
       },
     });
+    // Loyalty / threshold bonuses earned by this completed transfer
+    for (const award of (res.bonuses as Json[]) ?? []) {
+      if (award.status !== "AWARDED") continue;
+      await notify(userId, "reward_earned", {
+        amount: fmtMoney(award.amount, award.currency),
+        message: `Bonus earned: ${award.scheme_name}.`,
+        expires: ukDate(`${award.expires_at}T12:00:00Z`),
+      });
+    }
     const referral = res.referral as Json | null;
     if (referral?.status === "REWARDED" && !announcedRewards.has(referral.id)) {
       announcedRewards.add(referral.id);
@@ -174,6 +185,55 @@ export async function onTransferEvent(
     }
   } catch (err) {
     console.error("[rewards] transfer event not recorded:", err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Report a paid money request to the engine so a Request Money bonus scheme can reward the requester.
+ * Completed Send Money transfers need no separate call: the transfer event above also drives loyalty and threshold schemes.
+ * Never throws – a bonus problem must not affect the payment itself.
+ */
+export async function onMoneyRequestPaid(
+  requesterId: string,
+  request: { requestNumber: string; amount: number | string; currency: string },
+): Promise<void> {
+  try {
+    await syncCustomer(requesterId);
+    const res = await mito("/api/bonus/events", {
+      method: "POST",
+      body: {
+        type: "MONEY_REQUEST_PAID",
+        customer_id: requesterId,
+        event_id: request.requestNumber,
+        amount: Number(request.amount),
+        currency: request.currency,
+      },
+    });
+    for (const award of (res.awards as Json[]) ?? []) {
+      if (award.status !== "AWARDED") continue;
+      await notify(requesterId, "reward_earned", {
+        amount: fmtMoney(award.amount, award.currency),
+        message: `Bonus earned: ${award.scheme_name}.`,
+        expires: ukDate(`${award.expires_at}T12:00:00Z`),
+      });
+    }
+  } catch (err) {
+    console.error("[rewards] money request bonus not recorded:", err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Tell the engine a paid money request was refunded so it removes the unused part of the bonus that request earned.
+ * Never throws – a bonus problem must not affect the refund itself.
+ */
+export async function onMoneyRequestRefunded(requesterId: string, requestNumber: string): Promise<void> {
+  try {
+    await mito("/api/bonus/events", {
+      method: "POST",
+      body: { type: "MONEY_REQUEST_REFUNDED", customer_id: requesterId, event_id: requestNumber },
+    });
+  } catch (err) {
+    console.error("[rewards] money request refund not recorded:", err instanceof Error ? err.message : err);
   }
 }
 

@@ -328,26 +328,11 @@ export class MemStorage implements IStorage {
     this.sendMoneyTransactionsMap = new Map();
     this.sendMoneySequence = 0;
 
-    // Seed Mock Promo Code & Demo User
-    this.seedPromoCodes();
+    // Seed Demo User (promo codes live in Mito Admin, not here)
     this.seedDemoUser();
     this.seedDemoCampaigns();
     this.seedDemoSendMoneyTransactions();
     this.seedDemoMoneyInTransactions();
-  }
-
-  private seedPromoCodes() {
-    const id = randomUUID();
-    this.promoCodes.set("SAVE20", {
-      id,
-      code: "SAVE20",
-      type: "fixed",
-      value: "5.00", // 5 GBP off
-      minAmount: "50",
-      currency: "GBP",
-      status: "active",
-      usageCount: "0"
-    });
   }
 
   private seedDemoUser() {

@@ -128,12 +128,8 @@ export default function SendMoney() {
     // Calculations
     const fee = parseFloat(amount || "0") * FEE_PERCENTAGE;
 
-    // Promo Logic for SAVE20 (Amount Discount) vs Others (Fee Discount)
-    const isAmountDiscount = promoCode === "SAVE20";
-
-    // Effective fee is reduced only if it's a Standard Promo (not SAVE20). 
-    // If SAVE20, fee remains full, but Total Pay is reduced by discount.
-    const effectiveFee = isAmountDiscount ? fee : Math.max(0, fee - (promoApplied ? promoDiscount : 0));
+    // Promo codes are validated by Mito Admin; the discount it approves comes off the fee.
+    const effectiveFee = Math.max(0, fee - (promoApplied ? promoDiscount : 0));
 
     // Bonus Calculations
     const bonusAmount = useBonus ? bonusToApply(bonusBalance, parseFloat(amount || "0")) : 0;
@@ -144,13 +140,8 @@ export default function SendMoney() {
         if (choice === "send_more") toast({ title: `${formatMoney(value, "GBP")} bonus added`, description: "Your recipient will get more." });
     };
 
-    // Total Pay:
-    // If Amount Discount (SAVE20), subtract promoDiscount from (Amount + Fee).
-    // If Bonus "Pay Less" is active, subtract bonusAmount.
-    // Never below 0 (AC-5.2.7)
-    const totalPay = Math.max(0, isAmountDiscount
-        ? (parseFloat(amount || "0") + fee) - (promoApplied ? promoDiscount : 0) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0)
-        : (parseFloat(amount || "0") + effectiveFee) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0));
+    // Total Pay = You Send + fee (after promo) - (Pay Less bonus). Never below 0 (AC-5.2.7)
+    const totalPay = Math.max(0, (parseFloat(amount || "0") + effectiveFee) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0));
 
     // Amount Summary rows:
     //   You Send     = amount the customer entered (never includes fee or bonus)
@@ -199,9 +190,6 @@ export default function SendMoney() {
 
         setPromoLoading(true);
 
-        // MOCK SAVE20 Logic
-
-
         try {
             const response = await fetch("/api/promocodes/validate", {
                 method: "POST",
@@ -209,8 +197,8 @@ export default function SendMoney() {
                 body: JSON.stringify({
                     code,
                     amount: parseFloat(amount),
+                    fee: fee.toFixed(2),
                     currency: "GBP",
-                    userId: "user_123",
                     sourceCurrency: "GBP",
                     destCurrency: "NGN",
                     paymentMethod: paymentMethod || "bank_deposit",
@@ -306,7 +294,7 @@ export default function SendMoney() {
                 receiveAmount: finalReceiveAmount,
                 fee: effectiveFee.toFixed(2),
                 exchangeRate: String(EXCHANGE_RATE),
-                ...(promoApplied && promoCode ? { promoCode } : {}),
+                ...(promoApplied && promoCode ? { promoCode, feeBeforePromo: fee.toFixed(2) } : {}),
             });
             setTransactionId(created.id);
             setTransactionRef(created.reference);
@@ -1035,7 +1023,7 @@ export default function SendMoney() {
                                             <Label className="text-sm">Have a promo code?</Label>
                                             <div className="flex gap-2">
                                                 <Input
-                                                    placeholder="Enter code (e.g. WELCOME, SAVE20)"
+                                                    placeholder="Enter promo code"
                                                     value={promoCode}
                                                     onChange={(e) => {
                                                         setPromoCode(e.target.value.toUpperCase());
@@ -1149,7 +1137,7 @@ export default function SendMoney() {
                                                 <CardTitle className="text-base">Amount Summary</CardTitle>
                                             </CardHeader>
                                             <CardContent className="space-y-3 text-sm pt-4">
-                                                {/* Promo Discount Row (Top if applied) - SAVE20 Style */}
+                                                {/* Promo Discount Row (shown when a code is applied) */}
                                                 {promoApplied && promoDiscount > 0 && (
                                                     <div className="flex justify-between font-medium text-gray-900">
                                                         <span>Discount: ({promoCode})</span>

@@ -1,7 +1,8 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { validatePromoCode, promoStorage, type PromoValidationRequest } from "./promocode";
+import { demoModeEnabled } from "./config";
+import { validatePromo, redeemPromo } from "./promoService";
 import { registerRewardsRoutes } from "./rewardsRoutes";
 import { captureDevice } from "./deviceId";
 import { registerAuthRoutes } from "./auth";
@@ -126,55 +127,48 @@ export async function registerRoutes(
   registerRewardsRoutes(app);
   // Received Payments (merged view of settled/in-flight money-in payments)
   registerPaymentsReceivedRoutes(app);
-  // Promo Code Validation Endpoint
-  app.post("/api/promocodes/validate", (req, res) => {
+  // Promo codes live in Mito Admin; these endpoints forward to it (see promoService.ts).
+  // Validation while a transfer is being built. The customer comes from the session, never from the request body.
+  app.post("/api/promocodes/validate", async (req, res) => {
     try {
-      const validationReq: PromoValidationRequest = {
-        code: req.body.code,
-        amount: parseFloat(req.body.amount),
-        currency: req.body.currency,
-        userId: req.body.userId || "user_123", // Default user for demo
-        sourceCurrency: req.body.sourceCurrency,
-        destCurrency: req.body.destCurrency,
-        paymentMethod: req.body.paymentMethod,
-      };
-
-      const result = validatePromoCode(validationReq);
-
-      if (result.valid) {
-        return res.json({
-          valid: true,
-          appliedDiscount: result.appliedDiscount,
-          displayText: result.displayText,
-          promo: result.promo,
-        });
-      } else {
-        return res.status(400).json({ error: result.error });
-      }
+      const userId = req.session?.userId ?? (demoModeEnabled ? "user_123" : undefined);
+      const result = await validatePromo({
+        code: String(req.body?.code ?? ""),
+        amount: parseFloat(req.body?.amount),
+        fee: req.body?.fee !== undefined ? parseFloat(req.body.fee) : undefined,
+        currency: req.body?.currency,
+        userId,
+        sourceCurrency: req.body?.sourceCurrency,
+        destCurrency: req.body?.destCurrency,
+        paymentMethod: req.body?.paymentMethod,
+      });
+      if (!result.ok) return res.status(result.status >= 400 ? result.status : 400).json({ error: result.error });
+      return res.json({
+        valid: true,
+        appliedDiscount: result.body.appliedDiscount,
+        appliesTo: result.body.appliesTo ?? "fee",
+        displayText: result.body.displayText,
+      });
     } catch (error) {
       console.error("Promo validation error:", error);
       return res.status(500).json({ error: "Failed to validate promo code" });
     }
   });
 
-  // Promo Code Application Endpoint (called on transaction submission)
-  app.post("/api/promocodes/apply", (req, res) => {
+  // Redeeming a code outside the Send Money wizard (used by the test checkout page). The wizard redeems on payment itself.
+  app.post("/api/promocodes/apply", async (req, res) => {
     try {
-      const { code, userId, transactionId, discountAmount } = req.body;
-
-      const promo = promoStorage.getPromoByCode(code);
-      if (!promo) {
-        return res.status(404).json({ error: "Promo code not found" });
-      }
-
-      // Apply the promo code (increment usage, track redemption)
-      promoStorage.applyPromoCode(
-        promo.id,
-        transactionId || `txn_${Date.now()}`,
-        userId || "user_123",
-        discountAmount || 0
-      );
-
+      const { code, transactionId, amount, fee, currency } = req.body ?? {};
+      if (!transactionId) return res.status(400).json({ error: "transactionId is required" });
+      const result = await redeemPromo({
+        code: String(code ?? ""),
+        transactionId: String(transactionId),
+        userId: req.session?.userId ?? (demoModeEnabled ? "user_123" : undefined),
+        amount: amount !== undefined ? parseFloat(amount) : undefined,
+        fee: fee !== undefined ? parseFloat(fee) : undefined,
+        currency,
+      });
+      if (!result.ok) return res.status(result.status >= 400 ? result.status : 400).json({ error: result.error });
       return res.json({ success: true, message: "Promo code applied successfully" });
     } catch (error) {
       console.error("Promo application error:", error);

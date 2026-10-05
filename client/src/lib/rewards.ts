@@ -54,7 +54,12 @@ export interface WalletHistoryEntry {
   source_credit_id: string | null;
 }
 
+/** What a customer is told when they are blocked from earning bonus. The reason stays with admins. */
+export const BONUS_BLOCKED_MESSAGE = "You're not qualified to get bonus. Please contact support for more information.";
+
 export interface Wallet {
+  /** True when the customer cannot earn bonus until support approves them. */
+  bonus_blocked?: boolean;
   balances: WalletBalance[];
   unused: WalletCredit[];
   credits: Array<Pick<WalletCredit, "id" | "amount" | "remaining" | "currency" | "status"> & { expires_on: string | null; notes: string | null; reason_code: string; created_at: string }>;

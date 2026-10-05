@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
+import { BonusBlockedNotice } from "@/components/rewards/BonusBlockedNotice";
 import { cn } from "@/lib/utils";
 import {
   CREDIT_STATUS_LABEL,
@@ -203,6 +204,7 @@ export default function BonusAndDiscounts() {
           ) : (
             <>
               <TabsContent value="overview" className="mt-6 space-y-5">
+                {data?.wallet.bonus_blocked && <BonusBlockedNotice />}
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="bonus-totals">
                   <StatTile label="Available" value={formatMoney(balance.available, currency)} sub="Ready for your next transfer" accent>
                     {balance.available > 0 ? (

@@ -13,6 +13,7 @@ import { storage } from "./storage";
 import { demoModeEnabled } from "./config";
 import { dispatchNotification } from "./notificationService";
 import { onTransferEvent } from "./rewardsService";
+import { validatePromo, redeemPromo } from "./promoService";
 import { toMinorUnits, fromMinorUnits } from "@shared/money";
 import { formatDocumentNumber } from "@shared/invoice-logic";
 import {
@@ -106,6 +107,37 @@ async function getOwnedTransaction(idOrReference: string, userId: string): Promi
   return tx;
 }
 
+/**
+ * Promo codes belong to Mito Admin. When a transfer that carries a code is paid, Mito Admin re-checks the code for this
+ * customer and payment method, the discount the customer was shown must not exceed what Mito Admin approves, and the use
+ * is recorded once (against the transfer reference). A code that can no longer be used stops the payment before any money moves.
+ */
+async function redeemPromoForPayment(tx: SendMoneyTransaction, userId: string, paymentMethod: string): Promise<void> {
+  const feeBeforeMinor = tx.feeBeforePromoMinor ?? tx.feeMinor;
+  const request = {
+    code: tx.promoCode as string,
+    userId,
+    amount: Number(fromMinorUnits(tx.sendAmountMinor, tx.sendCurrency)),
+    fee: Number(fromMinorUnits(feeBeforeMinor, tx.sendCurrency)),
+    currency: tx.sendCurrency,
+    sourceCurrency: tx.sendCurrency,
+    destCurrency: tx.receiveCurrency,
+    paymentMethod,
+  };
+  const reject = (status: number, message: string) =>
+    new SendMoneyError(status === 503 ? 503 : 409, "PROMO_REJECTED", `${message.replace(/\.?$/, ".")} Go back and remove the promo code to continue.`);
+
+  const check = await validatePromo(request);
+  if (!check.ok) throw reject(check.status, check.error ?? "This promo code can no longer be used.");
+  const approvedMinor = toMinorUnits(String(check.body.appliedDiscount ?? 0), tx.sendCurrency);
+  const shownMinor = feeBeforeMinor - tx.feeMinor;
+  if (shownMinor > approvedMinor) {
+    throw new SendMoneyError(409, "PROMO_CHANGED", "The promo discount has changed. Go back and review your transfer.");
+  }
+  const redeemed = await redeemPromo({ ...request, transactionId: tx.reference });
+  if (!redeemed.ok) throw reject(redeemed.status, redeemed.error ?? "This promo code can no longer be used.");
+}
+
 export function registerSendMoneyRoutes(app: Express): void {
   app.post("/api/send-money/transactions", async (req: Request, res: Response) => {
     try {
@@ -115,6 +147,11 @@ export function registerSendMoneyRoutes(app: Express): void {
         throw new SendMoneyError(400, "VALIDATION_ERROR", firstZodMessage(parsed.error));
       }
       const input = parsed.data;
+      const feeMinor = toMinorUnits(input.fee, input.sendCurrency);
+      const feeBeforePromoMinor = input.promoCode && input.feeBeforePromo ? toMinorUnits(input.feeBeforePromo, input.sendCurrency) : null;
+      if (feeBeforePromoMinor !== null && feeBeforePromoMinor < feeMinor) {
+        throw new SendMoneyError(400, "VALIDATION_ERROR", "The fee before the promo cannot be less than the fee charged.");
+      }
       const now = new Date();
       const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
       const transaction: SendMoneyTransaction = {
@@ -128,9 +165,10 @@ export function registerSendMoneyRoutes(app: Express): void {
         sendAmountMinor: toMinorUnits(input.sendAmount, input.sendCurrency),
         receiveCurrency: input.receiveCurrency.toUpperCase(),
         receiveAmountMinor: toMinorUnits(input.receiveAmount, input.receiveCurrency),
-        feeMinor: toMinorUnits(input.fee, input.sendCurrency),
+        feeMinor,
         exchangeRate: input.exchangeRate,
         promoCode: input.promoCode ?? null,
+        feeBeforePromoMinor,
         status: "awaiting_payment",
         createdAt: now,
         paidAt: null,
@@ -164,6 +202,7 @@ export function registerSendMoneyRoutes(app: Express): void {
       if (tx.status !== "awaiting_payment") {
         throw new SendMoneyError(409, "INVALID_STATE", "Only a transaction awaiting payment can be paid.");
       }
+      if (tx.promoCode) await redeemPromoForPayment(tx, userId, parsed.data.paymentMethod);
       const status = statusForPaymentMethod(parsed.data.paymentMethod);
       const now = new Date();
       const updated = await storage.updateSendMoneyTransaction(tx.id, {
@@ -177,7 +216,7 @@ export function registerSendMoneyRoutes(app: Express): void {
       if (status === "completed") {
         await dispatchNotification({ userId, type: "transaction_complete", data: notificationData(updated) });
         // Referral programme: a completed transfer may qualify a referral (US-4.1)
-        const event = { reference: updated.reference, sendAmount: Number(fromMinorUnits(updated.sendAmountMinor, updated.sendCurrency)), sendCurrency: updated.sendCurrency, createdAt: updated.createdAt };
+        const event = { reference: updated.reference, sendAmount: Number(fromMinorUnits(updated.sendAmountMinor, updated.sendCurrency)), sendCurrency: updated.sendCurrency, receiveCurrency: updated.receiveCurrency, createdAt: updated.createdAt };
         void onTransferEvent(userId, event, "PAID").then(() => onTransferEvent(userId, event, "COMPLETED"));
       }
       return res.json({ data: toView(updated) });
@@ -202,7 +241,7 @@ export function registerSendMoneyRoutes(app: Express): void {
       }
       await dispatchNotification({ userId, type: "transaction_cancelled_customer", data: notificationData(updated) });
       // Releases any bonus used on this transfer (AC-5.2.10) and un-pends a referral (AC-4.4.1)
-      void onTransferEvent(userId, { reference: updated.reference, sendAmount: Number(fromMinorUnits(updated.sendAmountMinor, updated.sendCurrency)), sendCurrency: updated.sendCurrency, createdAt: updated.createdAt }, "CANCELLED");
+      void onTransferEvent(userId, { reference: updated.reference, sendAmount: Number(fromMinorUnits(updated.sendAmountMinor, updated.sendCurrency)), sendCurrency: updated.sendCurrency, receiveCurrency: updated.receiveCurrency, createdAt: updated.createdAt }, "CANCELLED");
       return res.json({ data: toView(updated) });
     } catch (err) {
       handleError(res, err);

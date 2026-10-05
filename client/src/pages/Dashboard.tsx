@@ -32,6 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
 import { balanceFor, formatMoney } from "@/lib/rewards";
 import { ReferEarnCard } from "@/components/rewards/ReferEarnCard";
+import { BonusBlockedNotice } from "@/components/rewards/BonusBlockedNotice";
 import { OfferBanner } from "@/components/rewards/OfferBanner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -1092,7 +1093,8 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="flex flex-col [&>*]:flex-1">
+          <motion.div variants={itemVariants} className="flex flex-col gap-3 [&>*:last-child]:flex-1">
+            {rewards.data?.wallet.bonus_blocked && <BonusBlockedNotice />}
             <ReferEarnCard
               offer={rewards.data?.offer ?? null}
               referrals={rewards.data?.referrals.data ?? []}

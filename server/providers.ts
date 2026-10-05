@@ -35,6 +35,7 @@ export type WebhookEventType =
   | "payment.cancelled"
   | "payment.pending"
   | "payment.unknown"
+  | "payment.refunded"
   | "payout.succeeded"
   | "payout.failed";
 

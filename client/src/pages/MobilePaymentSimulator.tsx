@@ -127,12 +127,6 @@ const recentRecipients = [
     },
 ];
 
-const PROMO_CODES: Record<string, number> = {
-    "WELCOME": 5,
-    "SAVE20": 20,
-    "BOOSTRATE": 10,
-};
-
 export default function MobilePaymentSimulator() {
     const [, setLocation] = useLocation();
     const [currentStep, setCurrentStep] = useState(1);
@@ -580,16 +574,27 @@ export default function MobilePaymentSimulator() {
         setCurrentStep((prev) => prev - 1);
     };
 
-    const handleApplyPromo = () => {
+    // Promo codes are checked by Mito Admin (via Rhemito's /api/promocodes/validate); the simulator holds no codes
+    const handleApplyPromo = async () => {
         const code = promoCode.trim().toUpperCase();
-        if (PROMO_CODES[code] !== undefined) {
-            setPromoDiscount(PROMO_CODES[code]);
+        if (!code) return;
+        try {
+            const res = await fetch("/api/promocodes/validate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    code, amount: sendVal, fee, currency: "GBP", sourceCurrency: "GBP", destCurrency: "NGN", paymentMethod: "instant_bank",
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || "Invalid promo code");
+            setPromoDiscount(Number(data.appliedDiscount) || 0);
             setPromoApplied(true);
-            setPromoMessage({ type: "success", text: `Promo code applied! Saved £${PROMO_CODES[code]}.` });
-        } else {
+            setPromoMessage({ type: "success", text: data.displayText || "Promo code applied!" });
+        } catch (err) {
             setPromoApplied(false);
             setPromoDiscount(0);
-            setPromoMessage({ type: "error", text: "Invalid promo code" });
+            setPromoMessage({ type: "error", text: err instanceof Error ? err.message : "Invalid promo code" });
         }
     };
 

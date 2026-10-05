@@ -37,6 +37,8 @@ export interface SendMoneyTransaction {
   /** Snapshot of the rate used, informational. */
   exchangeRate: string;
   promoCode: string | null;
+  /** Fee before the promo discount, minor units. Lets the server re-check the discount with Mito Admin when the transfer is paid. */
+  feeBeforePromoMinor?: number | null;
   status: SendMoneyStatus;
   createdAt: Date;
   paidAt: Date | null;
@@ -53,6 +55,7 @@ export const createSendMoneyTransactionSchema = z.object({
   fee: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid fee"),
   exchangeRate: z.string().trim().min(1),
   promoCode: z.string().trim().max(40).optional(),
+  feeBeforePromo: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid fee").optional(),
 });
 
 export const paySendMoneyTransactionSchema = z.object({

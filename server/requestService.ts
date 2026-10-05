@@ -25,6 +25,7 @@ import {
 } from "./providers";
 import { postFundingEntries, postPayoutEntry } from "./walletService";
 import { dispatchNotification } from "./notificationService";
+import { onMoneyRequestPaid, onMoneyRequestRefunded } from "./rewardsService";
 import { findCorridor, validateCorridor, type CorridorConfig } from "./corridors";
 import {
   toMinorUnits,
@@ -896,6 +897,12 @@ export async function processPayinWebhook(rawBody: Buffer, signature: string): P
         currency: request.payInCurrency,
       },
     });
+    // A paid request can earn the requester a Request Money bonus (decided by Mito Admin's scheme rules)
+    void onMoneyRequestPaid(request.requesterId, {
+      requestNumber: request.requestNumber,
+      amount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
+      currency: request.payInCurrency,
+    });
 
     // Payout eligibility passed (single-tier prototype): submit to the payout provider.
     const payout = await devPayoutProvider.submitPayout({
@@ -959,6 +966,13 @@ export async function processPayinWebhook(rawBody: Buffer, signature: string): P
         payerEmailMasked: null,
         failureReason: "Payment failed at the provider.",
       });
+    }
+  } else if (event.type === "payment.refunded") {
+    // Money that was received is being returned to the payer: the request is no longer a completed payment,
+    // and any Request Money bonus it earned is taken back.
+    if (["funded", "payout_pending", "paid_out"].includes(request.status) && request.providerPaymentRef === event.providerPaymentRef) {
+      await storage.updateMoneyRequest(request.id, { status: "refunded", failureReason: "Payment refunded to the payer." });
+      void onMoneyRequestRefunded(request.requesterId, request.requestNumber);
     }
   } else if (event.type === "payment.pending" || event.type === "payment.unknown") {
     if (request.payinIntentId === event.intentId && ["authorisation_in_progress", "payment_processing", "payment_pending"].includes(request.status)) {

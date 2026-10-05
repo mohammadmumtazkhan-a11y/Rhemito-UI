@@ -35,10 +35,9 @@ The server will start at **http://localhost:5000**
      - Exchange Rate
      - Collection Method
    
-   - **Apply a promo code:**
-     - Try: `SAVE20` (20% off fees, min £100)
-     - Try: `WELCOME` (£5 off, min £50)
-     - Try: `BOOSTRATE` (FX boost, min £500)
+   - **Apply a promo code:** use a code created in Mito Admin (Financials > Promo Codes).
+     Rhemito has no codes of its own; it asks Mito Admin (`MITO_API_URL`) to validate the code
+     and, when the transfer is paid, to record its use.
    
    - Click "Apply"
    - **Result**: You'll see a new green line appear:
@@ -48,16 +47,13 @@ The server will start at **http://localhost:5000**
 
 ## 📋 Test Codes
 
-| Code | Type | Discount | Min Amount |
-|------|------|----------|------------|
-| **SAVE20** | Percentage | 20% off fees | £100 |
-| **WELCOME** | Fixed | £5 off | £50 |
-| **BOOSTRATE** | FX Boost | Rate improvement | £500 |
+Create your own in Mito Admin. The demo codes SAVE20, WELCOME and BOOSTRATE were removed from Rhemito.
+If Mito Admin cannot be reached, a promo code cannot be applied (the checkout still works without one).
 
 ## 📁 What Was Changed
 
-- ✅ Backend: `server/promocode.ts` - Validation logic
-- ✅ Backend: `server/routes.ts` - API endpoints
+- ✅ Backend: `server/promoService.ts` - Forwards promo checks and redemptions to Mito Admin
+- ✅ Backend: `server/routes.ts` and `server/sendMoneyRoutes.ts` - API endpoints; the code is redeemed when the transfer is paid
 - ✅ Frontend: `client/src/pages/SendMoney.tsx` - Payment page UI
 - ✅ Config: `package.json` - Windows-compatible scripts
 

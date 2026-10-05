@@ -17,6 +17,8 @@ export interface CreateSendMoneyInput {
   fee: string;
   exchangeRate: string;
   promoCode?: string;
+  /** Fee before the promo discount (the server re-checks the discount when the transfer is paid). */
+  feeBeforePromo?: string;
 }
 
 export async function createSendMoneyTransaction(input: CreateSendMoneyInput): Promise<SendMoneyTransactionView> {
