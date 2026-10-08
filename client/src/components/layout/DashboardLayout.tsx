@@ -22,7 +22,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
       />
       <div className="lg:ml-56 transition-all duration-300">
-        <Header userName="Olayinka" onMenuClick={() => setSidebarOpen(true)} />
+        <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="p-3 sm:p-4 lg:p-6 pb-16 md:pb-8">
           {children}
         </main>

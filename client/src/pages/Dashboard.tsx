@@ -50,6 +50,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
+import { welcomeName } from "@/lib/userDisplay";
 import {
   Select,
   SelectContent,
@@ -734,6 +736,7 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const searchParams = useSearch();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   // Referral & Bonus — live offer, wallet and referrals from the rewards API
   const rewards = useRewards();
   const rewardsCurrency = rewards.data?.currency ?? "GBP";
@@ -971,7 +974,7 @@ export default function Dashboard() {
               variants={itemVariants}
               className="text-xl md:text-2xl font-bold font-display text-slate-900 tracking-tight flex items-center gap-2"
             >
-              Welcome Olayinka
+              <span data-testid="dashboard-welcome">Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}</span>
               <span className="inline-block origin-[70%_70%] text-xl md:text-2xl">👋</span>
             </motion.h1>
             <motion.p variants={itemVariants} className="text-xs md:text-sm text-slate-500 mt-0.5">
