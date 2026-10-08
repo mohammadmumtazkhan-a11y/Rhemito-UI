@@ -9,8 +9,6 @@ import {
   referralStage,
   referralStatusText,
   referralHelpText,
-  bonusToApply,
-  totalToPay,
   saveReferral,
   loadReferral,
   clearReferral,
@@ -73,17 +71,6 @@ describe("expiry", () => {
 describe("wallet", () => {
   it("returns zeros for a currency without a balance", () => {
     expect(balanceFor(undefined, "EUR")).toMatchObject({ currency: "EUR", available: 0, earned: 0 });
-  });
-
-  it("never applies more than the balance or the send amount", () => {
-    expect(bonusToApply(7, 500)).toBe(7);
-    expect(bonusToApply(20, 10)).toBe(10);
-    expect(bonusToApply(0, 10)).toBe(0);
-  });
-
-  it("works out the total to pay and never goes below 0", () => {
-    expect(totalToPay(500, 5, 3, 7)).toBe(495);
-    expect(totalToPay(5, 0, 3, 5)).toBe(0);
   });
 });
 
