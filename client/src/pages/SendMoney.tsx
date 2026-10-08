@@ -481,6 +481,19 @@ export default function SendMoney() {
                                         </div>
                                     </div>
 
+                                    {/* Bonus is offered as soon as the customer lands, not only at payment */}
+                                    <UseBonusCredit
+                                        balance={bonusWallet}
+                                        unused={rewards.data?.wallet.unused}
+                                        currency={SEND_CURRENCY}
+                                        sendAmount={parseFloat(amount || "0")}
+                                        receiveCurrency={recipientDetails.currency || "NGN"}
+                                        exchangeRate={EXCHANGE_RATE}
+                                        choice={bonusChoice}
+                                        onChoice={setBonusChoice}
+                                        blocked={rewards.data?.wallet.bonus_blocked}
+                                    />
+
                                     <div className="space-y-4 pt-4">
                                         <div className="flex items-center justify-between py-2">
                                             <div className="flex items-center gap-3 text-gray-600">
@@ -548,6 +561,12 @@ export default function SendMoney() {
                                                     <span className="text-gray-600">Fee</span>
                                                     <span className="font-medium text-gray-900">{fee.toFixed(2)} GBP</span>
                                                 </div>
+                                                {useBonus && (
+                                                    <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus-step1">
+                                                        <span>{bonusType === "pay_less" ? "Bonus discount" : "Bonus credit"}</span>
+                                                        <span>{bonusType === "pay_less" ? "-" : "+"} {bonusAmount.toFixed(2)} {SEND_CURRENCY}</span>
+                                                    </div>
+                                                )}
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Exchange Rate</span>
                                                     <span className="font-medium text-gray-900">1 GBP = {EXCHANGE_RATE.toFixed(2)} USD</span>
