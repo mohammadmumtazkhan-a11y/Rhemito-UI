@@ -389,13 +389,13 @@ export default function SendMoney() {
         <DashboardLayout>
             <div className="max-w-5xl mx-auto pb-10">
                 {/* Header */}
-                <div className="mb-6 flex items-center justify-between">
-                    <h1 className="text-2xl font-bold">Send Money</h1>
+                <div className="mb-4 flex items-center justify-between">
+                    <h1 className="text-xl font-bold">Send Money</h1>
                     <div className="text-sm text-muted-foreground">step {currentStep} of {steps.length}</div>
                 </div>
 
                 {/* Stepper */}
-                <div className="flex items-center justify-between mb-6 sm:mb-8 px-1 sm:px-4 md:px-12 relative overflow-hidden">
+                <div className="flex items-center justify-between mb-5 px-1 sm:px-4 md:px-12 relative overflow-hidden">
                     <div className="absolute left-6 right-6 top-4 h-0.5 bg-gray-200 -z-10" />
                     {steps.map((step) => (
                         <div key={step.id} className="flex flex-col items-center bg-background px-1 sm:px-2 z-10">
@@ -419,22 +419,22 @@ export default function SendMoney() {
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="grid grid-cols-1 lg:grid-cols-5 gap-8 w-full"
+                                className="grid grid-cols-1 lg:grid-cols-5 gap-6 w-full"
                             >
-                                <div className="lg:col-span-3 space-y-8">
+                                <div className="lg:col-span-3 space-y-5">
                                     <div className="space-y-2">
                                         <Label className="text-gray-500">You Send</Label>
-                                        <div className="flex bg-white border rounded-xl overflow-hidden h-14 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
+                                        <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
                                             <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
                                                 <img src="https://flagcdn.com/w40/gb.png" alt="GBP" className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
-                                                <span className="font-semibold text-base sm:text-lg">GBP</span>
+                                                <span className="font-semibold text-base">GBP</span>
                                                 <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
                                             </div>
                                             <input
                                                 type="number"
                                                 value={amount}
                                                 onChange={e => setAmount(e.target.value)}
-                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base sm:text-lg font-medium outline-none bg-transparent"
+                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base font-medium outline-none bg-transparent"
                                                 placeholder="0.00"
                                             />
                                         </div>
@@ -442,22 +442,22 @@ export default function SendMoney() {
 
                                     <div className="space-y-2">
                                         <Label className="text-gray-500">They Receive</Label>
-                                        <div className="flex bg-white border rounded-xl overflow-hidden h-14 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
+                                        <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
                                             <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
                                                 <img src="https://flagcdn.com/w40/ng.png" alt="NGN" className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
-                                                <span className="font-semibold text-base sm:text-lg">NGN</span>
+                                                <span className="font-semibold text-base">NGN</span>
                                                 <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
                                             </div>
                                             <input
                                                 readOnly
                                                 value={receiveAmount}
-                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base sm:text-lg font-medium outline-none bg-gray-50/70 text-gray-500"
+                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base font-medium outline-none bg-gray-50/70 text-gray-500"
                                             />
                                         </div>
                                     </div>
 
                                     <div className="space-y-4">
-                                        <h3 className="font-semibold text-base sm:text-lg">How will they receive the money?</h3>
+                                        <h3 className="font-semibold text-base">How will they receive the money?</h3>
                                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                                             {[
                                                 { id: "bank_deposit", label: "Bank Deposit", icon: Landmark },
@@ -494,7 +494,7 @@ export default function SendMoney() {
                                         blocked={rewards.data?.wallet.bonus_blocked}
                                     />
 
-                                    <div className="space-y-4 pt-4">
+                                    <div className="space-y-1 pt-2 lg:hidden">
                                         <div className="flex items-center justify-between py-2">
                                             <div className="flex items-center gap-3 text-gray-600">
                                                 <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
@@ -524,17 +524,17 @@ export default function SendMoney() {
                                         </div>
                                     </div>
 
-                                    <div className="pt-4 flex gap-3">
+                                    <div className="pt-2 flex gap-3">
                                         <Button
                                             variant="outline"
                                             onClick={handleBack}
-                                            className="flex-1 h-14 text-lg rounded-xl"
+                                            className="flex-1 h-12 text-base rounded-xl"
                                         >
                                             Back
                                         </Button>
                                         <Button
                                             onClick={handleNext}
-                                            className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
+                                            className="flex-1 h-12 text-base bg-blue-600 hover:bg-blue-700 rounded-xl"
                                         >
                                             Continue
                                         </Button>
@@ -589,10 +589,10 @@ export default function SendMoney() {
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="grid grid-cols-1 lg:grid-cols-5 gap-8 w-full"
+                                className="grid grid-cols-1 lg:grid-cols-5 gap-6 w-full"
                             >
                                 {/* Left Column: Recipient Selection */}
-                                <div className="lg:col-span-3 space-y-8">
+                                <div className="lg:col-span-3 space-y-5">
                                     <div className="space-y-6">
                                         <Button
                                             variant="outline"
@@ -602,7 +602,7 @@ export default function SendMoney() {
                                             <ArrowLeft className="w-4 h-4" />
                                             Back
                                         </Button>
-                                        <h2 className="text-xl font-bold text-gray-900">Who are you sending to?</h2>
+                                        <h2 className="text-lg font-bold text-gray-900">Who are you sending to?</h2>
 
                                         {/* Recent Recipients - Circles */}
                                         <div className="space-y-4">
@@ -744,13 +744,13 @@ export default function SendMoney() {
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="grid grid-cols-1 lg:grid-cols-5 gap-8 w-full"
+                                className="grid grid-cols-1 lg:grid-cols-5 gap-6 w-full"
                             >
                                 {/* Left Column: Form Details */}
-                                <div className="lg:col-span-3 space-y-8">
+                                <div className="lg:col-span-3 space-y-5">
                                     <Card>
                                         <CardHeader>
-                                            <CardTitle className="text-lg">Recipient Details</CardTitle>
+                                            <CardTitle className="text-base">Recipient Details</CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -841,7 +841,7 @@ export default function SendMoney() {
                                     {/* Banking Details Card — conditional by destination */}
                                     <Card>
                                         <CardHeader>
-                                            <CardTitle className="text-lg">Banking Details</CardTitle>
+                                            <CardTitle className="text-base">Banking Details</CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             <div className="space-y-2">
@@ -921,7 +921,7 @@ export default function SendMoney() {
                                         <Button
                                             variant="outline"
                                             onClick={handleBack}
-                                            className="flex-1 h-14 text-lg rounded-xl"
+                                            className="flex-1 h-12 text-base rounded-xl"
                                             disabled={submittingTransaction}
                                         >
                                             Back
@@ -929,7 +929,7 @@ export default function SendMoney() {
                                         <Button
                                             onClick={handleSubmitTransaction}
                                             disabled={submittingTransaction}
-                                            className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
+                                            className="flex-1 h-12 text-base bg-blue-600 hover:bg-blue-700 rounded-xl"
                                         >
                                             {submittingTransaction ? (
                                                 <div className="flex items-center gap-2">
@@ -984,7 +984,7 @@ export default function SendMoney() {
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="grid grid-cols-1 lg:grid-cols-5 gap-8 pb-24"
+                                className="grid grid-cols-1 lg:grid-cols-5 gap-6 pb-24"
                             >
                                 {/* Left Column: Input Sections */}
                                 <div className="lg:col-span-3 space-y-6">
@@ -1008,7 +1008,7 @@ export default function SendMoney() {
                                     {/* Payment Method Selection */}
                                     <Card>
                                         <CardHeader>
-                                            <CardTitle className="text-lg">How would you like to pay?</CardTitle>
+                                            <CardTitle className="text-base">How would you like to pay?</CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             {[
@@ -1411,7 +1411,7 @@ export default function SendMoney() {
                                             <Button
                                                 onClick={() => setLocation("/")}
                                                 variant="outline"
-                                                className="w-full h-14 text-base rounded-xl font-semibold border-2 border-gray-300 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
+                                                className="w-full h-12 text-base rounded-xl font-semibold border-2 border-gray-300 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
                                             >
                                                 <div className="flex flex-col items-center gap-0.5">
                                                     <span>I've noted the details — take me to Dashboard</span>
@@ -1427,7 +1427,7 @@ export default function SendMoney() {
                                             >
                                                 <Button
                                                     onClick={() => setLocation("/")}
-                                                    className="w-full h-14 text-base bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
+                                                    className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
                                                 >
                                                     Done — Go to Dashboard
                                                 </Button>
