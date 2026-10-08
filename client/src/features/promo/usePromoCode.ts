@@ -56,6 +56,8 @@ export function usePromoCode(input: PromoInputs) {
   const [message, setMessage] = useState("");
   const lastInputs = useRef<PromoInputs | null>(null);
   const appliedCode = useRef<string | null>(null);
+  // Once payment has started the code is redeemed on the server, so checking it again would count that very use against the customer
+  const locked = useRef(false);
 
   const run = useCallback(async (raw: string, inputs: PromoInputs, opts: { revalidate?: boolean } = {}) => {
     const c = normaliseCode(raw);
@@ -92,12 +94,14 @@ export function usePromoCode(input: PromoInputs) {
     setDisplayText("");
     appliedCode.current = null;
     lastInputs.current = null;
+    locked.current = false;
     toast({ title: PROMO_COPY.removedToast });
   }, [toast]);
 
   /** Editing the code text clears the applied state (P-42). */
   const setCode = useCallback((v: string) => {
     setCodeRaw(v.toUpperCase());
+    locked.current = false;
     if (appliedCode.current || state !== "idle") {
       appliedCode.current = null;
       setState("idle");
@@ -108,16 +112,20 @@ export function usePromoCode(input: PromoInputs) {
 
   /** Server says the code can no longer be used (pay-time re-check): show it like a rejection. */
   const reject = useCallback((msg: string) => {
+    locked.current = false;
     appliedCode.current = null;
     setDiscount(0);
     setState("rejected");
     setMessage(msg);
   }, []);
 
+  /** Call when the payment starts: the code is checked and used by the server at pay time (P-20), so stop re-validating it here. */
+  const lock = useCallback(() => { locked.current = true; }, []);
+
   // P-41: re-validate (debounced) when amount, fee, currencies or payment method change while a code is applied
   const { amount, fee, sendCurrency, receiveCurrency, paymentMethod } = input;
   useEffect(() => {
-    if (state !== "applied" || !appliedCode.current) return undefined;
+    if (state !== "applied" || !appliedCode.current || locked.current) return undefined;
     const next = { amount, fee, sendCurrency, receiveCurrency, paymentMethod };
     if (!shouldRevalidate(lastInputs.current, next)) return undefined;
     const t = setTimeout(() => { if (appliedCode.current) void run(appliedCode.current, next, { revalidate: true }); }, 400);
@@ -137,6 +145,7 @@ export function usePromoCode(input: PromoInputs) {
     apply,
     remove,
     reject,
+    lock,
   };
 }
 
