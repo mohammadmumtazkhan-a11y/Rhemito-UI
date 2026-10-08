@@ -1006,77 +1006,57 @@ export default function Dashboard() {
                   <span className="tracking-tight">Quick Services</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-1 flex-col justify-between gap-3 px-5 pb-5 pt-0 relative z-10">
-                <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    className="group w-full justify-start gap-3 sm:gap-3.5 bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white min-h-[64px] sm:h-[70px] px-3.5 sm:px-4 py-2 text-sm sm:text-[15px] font-semibold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/15 transition-all duration-200 border-none"
+              <CardContent className="flex flex-1 flex-col gap-3 px-5 pb-5 pt-0 relative z-10">
+                {/* Primary action — takes the spare height so the card always looks balanced */}
+                <motion.div className="flex flex-1" whileHover={{ y: -1 }} whileTap={{ scale: 0.99 }}>
+                  <button
+                    type="button"
                     onClick={() => setLocation("/send-money")}
                     data-testid="button-send-money"
+                    className="group relative flex min-h-[120px] w-full flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-600 to-indigo-600 p-4 text-left text-white shadow-sm transition-shadow hover:shadow-lg hover:shadow-blue-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   >
-                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/20 shrink-0">
-                      <Send className="w-5 h-5 text-white" />
+                    <div className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-white/10" />
+                    <div className="pointer-events-none absolute -bottom-12 right-10 h-28 w-28 rounded-full bg-white/5" />
+                    <div className="relative flex items-start justify-between">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/20 bg-white/15">
+                        <Send className="h-5 w-5" />
+                      </div>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 transition-transform group-hover:translate-x-0.5">
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
                     </div>
-                    <div className="flex-1 flex flex-col items-start gap-0.5 min-w-0">
-                      <span className="leading-none text-white font-bold truncate max-w-full">Send Money</span>
-                      <span className="text-[11px] sm:text-xs font-normal text-blue-100 truncate max-w-full">Transfer globally with live rates</span>
+                    <div className="relative mt-4">
+                      <p className="font-display text-xl font-bold leading-tight">Send Money</p>
+                      <p className="mt-0.5 text-[13px] text-blue-100">Transfer globally with live rates</p>
                     </div>
-                    <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center group-hover:translate-x-0.5 transition-transform shrink-0">
-                      <ArrowRight className="w-4 h-4 text-white" />
-                    </div>
-                  </Button>
+                  </button>
                 </motion.div>
 
-                <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    className="group w-full justify-start gap-3 sm:gap-3.5 bg-gradient-to-r from-teal to-emerald-600 hover:from-teal/90 hover:to-emerald-700 text-white min-h-[64px] sm:h-[70px] px-3.5 sm:px-4 py-2 text-sm sm:text-[15px] font-semibold rounded-xl shadow-sm hover:shadow-md hover:shadow-teal/15 transition-all duration-200 border-none"
-                    onClick={() => setLocation("/request-payment")}
-                    data-testid="button-request-payment"
-                  >
-                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/20 shrink-0">
-                      <Receipt className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 flex flex-col items-start gap-0.5 min-w-0">
-                      <span className="leading-none text-white font-bold truncate max-w-full">Receive Money</span>
-                      <span className="text-[11px] sm:text-xs font-normal text-teal-100 truncate max-w-full">Request instant payment link</span>
-                    </div>
-                    <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center group-hover:translate-x-0.5 transition-transform shrink-0">
-                      <ArrowRight className="w-4 h-4 text-white" />
-                    </div>
-                  </Button>
-                </motion.div>
-
-                {/* Direct entries for the other get-paid services */}
-                <div className="grid grid-cols-2 gap-3 pt-0.5">
-                  <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.98 }}>
-                    <button
-                      type="button"
-                      onClick={() => setLocation("/send-invoice")}
-                      className="group w-full h-[62px] flex flex-col items-center justify-center gap-1 rounded-xl bg-slate-50/70 border border-slate-200/80 shadow-2xs hover:bg-white hover:border-indigo-300 hover:shadow-sm transition-all"
-                      data-testid="button-send-invoice"
-                    >
-                      <div className="w-6 h-6 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                        <FileText className="w-3.5 h-3.5" />
-                      </div>
-                      <p className="text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-none text-center">
-                        Send Invoice
-                      </p>
-                    </button>
-                  </motion.div>
-                  <motion.div whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.98 }}>
-                    <button
-                      type="button"
-                      onClick={() => setLocation("/group-pay/create")}
-                      className="group w-full h-[62px] flex flex-col items-center justify-center gap-1 rounded-xl bg-slate-50/70 border border-slate-200/80 shadow-2xs hover:bg-white hover:border-purple-300 hover:shadow-sm transition-all"
-                      data-testid="button-funding-campaigns"
-                    >
-                      <div className="w-6 h-6 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                        <Users className="w-3.5 h-3.5" />
-                      </div>
-                      <p className="text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-none text-center">
-                        Funding Campaigns
-                      </p>
-                    </button>
-                  </motion.div>
+                {/* Secondary actions — one consistent list */}
+                <div className="flex flex-col gap-2">
+                  {[
+                    { id: "button-request-payment", href: "/request-payment", title: "Receive Money", sub: "Request instant payment link", icon: Receipt, chip: "bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white", hover: "hover:border-teal-300" },
+                    { id: "button-send-invoice", href: "/send-invoice", title: "Send Invoice", sub: "Bill a customer and get paid", icon: FileText, chip: "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white", hover: "hover:border-indigo-300" },
+                    { id: "button-funding-campaigns", href: "/group-pay/create", title: "Funding Campaigns", sub: "Raise money together", icon: Users, chip: "bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white", hover: "hover:border-purple-300" },
+                  ].map((a) => (
+                    <motion.div key={a.id} whileHover={{ y: -1 }} whileTap={{ scale: 0.99 }}>
+                      <button
+                        type="button"
+                        onClick={() => setLocation(a.href)}
+                        data-testid={a.id}
+                        className={`group flex min-h-[60px] w-full items-center gap-3 rounded-xl border border-slate-200/80 bg-white px-3.5 text-left shadow-2xs transition-all hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${a.hover}`}
+                      >
+                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${a.chip}`}>
+                          <a.icon className="h-[18px] w-[18px]" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-900">{a.title}</p>
+                          <p className="truncate text-xs text-slate-500">{a.sub}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                      </button>
+                    </motion.div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
