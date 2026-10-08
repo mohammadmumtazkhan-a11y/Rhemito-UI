@@ -135,8 +135,8 @@ test.describe('Bonus & Discounts page', () => {
         const list = page.getByTestId('bonus-history');
         await expect(list).toContainText('Referral bonus – Sarah S.');
         await expect(list).toContainText('Promo code WELCOME');
-        await page.getByRole('button', { name: 'Used' }).click();
-        await expect(list).toContainText('Used on transfer TXN-202609-00042');
+        await page.getByRole('button', { name: 'Bonus used' }).click();
+        await expect(list).toContainText('Bonus used on transfer TXN-202609-00042');
         await expect(list).not.toContainText('Promo code WELCOME');
     });
 
