@@ -30,9 +30,9 @@ import {
 } from "@/lib/unifiedTransactions";
 import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
-import { balanceFor, formatMoney } from "@/lib/rewards";
+import { balanceFor } from "@/features/bonus";
 import { ReferEarnCard } from "@/components/rewards/ReferEarnCard";
-import { BonusBlockedNotice } from "@/components/rewards/BonusBlockedNotice";
+import { BonusBlockedNotice, BonusCreditPill } from "@/features/bonus";
 import { OfferBanner } from "@/components/rewards/OfferBanner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -980,22 +980,8 @@ export default function Dashboard() {
           </div>
 
           {bonusBalance.available > 0 && (
-            <motion.div
-              variants={itemVariants}
-              whileHover={{ scale: 1.01, y: -1 }}
-              data-testid="bonus-earned-pill"
-              className="flex items-center gap-2.5 bg-gradient-to-r from-purple-50 via-pink-50/70 to-purple-50 text-purple-700 px-3.5 py-2.5 sm:px-4 sm:py-2 rounded-2xl sm:rounded-full border border-purple-200/70 shadow-xs backdrop-blur-sm self-start md:self-auto max-w-full"
-            >
-              <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-xs shrink-0">
-                <Gift className="w-3.5 h-3.5 text-pink-500" />
-              </div>
-              <span className="text-xs md:text-sm font-medium leading-snug">
-                You have earned <span className="font-bold text-purple-900">{formatMoney(bonusBalance.available, bonusBalance.currency)} Referral Bonus Credit</span>.{" "}
-                <button type="button" onClick={() => setLocation("/send-money")} className="font-semibold underline underline-offset-2 hover:text-purple-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
-                  Create a Transaction
-                </button>{" "}
-                to use it.
-              </span>
+            <motion.div variants={itemVariants} className="self-start md:self-auto max-w-full">
+              <BonusCreditPill balance={bonusBalance} unused={rewards.data?.wallet.unused} onCreateTransaction={() => setLocation("/send-money")} />
             </motion.div>
           )}
         </div>

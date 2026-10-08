@@ -50,8 +50,11 @@ export async function paySendMoneyTransaction(
   id: string,
   paymentMethod: SendMoneyPaymentMethod,
   promo?: { code: string; discount: number } | null,
+  bonus?: { mode: "pay_less" | "send_more"; amount: number } | null,
 ): Promise<SendMoneyTransactionView> {
   const body: Record<string, unknown> = { paymentMethod };
+  // Bonus credit travels with the payment so the server re-checks and uses it before any money moves (BONUS-RHEMITO B-20)
+  if (bonus && bonus.amount > 0) body.bonusCredit = { mode: bonus.mode, amount: bonus.amount.toFixed(2) };
   if (promo?.code) {
     body.promoCode = promo.code;
     body.promoDiscount = Math.max(0, promo.discount).toFixed(2);

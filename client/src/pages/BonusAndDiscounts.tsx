@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
-import { BonusBlockedNotice } from "@/components/rewards/BonusBlockedNotice";
+import { BonusBlockedNotice, BonusBreakdown, BONUS_COPY, SourceChip, WaysToEarn, describeCredit, isCreditSource, sourceGroupLabel, useBonusSummary, type CreditSource } from "@/features/bonus";
 import { usePromoSavings, PROMO_COPY } from "@/features/promo";
 import { cn } from "@/lib/utils";
 import {
@@ -45,15 +45,6 @@ const REFERRAL_PILL: Record<MyReferral["status"], { label: string; cls: string }
   REVERSED: { label: "Reversed", cls: "bg-red-50 text-red-700" },
 };
 
-/** Customer-friendly wording for ledger notes written by the referral engine. */
-function describeCredit(notes: string | null, reason: string): string {
-  const n = notes ?? "";
-  if (/^Referrer reward – referred /.test(n)) return n.replace(/^Referrer reward – referred /, "Referral bonus – ");
-  if (/^Referee reward – invited by /.test(n)) return n.replace(/^Referee reward – invited by /, "Welcome bonus – invited by ").replace(/ \(approved by.*\)$/, "");
-  if (reason === "BONUS_RETURNED") return "Bonus returned – transfer cancelled";
-  return n || "Bonus credit";
-}
-
 interface HistoryRow {
   id: string;
   date: string;
@@ -62,6 +53,8 @@ interface HistoryRow {
   amount: number;
   currency: string;
   status?: WalletCredit["status"];
+  returned?: boolean;
+  credit_source?: string | null;
 }
 
 type PromoRow = { id: string; code: string; amount: number; currency: string | null; created_at: string };
@@ -69,22 +62,25 @@ type PromoRow = { id: string; code: string; amount: number; currency: string | n
 function buildHistory(data: RewardsSummary, currency: string, promoRows: PromoRow[]): HistoryRow[] {
   const statusById = new Map(data.wallet.credits.map((c) => [c.id, c.status]));
   const rows: HistoryRow[] = data.wallet.history
-    .filter((h) => h.currency === currency)
-    .map((h) => {
+    // Repayment rows (CLAWBACK) are not shown as bonus activity; they are explained by the outstanding-repayment line
+    .filter((h) => h.currency === currency && h.type !== "CLAWBACK" && h.type !== "CLAWBACK_SETTLED")
+    .map((h): HistoryRow => {
+      const credit_source = h.credit_source ?? null;
       if (h.type === "EARNED") {
-        return { id: h.id, date: h.created_at, description: describeCredit(h.notes, h.reason_code), kind: "earned", amount: h.amount, currency: h.currency, status: statusById.get(h.id) };
+        const returned = h.reason_code === "BONUS_RETURNED";
+        return { id: h.id, date: h.created_at, description: describeCredit({ credit_source_label: h.credit_source_label, notes: h.notes, reason_code: h.reason_code }), kind: "earned", amount: h.amount, currency: h.currency, status: statusById.get(h.id), returned, credit_source };
       }
       if (h.type === "APPLIED") {
-        return { id: h.id, date: h.created_at, description: `Used on transfer ${h.transfer_id ?? ""}`.trim(), kind: "used", amount: h.amount, currency: h.currency };
+        return { id: h.id, date: h.created_at, description: `Used on transfer ${h.transfer_id ?? ""}`.trim(), kind: "used", amount: h.amount, currency: h.currency, credit_source };
       }
       return {
-        id: h.id, date: h.created_at, kind: "expired", amount: h.amount, currency: h.currency,
-        description: h.type === "VOIDED" ? "Referral bonus removed – transfer reversed" : "Bonus credit expired",
+        id: h.id, date: h.created_at, kind: "expired", amount: h.amount, currency: h.currency, credit_source,
+        description: h.type === "VOIDED" ? (credit_source && credit_source !== "REFERRAL" ? "Bonus removed – transfer or request reversed" : "Referral bonus removed – transfer reversed") : "Bonus credit expired",
       };
     });
   for (const p of promoRows) {
     if ((p.currency ?? currency) !== currency) continue;
-    rows.push({ id: p.id, date: p.created_at, description: PROMO_COPY.savingsRow(p.code), kind: "promo", amount: -Math.abs(p.amount), currency });
+    rows.push({ id: p.id, date: p.created_at, description: PROMO_COPY.savingsRow(p.code), kind: "promo", amount: -Math.abs(p.amount), currency, credit_source: "PROMO" });
   }
   return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
@@ -131,7 +127,12 @@ export default function BonusAndDiscounts() {
   const [tab, setTab] = useState<Tab>(["overview", "history", "referrals"].includes(initialTab) ? initialTab : "overview");
   const [filter, setFilter] = useState<HistoryFilter>("all");
   const [pickedCurrency, setPickedCurrency] = useState<string | null>(null);
+  // ?source=REFERRAL|SCHEME|MANUAL preselects the source filter (the referral screens link here)
+  const sourceParam = new URLSearchParams(search).get("source")?.toUpperCase();
+  const [source, setSource] = useState<CreditSource | "ALL">(isCreditSource(sourceParam) ? sourceParam : "ALL");
   const promoSavings = usePromoSavings();
+  // Live bonus offers (Ways to earn). Hidden when the bonus service is not reachable.
+  const bonusSummary = useBonusSummary(pickedCurrency ?? undefined);
 
   const data = rewards.data;
   const currencies = useMemo(() => {
@@ -140,13 +141,22 @@ export default function BonusAndDiscounts() {
   }, [data]);
   const currency = pickedCurrency ?? data?.currency ?? "GBP";
   const balance = balanceFor(data?.wallet, currency);
-  const unused = (data?.wallet.unused ?? []).filter((c) => c.currency === currency).sort((a, b) => String(a.expires_on).localeCompare(String(b.expires_on)));
+  const unused = (data?.wallet.unused ?? []).filter((c) => c.currency === currency && (source === "ALL" || c.credit_source === source)).sort((a, b) => String(a.expires_on).localeCompare(String(b.expires_on)));
   // Promo savings come from the promo module (PROMO-RHEMITO P-50); until Mito serves them, fall back to the wallet field (P-53)
   const promoRows: PromoRow[] = promoSavings.notAvailable || (!promoSavings.savings && !promoSavings.isError)
     ? (data?.wallet.promo_redemptions ?? []).map((p) => ({ id: p.id, code: p.code, amount: p.amount, currency: p.currency, created_at: p.created_at }))
     : (promoSavings.savings?.items ?? []).map((p) => ({ id: p.id, code: p.code, amount: p.amount, currency: p.currency, created_at: p.createdAt }));
   const history = data ? buildHistory(data, currency, promoRows) : [];
-  const filtered = filter === "all" ? history : history.filter((h) => h.kind === filter);
+  // The source filter narrows the lists only; the tiles always show the whole balance
+  const bySourceRows = source === "ALL" || filter === "promo" ? history : history.filter((h) => h.credit_source === source);
+  const filtered = filter === "all" ? bySourceRows : bySourceRows.filter((h) => h.kind === filter);
+  const showSourceFilter = (balance.by_source?.length ?? 0) > 1 || source !== "ALL";
+  const viewSource = (next: CreditSource) => {
+    setSource(next);
+    setFilter("all");
+    setTab("history");
+    setLocation(`/bonus-discounts?tab=history&source=${next}`, { replace: true });
+  };
   const promoSaved = promoRows.filter((p) => (p.currency ?? currency) === currency).reduce((s, p) => s + Math.abs(p.amount), 0);
   const referrals = data?.referrals.data ?? [];
   const referralSummary = data?.referrals.summary;
@@ -224,7 +234,7 @@ export default function BonusAndDiscounts() {
                   <StatTile
                     label="Total earned"
                     value={formatMoney(balance.earned, currency)}
-                    sub={`From ${balance.referral_credit_count} referral${balance.referral_credit_count === 1 ? "" : "s"} and ${balance.other_credit_count} other bonus${balance.other_credit_count === 1 ? "" : "es"}`}
+                    sub={BONUS_COPY.tilesEarnedSub(balance.referral_credit_count + balance.other_credit_count)}
                   />
                   <StatTile label="Used" value={formatMoney(balance.used, currency)} sub={`Across ${balance.used_transfer_count} transfer${balance.used_transfer_count === 1 ? "" : "s"}`} />
                   <StatTile label="Expired" value={formatMoney(balance.expired, currency)} sub="Use your bonus before it expires" />
@@ -234,10 +244,21 @@ export default function BonusAndDiscounts() {
                   You&apos;ve saved <strong>{formatMoney(balance.used + promoSaved, currency)}</strong> in total with bonuses and promo codes.
                 </p>
 
+                <BonusBreakdown balance={balance} currency={currency} activeSource={source} onView={viewSource} />
+
+                {source !== "ALL" && (
+                  <p className="flex items-center justify-between gap-3 rounded-xl bg-slate-100 px-3.5 py-2 text-sm text-slate-700" data-testid="source-filter-note">
+                    <span>{BONUS_COPY.sourceFilterShowing(sourceGroupLabel(source))}</span>
+                    <button type="button" onClick={() => setSource("ALL")} className="font-semibold text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">{BONUS_COPY.clearFilter}</button>
+                  </p>
+                )}
+
                 <Card className="rounded-2xl border border-slate-200 bg-white px-4">
                   <h2 className="mb-1 mt-3 text-[15px] font-bold text-slate-900">Unused bonus</h2>
                   {unused.length === 0 ? (
-                    <p className="pb-4 pt-1 text-sm text-slate-600">No unused bonus. Invite friends to earn bonus credit.</p>
+                    <p className="pb-4 pt-1 text-sm text-slate-600">
+                      {source === "ALL" ? "No unused bonus. Invite friends to earn bonus credit." : `No unused bonus from ${sourceGroupLabel(source).toLowerCase()}.`}
+                    </p>
                   ) : (
                     <ul data-testid="unused-bonus">
                       {unused.map((c, i) => {
@@ -245,7 +266,10 @@ export default function BonusAndDiscounts() {
                         return (
                           <li key={c.id} className={cn("flex items-center gap-3 py-3", i < unused.length - 1 && "border-b border-slate-100")}>
                             <div className="flex flex-1 flex-col gap-1">
-                              <span className="text-[15px] font-semibold text-slate-900">{describeCredit(c.source, c.reason_code)}</span>
+                              <span className="flex flex-wrap items-center gap-2">
+                                <span className="text-[15px] font-semibold text-slate-900">{describeCredit({ credit_source_label: c.credit_source_label, source: c.source, reason_code: c.reason_code })}</span>
+                                <SourceChip source={c.credit_source} />
+                              </span>
                               {c.status === "PARTLY_USED" && <span className="text-[13px] text-slate-500">{formatMoney(c.remaining, c.currency)} left of {formatMoney(c.amount, c.currency)}</span>}
                               <span className="text-[13px] text-slate-500">Earned {formatUkDate(c.earned_on)}{c.expires_on ? ` · expires ${formatUkDate(c.expires_on)}` : ""}</span>
                               {left !== null && left <= 14 && (
@@ -259,6 +283,8 @@ export default function BonusAndDiscounts() {
                     </ul>
                   )}
                 </Card>
+
+                <WaysToEarn offers={bonusSummary.data?.offers ?? []} blocked={data?.wallet.bonus_blocked || bonusSummary.data?.blocked} />
               </TabsContent>
 
               <TabsContent value="history" className="mt-6 space-y-4">
@@ -278,6 +304,22 @@ export default function BonusAndDiscounts() {
                     </button>
                   ))}
                 </div>
+                {showSourceFilter && (
+                  <div className="flex flex-wrap items-center gap-2" data-testid="source-filter">
+                    <label htmlFor="bonus-source" className="text-sm font-medium text-slate-600">{BONUS_COPY.sourceFilter}</label>
+                    <Select value={source} onValueChange={(v) => setSource(v as CreditSource | "ALL")}>
+                      <SelectTrigger id="bonus-source" className="h-9 w-[170px] rounded-full" aria-label={BONUS_COPY.sourceFilter}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">{BONUS_COPY.allSources}</SelectItem>
+                        <SelectItem value="REFERRAL">{sourceGroupLabel("REFERRAL")}</SelectItem>
+                        <SelectItem value="SCHEME">{sourceGroupLabel("SCHEME")}</SelectItem>
+                        <SelectItem value="MANUAL">{sourceGroupLabel("MANUAL")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <Card className="rounded-2xl border border-slate-200 bg-white px-4">
                   {filter === "promo" && promoSavings.isError ? (
                     <p className="py-6 text-center text-sm text-slate-600" role="alert">
@@ -293,14 +335,21 @@ export default function BonusAndDiscounts() {
                       {filtered.map((h, i) => (
                         <li key={h.id} className={cn("flex items-center gap-3 py-3.5", i < filtered.length - 1 && "border-b border-slate-100")}>
                           <div className="flex flex-1 flex-col gap-1">
-                            <span className="text-[15px] font-semibold text-slate-900">{h.description}</span>
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-[15px] font-semibold text-slate-900">{h.description}</span>
+                              <SourceChip source={h.credit_source} />
+                            </span>
                             <span className="text-[13px] text-slate-500">{formatUkDate(h.date)}</span>
                           </div>
                           <div className="flex flex-col items-end gap-1">
                             <span className={cn("text-[15px] font-bold", h.amount >= 0 ? "text-teal-700" : "text-slate-900")}>
                               {h.amount >= 0 ? "+" : ""}{formatMoney(h.amount, h.currency)}
                             </span>
-                            {h.status && <span className={cn("rounded-full px-2 py-0.5 text-xs font-bold", STATUS_PILL[h.status])}>{CREDIT_STATUS_LABEL[h.status]}</span>}
+                            {h.returned ? (
+                              <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-bold text-teal-800">Returned</span>
+                            ) : (
+                              h.status && <span className={cn("rounded-full px-2 py-0.5 text-xs font-bold", STATUS_PILL[h.status])}>{CREDIT_STATUS_LABEL[h.status]}</span>
+                            )}
                           </div>
                         </li>
                       ))}

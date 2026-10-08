@@ -14,6 +14,7 @@ import { demoModeEnabled } from "./config";
 import { dispatchNotification } from "./notificationService";
 import { onTransferEvent } from "./rewardsService";
 import * as promo from "./promo";
+import * as bonus from "./bonus";
 import { toMinorUnits, fromMinorUnits } from "@shared/money";
 import { formatDocumentNumber } from "@shared/invoice-logic";
 import {
@@ -82,6 +83,8 @@ function toView(tx: SendMoneyTransaction): SendMoneyTransactionView {
     exchangeRate: tx.exchangeRate,
     promoCode: tx.promoCode,
     promoDiscount: tx.promoDiscountMinor ? fromMinorUnits(tx.promoDiscountMinor, tx.sendCurrency) : null,
+    bonusCredit: tx.bonusCreditMinor ? fromMinorUnits(tx.bonusCreditMinor, tx.sendCurrency) : null,
+    bonusCreditMode: tx.bonusCreditMinor ? tx.bonusCreditMode ?? null : null,
     status: tx.status,
     createdAt: tx.createdAt.toISOString(),
     paidAt: tx.paidAt ? tx.paidAt.toISOString() : null,
@@ -181,6 +184,16 @@ export function registerSendMoneyRoutes(app: Express): void {
         if (err instanceof promo.PromoPaymentError) throw new SendMoneyError(err.status, err.code, err.message);
         throw err;
       }
+      // Bonus credit (one balance, Mito Money): re-checked and used once for this transfer before any money moves
+      // (BONUS-RHEMITO B-20 – B-23). If it fails, the promo use taken above is given back and the transfer stays unpaid.
+      let bonusAtPayment: bonus.BonusAtPayment | null = null;
+      try {
+        bonusAtPayment = await bonus.applyForPayment(tx, userId, parsed.data.bonusCredit);
+      } catch (err) {
+        if (promoAtPayment) await promo.releaseForPayment(tx.reference);
+        if (err instanceof bonus.BonusPaymentError) throw new SendMoneyError(err.status, err.code, err.message);
+        throw err;
+      }
       const status = statusForPaymentMethod(parsed.data.paymentMethod);
       const now = new Date();
       let updated: SendMoneyTransaction | undefined;
@@ -192,13 +205,16 @@ export function registerSendMoneyRoutes(app: Express): void {
           ...(promoAtPayment
             ? { promoCode: promoAtPayment.promoCode, feeBeforePromoMinor: promoAtPayment.feeBeforePromoMinor, feeMinor: promoAtPayment.feeMinor, promoDiscountMinor: promoAtPayment.promoDiscountMinor, promoRedeemedAt: now }
             : {}),
+          ...(bonusAtPayment ? { bonusCreditMinor: bonusAtPayment.amountMinor, bonusCreditMode: bonusAtPayment.mode } : {}),
         });
       } catch (err) {
         if (promoAtPayment) await promo.releaseForPayment(tx.reference);
+        if (bonusAtPayment) await bonus.releaseForPayment(userId, tx.reference);
         throw err;
       }
       if (!updated) {
         if (promoAtPayment) await promo.releaseForPayment(tx.reference);
+        if (bonusAtPayment) await bonus.releaseForPayment(userId, tx.reference);
         throw new SendMoneyError(500, "INTERNAL_ERROR", "The payment could not be recorded. Please try again.");
       }
       if (status === "completed") {
@@ -208,6 +224,8 @@ export function registerSendMoneyRoutes(app: Express): void {
         void onTransferEvent(userId, event, "PAID").then(() => onTransferEvent(userId, event, "COMPLETED"));
         promo.onTransferStatus(userId, updated, "PAID");
         promo.onTransferStatus(userId, updated, "COMPLETED");
+        bonus.onTransferStatus(userId, updated, "PAID");
+        bonus.onTransferStatus(userId, updated, "COMPLETED");
       }
       return res.json({ data: toView(updated) });
     } catch (err) {
@@ -234,6 +252,8 @@ export function registerSendMoneyRoutes(app: Express): void {
       void onTransferEvent(userId, { reference: updated.reference, sendAmount: Number(fromMinorUnits(updated.sendAmountMinor, updated.sendCurrency)), sendCurrency: updated.sendCurrency, receiveCurrency: updated.receiveCurrency, createdAt: updated.createdAt }, "CANCELLED");
       // Gives the promo code use back (PROMO-RHEMITO P-30); the rewards path above also does, both are idempotent (P-33)
       promo.onTransferStatus(userId, updated, "CANCELLED");
+      // Bonus module: gives back any bonus used and removes what this transfer earned (BONUS-RHEMITO B-10)
+      bonus.onTransferStatus(userId, updated, "CANCELLED");
       return res.json({ data: toView(updated) });
     } catch (err) {
       handleError(res, err);

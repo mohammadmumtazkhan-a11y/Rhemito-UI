@@ -91,6 +91,8 @@ const fmtMoney = (amount: number, currency: string) => {
   const dp = currency === "JPY" ? 0 : 2;
   return `${symbols[currency] ?? `${currency} `}${Number(amount).toLocaleString("en-GB", { minimumFractionDigits: dp, maximumFractionDigits: dp })}`;
 };
+/** The bonus feed (server/bonus) announces scheme awards and bonus use; the old notifications stand down when it is on (B-14). */
+const bonusFeedOn = () => String(process.env.BONUS_ENABLED ?? "true").toLowerCase() !== "false";
 const maskName = (first?: string | null, last?: string | null) => `${first || "Your friend"}${last ? ` ${last.trim()[0].toUpperCase()}.` : ""}`;
 const ukDate = (ymd?: string | null) => (ymd ? ymd.slice(0, 10).split("-").reverse().join("/") : "");
 
@@ -156,7 +158,7 @@ export async function onTransferEvent(
     });
     // Loyalty / threshold bonuses earned by this completed transfer
     for (const award of (res.bonuses as Json[]) ?? []) {
-      if (award.status !== "AWARDED") continue;
+      if (award.status !== "AWARDED" || bonusFeedOn()) continue;
       await notify(userId, "reward_earned", {
         amount: fmtMoney(award.amount, award.currency),
         message: `Bonus earned: ${award.scheme_name}.`,
@@ -210,7 +212,7 @@ export async function onMoneyRequestPaid(
       },
     });
     for (const award of (res.awards as Json[]) ?? []) {
-      if (award.status !== "AWARDED") continue;
+      if (award.status !== "AWARDED" || bonusFeedOn()) continue;
       await notify(requesterId, "reward_earned", {
         amount: fmtMoney(award.amount, award.currency),
         message: `Bonus earned: ${award.scheme_name}.`,
@@ -252,7 +254,7 @@ export async function applyBonus(userId: string, input: { amount: number; curren
     method: "POST",
     body: { amount: input.amount, currency: input.currency, transfer_id: input.transferId, send_amount: input.sendAmount },
   });
-  await notify(userId, "reward_bonus_used", { amount: fmtMoney(input.amount, input.currency), txnId: input.transferId });
+  if (!bonusFeedOn()) await notify(userId, "reward_bonus_used", { amount: fmtMoney(input.amount, input.currency), txnId: input.transferId });
   return result;
 }
 
