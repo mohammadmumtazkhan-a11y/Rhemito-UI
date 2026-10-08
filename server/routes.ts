@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { demoModeEnabled } from "./config";
 import { registerPromoRoutes, startPromo } from "./promo";
+import { registerBonusRoutes, startBonus } from "./bonus";
 import { registerRewardsRoutes } from "./rewardsRoutes";
 import { captureDevice } from "./deviceId";
 import { registerAuthRoutes } from "./auth";
@@ -130,6 +131,9 @@ export async function registerRoutes(
   // Promo codes live in Mito Money; the promo module forwards to it (server/promo, PROMO-RHEMITO spec).
   registerPromoRoutes(app);
   startPromo();
+  // Bonus credit lives in Mito Money; the bonus module forwards to it (server/bonus, BONUS-RHEMITO spec).
+  registerBonusRoutes(app);
+  startBonus();
 
   // --- Rewards (Refer & Earn, bonus wallet) — see rewardsRoutes.ts ---
 

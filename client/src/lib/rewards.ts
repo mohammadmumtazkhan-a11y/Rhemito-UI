@@ -28,9 +28,20 @@ export interface WalletBalance {
   used_transfer_count: number;
   referral_credit_count: number;
   other_credit_count: number;
+  /** Bonus module (one balance): money still owed from removed bonus, and the split by how it was earned. */
+  outstanding_debt?: number;
+  by_source?: Array<{ credit_source: "REFERRAL" | "SCHEME" | "MANUAL"; label?: string; earned: number; used: number; expired: number; removed: number; available: number }>;
 }
 
-export interface WalletCredit {
+/** How a credit was earned — present when Mito runs the bonus module. */
+export interface CreditSourceFields {
+  credit_source?: "REFERRAL" | "SCHEME" | "MANUAL" | null;
+  credit_source_detail?: string | null;
+  credit_source_label?: string | null;
+  source_label?: string | null;
+}
+
+export interface WalletCredit extends CreditSourceFields {
   id: string;
   source: string | null;
   reason_code: string;
@@ -42,10 +53,10 @@ export interface WalletCredit {
   status: "UNUSED" | "PARTLY_USED" | "USED" | "EXPIRED" | "REVERSED";
 }
 
-export interface WalletHistoryEntry {
+export interface WalletHistoryEntry extends CreditSourceFields {
   id: string;
   created_at: string;
-  type: "EARNED" | "APPLIED" | "EXPIRED" | "VOIDED";
+  type: "EARNED" | "APPLIED" | "EXPIRED" | "VOIDED" | "CLAWBACK" | "CLAWBACK_SETTLED";
   reason_code: string;
   amount: number;
   currency: string;

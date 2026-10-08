@@ -42,6 +42,9 @@ export interface SendMoneyTransaction {
   /** Promo discount Mito recorded for this transfer (minor units) and when (PROMO-RHEMITO P-25). */
   promoDiscountMinor?: number | null;
   promoRedeemedAt?: Date | null;
+  /** Bonus credit used on this transfer (minor units) and how (BONUS-RHEMITO B-24). */
+  bonusCreditMinor?: number | null;
+  bonusCreditMode?: "pay_less" | "send_more" | null;
   status: SendMoneyStatus;
   createdAt: Date;
   paidAt: Date | null;
@@ -66,6 +69,13 @@ export const paySendMoneyTransactionSchema = z.object({
   /** A promo code applied on the payment step, with the discount the customer was shown (PROMO-RHEMITO P-20). */
   promoCode: z.string().trim().max(20).optional(),
   promoDiscount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid discount").optional(),
+  /** Bonus credit chosen on the payment step (BONUS-RHEMITO B-20). */
+  bonusCredit: z
+    .object({
+      mode: z.enum(["pay_less", "send_more"]),
+      amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid bonus amount"),
+    })
+    .optional(),
 });
 
 /** API shape — money as display strings (2dp) and ISO timestamps. */
@@ -84,6 +94,9 @@ export interface SendMoneyTransactionView {
   promoCode: string | null;
   /** Promo discount recorded at payment, display string (2dp) or null. */
   promoDiscount?: string | null;
+  /** Bonus credit used, display string (2dp), and how it was used (BONUS-RHEMITO B-24). */
+  bonusCredit?: string | null;
+  bonusCreditMode?: "pay_less" | "send_more" | null;
   status: SendMoneyStatus;
   createdAt: string;
   paidAt: string | null;

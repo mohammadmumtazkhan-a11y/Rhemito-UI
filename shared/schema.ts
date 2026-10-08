@@ -218,6 +218,14 @@ export const NOTIFICATION_TYPES = [
   "reward_bonus_expiring",
   "reward_bonus_expired",
   "reward_bonus_reversed",
+  // Bonus credit (one balance) events
+  "bonus_earned",
+  "bonus_used",
+  "bonus_returned",
+  "bonus_expiring",
+  "bonus_expired",
+  "bonus_reversed",
+  "bonus_unblocked",
 ] as const;
 
 export type NotificationEventType = (typeof NOTIFICATION_TYPES)[number];

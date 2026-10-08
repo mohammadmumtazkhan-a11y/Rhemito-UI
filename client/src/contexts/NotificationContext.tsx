@@ -55,7 +55,14 @@ export type NotificationType =
   | "reward_bonus_used"
   | "reward_bonus_expiring"
   | "reward_bonus_expired"
-  | "reward_bonus_reversed";
+  | "reward_bonus_reversed"
+  | "bonus_earned"
+  | "bonus_used"
+  | "bonus_returned"
+  | "bonus_expiring"
+  | "bonus_expired"
+  | "bonus_reversed"
+  | "bonus_unblocked";
 
 export interface Notification {
   id: string;

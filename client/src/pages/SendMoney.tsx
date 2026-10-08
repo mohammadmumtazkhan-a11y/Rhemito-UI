@@ -19,8 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
-import { balanceFor, bonusToApply, expiringSoon, formatMoney } from "@/lib/rewards";
-import { BonusRedemption, type BonusChoice } from "@/components/rewards/BonusRedemption";
+import { BONUS_COPY, UseBonusCredit, balanceFor, creditToApply, formatMoney, type BonusChoice } from "@/features/bonus";
 import { PromoCodeField, usePromoCode, PROMO_COPY, formatPromoMoney } from "@/features/promo";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
 import {
@@ -115,10 +114,9 @@ export default function SendMoney() {
 
     // Referral bonus — live wallet from the rewards API (US-5.2 / US-5.3)
     const rewards = useRewards();
-    const bonusWallet = balanceFor(rewards.data?.wallet, "GBP");
+    // One bonus balance, in the currency of this transfer; no minimum to use it (BONUS-RHEMITO 7.5)
+    const bonusWallet = balanceFor(rewards.data?.wallet, SEND_CURRENCY);
     const bonusBalance = bonusWallet.available;
-    const bonusMinRedeem = rewards.data?.offer?.currency === "GBP" ? Number(rewards.data.offer.min_redeem_amount || 0) : 0;
-    const bonusExpiring = expiringSoon((rewards.data?.wallet.unused ?? []).filter((c) => c.currency === "GBP"))[0];
     const [bonusChoice, setBonusChoiceState] = useState<BonusChoice>("none");
     const useBonus = bonusChoice !== "none" && bonusBalance > 0;
     const bonusType: 'pay_less' | 'send_more' = bonusChoice === "send_more" ? "send_more" : "pay_less";
@@ -140,12 +138,18 @@ export default function SendMoney() {
     const effectiveFee = Math.max(0, fee - (promoApplied ? promoDiscount : 0));
 
     // Bonus Calculations
-    const bonusAmount = useBonus ? bonusToApply(bonusBalance, parseFloat(amount || "0")) : 0;
+    const bonusAmount = useBonus ? creditToApply(bonusBalance, parseFloat(amount || "0"), SEND_CURRENCY) : 0;
     const setBonusChoice = (choice: BonusChoice) => {
         setBonusChoiceState(choice);
-        const value = bonusToApply(bonusBalance, parseFloat(amount || "0"));
-        if (choice === "pay_less") toast({ title: `${formatMoney(value, "GBP")} bonus applied`, description: `You'll pay ${formatMoney(value, "GBP")} less.` });
-        if (choice === "send_more") toast({ title: `${formatMoney(value, "GBP")} bonus added`, description: "Your recipient will get more." });
+        const value = formatMoney(creditToApply(bonusBalance, parseFloat(amount || "0"), SEND_CURRENCY), SEND_CURRENCY);
+        if (choice === "pay_less") toast(BONUS_COPY.toastPayLess(value));
+        if (choice === "send_more") toast(BONUS_COPY.toastSendMore(value));
+    };
+    /** The server refused the bonus: reset the choice and reload the balance (BONUS-RHEMITO 7.5). */
+    const bonusRefused = (e: SendMoneyApiError) => {
+        if (e.code !== "BONUS_UNAVAILABLE") setBonusChoiceState("none");
+        void rewards.refetch();
+        toast({ title: e.code === "BONUS_CHANGED" ? BONUS_COPY.changedTitle : "Bonus not applied", description: e.message, variant: "destructive" });
     };
 
     // Total Pay = You Send + fee (after promo) - (Pay Less bonus). Never below 0 (AC-5.2.7)
@@ -967,16 +971,16 @@ export default function SendMoney() {
                                 <div className="lg:col-span-3 space-y-6">
 
                                     {/* Bonus Redemption Section (spec §6) */}
-                                    <BonusRedemption
-                                        available={bonusBalance}
-                                        currency="GBP"
+                                    <UseBonusCredit
+                                        balance={bonusWallet}
+                                        unused={rewards.data?.wallet.unused}
+                                        currency={SEND_CURRENCY}
                                         sendAmount={parseFloat(amount || "0")}
-                                        receiveCurrency="NGN"
+                                        receiveCurrency={recipientDetails.currency || "NGN"}
                                         exchangeRate={EXCHANGE_RATE}
-                                        minRedeem={bonusMinRedeem}
-                                        expiringCredit={bonusExpiring}
                                         choice={bonusChoice}
                                         onChoice={setBonusChoice}
+                                        blocked={rewards.data?.wallet.bonus_blocked}
                                     />
 
                                     {/* Promo Code Section (features/promo) */}
@@ -997,37 +1001,19 @@ export default function SendMoney() {
                                                 <div
                                                     key={method.id}
                                                     onClick={async () => {
-                                                        // Use the bonus first so a changed balance never takes payment (AC-5.2.9)
-                                                        if (useBonus && transactionId) {
-                                                            try {
-                                                                const res = await fetch("/api/rewards/apply", {
-                                                                    method: "POST",
-                                                                    headers: { "Content-Type": "application/json" },
-                                                                    credentials: "include",
-                                                                    body: JSON.stringify({ transactionId, amount: bonusAmount, mode: bonusType }),
-                                                                });
-                                                                if (!res.ok) {
-                                                                    const body = await res.json().catch(() => ({}));
-                                                                    const message = body?.error?.code === "ALREADY_APPLIED" ? null : (body?.error?.message ?? "Your bonus balance has changed. Please review your transfer.");
-                                                                    if (message) {
-                                                                        setBonusChoiceState("none");
-                                                                        void rewards.refetch();
-                                                                        toast({ title: "Bonus not applied", description: message, variant: "destructive" });
-                                                                        return;
-                                                                    }
-                                                                }
-                                                            } catch {
-                                                                toast({ title: "Bonus not applied", description: "Rewards are unavailable right now. Please try again or continue without the bonus.", variant: "destructive" });
-                                                                return;
-                                                            }
-                                                        }
                                                         setPaymentMethod(method.id);
                                                         // Record the payment method on the server-owned
                                                         // transaction (instant methods complete it).
                                                         if (transactionId) {
                                                             try {
-                                                                await paySendMoneyTransaction(transactionId, method.id as SendMoneyPaymentMethod, promoApplied ? { code: promoCode, discount: promoDiscount } : null);
+                                                                await paySendMoneyTransaction(transactionId, method.id as SendMoneyPaymentMethod, promoApplied ? { code: promoCode, discount: promoDiscount } : null, useBonus ? { mode: bonusType, amount: bonusAmount } : null);
                                                             } catch (e) {
+                                                                // The bonus is used with the payment; if it can't be, the transfer is not paid (BONUS-RHEMITO B-23)
+                                                                if (e instanceof SendMoneyApiError && e.code.startsWith("BONUS_")) {
+                                                                    bonusRefused(e);
+                                                                    setPaymentMethod("");
+                                                                    return;
+                                                                }
                                                                 // A promo code that can no longer be used stops the payment before any money moves (PROMO-RHEMITO §6.4)
                                                                 if (e instanceof SendMoneyApiError && e.code.startsWith("PROMO_")) {
                                                                     promo.reject(e.message);
@@ -1088,16 +1074,16 @@ export default function SendMoney() {
                                                 {/* Bonus Applied Row - Pay Less */}
                                                 {useBonus && bonusType === "pay_less" && (
                                                     <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus">
-                                                        <span>Referral bonus</span>
-                                                        <span>- {bonusAmount.toFixed(2)} GBP</span>
+                                                        <span>{BONUS_COPY.summaryPayLess}</span>
+                                                        <span>- {bonusAmount.toFixed(2)} {SEND_CURRENCY}</span>
                                                     </div>
                                                 )}
 
                                                 {/* Bonus Applied Row - Send More */}
                                                 {useBonus && bonusType === "send_more" && (
                                                     <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus">
-                                                        <span>Referral bonus (recipient)</span>
-                                                        <span>+ {bonusAmount.toFixed(2)} GBP</span>
+                                                        <span>{BONUS_COPY.summarySendMore}</span>
+                                                        <span>+ {bonusAmount.toFixed(2)} {SEND_CURRENCY}</span>
                                                     </div>
                                                 )}
 
@@ -1514,11 +1500,11 @@ export default function SendMoney() {
                                 <h3 className="text-xl font-bold text-gray-900">Success!</h3>
                                 <p className="text-gray-600 text-base">
                                     {promoApplied && useBonus
-                                        ? `Your promo code and Referral Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} have been applied to your transaction.`
+                                        ? `Your promo code and Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} have been applied to your transaction.`
                                         : promoApplied
                                             ? "Your promo code has been applied to your transaction."
                                             : useBonus
-                                                ? `Referral Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} has been applied to your transaction.`
+                                                ? `Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} has been applied to your transaction.`
                                                 : "Transaction submitted successfully."
                                     }
                                 </p>
@@ -1568,8 +1554,15 @@ export default function SendMoney() {
                                             // transaction stays awaiting_payment inside the 30-min window.
                                             if (transactionId) {
                                                 try {
-                                                    await paySendMoneyTransaction(transactionId, "manual_transfer", promoApplied ? { code: promoCode, discount: promoDiscount } : null);
+                                                    await paySendMoneyTransaction(transactionId, "manual_transfer", promoApplied ? { code: promoCode, discount: promoDiscount } : null, useBonus ? { mode: bonusType, amount: bonusAmount } : null);
                                                 } catch (e) {
+                                                    if (e instanceof SendMoneyApiError && e.code.startsWith("BONUS_")) {
+                                                        bonusRefused(e);
+                                                        setIsSubmittingTransaction(false);
+                                                        setShowManualTransferConfirm(false);
+                                                        setPaymentMethod("");
+                                                        return;
+                                                    }
                                                     if (e instanceof SendMoneyApiError && e.code.startsWith("PROMO_")) {
                                                         promo.reject(e.message);
                                                         setIsSubmittingTransaction(false);

@@ -1,0 +1,172 @@
+import { test, expect } from '@playwright/test';
+
+/**
+ * Bonus credit (one balance, tagged by how it was earned) — BONUS_MODULE_SPEC_RHEMITO.md §7 / §9.
+ * Mito is mocked: the rewards summary supplies the wallet, /api/bonus/summary the live offers.
+ */
+
+const inDays = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+};
+
+const bySource = [
+    { credit_source: 'REFERRAL', label: 'Referrals', earned: 10, used: 6, expired: 0, removed: 0, available: 4 },
+    { credit_source: 'SCHEME', label: 'Bonus offers', earned: 5, used: 2, expired: 0, removed: 0, available: 3 },
+];
+
+function summary({ blocked = false, debt = 0 } = {}) {
+    return {
+        customer: { id: 'user_123', referralCode: 'JOHN2880', currency: 'GBP' },
+        currency: 'GBP',
+        offer: null,
+        wallet: {
+            bonus_blocked: blocked,
+            balances: [{ currency: 'GBP', available: 7, earned: 15, used: 8, expired: 0, used_transfer_count: 2, referral_credit_count: 1, other_credit_count: 1, outstanding_debt: debt, by_source: bySource }],
+            unused: [
+                { id: 's1', source: 'Loyal', credit_source: 'SCHEME', credit_source_label: 'Loyalty bonus – Loyal Sender', reason_code: 'SCHEME_REWARD', amount: 5, remaining: 3, currency: 'GBP', earned_on: '2026-09-12', expires_on: inDays(5), status: 'PARTLY_USED' },
+                { id: 'r1', source: 'Referrer reward – referred Sarah S.', credit_source: 'REFERRAL', credit_source_label: 'Referral bonus – Sarah S.', reason_code: 'REFERRAL_REWARD', amount: 10, remaining: 4, currency: 'GBP', earned_on: '2026-10-01', expires_on: inDays(80), status: 'PARTLY_USED' },
+            ],
+            credits: [],
+            history: [
+                { id: 'r1', created_at: '2026-10-01T10:00:00Z', type: 'EARNED', reason_code: 'REFERRAL_REWARD', amount: 10, currency: 'GBP', notes: 'Referrer reward – referred Sarah S.', transfer_id: null, source_credit_id: null, credit_source: 'REFERRAL', credit_source_label: 'Referral bonus – Sarah S.' },
+                { id: 's1', created_at: '2026-09-12T10:00:00Z', type: 'EARNED', reason_code: 'SCHEME_REWARD', amount: 5, currency: 'GBP', notes: 'Loyal', transfer_id: null, source_credit_id: null, credit_source: 'SCHEME', credit_source_label: 'Loyalty bonus – Loyal Sender' },
+            ],
+            promo_redemptions: [],
+        },
+        referrals: { data: [], summary: { joined: 0, earned_count: 0, total_earned: {} } },
+        latestOffer: null,
+    };
+}
+
+async function mock(page, { offers = [], bonusDown = false, ...opts } = {}) {
+    await page.route('**/api/rewards/summary**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: summary(opts) }) }));
+    await page.route('**/api/promocodes/savings**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { items: [], saved: {} } }) }));
+    await page.route('**/api/bonus/summary**', (route) =>
+        bonusDown
+            ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'BONUS_UNAVAILABLE', message: 'down' } }) })
+            : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { currency: 'GBP', currencies: ['GBP'], blocked: opts.blocked ?? false, offers, wallet: summary(opts).wallet } }) }));
+}
+
+test.describe('Dashboard', () => {
+    test('one pill for the whole balance, with an expiry warning', async ({ page }) => {
+        await mock(page);
+        await page.goto('/');
+        const pill = page.getByTestId('bonus-earned-pill');
+        await expect(pill).toContainText('You have £7.00 bonus credit');
+        await expect(pill).not.toContainText('Referral Bonus');
+        await expect(page.getByTestId('bonus-pill-expiring')).toContainText('£3.00 expires in 5 days');
+    });
+
+    test('blocked customers see the notice', async ({ page }) => {
+        await mock(page, { blocked: true });
+        await page.goto('/');
+        await expect(page.getByTestId('bonus-blocked-notice')).toContainText("You're not qualified to get bonus");
+    });
+});
+
+test.describe('Bonus & Discounts', () => {
+    test('shows how the balance was earned, adding up to the tiles', async ({ page }) => {
+        await mock(page);
+        await page.goto('/bonus-discounts');
+        const rows = page.getByTestId('bonus-breakdown');
+        await expect(rows.getByTestId('breakdown-REFERRAL')).toContainText('Earned £10.00 · £4.00 left');
+        await expect(rows.getByTestId('breakdown-SCHEME')).toContainText('Earned £5.00 · £3.00 left');
+        await expect(page.getByTestId('bonus-totals')).toContainText('From 2 bonuses');
+        await expect(page.getByTestId('unused-bonus')).toContainText('Loyalty bonus – Loyal Sender');
+        await expect(page.getByTestId('unused-bonus').getByTestId('source-chip').first()).toContainText('Bonus offers');
+    });
+
+    test('View applies a source filter to the lists but never to the tiles', async ({ page }) => {
+        await mock(page);
+        await page.goto('/bonus-discounts');
+        await page.getByRole('button', { name: 'View Referrals' }).click();
+        const list = page.getByTestId('bonus-history');
+        await expect(list).toContainText('Referral bonus – Sarah S.');
+        await expect(list).not.toContainText('Loyalty bonus');
+        await page.getByRole('tab', { name: 'Overview' }).click();
+        await expect(page.getByTestId('bonus-totals')).toContainText('£15.00');
+        await expect(page.getByTestId('source-filter-note')).toContainText('Showing Referrals only');
+        await page.getByRole('button', { name: 'Show all' }).click();
+        await expect(page.getByTestId('unused-bonus')).toContainText('Loyalty bonus');
+    });
+
+    test('?source=REFERRAL preselects the filter', async ({ page }) => {
+        await mock(page);
+        await page.goto('/bonus-discounts?tab=history&source=REFERRAL');
+        const list = page.getByTestId('bonus-history');
+        await expect(list).toContainText('Referral bonus – Sarah S.');
+        await expect(list).not.toContainText('Loyalty bonus');
+    });
+
+    test('outstanding repayment line', async ({ page }) => {
+        await mock(page, { debt: 3 });
+        await page.goto('/bonus-discounts');
+        await expect(page.getByTestId('bonus-outstanding')).toContainText('£3.00 of future bonus will go towards bonus that was removed');
+    });
+
+    test('Ways to earn lists live offers, and is hidden when the service is down or the customer is blocked', async ({ page }) => {
+        const offers = [{ id: 1, name: 'Send 3, get £10', type: 'LOYALTY', currency: 'GBP', summary: 'Complete 3 transfers within 30 days and get £10.00 bonus credit.', end_date: '2027-01-31', end_date_display: '31/01/2027' }];
+        await mock(page, { offers });
+        await page.goto('/bonus-discounts');
+        const ways = page.getByTestId('ways-to-earn');
+        await expect(ways).toContainText('Complete 3 transfers within 30 days and get £10.00 bonus credit.');
+        await expect(ways).toContainText('Ends 31/01/2027');
+
+        await page.unroute('**/api/bonus/summary**');
+        await mock(page, { offers, blocked: true });
+        await page.goto('/bonus-discounts');
+        await expect(page.getByTestId('bonus-blocked-notice')).toBeVisible();
+        await expect(page.getByTestId('ways-to-earn')).toHaveCount(0);
+    });
+
+    test('still renders when the bonus service is down', async ({ page }) => {
+        await mock(page, { bonusDown: true });
+        await page.goto('/bonus-discounts');
+        await expect(page.getByTestId('bonus-totals')).toContainText('£7.00');
+        await expect(page.getByTestId('ways-to-earn')).toHaveCount(0);
+    });
+});
+
+test.describe('Send Money — use your bonus', () => {
+    async function toPayment(page, amount) {
+        await page.goto('/send-money');
+        await page.getByPlaceholder('0.00').first().fill(amount);
+        await page.getByRole('button', { name: 'Continue' }).click();
+        await page.getByText('Akshita', { exact: true }).first().click();
+        await expect(page.getByText('Recipient Details')).toBeVisible();
+        await page.getByRole('button', { name: 'Continue' }).click();
+    }
+
+    test('shows what the balance is made of, has no minimum, and labels the summary row', async ({ page }) => {
+        await mock(page);
+        await toPayment(page, '5');
+        const card = page.getByTestId('bonus-redemption');
+        await expect(card).toContainText('£7.00 available', { timeout: 15000 });
+        await expect(card).toContainText('Includes £4.00 from referrals and £3.00 from bonus offers');
+        await expect(page.getByTestId('bonus-below-min')).toHaveCount(0);
+        // Credit is capped at the send amount; the rest stays in the balance
+        await expect(card).toContainText('Save £5.00 now. £2.00 will stay in your bonus credit.');
+        await page.getByRole('radio', { name: /Pay less/ }).check();
+        await expect(page.getByTestId('summary-bonus')).toContainText('Bonus credit');
+        await expect(page.getByTestId('summary-bonus')).toContainText('5.00');
+        await page.getByRole('radio', { name: /Send more/ }).check();
+        await expect(page.getByTestId('summary-bonus')).toContainText('Bonus credit (to recipient)');
+    });
+
+    test('the choice travels with the payment, and a changed balance stops it', async ({ page }) => {
+        await mock(page);
+        await page.route('**/api/send-money/transactions/*/pay', async (route) => {
+            const sent = route.request().postDataJSON();
+            expect(sent.bonusCredit).toEqual({ mode: 'pay_less', amount: '7.00' });
+            await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { code: 'BONUS_CHANGED', message: 'Your bonus balance has changed. Please review your transfer.' } }) });
+        });
+        await toPayment(page, '500');
+        await expect(page.getByTestId('bonus-redemption')).toContainText('£7.00 available', { timeout: 15000 });
+        await page.getByRole('radio', { name: /Pay less/ }).check();
+        await page.getByText('Credit/Debit Card').click();
+        await expect(page.getByText('Your bonus balance has changed. Please review your transfer.').first()).toBeVisible();
+        await expect(page.getByRole('radio', { name: /Don't use bonus/ })).toBeChecked();
+    });
+});

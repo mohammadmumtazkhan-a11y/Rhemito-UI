@@ -80,6 +80,13 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
   reward_bonus_expiring: { icon: Clock, containerClass: "bg-amber/10", iconClass: "text-amber", label: "Bonus Expiring" },
   reward_bonus_expired: { icon: Clock, containerClass: "bg-slate-100", iconClass: "text-slate-600", label: "Bonus Expired" },
   reward_bonus_reversed: { icon: XCircle, containerClass: "bg-destructive/10", iconClass: "text-destructive", label: "Bonus Removed" },
+  bonus_earned: { icon: Gift, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Bonus Earned" },
+  bonus_used: { icon: Gift, containerClass: "bg-slate-100", iconClass: "text-slate-600", label: "Bonus Used" },
+  bonus_returned: { icon: Gift, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Bonus Returned" },
+  bonus_expiring: { icon: Clock, containerClass: "bg-amber/10", iconClass: "text-amber", label: "Bonus Expiring" },
+  bonus_expired: { icon: Clock, containerClass: "bg-slate-100", iconClass: "text-slate-600", label: "Bonus Expired" },
+  bonus_reversed: { icon: XCircle, containerClass: "bg-destructive/10", iconClass: "text-destructive", label: "Bonus Removed" },
+  bonus_unblocked: { icon: Gift, containerClass: "bg-teal/10", iconClass: "text-teal", label: "Bonus Available" },
 };
 
 // ─── Format timestamp — full (not relative) ──────────────────────────────────
