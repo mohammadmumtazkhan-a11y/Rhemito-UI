@@ -372,6 +372,9 @@ export default function BonusAndDiscounts() {
                       Joined: {referralSummary?.joined ?? referrals.length} · Earned: {referralSummary?.earned_count ?? 0} · Total earned:{" "}
                       {Object.entries(referralSummary?.total_earned ?? {}).map(([c, v]) => formatMoney(v, c)).join(", ") || formatMoney(0, currency)}
                     </p>
+                    <button type="button" className="self-start text-[15px] font-semibold text-blue-600 hover:underline" data-testid="referral-view-credits" onClick={() => viewSource("REFERRAL")}>
+                      View referral bonus in your history
+                    </button>
                     {referrals.map((r) => (
                       <Card key={r.id} className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col gap-3" data-testid={`referral-card-${r.id}`}>
                         <div className="flex items-center justify-between">
