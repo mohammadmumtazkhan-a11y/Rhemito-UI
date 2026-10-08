@@ -24,7 +24,9 @@ test.describe('Send money receipt', () => {
         await expect(page.getByTestId('receipt-line-promo')).toContainText('−GBP 2.00');
         await expect(page.getByTestId('receipt-line-bonus_pay_less')).toContainText('−GBP 5.00');
         await expect(page.getByTestId('receipt-line-total')).toContainText('GBP 95.00');
-        await expect(page.getByTestId('receipt-contact-support')).toHaveAttribute('href', /^mailto:/);
+        // Contact support is shown but disabled until a support channel is decided
+        await expect(page.getByTestId('receipt-contact-support')).toHaveAttribute('aria-disabled', 'true');
+        await expect(page.getByTestId('receipt-contact-support')).not.toHaveAttribute('href', /.*/);
 
         // The receipt can always be closed
         await page.keyboard.press('Escape');

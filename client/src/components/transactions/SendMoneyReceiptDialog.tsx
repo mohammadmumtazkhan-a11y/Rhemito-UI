@@ -6,7 +6,7 @@ import { Gift, Tag } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { receiptLines } from "@/lib/sendMoney";
-import { supportHref } from "@/lib/support";
+import { SUPPORT_LINK_ENABLED, supportHref } from "@/lib/support";
 import type { SendMoneyTransactionView } from "@shared/sendMoney";
 
 interface SendMoneyReceiptDialogProps {
@@ -58,9 +58,15 @@ export function SendMoneyReceiptDialog({ transaction, open, onOpenChange }: Send
 
         <p className="text-xs text-slate-500">
           Something look wrong?{" "}
-          <a href={supportHref(`Receipt ${transaction.reference}`)} data-testid="receipt-contact-support" className="font-semibold text-blue-600 hover:underline">
-            Contact support
-          </a>
+          {SUPPORT_LINK_ENABLED ? (
+            <a href={supportHref(`Receipt ${transaction.reference}`)} data-testid="receipt-contact-support" className="font-semibold text-blue-600 hover:underline">
+              Contact support
+            </a>
+          ) : (
+            <span aria-disabled="true" title="Coming soon" data-testid="receipt-contact-support" className="font-semibold text-slate-400 cursor-not-allowed">
+              Contact support
+            </span>
+          )}
         </p>
       </DialogContent>
     </Dialog>
