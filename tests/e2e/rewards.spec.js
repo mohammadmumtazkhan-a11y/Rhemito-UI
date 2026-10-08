@@ -55,6 +55,12 @@ function summary(overrides = {}) {
 
 async function mockRewards(page, data = summary()) {
     await page.route('**/api/rewards/summary**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data }) }));
+    // Promo savings now come from the promo module (PROMO-RHEMITO P-12); serve the same rows
+    const promoRows = data.wallet?.promo_redemptions ?? [];
+    const items = promoRows.map((p) => ({ id: p.id, code: p.code, amount: Math.abs(p.amount), currency: p.currency, transferId: p.transfer_id, createdAt: p.created_at }));
+    const saved = {};
+    for (const i of items) saved[i.currency] = (saved[i.currency] ?? 0) + i.amount;
+    await page.route('**/api/promocodes/savings**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { items, saved } }) }));
 }
 
 test.describe('Refer & Earn on the Dashboard', () => {

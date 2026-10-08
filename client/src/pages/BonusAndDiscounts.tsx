@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
 import { BonusBlockedNotice } from "@/components/rewards/BonusBlockedNotice";
+import { usePromoSavings, PROMO_COPY } from "@/features/promo";
 import { cn } from "@/lib/utils";
 import {
   CREDIT_STATUS_LABEL,
@@ -63,7 +64,9 @@ interface HistoryRow {
   status?: WalletCredit["status"];
 }
 
-function buildHistory(data: RewardsSummary, currency: string): HistoryRow[] {
+type PromoRow = { id: string; code: string; amount: number; currency: string | null; created_at: string };
+
+function buildHistory(data: RewardsSummary, currency: string, promoRows: PromoRow[]): HistoryRow[] {
   const statusById = new Map(data.wallet.credits.map((c) => [c.id, c.status]));
   const rows: HistoryRow[] = data.wallet.history
     .filter((h) => h.currency === currency)
@@ -79,9 +82,9 @@ function buildHistory(data: RewardsSummary, currency: string): HistoryRow[] {
         description: h.type === "VOIDED" ? "Referral bonus removed – transfer reversed" : "Bonus credit expired",
       };
     });
-  for (const p of data.wallet.promo_redemptions) {
+  for (const p of promoRows) {
     if ((p.currency ?? currency) !== currency) continue;
-    rows.push({ id: p.id, date: p.created_at, description: `Promo code ${p.code}`, kind: "promo", amount: p.amount, currency });
+    rows.push({ id: p.id, date: p.created_at, description: PROMO_COPY.savingsRow(p.code), kind: "promo", amount: -Math.abs(p.amount), currency });
   }
   return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
@@ -128,6 +131,7 @@ export default function BonusAndDiscounts() {
   const [tab, setTab] = useState<Tab>(["overview", "history", "referrals"].includes(initialTab) ? initialTab : "overview");
   const [filter, setFilter] = useState<HistoryFilter>("all");
   const [pickedCurrency, setPickedCurrency] = useState<string | null>(null);
+  const promoSavings = usePromoSavings();
 
   const data = rewards.data;
   const currencies = useMemo(() => {
@@ -137,9 +141,13 @@ export default function BonusAndDiscounts() {
   const currency = pickedCurrency ?? data?.currency ?? "GBP";
   const balance = balanceFor(data?.wallet, currency);
   const unused = (data?.wallet.unused ?? []).filter((c) => c.currency === currency).sort((a, b) => String(a.expires_on).localeCompare(String(b.expires_on)));
-  const history = data ? buildHistory(data, currency) : [];
+  // Promo savings come from the promo module (PROMO-RHEMITO P-50); until Mito serves them, fall back to the wallet field (P-53)
+  const promoRows: PromoRow[] = promoSavings.notAvailable || (!promoSavings.savings && !promoSavings.isError)
+    ? (data?.wallet.promo_redemptions ?? []).map((p) => ({ id: p.id, code: p.code, amount: p.amount, currency: p.currency, created_at: p.created_at }))
+    : (promoSavings.savings?.items ?? []).map((p) => ({ id: p.id, code: p.code, amount: p.amount, currency: p.currency, created_at: p.createdAt }));
+  const history = data ? buildHistory(data, currency, promoRows) : [];
   const filtered = filter === "all" ? history : history.filter((h) => h.kind === filter);
-  const promoSaved = (data?.wallet.promo_redemptions ?? []).filter((p) => (p.currency ?? currency) === currency).reduce((s, p) => s + Math.abs(p.amount), 0);
+  const promoSaved = promoRows.filter((p) => (p.currency ?? currency) === currency).reduce((s, p) => s + Math.abs(p.amount), 0);
   const referrals = data?.referrals.data ?? [];
   const referralSummary = data?.referrals.summary;
 
@@ -271,7 +279,12 @@ export default function BonusAndDiscounts() {
                   ))}
                 </div>
                 <Card className="rounded-2xl border border-slate-200 bg-white px-4">
-                  {filtered.length === 0 ? (
+                  {filter === "promo" && promoSavings.isError ? (
+                    <p className="py-6 text-center text-sm text-slate-600" role="alert">
+                      {PROMO_COPY.savingsError}{" "}
+                      <button type="button" className="font-semibold text-blue-700 underline" onClick={() => void promoSavings.refetch()}>{PROMO_COPY.tryAgain}</button>
+                    </p>
+                  ) : filtered.length === 0 ? (
                     <p className="py-6 text-center text-sm text-slate-600">
                       {history.length === 0 ? "No rewards yet. Invite friends or use a promo code to start saving." : "Nothing to show for this filter."}
                     </p>

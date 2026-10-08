@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { usePromoCode, PROMO_COPY } from "@/features/promo";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import {
@@ -235,10 +236,6 @@ export default function MobilePaymentSimulator() {
     // Form States - Step 3
     const [useBonus, setUseBonus] = useState(false);
     const [bonusType, setBonusType] = useState<"pay_less" | "send_more">("pay_less");
-    const [promoCode, setPromoCode] = useState("");
-    const [promoApplied, setPromoApplied] = useState(false);
-    const [promoDiscount, setPromoDiscount] = useState(0);
-    const [promoMessage, setPromoMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
     const [paymentMethod, setPaymentMethod] = useState("manual_transfer");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -554,7 +551,10 @@ export default function MobilePaymentSimulator() {
     const fee = 5.00;
     const exchangeRate = EXCHANGE_RATE;
 
-    const discount = promoApplied ? promoDiscount : 0;
+    // Promo codes are checked by Mito Money through the shared promo feature (PROMO-RHEMITO §6.7)
+    const promo = usePromoCode({ amount: sendVal, fee, sendCurrency: "GBP", receiveCurrency: "NGN", paymentMethod: "instant_bank" });
+    const promoApplied = promo.applied;
+    const discount = promo.discount;
     const bonusOffset = useBonus && bonusType === "pay_less" ? 5.00 : 0;
     const totalToPay = Math.max(0, sendVal + fee - discount - bonusOffset);
 
@@ -574,29 +574,6 @@ export default function MobilePaymentSimulator() {
         setCurrentStep((prev) => prev - 1);
     };
 
-    // Promo codes are checked by Mito Admin (via Rhemito's /api/promocodes/validate); the simulator holds no codes
-    const handleApplyPromo = async () => {
-        const code = promoCode.trim().toUpperCase();
-        if (!code) return;
-        try {
-            const res = await fetch("/api/promocodes/validate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    code, amount: sendVal, fee, currency: "GBP", sourceCurrency: "GBP", destCurrency: "NGN", paymentMethod: "instant_bank",
-                }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || "Invalid promo code");
-            setPromoDiscount(Number(data.appliedDiscount) || 0);
-            setPromoApplied(true);
-            setPromoMessage({ type: "success", text: data.displayText || "Promo code applied!" });
-        } catch (err) {
-            setPromoApplied(false);
-            setPromoDiscount(0);
-            setPromoMessage({ type: "error", text: err instanceof Error ? err.message : "Invalid promo code" });
-        }
-    };
 
     const handleSubmitPayment = async () => {
         setIsSubmitting(true);
@@ -1478,27 +1455,24 @@ export default function MobilePaymentSimulator() {
                                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Have a promo code?</label>
                                         <div className="flex gap-2">
                                             <Input
-                                                placeholder="Enter code (e.g. WELCOME, SAVE20)"
-                                                value={promoCode}
-                                                onChange={(e) => {
-                                                    setPromoCode(e.target.value);
-                                                    setPromoApplied(false);
-                                                    setPromoMessage(null);
-                                                }}
+                                                placeholder={PROMO_COPY.placeholder}
+                                                value={promo.code}
+                                                maxLength={20}
+                                                onChange={(e) => promo.setCode(e.target.value)}
                                                 className="h-9 text-xs rounded-lg font-mono uppercase"
-                                                disabled={promoApplied}
+                                                disabled={promoApplied || promo.state === "checking"}
                                             />
                                             <Button
-                                                onClick={handleApplyPromo}
-                                                disabled={promoApplied || !promoCode}
+                                                onClick={() => (promoApplied ? promo.remove() : void promo.apply())}
+                                                disabled={promo.state === "checking" || (!promoApplied && !promo.code)}
                                                 className="h-9 text-xs px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold"
                                             >
-                                                {promoApplied ? <Check className="w-4 h-4" /> : "Apply"}
+                                                {promoApplied ? PROMO_COPY.remove : promo.state === "checking" ? PROMO_COPY.checking : PROMO_COPY.apply}
                                             </Button>
                                         </div>
-                                        {promoMessage && (
-                                            <p className={`text-[10px] font-semibold mt-1 ${promoMessage.type === "success" ? "text-emerald-600" : "text-rose-600"}`}>
-                                                {promoMessage.text}
+                                        {promo.message && promo.state !== "idle" && promo.state !== "checking" && (
+                                            <p role={promoApplied ? "status" : "alert"} className={`text-[10px] font-semibold mt-1 ${promoApplied ? "text-emerald-600" : "text-rose-600"}`}>
+                                                {promo.message}
                                             </p>
                                         )}
                                     </div>
@@ -1714,8 +1688,7 @@ export default function MobilePaymentSimulator() {
                                         setCurrentStep(1);
                                         setSendAmount("500.00");
                                         setReceiveAmount("1,012,750.00");
-                                        setPromoApplied(false);
-                                        setPromoCode("");
+                                        if (promoApplied || promo.code) promo.remove();
                                         setUseBonus(false);
                                     }}
                                     className="w-full h-11 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
@@ -2643,7 +2616,6 @@ export default function MobilePaymentSimulator() {
             {/* Simulated Phone side buttons */}
             <div className="hidden md:flex text-xs text-slate-400 mt-6 gap-6 bg-white px-4 py-2.5 rounded-full border border-slate-200 shadow-sm">
                 <span>⚡ Rate: GBP 1 = NGN {EXCHANGE_RATE}</span>
-                <span>🎁 Try promo codes: <strong>SAVE20</strong>, <strong>WELCOME</strong></span>
             </div>
 
         </div>

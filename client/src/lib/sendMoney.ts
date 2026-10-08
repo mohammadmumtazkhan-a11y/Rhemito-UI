@@ -31,9 +31,42 @@ export async function getSendMoneyTransactions(): Promise<SendMoneyTransactionVi
   return ((await res.json()) as { data: SendMoneyTransactionView[] }).data;
 }
 
-export async function paySendMoneyTransaction(id: string, paymentMethod: SendMoneyPaymentMethod): Promise<SendMoneyTransactionView> {
-  const res = await apiRequest("POST", `/api/send-money/transactions/${encodeURIComponent(id)}/pay`, { paymentMethod });
-  return ((await res.json()) as { data: SendMoneyTransactionView }).data;
+/** A Send Money API error with its machine code (e.g. PROMO_REJECTED, PROMO_CHANGED). */
+export class SendMoneyApiError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/**
+ * Pay a transaction. A promo code applied on the payment step travels with the request, together with the
+ * discount the customer was shown, so the server can re-check and record it before any money moves (PROMO-RHEMITO P-20).
+ */
+export async function paySendMoneyTransaction(
+  id: string,
+  paymentMethod: SendMoneyPaymentMethod,
+  promo?: { code: string; discount: number } | null,
+): Promise<SendMoneyTransactionView> {
+  const body: Record<string, unknown> = { paymentMethod };
+  if (promo?.code) {
+    body.promoCode = promo.code;
+    body.promoDiscount = Math.max(0, promo.discount).toFixed(2);
+  }
+  const res = await fetch(`/api/send-money/transactions/${encodeURIComponent(id)}/pay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new SendMoneyApiError(res.status, String(json?.error?.code ?? "PAY_FAILED"), String(json?.error?.message ?? "The payment could not be recorded. Please try again."));
+  }
+  return (json as { data: SendMoneyTransactionView }).data;
 }
 
 export async function cancelSendMoneyTransaction(id: string): Promise<void> {

@@ -21,17 +21,20 @@ import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
 import { balanceFor, bonusToApply, expiringSoon, formatMoney } from "@/lib/rewards";
 import { BonusRedemption, type BonusChoice } from "@/components/rewards/BonusRedemption";
+import { PromoCodeField, usePromoCode, PROMO_COPY, formatPromoMoney } from "@/features/promo";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
 import {
     cancelSendMoneyTransaction,
     createSendMoneyTransaction,
     paySendMoneyTransaction,
+    SendMoneyApiError,
 } from "@/lib/sendMoney";
 import type { SendMoneyPaymentMethod, SendMoneyService } from "@shared/sendMoney";
 
 // Mock Data
 const EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN
 const FEE_PERCENTAGE = 0.01; // 1%
+const SEND_CURRENCY = "GBP"; // Send Money is GBP-only for now (known limit L4)
 
 const recentRecipients = [
     { id: 1, name: "Akshita Gupta",   bank: "Barclays",        account: "12345678",  sortCode: "20-45-67", iban: "",                       swift: "",          currency: "GBP", country: "UK",            narration: "",                    initials: "AG", color: "bg-blue-100 text-blue-600" },
@@ -58,11 +61,6 @@ export default function SendMoney() {
     const [amount, setAmount] = useState<string>("500");
     const [receiveAmount, setReceiveAmount] = useState<string>("");
     const [deliveryMethod, setDeliveryMethod] = useState("bank_deposit");
-    const [promoCode, setPromoCode] = useState("");
-    const [promoApplied, setPromoApplied] = useState(false);
-    const [promoMessage, setPromoMessage] = useState("");
-    const [promoDiscount, setPromoDiscount] = useState(0);
-    const [promoLoading, setPromoLoading] = useState(false);
 
     const [selectedRecipient, setSelectedRecipient] = useState<any>(null);
     const [recipientDetails, setRecipientDetails] = useState({
@@ -128,7 +126,17 @@ export default function SendMoney() {
     // Calculations
     const fee = parseFloat(amount || "0") * FEE_PERCENTAGE;
 
-    // Promo codes are validated by Mito Admin; the discount it approves comes off the fee.
+    // Promo codes are validated by Mito Money; the discount it approves comes off the fee (features/promo).
+    const promo = usePromoCode({
+        amount: parseFloat(amount || "0"),
+        fee,
+        sendCurrency: SEND_CURRENCY,
+        receiveCurrency: recipientDetails.currency || "NGN",
+        paymentMethod: paymentMethod || null,
+    });
+    const promoApplied = promo.applied;
+    const promoDiscount = promo.discount;
+    const promoCode = promo.appliedCode ?? "";
     const effectiveFee = Math.max(0, fee - (promoApplied ? promoDiscount : 0));
 
     // Bonus Calculations
@@ -180,49 +188,6 @@ export default function SendMoney() {
         }
     }, [selectedRecipient]);
 
-    const handleApplyPromo = async () => {
-        const code = promoCode.trim().toUpperCase();
-        if (!code) {
-            setPromoMessage("Please enter a promo code.");
-            setPromoApplied(false);
-            return;
-        }
-
-        setPromoLoading(true);
-
-        try {
-            const response = await fetch("/api/promocodes/validate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    code,
-                    amount: parseFloat(amount),
-                    fee: fee.toFixed(2),
-                    currency: "GBP",
-                    sourceCurrency: "GBP",
-                    destCurrency: "NGN",
-                    paymentMethod: paymentMethod || "bank_deposit",
-                }),
-            });
-
-            const data = await response.json();
-            if (response.ok) {
-                setPromoApplied(true);
-                setPromoDiscount(data.appliedDiscount || 0);
-                setPromoMessage(data.displayText || "Promo code applied!");
-            } else {
-                setPromoApplied(false);
-                setPromoDiscount(0);
-                setPromoMessage(data.error || "Invalid promo code");
-            }
-        } catch (error) {
-            setPromoApplied(false);
-            setPromoDiscount(0);
-            setPromoMessage("Failed to validate promo code");
-        } finally {
-            setPromoLoading(false);
-        }
-    };
 
 
 
@@ -1014,40 +979,8 @@ export default function SendMoney() {
                                         onChoice={setBonusChoice}
                                     />
 
-                                    {/* Promo Code Section */}
-                                    <Card>
-                                        <CardHeader className="pb-4">
-                                            <CardTitle className="text-base">Promo Code</CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="space-y-3">
-                                            <Label className="text-sm">Have a promo code?</Label>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    placeholder="Enter promo code"
-                                                    value={promoCode}
-                                                    onChange={(e) => {
-                                                        setPromoCode(e.target.value.toUpperCase());
-                                                        setPromoApplied(false);
-                                                        setPromoMessage("");
-                                                    }}
-                                                    className="uppercase font-mono"
-                                                    disabled={promoLoading}
-                                                />
-                                                <Button
-                                                    variant="outline"
-                                                    onClick={handleApplyPromo}
-                                                    disabled={promoLoading || !promoCode}
-                                                >
-                                                    {promoLoading ? "Checking..." : "Apply"}
-                                                </Button>
-                                            </div>
-                                            {promoMessage && (
-                                                <p className={`text-xs mt-1 font-medium ${promoApplied ? "text-green-600" : "text-red-500"}`}>
-                                                    {promoApplied ? "✓ " : "✗ "}{promoMessage}
-                                                </p>
-                                            )}
-                                        </CardContent>
-                                    </Card>
+                                    {/* Promo Code Section (features/promo) */}
+                                    <PromoCodeField promo={promo} />
 
                                     {/* Payment Method Selection */}
                                     <Card>
@@ -1093,8 +1026,15 @@ export default function SendMoney() {
                                                         // transaction (instant methods complete it).
                                                         if (transactionId) {
                                                             try {
-                                                                await paySendMoneyTransaction(transactionId, method.id as SendMoneyPaymentMethod);
+                                                                await paySendMoneyTransaction(transactionId, method.id as SendMoneyPaymentMethod, promoApplied ? { code: promoCode, discount: promoDiscount } : null);
                                                             } catch (e) {
+                                                                // A promo code that can no longer be used stops the payment before any money moves (PROMO-RHEMITO §6.4)
+                                                                if (e instanceof SendMoneyApiError && e.code.startsWith("PROMO_")) {
+                                                                    promo.reject(e.message);
+                                                                    setPaymentMethod("");
+                                                                    toast({ title: "Payment not made", description: e.message, variant: "destructive" });
+                                                                    return;
+                                                                }
                                                                 console.error("Failed to record payment method", e);
                                                             }
                                                         }
@@ -1139,9 +1079,9 @@ export default function SendMoney() {
                                             <CardContent className="space-y-3 text-sm pt-4">
                                                 {/* Promo Discount Row (shown when a code is applied) */}
                                                 {promoApplied && promoDiscount > 0 && (
-                                                    <div className="flex justify-between font-medium text-gray-900">
-                                                        <span>Discount: ({promoCode})</span>
-                                                        <span>{promoDiscount.toFixed(2)} GBP</span>
+                                                    <div className="flex justify-between font-medium text-green-700" data-testid="summary-promo">
+                                                        <span>{PROMO_COPY.summaryLabel(promoCode)}</span>
+                                                        <span>−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
                                                     </div>
                                                 )}
 
@@ -1200,7 +1140,7 @@ export default function SendMoney() {
                                                     </div>
                                                     {(promoApplied || useBonus) && (
                                                         <p className="text-xs text-green-600 font-medium mt-1">
-                                                            Includes {promoApplied && "Promo Code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
+                                                            Includes {promoApplied && "promo code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
                                                         </p>
                                                     )}
                                                 </div>
@@ -1574,9 +1514,9 @@ export default function SendMoney() {
                                 <h3 className="text-xl font-bold text-gray-900">Success!</h3>
                                 <p className="text-gray-600 text-base">
                                     {promoApplied && useBonus
-                                        ? `Promo Code and Referral Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} have been applied to your transaction.`
+                                        ? `Your promo code and Referral Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} have been applied to your transaction.`
                                         : promoApplied
-                                            ? "Promo Code has been applied to your transaction."
+                                            ? "Your promo code has been applied to your transaction."
                                             : useBonus
                                                 ? `Referral Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} has been applied to your transaction.`
                                                 : "Transaction submitted successfully."
@@ -1628,8 +1568,16 @@ export default function SendMoney() {
                                             // transaction stays awaiting_payment inside the 30-min window.
                                             if (transactionId) {
                                                 try {
-                                                    await paySendMoneyTransaction(transactionId, "manual_transfer");
+                                                    await paySendMoneyTransaction(transactionId, "manual_transfer", promoApplied ? { code: promoCode, discount: promoDiscount } : null);
                                                 } catch (e) {
+                                                    if (e instanceof SendMoneyApiError && e.code.startsWith("PROMO_")) {
+                                                        promo.reject(e.message);
+                                                        setIsSubmittingTransaction(false);
+                                                        setShowManualTransferConfirm(false);
+                                                        setPaymentMethod("");
+                                                        toast({ title: "Payment not made", description: e.message, variant: "destructive" });
+                                                        return;
+                                                    }
                                                     console.error("Failed to record payment method", e);
                                                 }
                                             }
