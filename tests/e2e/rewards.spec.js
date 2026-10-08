@@ -71,10 +71,12 @@ test.describe('Refer & Earn on the Dashboard', () => {
         await expect(card).toBeVisible();
         await expect(card.getByTestId('refer-offer-text')).toContainText('You get £5.00 and your friend gets £10.00');
         await expect(card.getByLabel('Your referral link')).toHaveValue('localhost:5000/ref/JOHN2880');
-        await expect(card.getByText('Kemi L.')).toBeVisible();
-        await expect(card.getByText('Transfer in progress')).toBeVisible();
-        await expect(card.getByText('£5.00 earned')).toBeVisible();
-        await expect(card.getByRole('link', { name: 'See all referrals (3)' })).toBeVisible();
+        // Totals only — individual friends are listed on the Referrals tab, so the card never grows
+        await expect(card.getByTestId('refer-count')).toHaveText('3');
+        await expect(card.getByTestId('refer-earned')).toHaveText('£5.00');
+        await expect(card.getByTestId('refer-waiting')).toContainText('2 friends are yet to send £50.00+');
+        await expect(card.getByText('Kemi L.')).toHaveCount(0);
+        await expect(card.getByRole('link', { name: 'View all referrals' })).toBeVisible();
         await expect(page.getByTestId('bonus-credit-card')).toHaveCount(0);
         await expect(page.getByTestId('bonus-earned-pill')).toContainText('£7.00 bonus credit');
     });

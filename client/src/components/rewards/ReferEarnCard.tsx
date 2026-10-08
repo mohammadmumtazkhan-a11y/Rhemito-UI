@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import { Check, Copy, RefreshCw, Share2 } from "lucide-react";
+import { ArrowRight, Check, Copy, RefreshCw, Share2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,11 +8,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatMoney, type RewardOffer, type MyReferral } from "@/lib/rewards";
-import { ReferralProgressLegend, ReferralProgressRow } from "./ReferralProgress";
 
 interface ReferEarnCardProps {
   offer: RewardOffer | null;
   referrals: MyReferral[];
+  /** Totals across every referral, so the card stays the same height however many friends join. */
+  summary?: { joined: number; earned_count: number; total_earned: Record<string, number> };
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -30,7 +31,7 @@ function OfferSentence({ text }: { text: string }) {
 }
 
 /** Dashboard Refer & Earn card — approved "Mix" design (spec §2). */
-export function ReferEarnCard({ offer, referrals, isLoading, isError, onRetry, highlighted }: ReferEarnCardProps) {
+export function ReferEarnCard({ offer, referrals, summary, isLoading, isError, onRetry, highlighted }: ReferEarnCardProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
@@ -74,7 +75,11 @@ export function ReferEarnCard({ offer, referrals, isLoading, isError, onRetry, h
   if (!offer) return null;
 
   const link = offer.referral_link ?? "";
-  const latest = referrals.slice(0, 3);
+  const joined = summary?.joined ?? referrals.length;
+  const waiting = Math.max(0, joined - (summary?.earned_count ?? 0));
+  const earnedText =
+    Object.entries(summary?.total_earned ?? {}).filter(([, v]) => v > 0).map(([c, v]) => formatMoney(v, c)).join(" + ") ||
+    formatMoney(0, offer.currency);
 
   const handleCopy = async () => {
     try {
@@ -154,15 +159,29 @@ export function ReferEarnCard({ offer, referrals, isLoading, isError, onRetry, h
         </>
       )}
 
-      <div className="flex flex-col gap-3.5 border-t border-slate-200 pt-3.5" data-testid="refer-latest">
-        {latest.length === 0 ? (
+      <div className="flex flex-col gap-3 border-t border-slate-200 pt-4" data-testid="refer-latest">
+        {joined === 0 ? (
           <p className="text-sm text-slate-600">No referrals yet. Share your link to start earning.</p>
         ) : (
           <>
-            {latest.map((r) => <ReferralProgressRow key={r.id} referral={r} />)}
-            <ReferralProgressLegend floorLabel={formatMoney(offer.floor, offer.currency)} />
-            <Link href="/bonus-discounts?tab=referrals" className="text-[15px] font-semibold text-blue-600 hover:underline">
-              See all referrals ({referrals.length})
+            <div className="grid grid-cols-2 gap-2.5" data-testid="refer-stats">
+              <div className="rounded-xl bg-slate-50 px-3.5 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Friends joined</p>
+                <p className="mt-1 font-display text-2xl font-bold leading-none text-slate-900" data-testid="refer-count">{joined}</p>
+              </div>
+              <div className="rounded-xl bg-teal-50 px-3.5 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Bonus earned</p>
+                <p className="mt-1 font-display text-2xl font-bold leading-none text-teal-700" data-testid="refer-earned">{earnedText}</p>
+              </div>
+            </div>
+            {waiting > 0 && (
+              <p className="text-[13px] text-slate-500" data-testid="refer-waiting">
+                {waiting} {waiting === 1 ? "friend is" : "friends are"} yet to send {formatMoney(offer.floor, offer.currency)}+
+              </p>
+            )}
+            <Link href="/bonus-discounts?tab=referrals" className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-blue-600 hover:underline">
+              View all referrals
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </>
         )}
