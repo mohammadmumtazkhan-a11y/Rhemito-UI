@@ -1006,6 +1006,7 @@ export default function SendMoney() {
                                                         // transaction (instant methods complete it).
                                                         if (transactionId) {
                                                             try {
+                                                                if (promoApplied) promo.lock();
                                                                 await paySendMoneyTransaction(transactionId, method.id as SendMoneyPaymentMethod, promoApplied ? { code: promoCode, discount: promoDiscount } : null, useBonus ? { mode: bonusType, amount: bonusAmount } : null);
                                                             } catch (e) {
                                                                 // The bonus is used with the payment; if it can't be, the transfer is not paid (BONUS-RHEMITO B-23)
@@ -1554,6 +1555,7 @@ export default function SendMoney() {
                                             // transaction stays awaiting_payment inside the 30-min window.
                                             if (transactionId) {
                                                 try {
+                                                    if (promoApplied) promo.lock();
                                                     await paySendMoneyTransaction(transactionId, "manual_transfer", promoApplied ? { code: promoCode, discount: promoDiscount } : null, useBonus ? { mode: bonusType, amount: bonusAmount } : null);
                                                 } catch (e) {
                                                     if (e instanceof SendMoneyApiError && e.code.startsWith("BONUS_")) {
