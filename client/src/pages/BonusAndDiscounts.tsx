@@ -71,7 +71,7 @@ function buildHistory(data: RewardsSummary, currency: string, promoRows: PromoRo
         return { id: h.id, date: h.created_at, description: describeCredit({ credit_source_label: h.credit_source_label, notes: h.notes, reason_code: h.reason_code }), kind: "earned", amount: h.amount, currency: h.currency, status: statusById.get(h.id), returned, credit_source };
       }
       if (h.type === "APPLIED") {
-        return { id: h.id, date: h.created_at, description: `Used on transfer ${h.transfer_id ?? ""}`.trim(), kind: "used", amount: h.amount, currency: h.currency, credit_source };
+        return { id: h.id, date: h.created_at, description: `Bonus used on transfer ${h.transfer_id ?? ""}`.trim(), kind: "used", amount: h.amount, currency: h.currency, credit_source };
       }
       return {
         id: h.id, date: h.created_at, kind: "expired", amount: h.amount, currency: h.currency, credit_source,
@@ -289,7 +289,7 @@ export default function BonusAndDiscounts() {
 
               <TabsContent value="history" className="mt-6 space-y-4">
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter history">
-                  {([["all", "All"], ["earned", "Earned"], ["used", "Used"], ["expired", "Expired"], ["promo", "Promo codes"]] as const).map(([key, label]) => (
+                  {([["all", "All"], ["earned", "Earned"], ["used", "Bonus used"], ["expired", "Expired"], ["promo", "Promo codes"]] as const).map(([key, label]) => (
                     <button
                       key={key}
                       type="button"
@@ -328,7 +328,7 @@ export default function BonusAndDiscounts() {
                     </p>
                   ) : filtered.length === 0 ? (
                     <p className="py-6 text-center text-sm text-slate-600">
-                      {history.length === 0 ? "No rewards yet. Invite friends or use a promo code to start saving." : "Nothing to show for this filter."}
+                      {history.length === 0 ? "No rewards yet. Invite friends or use a promo code to start saving." : filter === "used" ? "You haven't used any bonus credit yet. You can use it when you pay for a transfer." : "Nothing to show for this filter."}
                     </p>
                   ) : (
                     <ul data-testid="bonus-history">
