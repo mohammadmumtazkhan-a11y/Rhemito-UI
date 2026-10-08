@@ -1023,6 +1023,10 @@ export default function SendMoney() {
                                                                     return;
                                                                 }
                                                                 console.error("Failed to record payment method", e);
+                                                                const description = e instanceof SendMoneyApiError ? e.message : "We couldn't complete your payment. Please try again.";
+                                                                toast({ title: "Payment not completed", description, variant: "destructive" });
+                                                                setPaymentMethod("");
+                                                                return;
                                                             }
                                                         }
                                                         void rewards.refetch();
@@ -1574,6 +1578,12 @@ export default function SendMoney() {
                                                         return;
                                                     }
                                                     console.error("Failed to record payment method", e);
+                                                    const description = e instanceof SendMoneyApiError ? e.message : "We couldn't complete your payment. Please try again.";
+                                                    toast({ title: "Payment not completed", description, variant: "destructive" });
+                                                    setIsSubmittingTransaction(false);
+                                                    setShowManualTransferConfirm(false);
+                                                    setPaymentMethod("");
+                                                    return;
                                                 }
                                             }
                                             setIsSubmittingTransaction(false);
