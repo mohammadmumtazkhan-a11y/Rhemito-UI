@@ -200,3 +200,12 @@ npx vitest        # Watch mode
 ```bash
 npx.cmd playwright test --reporter=line
 ```
+
+## Rewards contract tests
+
+Promo Code, Bonus (one bonus balance, `credit_source` REFERRAL / SCHEME / MANUAL), Referral and the Send Money payment flow are implemented and working. Their rules are pinned by contract tests so a wrong change fails loudly.
+
+- **Before changing** promo, bonus, referral or payment-flow code (`server/promo/*`, `server/bonus/*`, `server/rewardsService.ts`, `server/rewardsRoutes.ts`, `server/sendMoneyRoutes.ts`, `client/src/features/{promo,bonus}/**`, `client/src/lib/{rewards,sendMoney}.ts`, `SendMoney.tsx`, `BonusAndDiscounts.tsx`, `ReferEarnCard.tsx`), run `npm run test:contracts`. The UI contracts are in `tests/e2e/rewards_contract.spec.js` (`npm run e2e:contracts`, dev server running).
+- **When one fails**, read the `CONTRACT <id> BROKEN` block at the top of the failure: it states the rule, WHY it exists, HOW it is implemented / the fix, and the CODE files. Restore the implemented behaviour; do not edit the test to make it pass.
+- **Only change a contract** if the product owner (Mohammad) has explicitly changed the rule. Then update the test (and its `why` / `fix` text) in the same PR and state the reason in the PR description.
+- Tests live in `client/src/__tests__/contracts/` (`promo`, `bonus`, `referral`, `payment-flow`; helper `_contract.ts` provides `rule(id, title, { why, fix, where }, fn)`, `_mitoStub.ts` is a stub Mito service wired to the real Rhemito routes).
