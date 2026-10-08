@@ -232,12 +232,12 @@ export default function BonusAndDiscounts() {
                     )}
                   </StatTile>
                   <StatTile
-                    label="Total earned"
+                    label="Bonus earned"
                     value={formatMoney(balance.earned, currency)}
                     sub={BONUS_COPY.tilesEarnedSub(balance.referral_credit_count + balance.other_credit_count)}
                   />
-                  <StatTile label="Used" value={formatMoney(balance.used, currency)} sub={`Across ${balance.used_transfer_count} transfer${balance.used_transfer_count === 1 ? "" : "s"}`} />
-                  <StatTile label="Expired" value={formatMoney(balance.expired, currency)} sub="Use your bonus before it expires" />
+                  <StatTile label="Bonus used" value={formatMoney(balance.used, currency)} sub={`Across ${balance.used_transfer_count} transfer${balance.used_transfer_count === 1 ? "" : "s"}`} />
+                  <StatTile label="Bonus expired" value={formatMoney(balance.expired, currency)} sub="Use your bonus before it expires" />
                 </div>
 
                 <p className="text-sm text-slate-700" data-testid="total-saved">
@@ -289,7 +289,7 @@ export default function BonusAndDiscounts() {
 
               <TabsContent value="history" className="mt-6 space-y-4">
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter history">
-                  {([["all", "All"], ["earned", "Earned"], ["used", "Bonus used"], ["expired", "Expired"], ["promo", "Promo codes"]] as const).map(([key, label]) => (
+                  {([["all", "All"], ["earned", "Bonus earned"], ["used", "Bonus used"], ["expired", "Bonus expired"], ["promo", "Promo codes"]] as const).map(([key, label]) => (
                     <button
                       key={key}
                       type="button"
