@@ -170,3 +170,15 @@ test.describe('Send Money — use your bonus', () => {
         await expect(page.getByRole('radio', { name: /Don't use bonus/ })).toBeChecked();
     });
 });
+
+test.describe('Send money — bonus on landing', () => {
+    test('bonus is offered on the Amount step and the choice reaches payment', async ({ page }) => {
+        await mock(page);
+        await page.goto('/send-money');
+        const panel = page.getByTestId('bonus-redemption');
+        await expect(panel).toBeVisible();
+        await expect(panel).toContainText('£7.00 available');
+        await panel.getByText('Pay less').click();
+        await expect(page.getByTestId('summary-bonus-step1')).toContainText('7.00 GBP');
+    });
+});
