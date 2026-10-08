@@ -65,9 +65,6 @@ export interface WalletHistoryEntry extends CreditSourceFields {
   source_credit_id: string | null;
 }
 
-/** What a customer is told when they are blocked from earning bonus. The reason stays with admins. */
-export const BONUS_BLOCKED_MESSAGE = "You're not qualified to get bonus. Please contact support for more information.";
-
 export interface Wallet {
   /** True when the customer cannot earn bonus until support approves them. */
   bonus_blocked?: boolean;
@@ -200,17 +197,6 @@ export function referralHelpText(r: MyReferral, now: Date = new Date()): string 
 export const CREDIT_STATUS_LABEL: Record<WalletCredit["status"], string> = {
   UNUSED: "Unused", PARTLY_USED: "Partly used", USED: "Used", EXPIRED: "Expired", REVERSED: "Reversed",
 };
-
-/** Bonus applicable to a transfer: never more than the balance or the send amount. */
-export function bonusToApply(available: number, sendAmount: number): number {
-  if (!(available > 0) || !(sendAmount > 0)) return 0;
-  return Math.round(Math.min(available, sendAmount) * 100) / 100;
-}
-
-/** Total to pay after promo and Pay-less bonus; never below 0. */
-export function totalToPay(sendAmount: number, fee: number, promoDiscount: number, payLessBonus: number): number {
-  return Math.max(0, Math.round((sendAmount + fee - promoDiscount - payLessBonus) * 100) / 100);
-}
 
 // ─── Referral code captured from a /ref link (kept 30 days, AC-3.1.2) ────────
 

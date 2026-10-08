@@ -156,15 +156,6 @@ export async function onTransferEvent(
         created_at: new Date(tx.createdAt).toISOString(),
       },
     });
-    // Loyalty / threshold bonuses earned by this completed transfer
-    for (const award of (res.bonuses as Json[]) ?? []) {
-      if (award.status !== "AWARDED" || bonusFeedOn()) continue;
-      await notify(userId, "reward_earned", {
-        amount: fmtMoney(award.amount, award.currency),
-        message: `Bonus earned: ${award.scheme_name}.`,
-        expires: ukDate(`${award.expires_at}T12:00:00Z`),
-      });
-    }
     const referral = res.referral as Json | null;
     if (referral?.status === "REWARDED" && !announcedRewards.has(referral.id)) {
       announcedRewards.add(referral.id);
