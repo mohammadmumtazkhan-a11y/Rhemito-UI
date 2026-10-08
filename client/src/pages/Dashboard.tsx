@@ -1087,6 +1087,7 @@ export default function Dashboard() {
             <ReferEarnCard
               offer={rewards.data?.offer ?? null}
               referrals={rewards.data?.referrals.data ?? []}
+              summary={rewards.data?.referrals.summary}
               isLoading={rewards.isLoading}
               isError={rewards.isError}
               onRetry={() => rewards.refetch()}
