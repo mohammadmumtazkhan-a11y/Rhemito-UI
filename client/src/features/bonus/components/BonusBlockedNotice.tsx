@@ -1,5 +1,6 @@
 import { Info } from "lucide-react";
 import { BONUS_COPY } from "../lib/copy";
+import { supportHref } from "@/lib/support";
 
 /** Shown when the customer is blocked from earning bonus. The reason stays with admins (7.2). */
 export function BonusBlockedNotice({ className = "", onContact }: { className?: string; onContact?: () => void }) {
@@ -12,13 +13,15 @@ export function BonusBlockedNotice({ className = "", onContact }: { className?: 
       <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
       <p>
         {BONUS_COPY.blocked}
-        {onContact && (
-          <>
-            {" "}
-            <button type="button" onClick={onContact} className="font-semibold underline underline-offset-2 hover:text-amber-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
-              {BONUS_COPY.contactSupport}
-            </button>
-          </>
+        {" "}
+        {onContact ? (
+          <button type="button" onClick={onContact} className="font-semibold underline underline-offset-2 hover:text-amber-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
+            {BONUS_COPY.contactSupport}
+          </button>
+        ) : (
+          <a href={supportHref("Bonus credit")} data-testid="bonus-contact-support" className="font-semibold underline underline-offset-2 hover:text-amber-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
+            {BONUS_COPY.contactSupport}
+          </a>
         )}
       </p>
     </div>
