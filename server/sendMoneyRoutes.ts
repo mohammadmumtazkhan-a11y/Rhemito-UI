@@ -13,7 +13,7 @@ import { storage } from "./storage";
 import { demoModeEnabled } from "./config";
 import { dispatchNotification } from "./notificationService";
 import { onTransferEvent } from "./rewardsService";
-import { validatePromo, redeemPromo } from "./promoService";
+import * as promo from "./promo";
 import { toMinorUnits, fromMinorUnits } from "@shared/money";
 import { formatDocumentNumber } from "@shared/invoice-logic";
 import {
@@ -81,6 +81,7 @@ function toView(tx: SendMoneyTransaction): SendMoneyTransactionView {
     fee: fromMinorUnits(tx.feeMinor, tx.sendCurrency),
     exchangeRate: tx.exchangeRate,
     promoCode: tx.promoCode,
+    promoDiscount: tx.promoDiscountMinor ? fromMinorUnits(tx.promoDiscountMinor, tx.sendCurrency) : null,
     status: tx.status,
     createdAt: tx.createdAt.toISOString(),
     paidAt: tx.paidAt ? tx.paidAt.toISOString() : null,
@@ -105,37 +106,6 @@ async function getOwnedTransaction(idOrReference: string, userId: string): Promi
     throw new SendMoneyError(404, "NOT_FOUND", "Transaction not found.");
   }
   return tx;
-}
-
-/**
- * Promo codes belong to Mito Admin. When a transfer that carries a code is paid, Mito Admin re-checks the code for this
- * customer and payment method, the discount the customer was shown must not exceed what Mito Admin approves, and the use
- * is recorded once (against the transfer reference). A code that can no longer be used stops the payment before any money moves.
- */
-async function redeemPromoForPayment(tx: SendMoneyTransaction, userId: string, paymentMethod: string): Promise<void> {
-  const feeBeforeMinor = tx.feeBeforePromoMinor ?? tx.feeMinor;
-  const request = {
-    code: tx.promoCode as string,
-    userId,
-    amount: Number(fromMinorUnits(tx.sendAmountMinor, tx.sendCurrency)),
-    fee: Number(fromMinorUnits(feeBeforeMinor, tx.sendCurrency)),
-    currency: tx.sendCurrency,
-    sourceCurrency: tx.sendCurrency,
-    destCurrency: tx.receiveCurrency,
-    paymentMethod,
-  };
-  const reject = (status: number, message: string) =>
-    new SendMoneyError(status === 503 ? 503 : 409, "PROMO_REJECTED", `${message.replace(/\.?$/, ".")} Go back and remove the promo code to continue.`);
-
-  const check = await validatePromo(request);
-  if (!check.ok) throw reject(check.status, check.error ?? "This promo code can no longer be used.");
-  const approvedMinor = toMinorUnits(String(check.body.appliedDiscount ?? 0), tx.sendCurrency);
-  const shownMinor = feeBeforeMinor - tx.feeMinor;
-  if (shownMinor > approvedMinor) {
-    throw new SendMoneyError(409, "PROMO_CHANGED", "The promo discount has changed. Go back and review your transfer.");
-  }
-  const redeemed = await redeemPromo({ ...request, transactionId: tx.reference });
-  if (!redeemed.ok) throw reject(redeemed.status, redeemed.error ?? "This promo code can no longer be used.");
 }
 
 export function registerSendMoneyRoutes(app: Express): void {
@@ -202,15 +172,33 @@ export function registerSendMoneyRoutes(app: Express): void {
       if (tx.status !== "awaiting_payment") {
         throw new SendMoneyError(409, "INVALID_STATE", "Only a transaction awaiting payment can be paid.");
       }
-      if (tx.promoCode) await redeemPromoForPayment(tx, userId, parsed.data.paymentMethod);
+      // Promo codes belong to Mito Money: the code is re-checked for this customer and payment method and its use
+      // recorded once (against the transfer reference) before any money moves (PROMO-RHEMITO P-20 – P-25).
+      let promoAtPayment: promo.PromoAtPayment | null = null;
+      try {
+        promoAtPayment = await promo.applyForPayment(tx, userId, parsed.data.paymentMethod, { code: parsed.data.promoCode, shownDiscount: parsed.data.promoDiscount });
+      } catch (err) {
+        if (err instanceof promo.PromoPaymentError) throw new SendMoneyError(err.status, err.code, err.message);
+        throw err;
+      }
       const status = statusForPaymentMethod(parsed.data.paymentMethod);
       const now = new Date();
-      const updated = await storage.updateSendMoneyTransaction(tx.id, {
-        paymentMethod: parsed.data.paymentMethod,
-        status,
-        paidAt: status === "completed" ? now : null,
-      });
+      let updated: SendMoneyTransaction | undefined;
+      try {
+        updated = await storage.updateSendMoneyTransaction(tx.id, {
+          paymentMethod: parsed.data.paymentMethod,
+          status,
+          paidAt: status === "completed" ? now : null,
+          ...(promoAtPayment
+            ? { promoCode: promoAtPayment.promoCode, feeBeforePromoMinor: promoAtPayment.feeBeforePromoMinor, feeMinor: promoAtPayment.feeMinor, promoDiscountMinor: promoAtPayment.promoDiscountMinor, promoRedeemedAt: now }
+            : {}),
+        });
+      } catch (err) {
+        if (promoAtPayment) await promo.releaseForPayment(tx.reference);
+        throw err;
+      }
       if (!updated) {
+        if (promoAtPayment) await promo.releaseForPayment(tx.reference);
         throw new SendMoneyError(500, "INTERNAL_ERROR", "The payment could not be recorded. Please try again.");
       }
       if (status === "completed") {
@@ -218,6 +206,8 @@ export function registerSendMoneyRoutes(app: Express): void {
         // Referral programme: a completed transfer may qualify a referral (US-4.1)
         const event = { reference: updated.reference, sendAmount: Number(fromMinorUnits(updated.sendAmountMinor, updated.sendCurrency)), sendCurrency: updated.sendCurrency, receiveCurrency: updated.receiveCurrency, createdAt: updated.createdAt };
         void onTransferEvent(userId, event, "PAID").then(() => onTransferEvent(userId, event, "COMPLETED"));
+        promo.onTransferStatus(userId, updated, "PAID");
+        promo.onTransferStatus(userId, updated, "COMPLETED");
       }
       return res.json({ data: toView(updated) });
     } catch (err) {
@@ -242,6 +232,8 @@ export function registerSendMoneyRoutes(app: Express): void {
       await dispatchNotification({ userId, type: "transaction_cancelled_customer", data: notificationData(updated) });
       // Releases any bonus used on this transfer (AC-5.2.10) and un-pends a referral (AC-4.4.1)
       void onTransferEvent(userId, { reference: updated.reference, sendAmount: Number(fromMinorUnits(updated.sendAmountMinor, updated.sendCurrency)), sendCurrency: updated.sendCurrency, receiveCurrency: updated.receiveCurrency, createdAt: updated.createdAt }, "CANCELLED");
+      // Gives the promo code use back (PROMO-RHEMITO P-30); the rewards path above also does, both are idempotent (P-33)
+      promo.onTransferStatus(userId, updated, "CANCELLED");
       return res.json({ data: toView(updated) });
     } catch (err) {
       handleError(res, err);
