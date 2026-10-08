@@ -84,6 +84,8 @@ export interface SendMoneyRow {
   date: string;
   amount: string;
   status: string;
+  /** Full record, present once the transfer has been paid; powers the receipt. */
+  receipt?: SendMoneyTransactionView;
 }
 
 const SERVICE_LABELS: Record<SendMoneyService, string> = {
@@ -100,5 +102,41 @@ export function toSendMoneyRow(view: SendMoneyTransactionView): SendMoneyRow {
     date: formatShortDate(view.createdAt.slice(0, 10)),
     amount: `${view.sendCurrency} ${view.sendAmount}`,
     status: view.status,
+    ...(view.paidAt ? { receipt: view } : {}),
   };
+}
+
+export interface ReceiptLine {
+  key: "send" | "fee" | "promo" | "bonus_pay_less" | "bonus_send_more" | "total" | "receive";
+  label: string;
+  /** Signed display amount, e.g. "−GBP 5.00". */
+  value: string;
+  tone?: "discount" | "total";
+}
+
+/**
+ * Money lines of a paid transfer (PROMO/BONUS-RHEMITO). The stored fee is the fee after the promo discount,
+ * so the fee line shows it before the discount and the promo line takes the discount off. Pay-less bonus
+ * reduces the total paid; Send-more bonus adds to the amount converted and leaves the total unchanged.
+ */
+export function receiptLines(v: SendMoneyTransactionView): ReceiptLine[] {
+  const num = (x?: string | null) => (x ? Number(x) : 0);
+  const cur = v.sendCurrency;
+  const money = (n: number) => `${cur} ${n.toFixed(2)}`;
+  const send = num(v.sendAmount);
+  const fee = num(v.fee);
+  const promo = num(v.promoDiscount);
+  const bonus = num(v.bonusCredit);
+  const payLess = v.bonusCreditMode === "pay_less" ? bonus : 0;
+  const sendMore = v.bonusCreditMode === "send_more" ? bonus : 0;
+  const lines: ReceiptLine[] = [
+    { key: "send", label: "You send", value: money(send) },
+    { key: "fee", label: "Transfer fee", value: money(fee + promo) },
+  ];
+  if (promo > 0) lines.push({ key: "promo", label: v.promoCode ? `Promo code ${v.promoCode}` : "Promo code", value: `−${money(promo)}`, tone: "discount" });
+  if (payLess > 0) lines.push({ key: "bonus_pay_less", label: "Bonus credit used", value: `−${money(payLess)}`, tone: "discount" });
+  if (sendMore > 0) lines.push({ key: "bonus_send_more", label: "Bonus added to your transfer", value: `+${money(sendMore)}`, tone: "discount" });
+  lines.push({ key: "total", label: "Total paid", value: money(Math.max(0, send + fee - payLess)), tone: "total" });
+  lines.push({ key: "receive", label: "Recipient gets", value: `${v.receiveCurrency} ${num(v.receiveAmount).toFixed(2)}` });
+  return lines;
 }
