@@ -289,7 +289,7 @@ export default function BonusAndDiscounts() {
 
               <TabsContent value="history" className="mt-6 space-y-4">
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Filter history">
-                  {([["all", "All"], ["earned", "Earned"], ["used", "Bonus used"], ["expired", "Expired"], ["promo", "Promo codes"]] as const).map(([key, label]) => (
+                  {([["all", "All"], ["earned", "Bonus earned"], ["used", "Bonus used"], ["expired", "Bonus expired"], ["promo", "Promo codes"]] as const).map(([key, label]) => (
                     <button
                       key={key}
                       type="button"
