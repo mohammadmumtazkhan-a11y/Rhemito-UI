@@ -111,6 +111,7 @@ export default function SendMoney() {
     const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
     const [showExpiryPopup, setShowExpiryPopup] = useState(false);
     const [expiryCountdown, setExpiryCountdown] = useState(5);
+    const [showPromoModal, setShowPromoModal] = useState(false);
 
     // Referral bonus — live wallet from the rewards API (US-5.2 / US-5.3)
     const rewards = useRewards();
@@ -135,7 +136,10 @@ export default function SendMoney() {
     const promoApplied = promo.applied;
     const promoDiscount = promo.discount;
     const promoCode = promo.appliedCode ?? "";
-    const effectiveFee = Math.max(0, fee - (promoApplied ? promoDiscount : 0));
+    const promoOnAmount = promoApplied && promo.appliesTo === "amount";
+    // Fee promos reduce the fee (never below 0); a Fixed amount promo comes off the whole amount to pay instead
+    const effectiveFee = Math.max(0, fee - (promoApplied && !promoOnAmount ? promoDiscount : 0));
+    const amountPromoDiscount = promoOnAmount ? Math.min(promoDiscount, parseFloat(amount || "0")) : 0;
 
     // Bonus Calculations
     const bonusAmount = useBonus ? creditToApply(bonusBalance, parseFloat(amount || "0"), SEND_CURRENCY) : 0;
@@ -153,7 +157,7 @@ export default function SendMoney() {
     };
 
     // Total Pay = You Send + fee (after promo) - (Pay Less bonus). Never below 0 (AC-5.2.7)
-    const totalPay = Math.max(0, (parseFloat(amount || "0") + effectiveFee) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0));
+    const totalPay = Math.max(0, (parseFloat(amount || "0") + effectiveFee) - amountPromoDiscount - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0));
 
     // Amount Summary rows:
     //   You Send     = amount the customer entered (never includes fee or bonus)
@@ -263,7 +267,7 @@ export default function SendMoney() {
                 receiveAmount: finalReceiveAmount,
                 fee: effectiveFee.toFixed(2),
                 exchangeRate: String(EXCHANGE_RATE),
-                ...(promoApplied && promoCode ? { promoCode, feeBeforePromo: fee.toFixed(2) } : {}),
+                ...(promoApplied && promoCode ? { promoCode, feeBeforePromo: fee.toFixed(2), ...(promoOnAmount ? { promoAppliesTo: "amount" as const, promoDiscount: amountPromoDiscount.toFixed(2) } : {}) } : {}),
             });
             setTransactionId(created.id);
             setTransactionRef(created.reference);
@@ -423,7 +427,41 @@ export default function SendMoney() {
                             >
                                 <div className="lg:col-span-3 space-y-5">
                                     <div className="space-y-2">
-                                        <Label className="text-gray-500">You Send</Label>
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-gray-500">You Send</Label>
+                                            {promo.enabled && (
+                                                promoApplied ? (
+                                                    <div className="flex items-center gap-2 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full" data-testid="step1-promo-applied-pill">
+                                                        <Check className="w-3.5 h-3.5 text-green-600" />
+                                                        <span>Promo <strong className="font-mono">{promoCode}</strong> (−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")})</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowPromoModal(true)}
+                                                            className="text-blue-600 hover:underline ml-1"
+                                                        >
+                                                            Change
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={promo.remove}
+                                                            className="text-gray-500 hover:text-red-600 ml-0.5"
+                                                            aria-label="Remove promo code"
+                                                        >
+                                                            <X className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowPromoModal(true)}
+                                                        data-testid="step1-use-promo-btn"
+                                                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 px-3 py-1 rounded-full transition-colors"
+                                                    >
+                                                        <span>🏷️ Use Promo Code</span>
+                                                    </button>
+                                                )
+                                            )}
+                                        </div>
                                         <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
                                             <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
                                                 <img src="https://flagcdn.com/w40/gb.png" alt="GBP" className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
@@ -513,6 +551,12 @@ export default function SendMoney() {
                                             </div>
                                             <span className="font-medium">{fee.toFixed(2)} GBP</span>
                                         </div>
+                                        {promoApplied && (
+                                            <div className="flex items-center justify-between py-2 text-green-600 font-medium">
+                                                <span>Promo ({promoCode})</span>
+                                                <span>- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                            </div>
+                                        )}
                                         <div className="flex items-center justify-between py-2 bg-blue-50 px-4 rounded-lg -mx-4">
                                             <div className="flex items-center gap-3 text-gray-600">
                                                 <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-blue-600">
@@ -561,6 +605,12 @@ export default function SendMoney() {
                                                     <span className="text-gray-600">Fee</span>
                                                     <span className="font-medium text-gray-900">{fee.toFixed(2)} GBP</span>
                                                 </div>
+                                                {promoApplied && (
+                                                    <div className="flex justify-between font-medium text-green-600 bg-green-50 px-2 py-1 -mx-2 rounded" data-testid="summary-promo-step1">
+                                                        <span>Promo ({promoCode})</span>
+                                                        <span>- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                                    </div>
+                                                )}
                                                 {useBonus && (
                                                     <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus-step1">
                                                         <span>{bonusType === "pay_less" ? "Bonus discount" : "Bonus credit"}</span>
@@ -571,6 +621,12 @@ export default function SendMoney() {
                                                     <span className="text-gray-600">Exchange Rate</span>
                                                     <span className="font-medium text-gray-900">1 GBP = {EXCHANGE_RATE.toFixed(2)} USD</span>
                                                 </div>
+                                                {(promoApplied || useBonus) && (
+                                                    <div className="flex justify-between pt-2 border-t font-bold text-gray-900">
+                                                        <span>Total to Pay</span>
+                                                        <span>{totalPay.toFixed(2)} GBP</span>
+                                                    </div>
+                                                )}
 
                                                 <div className="pt-4 mt-4 border-t flex justify-between items-center">
                                                     <span className="text-gray-600 font-medium">They Receive</span>
@@ -581,6 +637,46 @@ export default function SendMoney() {
                                     </div>
                                 </div>
                             </motion.div>
+                        )}
+
+                        {/* Step 1 Promo Code Modal */}
+                        {showPromoModal && (
+                            <div
+                                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                                onClick={() => setShowPromoModal(false)}
+                                data-testid="step1-promo-modal"
+                            >
+                                <div
+                                    className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-md p-6 space-y-4"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className="flex items-center justify-between border-b pb-3">
+                                        <h3 className="text-base font-bold text-gray-900">Insert Promo Code</h3>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPromoModal(false)}
+                                            className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                                            aria-label="Close promo code modal"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500">
+                                        Have a promotional discount code? Enter it below to see your discount reflected immediately in your transfer summary.
+                                    </p>
+                                    <PromoCodeField promo={promo} bare />
+                                    <div className="flex justify-end pt-2">
+                                        <Button
+                                            type="button"
+                                            onClick={() => setShowPromoModal(false)}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-5"
+                                            data-testid="step1-promo-modal-done"
+                                        >
+                                            Done
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
                         )}
 
                         {/* Step 2: Recipient */}
@@ -724,6 +820,12 @@ export default function SendMoney() {
                                                     <span className="text-gray-600">Transaction Fee</span>
                                                     <span className="font-medium text-gray-900">{fee.toFixed(2)} GBP</span>
                                                 </div>
+                                                {promoApplied && (
+                                                    <div className="flex justify-between font-medium text-green-600 bg-green-50 px-2 py-1 -mx-2 rounded">
+                                                        <span>Promo ({promoCode})</span>
+                                                        <span>- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                                    </div>
+                                                )}
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Exchange Rate</span>
                                                     <span className="font-medium text-gray-900">1 GBP = {EXCHANGE_RATE.toFixed(2)} USD</span>
@@ -963,9 +1065,15 @@ export default function SendMoney() {
                                                     <span className="text-gray-600">Fees</span>
                                                     <span className="font-medium text-gray-900">{fee.toFixed(2)} GBP</span>
                                                 </div>
+                                                {promoApplied && (
+                                                    <div className="flex justify-between font-medium text-green-600 bg-green-50 px-2 py-1 -mx-2 rounded">
+                                                        <span>Promo ({promoCode})</span>
+                                                        <span>- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                                    </div>
+                                                )}
                                                 <div className="border-t pt-2 mt-2 flex justify-between items-center">
                                                     <span className="text-gray-900 font-bold text-base">Total to Pay</span>
-                                                    <span className="font-bold text-lg text-gray-900">{(parseFloat(amount) + effectiveFee).toFixed(2)} GBP</span>
+                                                    <span className="font-bold text-lg text-gray-900">{totalPay.toFixed(2)} GBP</span>
                                                 </div>
 
                                                 <div className="pt-4 mt-2 bg-blue-50/50 -mx-6 px-6 py-4 mb-[-24px]">

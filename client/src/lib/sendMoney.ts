@@ -19,6 +19,9 @@ export interface CreateSendMoneyInput {
   promoCode?: string;
   /** Fee before the promo discount (the server re-checks the discount when the transfer is paid). */
   feeBeforePromo?: string;
+  /** Fixed amount promos only: the discount comes off the whole amount to pay, and this is what the customer was shown. */
+  promoAppliesTo?: "fee" | "amount";
+  promoDiscount?: string;
 }
 
 export async function createSendMoneyTransaction(input: CreateSendMoneyInput): Promise<SendMoneyTransactionView> {
@@ -129,14 +132,15 @@ export function receiptLines(v: SendMoneyTransactionView): ReceiptLine[] {
   const bonus = num(v.bonusCredit);
   const payLess = v.bonusCreditMode === "pay_less" ? bonus : 0;
   const sendMore = v.bonusCreditMode === "send_more" ? bonus : 0;
+  const amountPromo = v.promoAppliesTo === "amount" ? promo : 0;
   const lines: ReceiptLine[] = [
     { key: "send", label: "You send", value: money(send) },
-    { key: "fee", label: "Transfer fee", value: money(fee + promo) },
+    { key: "fee", label: "Transfer fee", value: money(v.promoAppliesTo === "amount" ? fee : fee + promo) },
   ];
   if (promo > 0) lines.push({ key: "promo", label: v.promoCode ? `Promo code ${v.promoCode}` : "Promo code", value: `−${money(promo)}`, tone: "discount" });
   if (payLess > 0) lines.push({ key: "bonus_pay_less", label: "Bonus credit used", value: `−${money(payLess)}`, tone: "discount" });
   if (sendMore > 0) lines.push({ key: "bonus_send_more", label: "Bonus added to your transfer", value: `+${money(sendMore)}`, tone: "discount" });
-  lines.push({ key: "total", label: "Total paid", value: money(Math.max(0, send + fee - payLess)), tone: "total" });
+  lines.push({ key: "total", label: "Total paid", value: money(Math.max(0, send + fee - amountPromo - payLess)), tone: "total" });
   lines.push({ key: "receive", label: "Recipient gets", value: `${v.receiveCurrency} ${num(v.receiveAmount).toFixed(2)}` });
   return lines;
 }

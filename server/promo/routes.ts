@@ -43,7 +43,7 @@ export function registerPromoRoutes(app: Express): void {
       const amount = num(req.body?.amount);
       const fee = num(req.body?.fee);
       if (amount === undefined || !(amount > 0) || (fee !== undefined && (Number.isNaN(fee) || fee < 0))) {
-        return res.status(400).json({ error: "Enter the amount you're sending first.", code: "VALIDATION" });
+        return res.status(400).json({ error: req.body?.flow === "receive" ? "Enter the amount you want to receive first." : "Enter the amount you're sending first.", code: "VALIDATION" });
       }
       const userId = sessionUser(req);
       if (rateLimited(userId ?? req.ip ?? "anon")) {
@@ -61,6 +61,8 @@ export function registerPromoRoutes(app: Express): void {
         destCurrency: upper(req.body?.destCurrency),
         // P-40: only when the customer has chosen one
         paymentMethod: req.body?.paymentMethod ? String(req.body.paymentMethod) : undefined,
+        // Receive Money requests ask for a bonus check; omitted = Send Money, as before
+        ...(req.body?.flow === "receive" ? { flow: "receive" as const } : {}),
       });
       if (!result.ok) return res.status(result.status >= 400 ? result.status : 400).json({ error: result.error, code: result.code });
       return res.json({

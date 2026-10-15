@@ -502,6 +502,8 @@ export class MemStorage implements IStorage {
         payerSourceBankName: null,
         payerSourceAccountMasked: null,
         payerSourceOrigin: null,
+        promoCode: null,
+        promoBonusMinor: null,
         reference: null,
         status: r.status,
         token,

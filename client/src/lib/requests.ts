@@ -150,6 +150,8 @@ export interface CreateRequestInput {
   /** Payment link expiry — preset day count or an explicit custom date. */
   expiry: InvoiceExpiry;
   idempotencyKey: string;
+  /** Optional Receive Money promo code: the requester earns a bonus once the request is paid out. */
+  promoCode?: string;
 }
 
 async function getJSON<T>(url: string): Promise<T> {

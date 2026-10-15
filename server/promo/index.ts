@@ -6,8 +6,8 @@
  */
 
 export { registerPromoRoutes } from "./routes";
-export { applyForPayment, releaseForPayment, onTransferStatus, syncCustomer, promoOutbox, PromoPaymentError } from "./hooks";
-export type { PromoAtPayment, PromoTransferStatus } from "./hooks";
+export { applyForPayment, releaseForPayment, onTransferStatus, syncCustomer, promoOutbox, PromoPaymentError, applyForRequest, releaseForRequest, onRequestStatus } from "./hooks";
+export type { PromoAtPayment, PromoTransferStatus, PromoAtRequest, PromoRequestStatus } from "./hooks";
 export { promoEnabled, validatePromo, redeemPromo } from "./client";
 
 import { promoOutbox } from "./hooks";

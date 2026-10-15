@@ -881,6 +881,9 @@ export const moneyRequests = pgTable("money_requests", {
   payoutProviderRef: text("payout_provider_ref"),
   paymentMethod: text("payment_method"),
   idempotencyKey: text("idempotency_key"),
+  // Receive Money promo code (bonus from Mito) and the bonus reserved for the requester, minor units of payoutCurrency
+  promoCode: text("promo_code"),
+  promoBonusMinor: bigint("promo_bonus_minor", { mode: "number" }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -932,6 +935,7 @@ export const LEDGER_ENTRY_TYPES = [
   "fx_conversion", // FX debit/credit pair for cross-currency payouts
   "net_wallet_credit", // net credit to the requester's Rhemito wallet
   "payout_debit", // debit when net funds leave the wallet to the bank
+  "promo_bonus", // Receive Money promo bonus paid to the requester's bank on top, funded by Mito
   "refund",
   "reversal",
   "loss_adjustment",
@@ -1025,6 +1029,8 @@ export const createMoneyRequestSchema = z
     // historical 30-day preset (the UI always sends an explicit choice).
     expiry: invoiceExpirySchema.optional().default({ type: "preset", days: 30 }),
     idempotencyKey: z.string().min(8),
+    // Optional Receive Money promo code: the requester earns a bonus (Mito) once the request is paid out.
+    promoCode: z.string().trim().max(20).optional().or(z.literal("")).transform((v) => v || undefined),
   });
 
 export type CreateMoneyRequestPayload = z.infer<typeof createMoneyRequestSchema>;

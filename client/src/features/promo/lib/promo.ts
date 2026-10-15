@@ -40,6 +40,8 @@ export interface PromoInputs {
   sendCurrency: string;
   receiveCurrency: string;
   paymentMethod?: string | null;
+  /** "receive" on the Receive Money page (the code earns a bonus); omitted = Send Money. */
+  flow?: "send" | "receive";
 }
 
 /** True when anything that affects the discount changed (P-41). */

@@ -122,9 +122,20 @@ export async function postFundingEntries(request: MoneyRequest, providerPaymentR
 }
 
 /**
+ * What leaves for the requester's bank: the net payout, plus a Receive Money promo bonus paid on top (funded by Mito).
+ * Requests without a promo code are exactly the net payout, as before.
+ */
+export function payoutTotalMinor(request: MoneyRequest): number {
+  const base = request.payoutAmountMinor ?? netMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee);
+  return base + (request.promoCode ? request.promoBonusMinor ?? 0 : 0);
+}
+
+/**
  * Post the payout debit when net funds leave for the requester's bank. For
  * same-currency requests the debit comes straight from the wallet; for
  * cross-currency it comes from the payout clearing account.
+ * A promo bonus is first credited to that account from Mito's promo-bonus account (in the payout currency), so
+ * the payout of net + bonus is fully funded and the bonus cost sits on Mito's side of the ledger.
  */
 export async function postPayoutEntry(request: MoneyRequest, payoutRef: string): Promise<void> {
   const account =
@@ -132,13 +143,34 @@ export async function postPayoutEntry(request: MoneyRequest, payoutRef: string):
       ? `wallet:${request.requesterId}`
       : `payout_clearing:${request.requesterId}`;
 
+  const bonus = request.promoCode ? request.promoBonusMinor ?? 0 : 0;
+  if (bonus > 0) {
+    await post({
+      requestId: request.id,
+      type: "promo_bonus",
+      account: "promo_bonus:mito",
+      direction: "debit",
+      amountMinor: bonus,
+      currency: request.payoutCurrency,
+      idempotencyKey: `${request.id}:promo_bonus_expense`,
+    });
+    await post({
+      requestId: request.id,
+      type: "promo_bonus",
+      account,
+      direction: "credit",
+      amountMinor: bonus,
+      currency: request.payoutCurrency,
+      idempotencyKey: `${request.id}:promo_bonus_credit`,
+    });
+  }
+
   await post({
     requestId: request.id,
     type: "payout_debit",
     account,
     direction: "debit",
-    amountMinor:
-      request.payoutAmountMinor ?? netMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee),
+    amountMinor: payoutTotalMinor(request),
     currency: request.payoutCurrency,
     idempotencyKey: `${request.id}:payout_debit`,
     providerRef: payoutRef,
