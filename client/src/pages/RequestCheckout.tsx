@@ -141,6 +141,8 @@ export default function RequestCheckout() {
 
   // Payment Execution State
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  // The link opens on the payment summary; "Pay now" moves on to identification.
+  const [started, setStarted] = useState(false);
   const [intentId, setIntentId] = useState<string | null>(null);
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -960,20 +962,15 @@ export default function RequestCheckout() {
     return (
       <Shell>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
-          <Card className="shadow-xl overflow-hidden border-border/80">
-            {/* Header with Timer */}
-            <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-white/10 text-white border-white/20 text-xs px-2.5 py-0.5 font-normal">
-                    Session Active
-                  </Badge>
-                  <span className="text-xs text-white/70 font-mono">{request.requestNumber}</span>
-                </div>
+          <Card className="shadow-xl overflow-hidden border-2 border-blue-600" data-testid="mito-payment-card">
+            {/* MITO PAYMENT header */}
+            <div className="px-6 pt-6 pb-2 space-y-4 text-center" data-testid="checkout-summary">
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
                 {/* 10-Minute Countdown */}
                 <div
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold ${
-                    sessionSecondsLeft < 120 ? "bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse" : "bg-primary/20 text-teal-300 border border-teal-500/30"
+                    sessionSecondsLeft < 120 ? "bg-red-50 text-red-600 border border-red-200 animate-pulse" : "bg-blue-50 text-blue-700 border border-blue-100"
                   }`}
                   data-testid="session-timer"
                 >
@@ -983,75 +980,65 @@ export default function RequestCheckout() {
               </div>
 
               <div>
-                <p className="text-xs text-white/60 uppercase font-semibold">Total Payable</p>
-                <p className="text-4xl font-bold tracking-tight mt-0.5" data-testid="checkout-amount">
-                  {symbol}{request.amount} <span className="text-lg font-normal text-white/70">{request.currency}</span>
-                </p>
+                <p className="text-xs text-slate-500">Payment Request From</p>
+                <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
+                <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>
               </div>
 
-              <div className="space-y-1 text-xs border-t border-white/10 pt-3">
-                <div className="flex justify-between">
-                  <span className="text-white/60">Paying as</span>
-                  <span className="font-medium">{payerDisplayName || payerEmail || "Guest Payer"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/60">Pay to</span>
-                  <span className="font-medium">{request.requesterName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/60">Purpose</span>
-                  <span className="font-medium capitalize">{request.purpose?.replace(/_/g, " ") ?? "Payment request"}</span>
-                </div>
-                {request.reference && (
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Reference</span>
-                    <span className="font-medium">{request.reference}</span>
-                  </div>
-                )}
+              <div>
+                <p className="text-xs text-slate-500">You pay</p>
+                <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
+                  {request.currency} {formatMoney(request.amount)}
+                </p>
               </div>
             </div>
 
-            <CardContent className="p-5 space-y-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-800">Select Payment Method</Label>
-                <div className="space-y-2">
-                  {request.methods.map((m) => {
-                    const icon =
-                      m === "card" ? <CreditCard className="w-4 h-4 text-blue-600" /> :
-                      m === "pay_by_bank" ? <Building2 className="w-4 h-4 text-purple-600" /> :
-                      m === "wallet" ? <Wallet className="w-4 h-4 text-teal-600" /> :
-                      <Building2 className="w-4 h-4 text-emerald-600" />;
+            <CardContent className="p-6 pt-3 space-y-4">
+              <PaymentBreakdown request={request} />
 
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => handleMethodSelect(m)}
-                        className="w-full flex items-center justify-between p-3.5 rounded-xl border border-slate-200 hover:border-primary hover:bg-primary/5 transition-all text-left group disabled:opacity-50"
-                        data-testid={`button-method-${m}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                            {icon}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{METHOD_LABELS[m] ?? m}</p>
-                            <p className="text-[11px] text-muted-foreground">Instant & secure processing</p>
-                          </div>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-primary transition-colors" />
-                      </button>
-                    );
-                  })}
+              {request.methods.length > 1 && (
+                <div className="space-y-2" role="radiogroup" aria-label="Payment method">
+                  <Label className="text-xs font-semibold text-slate-800">Pay with</Label>
+                  <div className="grid gap-2">
+                    {request.methods.map((m) => {
+                      const active = (selectedMethod && request.methods.includes(selectedMethod) ? selectedMethod : request.methods[0]) === m;
+                      const icon =
+                        m === "card" ? <CreditCard className="w-4 h-4 text-blue-600" /> :
+                        m === "wallet" ? <Wallet className="w-4 h-4 text-teal-600" /> :
+                        <Building2 className="w-4 h-4 text-purple-600" />;
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          disabled={busy}
+                          onClick={() => setSelectedMethod(m)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors disabled:opacity-50 ${
+                            active ? "border-blue-600 bg-blue-50/60 ring-1 ring-blue-600" : "border-slate-200 hover:border-blue-300"
+                          }`}
+                          data-testid={`button-method-${m}`}
+                        >
+                          <span className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">{icon}</span>
+                          <span className="text-sm font-semibold text-slate-900">{METHOD_LABELS[m] ?? m}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                {busy && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-1">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Initialising secure transaction…
-                  </p>
-                )}
-                {errorMessage && <p className="text-xs text-destructive" data-testid="error-checkout">{errorMessage}</p>}
-              </div>
+              )}
+
+              <Button
+                variant="outline"
+                className="w-full h-12 rounded-full border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+                disabled={busy || request.methods.length === 0}
+                onClick={() => handleMethodSelect(selectedMethod && request.methods.includes(selectedMethod) ? selectedMethod : request.methods[0])}
+                data-testid="button-pay-now"
+              >
+                {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Initialising secure payment…</> : "Pay now"}
+              </Button>
+              {errorMessage && <p className="text-xs text-destructive" data-testid="error-checkout">{errorMessage}</p>}
+
 
               {/* Disclosures & Anti-Scam */}
               <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-[11px] text-slate-600 space-y-2">
@@ -1069,7 +1056,23 @@ export default function RequestCheckout() {
                 </span>
               </div>
             </CardContent>
+            <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
+              <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
+              <span className="text-lg font-bold lowercase font-display">rhemito</span>
+            </div>
           </Card>
+        </motion.div>
+      </Shell>
+    );
+  }
+
+  // ─── 5a. FIRST SCREEN — PAYMENT SUMMARY (before identification) ────────────
+
+  if (!started) {
+    return (
+      <Shell>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
+          <MitoSummaryCard request={request} onPay={() => setStarted(true)} />
         </motion.div>
       </Shell>
     );
@@ -1077,58 +1080,60 @@ export default function RequestCheckout() {
 
   // ─── 5. PRE-AUTH IDENTIFICATION & LOGIN SCREEN ─────────────────────────────
 
+  // Naira payers verify their email with a code on the Mito Payment card.
+  const ngnFlow = request.currency === "NGN";
+
   return (
     <Shell>
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
-        <Card className="shadow-xl overflow-hidden border-border/80">
+        <Card className={`shadow-xl overflow-hidden ${ngnFlow ? "border-2 border-blue-600" : "border-border/80"}`}>
           {/* Header Summary */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 space-y-3" data-testid="checkout-summary">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/60">Payment Request</p>
-              <p className="text-xs font-mono text-white/70">{request.requestNumber}</p>
-            </div>
-
+          <div className="bg-white text-slate-900 px-6 pt-6 pb-4 space-y-4 text-center" data-testid="checkout-summary">
+            <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
             <div>
-              <p className="text-xs text-white/60 uppercase font-semibold">Requested Amount</p>
-              <p className="text-4xl font-bold tracking-tight mt-0.5" data-testid="checkout-amount">
-                {symbol}{request.amount} <span className="text-lg font-normal text-white/70">{request.currency}</span>
+              <p className="text-xs text-slate-500">Payment Request From</p>
+              <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
+              {request.requestNumber && <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>}
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">You pay</p>
+              <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
+                {request.currency} {formatMoney(request.amount)}
               </p>
             </div>
 
-            <div className="space-y-1.5 text-xs border-t border-white/10 pt-3">
-              <div className="flex justify-between">
-                <span className="text-white/60">Requested by</span>
-                <span className="font-medium">{request.requesterName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-white/60">Purpose</span>
-                <span className="font-medium capitalize">{request.purpose?.replace(/_/g, " ") ?? "Payment request"}</span>
-              </div>
-              {request.reference && (
+            {!ngnFlow && (
+              <div className="space-y-1.5 text-xs border-t border-slate-100 pt-3 text-left">
                 <div className="flex justify-between">
-                  <span className="text-white/60">Reference</span>
-                  <span className="font-medium">{request.reference}</span>
+                  <span className="text-slate-500">Purpose</span>
+                  <span className="font-medium capitalize">{request.purpose?.replace(/_/g, " ") ?? "Payment request"}</span>
                 </div>
-              )}
-              {request.dueDate && (
+                {request.reference && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Reference</span>
+                    <span className="font-medium">{request.reference}</span>
+                  </div>
+                )}
+                {request.dueDate && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Due Date</span>
+                    <span className="font-medium">{formatHumanDate(request.dueDate)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
-                  <span className="text-white/60">Due Date</span>
-                  <span className="font-medium">{formatHumanDate(request.dueDate)}</span>
+                  <span className="text-slate-500">Valid Until</span>
+                  <span className="font-medium">{formatHumanDate(request.expiryDate)}</span>
                 </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-white/60">Valid Until</span>
-                <span className="font-medium">{formatHumanDate(request.expiryDate)}</span>
+                {isEmailLink && request.recipientEmailMasked && (
+                  <div className="flex justify-between bg-slate-50 p-2 rounded border border-slate-200 text-[11px]">
+                    <span className="text-slate-600">Recipient Email:</span>
+                    <span className="font-mono text-blue-700 font-semibold" data-testid="masked-email">
+                      {request.recipientEmailMasked}
+                    </span>
+                  </div>
+                )}
               </div>
-              {isEmailLink && request.recipientEmailMasked && (
-                <div className="flex justify-between bg-white/5 p-2 rounded border border-white/10 text-[11px]">
-                  <span className="text-white/70">Recipient Email:</span>
-                  <span className="font-mono text-teal-300 font-semibold" data-testid="masked-email">
-                    {request.recipientEmailMasked}
-                  </span>
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           <CardContent className="p-5 space-y-4">
@@ -1241,7 +1246,7 @@ export default function RequestCheckout() {
               /* Identifier-first payer auth: email → password (registered) or PIN → registration (new) */
               <div className="space-y-4" data-testid={`payer-auth-${authStep}`}>
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-700 font-semibold">
+                  <p className={ngnFlow ? "hidden" : "text-xs text-slate-700 font-semibold"}>
                     {isEmailLink ? "Identify yourself to pay this request:" : "Identify yourself to open secure payment session:"}
                   </p>
                   {isAuthenticated && authUser && useOtherAccount && (
@@ -1284,7 +1289,105 @@ export default function RequestCheckout() {
                 )}
 
                 {/* Step 1: Email capture — routes to sign-in or PIN verification */}
-                {authStep === "email" && (
+                {authStep === "email" && ngnFlow && (
+                  <form onSubmit={handleEmailCheck} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-4" data-testid="ngn-verify-email">
+                    <div className="space-y-1">
+                      <p className="text-lg font-bold text-slate-900">Verify Your Email To Continue</p>
+                      <p className="text-sm text-slate-500 leading-relaxed">
+                        Confirm the email we should use for your receipt. We will email a 6-digit code that expires in 30 minutes.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="payerEmail" className="text-xs font-medium">Email</Label>
+                      <Input
+                        id="payerEmail"
+                        type="email"
+                        placeholder={isEmailLink && request.recipientEmailMasked ? "Confirm your full email" : "your.email@example.com"}
+                        value={payerEmail}
+                        onChange={(e) => setPayerEmail(e.target.value)}
+                        className="bg-white"
+                        data-testid="input-payer-email"
+                        required
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold text-slate-800">New to Mito?</p>
+                      <div className="inline-flex rounded-full border border-slate-200 bg-white p-0.5" role="radiogroup" aria-label="Account type">
+                        {(["individual", "business"] as const).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            role="radio"
+                            aria-checked={regAccountType === t}
+                            onClick={() => { setRegAccountType(t); setBizStep(1); }}
+                            className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors ${
+                              regAccountType === t ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-800"
+                            }`}
+                            data-testid={`button-ngn-account-${t}`}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {regAccountType === "individual" && (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="ngnFirstName" className="text-xs font-medium">First name</Label>
+                            <Input
+                              id="ngnFirstName"
+                              value={regFirstName}
+                              onChange={(e) => setRegFirstName(e.target.value)}
+                              className="bg-white"
+                              data-testid="input-ngn-first-name"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="ngnLastName" className="text-xs font-medium">Last name</Label>
+                            <Input
+                              id="ngnLastName"
+                              value={regLastName}
+                              onChange={(e) => setRegLastName(e.target.value)}
+                              className="bg-white"
+                              data-testid="input-ngn-last-name"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium">Gender</Label>
+                          <Select value={regGender} onValueChange={setRegGender}>
+                            <SelectTrigger className="bg-white sm:w-1/2" data-testid="select-ngn-gender">
+                              <SelectValue placeholder="Select gender" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {genderOptions.map((g) => (
+                                <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    )}
+
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      className="w-full h-12 rounded-full border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+                      disabled={busy}
+                      data-testid="button-check-email"
+                    >
+                      {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Send code
+                    </Button>
+                    {demoPayerHint}
+                  </form>
+                )}
+
+                {authStep === "email" && !ngnFlow && (
                   <form onSubmit={handleEmailCheck} className="space-y-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="payerEmail" className="text-xs font-medium">
@@ -1735,6 +1838,12 @@ export default function RequestCheckout() {
               </span>
             </div>
           </CardContent>
+          {ngnFlow && (
+            <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
+              <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
+              <span className="text-lg font-bold lowercase font-display">rhemito</span>
+            </div>
+          )}
         </Card>
       </motion.div>
     </Shell>
@@ -1777,5 +1886,140 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-right">{value}</span>
     </div>
+  );
+}
+
+
+// ─── Payment breakdown (payer, post-identification) ───────────────────────────
+
+function formatMoney(v: string | number | null | undefined): string {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function PaymentBreakdown({ request }: { request: PublicRequestView }) {
+  const total = parseFloat(request.amount);
+  const fee = parseFloat(request.feeAmount ?? "0") || 0;
+  // The fee is carved out of what the payer sends in both fee models.
+  const actualSent = total - fee;
+  const payoutCurrency = request.payoutCurrency ?? request.currency;
+  const crossCurrency = payoutCurrency !== request.currency;
+  const rate = request.fxRate ?? null;
+  const rateNum = (n: number) =>
+    n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  // Always "<payer-currency units> = 1 <payout currency>", as in the Mito design.
+  const rateText =
+    rate && rate > 0
+      ? rate >= 1
+        ? `1 ${request.currency} = ${rateNum(rate)} ${payoutCurrency}`
+        : `${rateNum(1 / rate)} ${request.currency} = 1 ${payoutCurrency}`
+      : "Not available";
+  const last4 = (request.payoutAccountMasked ?? "").replace(/\D/g, "").slice(-4);
+  const payoutSymbol = CURRENCY_SYMBOLS[payoutCurrency] ?? `${payoutCurrency} `;
+  const receiveValue = request.payoutAmount
+    ? `${payoutSymbol}${formatMoney(request.payoutAmount)}`
+    : !crossCurrency
+      ? `${payoutSymbol}${formatMoney(actualSent)}`
+      : "Not available";
+  const line = "flex items-start justify-between gap-4 text-[15px]";
+
+  return (
+    <div className="space-y-3" data-testid="payment-breakdown">
+      <div className="rounded-2xl border border-slate-200 p-5 space-y-4 shadow-sm">
+        <p className="text-base font-semibold text-slate-900">Payment breakdown</p>
+
+        <div className={line}>
+          <div>
+            <p className="font-semibold text-blue-600">You pay</p>
+            <p className="text-xs text-slate-500">Locked</p>
+          </div>
+          <span className="font-semibold tabular-nums text-blue-600" data-testid="breakdown-you-pay">
+            {request.currency} {formatMoney(total)}
+          </span>
+        </div>
+
+        <div className={line}>
+          <span className="text-slate-700">Transaction fee ({request.currency})</span>
+          <span className="font-semibold tabular-nums text-red-600" data-testid="breakdown-fee">
+            {request.currency} {formatMoney(fee)}
+          </span>
+        </div>
+
+        <div className={line}>
+          <span className="text-slate-700">Actual sent</span>
+          <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-actual-sent">
+            {request.currency} {formatMoney(actualSent)}
+          </span>
+        </div>
+
+        {crossCurrency && (
+          <div className={line}>
+            <span className="text-slate-700">Exchange rate</span>
+            <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-rate">{rateText}</span>
+          </div>
+        )}
+
+        <div className={line}>
+          <div>
+            <p className="font-semibold text-blue-600">They receive in bank</p>
+            {crossCurrency && request.fxRateIsIndicative !== false && (
+              <p className="text-xs text-slate-500">Indicative</p>
+            )}
+          </div>
+          <span className="font-semibold tabular-nums text-blue-600" data-testid="breakdown-receive">{receiveValue}</span>
+        </div>
+
+        {request.payoutBankName && (
+          <p className="text-sm text-slate-700" data-testid="breakdown-bank">
+            Paid into {request.payoutBankName}{last4 ? ` · ****${last4}` : ""}.
+          </p>
+        )}
+
+        <p className="rounded-lg bg-orange-50 px-3.5 py-3 text-sm text-slate-700">
+          This is the amount you send. The fee and what they receive are calculated from it.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function MitoSummaryCard({ request, onPay }: { request: PublicRequestView; onPay: () => void }) {
+  return (
+    <Card className="shadow-xl overflow-hidden border-2 border-blue-600" data-testid="mito-summary-card">
+      <div className="px-6 pt-6 pb-2 space-y-4 text-center" data-testid="checkout-summary">
+        <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
+        <div>
+          <p className="text-xs text-slate-500">Payment Request From</p>
+          <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
+          <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">You pay</p>
+          <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
+            {request.currency} {formatMoney(request.amount)}
+          </p>
+        </div>
+      </div>
+      <CardContent className="p-6 pt-3 space-y-4">
+        <PaymentBreakdown request={request} />
+        <Button
+          variant="outline"
+          className="w-full h-12 rounded-full border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+          onClick={onPay}
+          data-testid="button-start-pay"
+        >
+          Pay now
+        </Button>
+        <p className="flex items-start gap-1.5 text-[11px] text-amber-900 bg-amber-50 border border-amber-200/80 rounded-lg p-2 font-medium">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
+          Anti-Scam Notice: Rhemito will never ask for your password or SMS codes. Only pay requests you expect.
+        </p>
+      </CardContent>
+      <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
+        <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
+        <span className="text-lg font-bold lowercase font-display">rhemito</span>
+      </div>
+    </Card>
   );
 }

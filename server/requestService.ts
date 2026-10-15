@@ -527,15 +527,23 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
   }
 
   return {
-    requestNumber: currentUserId ? request.requestNumber : null,
+    requestNumber: request.requestNumber,
     requesterName: request.requesterName,
     requesterIdentity: "Rhemito customer",
-    amount: fromMinorUnits(currentUserId ? senderPaysMinor : request.payInAmountMinor, request.payInCurrency),
+    amount: fromMinorUnits(senderPaysMinor, request.payInCurrency),
     requestedAmount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
-    feeAmount: currentUserId ? fromMinorUnits(request.feeMinor, request.payInCurrency) : null,
+    feeAmount: fromMinorUnits(request.feeMinor, request.payInCurrency),
     currency: request.payInCurrency,
-    payoutCurrency: currentUserId ? request.payoutCurrency : null,
-    absorbFee: currentUserId ? request.absorbFee : null,
+    payoutCurrency: request.payoutCurrency,
+    absorbFee: request.absorbFee,
+    // Payment summary shown on the first screen of the link. The payout account is masked (bank + last 4 only).
+    payoutAmount: request.payoutAmountMinor !== null
+      ? fromMinorUnits(request.payoutAmountMinor, request.payoutCurrency)
+      : null,
+    fxRate: request.fxRate !== null ? Number(request.fxRate) : null,
+    fxRateIsIndicative: request.fxRateIsIndicative,
+    payoutBankName: request.payoutAccountBankName,
+    payoutAccountMasked: request.payoutAccountMasked,
     purpose: currentUserId ? request.purpose : null,
     reference: currentUserId ? (request.reference ?? null) : null,
     dueDate: request.dueDate ?? null,

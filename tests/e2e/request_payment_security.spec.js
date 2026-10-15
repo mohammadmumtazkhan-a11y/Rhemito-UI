@@ -48,10 +48,16 @@ test.describe('Request Payment security and concurrency', () => {
     const share = await anonymous.get(`/api/public/requests/${shareToken}`);
     expect(share.ok()).toBeTruthy();
     const shareView = (await share.json()).data;
-    expect(shareView.requestNumber).toBeNull();
+    // The link opens on the Mito Payment summary: ref, fee, rate/payout and the masked bank are public.
+    expect(shareView.requestNumber).toMatch(/^RM-/);
+    expect(shareView.feeAmount).not.toBeNull();
+    expect(shareView.payoutAccountMasked).toMatch(/\d{4}$/);
+    expect(shareView.payoutAccountMasked).not.toMatch(/\d{5}/);
+    // Everything else stays hidden until the payer identifies.
     expect(shareView.purpose).toBeNull();
     expect(shareView.reference).toBeNull();
-    expect(shareView.feeAmount).toBeNull();
+    expect(shareView.methods).toEqual([]);
+    expect(shareView.activeSessionId).toBeNull();
     expect(shareView.recipientEmailMasked).toBeUndefined();
 
     const email = await anonymous.get(`/api/public/requests/e/${emailToken}`);
