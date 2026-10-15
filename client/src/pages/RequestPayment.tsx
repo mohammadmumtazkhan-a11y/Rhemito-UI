@@ -756,7 +756,8 @@ export default function RequestPayment() {
         <DialogHeader className="items-center text-center space-y-1">
           <p className="text-xs font-extrabold tracking-[0.14em] uppercase text-primary">Rhemito Payment</p>
           <DialogTitle className="font-display text-lg text-slate-900">
-            Payment request from {requesterName}
+            Payment request from{" "}
+            <span className="block" data-testid="preview-requester-name">{requesterName}</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
             Ref {createdRequestNumber || "pending"} · Preview only, no new request is created

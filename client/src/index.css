@@ -270,3 +270,21 @@
     display: none !important;
   }
 }
+
+/* Status column: traffic light only (label stays in the DOM for screen readers
+   and tooltips). Colour comes from the pill's existing green/amber/red classes. */
+.status-light {
+  font-size: 0;
+  line-height: 0;
+  gap: 0;
+  padding: 0.5rem;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+.status-light > span:first-child {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 16%, transparent);
+}
