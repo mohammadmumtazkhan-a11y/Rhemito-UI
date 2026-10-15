@@ -33,6 +33,8 @@ interface StagingConfig {
   password: string;
   serviceNo: string;
   affiliateId: string;
+  /** Optional FURP user the rates are requested for (sent as ?userId=). */
+  userId: string;
 }
 
 const RATES_TTL_MS = 2 * 60 * 1000;
@@ -50,7 +52,8 @@ export function stagingConfig(): StagingConfig | null {
   const serviceNo = process.env.FURP_SERVICE_NO ?? "";
   const affiliateId = process.env.FURP_AFFILIATE_ID ?? "";
   if (!baseUrl || !apiKey || !username || !password || !serviceNo || !affiliateId) return null;
-  return { baseUrl, apiKey, username, password, serviceNo, affiliateId };
+  const userId = (process.env.FURP_USER_ID ?? "").trim();
+  return { baseUrl, apiKey, username, password, serviceNo, affiliateId, userId };
 }
 
 export function stagingRatesEnabled(): boolean {
@@ -90,7 +93,8 @@ async function bearer(cfg: StagingConfig): Promise<string> {
 }
 
 async function requestRates(cfg: StagingConfig, jwt: string): Promise<Response> {
-  return fetch(`${cfg.baseUrl}/Exchange/affiliateRates`, {
+  const query = cfg.userId ? `?userId=${encodeURIComponent(cfg.userId)}` : "";
+  return fetch(`${cfg.baseUrl}/Exchange/affiliateRates${query}`, {
     headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
     signal: AbortSignal.timeout(TIMEOUT_MS()),
   });
