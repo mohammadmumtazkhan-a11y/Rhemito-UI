@@ -242,7 +242,7 @@ export async function createMoneyRequest(params: {
   const emailToken = randomBytes(24).toString("hex"); // 192 bits of entropy for email notification link
   const emailTokenHash = hashToken(emailToken);
   const requesterName = await displayNameOf(userId);
-  const recipientEmailMasked = maskEmail(payload.senderEmail);
+  const recipientEmailMasked = payload.senderEmail ? maskEmail(payload.senderEmail) : null;
 
   const request: MoneyRequest = {
     id: randomUUID(),
@@ -267,11 +267,15 @@ export async function createMoneyRequest(params: {
     payoutAccountHolderName: account.holderName,
     payoutAccountCountry: account.country,
     senderType: payload.senderType,
-    senderName: payload.senderName,
-    senderEmail: payload.senderEmail.toLowerCase(),
+    senderName: payload.senderName ?? null,
+    senderEmail: payload.senderEmail ? payload.senderEmail.toLowerCase() : null,
     senderPhone: payload.senderPhone ?? null,
     senderDob: payload.senderDob ?? null,
     purpose: payload.purpose,
+    senderId: payload.senderId ?? null,
+    payerSourceBankName: payload.payerAccountNumber ? (payload.payerBankName ?? null) : null,
+    payerSourceAccountMasked: payload.payerAccountNumber ? maskAccountNumber(payload.payerAccountNumber) : null,
+    payerSourceOrigin: payload.payerAccountNumber ? (payload.senderId ? "saved_sender" : "requester") : null,
     reference: payload.reference ?? null,
     status: "active",
     token,
@@ -306,7 +310,8 @@ export async function createMoneyRequest(params: {
 
   await storage.createMoneyRequest(request);
   await ensureDemoPayerForRequest(request);
-  await queueRequestEmail(request, "initial");
+  // No email is sent at creation: the requester chooses to send one (Send email),
+  // so creating a link never implies that an email went out.
   return {
     request,
     token,
@@ -326,8 +331,9 @@ export async function createMoneyRequest(params: {
 async function ensureDemoPayerForRequest(request: MoneyRequest): Promise<void> {
   if (!demoModeEnabled) return;
   const email = request.senderEmail;
+  if (!email) return; // generic link: no payer registered up front
   if (await storage.getAuthUserByEmail(email)) return;
-  const [firstName, ...rest] = request.senderName.split(" ");
+  const [firstName, ...rest] = (request.senderName ?? "").split(" ");
   await storage.createAuthUser({
     email,
     password: bcrypt.hashSync(DEMO_PAYER_CREDENTIALS.password, 12),
@@ -355,6 +361,9 @@ async function ensureDemoPayerForRequest(request: MoneyRequest): Promise<void> {
 // ─── Email (provider interface, delivery states, idempotent, rate-limited) ────
 
 async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resend"): Promise<void> {
+  const recipientEmail = request.senderEmail;
+  // Generic links have no payer email: nothing to send until the requester adds one.
+  if (!recipientEmail) return;
   const dedupeKey = kind === "initial" ? `${request.id}:initial` : `${request.id}:resend:${Date.now()}`;
 
   if (kind === "initial") {
@@ -372,10 +381,10 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
   )} ${request.payInCurrency}`;
 
   const message = {
-    to: request.senderEmail,
+    to: recipientEmail,
     subject: `${request.requesterName} requests ${amountText} via Rhemito`,
     text:
-      `Hello ${request.senderName},\n\n` +
+      `Hello ${request.senderName ?? "there"},\n\n` +
       `${request.requesterName} has requested ${amountText} through Rhemito.\n\n` +
       `Purpose: ${request.purpose.replace(/_/g, " ")}\n` +
       `Reference: ${request.requestNumber}\n` +
@@ -390,7 +399,7 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
   const delivery = {
     id: randomUUID(),
     requestId: request.id,
-    toEmail: request.senderEmail,
+    toEmail: recipientEmail,
     subject: message.subject,
     state: "queued",
     attempts: "0",
@@ -434,8 +443,12 @@ async function sendLifecycleEmail(
   }
 }
 
-export async function resendRequestEmail(userId: string, requestId: string): Promise<void> {
-  const request = await getOwnRequest(userId, requestId);
+export async function resendRequestEmail(
+  userId: string,
+  requestId: string,
+  payer?: { email?: string; name?: string },
+): Promise<void> {
+  let request = await getOwnRequest(userId, requestId);
   if (request.status !== "active" && request.status !== "viewed") {
     throw new RequestError(409, "INVALID_STATE", "Email can only be resent while the request is awaiting payment.");
   }
@@ -444,6 +457,24 @@ export async function resendRequestEmail(userId: string, requestId: string): Pro
   const last = deliveries[deliveries.length - 1];
   if (last?.lastAttemptAt && Date.now() - last.lastAttemptAt.getTime() < serverConfig.emailResendCooldownMs) {
     throw new RequestError(429, "RATE_LIMITED", "Please wait a minute before resending the email.");
+  }
+
+  // The requester may add or change the payer email at send time (payer is optional at creation).
+  const email = payer?.email?.trim().toLowerCase();
+  if (email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      throw new RequestError(400, "INVALID_EMAIL", "Enter a valid payer email such as name@example.com.");
+    }
+    const patch = {
+      senderEmail: email,
+      recipientEmailMasked: maskEmail(email),
+      senderName: payer?.name?.trim() || request.senderName,
+    };
+    request = { ...request, ...patch };
+    await storage.updateMoneyRequest(request.id, patch);
+  }
+  if (!request.senderEmail) {
+    throw new RequestError(400, "PAYER_EMAIL_REQUIRED", "Enter the payer's email to send this request.");
   }
 
   await queueRequestEmail(request, "resend");
@@ -520,11 +551,11 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
     failureReason: currentUserId ? request.failureReason : null,
     legalEntity: serverConfig.legalEntity,
     isEmailLink,
-    recipientEmailMasked: isEmailLink ? (request.recipientEmailMasked || maskEmail(request.senderEmail)) : undefined,
+    recipientEmailMasked: isEmailLink ? (request.recipientEmailMasked || (request.senderEmail ? maskEmail(request.senderEmail) : undefined)) : undefined,
     // Prototype-only demo aid: the sender email the requester provided is the
     // registered demo payer shown on the identification screen. Hidden in real
     // production (no dev hooks) so the payer email is never disclosed pre-auth.
-    demoPayerEmail: demoModeEnabled ? request.senderEmail : undefined,
+    demoPayerEmail: demoModeEnabled ? (request.senderEmail ?? undefined) : undefined,
     activeSessionId: currentUserId && !sessionExpired ? request.activeSessionId : null,
     sessionExpiresAt: currentUserId && !sessionExpired && request.sessionExpiresAt ? request.sessionExpiresAt.toISOString() : null,
     isReservedByOther: ["authorisation_in_progress", "payment_processing", "payment_pending"].includes(request.status)
@@ -766,7 +797,11 @@ export async function requestNewPaymentLink(
     throw new RequestError(400, "NOT_EXPIRED", "This request has not expired yet.");
   }
 
-  const normalizedPayerEmail = (payerEmail || request.senderEmail).toLowerCase();
+  const resolvedPayerEmail = payerEmail || request.senderEmail;
+  if (!resolvedPayerEmail) {
+    throw new RequestError(400, "PAYER_EMAIL_REQUIRED", "Enter your email to ask for a new link.");
+  }
+  const normalizedPayerEmail = resolvedPayerEmail.toLowerCase();
   const existingRenewal = (await storage.listRenewalRequests(request.id))
     .find((item) => item.payerEmail?.toLowerCase() === normalizedPayerEmail);
   if (existingRenewal) {
@@ -1044,7 +1079,7 @@ export async function cancelRequest(userId: string, requestId: string): Promise<
   const activePayerEmails = attempts
     .filter((attempt) => attempt.status === "session_open" && !!attempt.sessionExpiresAt && attempt.sessionExpiresAt.getTime() > Date.now())
     .map((attempt) => attempt.payerEmail);
-  const recipients = Array.from(new Set([request.senderEmail, ...activePayerEmails].map((email) => email.toLowerCase())));
+  const recipients = Array.from(new Set([request.senderEmail, ...activePayerEmails].filter((email): email is string => !!email).map((email) => email.toLowerCase())));
   await Promise.all(recipients.map((email) => sendLifecycleEmail(
     request, email, `Payment request cancelled: ${request.requestNumber}`,
     `${request.requesterName} cancelled this payment request. No payment can be submitted.`,
@@ -1056,7 +1091,7 @@ export async function cancelRequest(userId: string, requestId: string): Promise<
     type: "money_request_cancelled",
     data: {
       requestNumber: request.requestNumber,
-      senderName: request.senderName,
+      senderName: request.senderName ?? "Any payer",
       amount: fromMinorUnits(request.payInAmountMinor, request.payInCurrency),
       currency: request.payInCurrency,
     },
