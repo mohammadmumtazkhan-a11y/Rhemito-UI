@@ -141,6 +141,8 @@ export default function RequestCheckout() {
 
   // Payment Execution State
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  // The link opens on the payment summary; "Pay now" moves on to identification.
+  const [started, setStarted] = useState(false);
   const [intentId, setIntentId] = useState<string | null>(null);
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1064,60 +1066,74 @@ export default function RequestCheckout() {
     );
   }
 
+  // ─── 5a. FIRST SCREEN — PAYMENT SUMMARY (before identification) ────────────
+
+  if (!started) {
+    return (
+      <Shell>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
+          <MitoSummaryCard request={request} onPay={() => setStarted(true)} />
+        </motion.div>
+      </Shell>
+    );
+  }
+
   // ─── 5. PRE-AUTH IDENTIFICATION & LOGIN SCREEN ─────────────────────────────
+
+  // Naira payers verify their email with a code on the Mito Payment card.
+  const ngnFlow = request.currency === "NGN";
 
   return (
     <Shell>
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
-        <Card className="shadow-xl overflow-hidden border-border/80">
+        <Card className={`shadow-xl overflow-hidden ${ngnFlow ? "border-2 border-blue-600" : "border-border/80"}`}>
           {/* Header Summary */}
-          <div className="bg-white text-slate-900 px-6 pt-6 pb-4 space-y-4" data-testid="checkout-summary">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
-              {request.requestNumber && <p className="text-xs font-mono text-slate-500">Ref {request.requestNumber}</p>}
-            </div>
-
+          <div className="bg-white text-slate-900 px-6 pt-6 pb-4 space-y-4 text-center" data-testid="checkout-summary">
+            <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
             <div>
               <p className="text-xs text-slate-500">Payment Request From</p>
               <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
+              {request.requestNumber && <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>}
             </div>
             <div>
               <p className="text-xs text-slate-500">You pay</p>
-              <p className="text-4xl font-bold tracking-tight text-blue-600 mt-0.5" data-testid="checkout-amount">
-                {symbol}{request.amount} <span className="text-lg font-normal text-blue-400">{request.currency}</span>
+              <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
+                {request.currency} {formatMoney(request.amount)}
               </p>
             </div>
 
-            <div className="space-y-1.5 text-xs border-t border-slate-100 pt-3">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Purpose</span>
-                <span className="font-medium capitalize">{request.purpose?.replace(/_/g, " ") ?? "Payment request"}</span>
-              </div>
-              {request.reference && (
+            {!ngnFlow && (
+              <div className="space-y-1.5 text-xs border-t border-slate-100 pt-3 text-left">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Reference</span>
-                  <span className="font-medium">{request.reference}</span>
+                  <span className="text-slate-500">Purpose</span>
+                  <span className="font-medium capitalize">{request.purpose?.replace(/_/g, " ") ?? "Payment request"}</span>
                 </div>
-              )}
-              {request.dueDate && (
+                {request.reference && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Reference</span>
+                    <span className="font-medium">{request.reference}</span>
+                  </div>
+                )}
+                {request.dueDate && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Due Date</span>
+                    <span className="font-medium">{formatHumanDate(request.dueDate)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Due Date</span>
-                  <span className="font-medium">{formatHumanDate(request.dueDate)}</span>
+                  <span className="text-slate-500">Valid Until</span>
+                  <span className="font-medium">{formatHumanDate(request.expiryDate)}</span>
                 </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-slate-500">Valid Until</span>
-                <span className="font-medium">{formatHumanDate(request.expiryDate)}</span>
+                {isEmailLink && request.recipientEmailMasked && (
+                  <div className="flex justify-between bg-slate-50 p-2 rounded border border-slate-200 text-[11px]">
+                    <span className="text-slate-600">Recipient Email:</span>
+                    <span className="font-mono text-blue-700 font-semibold" data-testid="masked-email">
+                      {request.recipientEmailMasked}
+                    </span>
+                  </div>
+                )}
               </div>
-              {isEmailLink && request.recipientEmailMasked && (
-                <div className="flex justify-between bg-slate-50 p-2 rounded border border-slate-200 text-[11px]">
-                  <span className="text-slate-600">Recipient Email:</span>
-                  <span className="font-mono text-blue-700 font-semibold" data-testid="masked-email">
-                    {request.recipientEmailMasked}
-                  </span>
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           <CardContent className="p-5 space-y-4">
@@ -1230,7 +1246,7 @@ export default function RequestCheckout() {
               /* Identifier-first payer auth: email → password (registered) or PIN → registration (new) */
               <div className="space-y-4" data-testid={`payer-auth-${authStep}`}>
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-700 font-semibold">
+                  <p className={ngnFlow ? "hidden" : "text-xs text-slate-700 font-semibold"}>
                     {isEmailLink ? "Identify yourself to pay this request:" : "Identify yourself to open secure payment session:"}
                   </p>
                   {isAuthenticated && authUser && useOtherAccount && (
@@ -1273,7 +1289,105 @@ export default function RequestCheckout() {
                 )}
 
                 {/* Step 1: Email capture — routes to sign-in or PIN verification */}
-                {authStep === "email" && (
+                {authStep === "email" && ngnFlow && (
+                  <form onSubmit={handleEmailCheck} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-4" data-testid="ngn-verify-email">
+                    <div className="space-y-1">
+                      <p className="text-lg font-bold text-slate-900">Verify Your Email To Continue</p>
+                      <p className="text-sm text-slate-500 leading-relaxed">
+                        Confirm the email we should use for your receipt. We will email a 6-digit code that expires in 30 minutes.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="payerEmail" className="text-xs font-medium">Email</Label>
+                      <Input
+                        id="payerEmail"
+                        type="email"
+                        placeholder={isEmailLink && request.recipientEmailMasked ? "Confirm your full email" : "your.email@example.com"}
+                        value={payerEmail}
+                        onChange={(e) => setPayerEmail(e.target.value)}
+                        className="bg-white"
+                        data-testid="input-payer-email"
+                        required
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold text-slate-800">New to Mito?</p>
+                      <div className="inline-flex rounded-full border border-slate-200 bg-white p-0.5" role="radiogroup" aria-label="Account type">
+                        {(["individual", "business"] as const).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            role="radio"
+                            aria-checked={regAccountType === t}
+                            onClick={() => { setRegAccountType(t); setBizStep(1); }}
+                            className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors ${
+                              regAccountType === t ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-800"
+                            }`}
+                            data-testid={`button-ngn-account-${t}`}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {regAccountType === "individual" && (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="ngnFirstName" className="text-xs font-medium">First name</Label>
+                            <Input
+                              id="ngnFirstName"
+                              value={regFirstName}
+                              onChange={(e) => setRegFirstName(e.target.value)}
+                              className="bg-white"
+                              data-testid="input-ngn-first-name"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="ngnLastName" className="text-xs font-medium">Last name</Label>
+                            <Input
+                              id="ngnLastName"
+                              value={regLastName}
+                              onChange={(e) => setRegLastName(e.target.value)}
+                              className="bg-white"
+                              data-testid="input-ngn-last-name"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium">Gender</Label>
+                          <Select value={regGender} onValueChange={setRegGender}>
+                            <SelectTrigger className="bg-white sm:w-1/2" data-testid="select-ngn-gender">
+                              <SelectValue placeholder="Select gender" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {genderOptions.map((g) => (
+                                <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    )}
+
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      className="w-full h-12 rounded-full border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+                      disabled={busy}
+                      data-testid="button-check-email"
+                    >
+                      {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Send code
+                    </Button>
+                    {demoPayerHint}
+                  </form>
+                )}
+
+                {authStep === "email" && !ngnFlow && (
                   <form onSubmit={handleEmailCheck} className="space-y-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="payerEmail" className="text-xs font-medium">
@@ -1724,6 +1838,12 @@ export default function RequestCheckout() {
               </span>
             </div>
           </CardContent>
+          {ngnFlow && (
+            <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
+              <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
+              <span className="text-lg font-bold lowercase font-display">rhemito</span>
+            </div>
+          )}
         </Card>
       </motion.div>
     </Shell>
@@ -1861,5 +1981,45 @@ function PaymentBreakdown({ request }: { request: PublicRequestView }) {
         </p>
       </div>
     </div>
+  );
+}
+
+function MitoSummaryCard({ request, onPay }: { request: PublicRequestView; onPay: () => void }) {
+  return (
+    <Card className="shadow-xl overflow-hidden border-2 border-blue-600" data-testid="mito-summary-card">
+      <div className="px-6 pt-6 pb-2 space-y-4 text-center" data-testid="checkout-summary">
+        <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
+        <div>
+          <p className="text-xs text-slate-500">Payment Request From</p>
+          <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
+          <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">You pay</p>
+          <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
+            {request.currency} {formatMoney(request.amount)}
+          </p>
+        </div>
+      </div>
+      <CardContent className="p-6 pt-3 space-y-4">
+        <PaymentBreakdown request={request} />
+        <Button
+          variant="outline"
+          className="w-full h-12 rounded-full border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+          onClick={onPay}
+          data-testid="button-start-pay"
+        >
+          Pay now
+        </Button>
+        <p className="flex items-start gap-1.5 text-[11px] text-amber-900 bg-amber-50 border border-amber-200/80 rounded-lg p-2 font-medium">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
+          Anti-Scam Notice: Rhemito will never ask for your password or SMS codes. Only pay requests you expect.
+        </p>
+      </CardContent>
+      <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
+        <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
+        <span className="text-lg font-bold lowercase font-display">rhemito</span>
+      </div>
+    </Card>
   );
 }
