@@ -71,13 +71,14 @@ describe("corridor validation (server-owned)", () => {
   const gbng = findCorridor("GB-NG-GBP-NGN")!;
   const nggb = findCorridor("NG-GB-NGN-GBP")!;
 
-  it("has the four development corridors with Nigeria→UK disabled by default", () => {
+  it("has the development corridors, all enabled including Nigeria→UK (NGN payer, GBP payout)", () => {
     expect(CORRIDORS).toHaveLength(8);
     expect(gbgb.enabled).toBe(true);
     expect(gbng.enabled).toBe(true);
     expect(findCorridor("NG-NG-NGN")!.enabled).toBe(true);
-    expect(nggb.enabled).toBe(false);
-    expect(nggb.unavailabilityReason).toBeTruthy();
+    expect(nggb.enabled).toBe(true);
+    expect(nggb.payInCurrency).toBe("NGN");
+    expect(nggb.payoutCurrency).toBe("GBP");
   });
 
   it("accepts a matching enabled corridor within limits", () => {
@@ -92,9 +93,15 @@ describe("corridor validation (server-owned)", () => {
     ).toBe(true);
   });
 
-  it("rejects disabled corridors, mismatched accounts and out-of-range amounts", () => {
+  it("accepts Nigeria→UK for a UK requester with a GBP account", () => {
     expect(
-      validateCorridor({ corridor: nggb, requesterCountry: "GB", payoutAccountCountry: "GB", payoutAccountCurrency: "GBP", amountMinor: 1000 }).ok,
+      validateCorridor({ corridor: nggb, requesterCountry: "GB", payoutAccountCountry: "GB", payoutAccountCurrency: "GBP", amountMinor: 50_000 }).ok,
+    ).toBe(true);
+  });
+
+  it("rejects wrong requester countries, mismatched accounts and out-of-range amounts", () => {
+    expect(
+      validateCorridor({ corridor: nggb, requesterCountry: "NG", payoutAccountCountry: "GB", payoutAccountCurrency: "GBP", amountMinor: 50_000 }).ok,
     ).toBe(false);
     expect(
       validateCorridor({ corridor: gbng, requesterCountry: "NG", payoutAccountCountry: "GB", payoutAccountCurrency: "GBP", amountMinor: 1000 }).ok,
