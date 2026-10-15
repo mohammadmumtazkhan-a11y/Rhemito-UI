@@ -7,6 +7,8 @@
  * cannot be priced — never a silent 1:1 fallback that would misprice money.
  */
 
+import { getStagingFxRate, stagingRatesEnabled } from "./stagingRates";
+
 const LIVE_RATES_URL = "https://open.er-api.com/v6/latest";
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
@@ -69,6 +71,21 @@ async function fetchLiveRates(base: string): Promise<Record<string, number>> {
 export async function getFxRate(from: string, to: string): Promise<number> {
   if (from === to) return 1;
 
+  // 1. Affiliate rates from the FURP staging API, when configured.
+  if (stagingRatesEnabled()) {
+    try {
+      const staged = await getStagingFxRate(from, to);
+      if (staged !== null) return staged;
+      console.warn(`[fxService] no affiliate rate for ${from}→${to}, using fallback provider`);
+    } catch (err) {
+      console.warn(
+        "[fxService] affiliate rates unavailable, using fallback provider:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  // 2. Public live provider, then 3. static table.
   const cached = rateCache.get(from);
   let rates: Record<string, number> | undefined;
 
