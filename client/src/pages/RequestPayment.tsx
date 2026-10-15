@@ -282,6 +282,8 @@ export default function RequestPayment() {
       senderId: knownSenderId(sender),
       payerName: knownSenderName(sender),
       senderEmail: sender.email,
+      payerBankName: sender.bankName || prev.payerBankName,
+      payerAccountNumber: sender.accountNumber ? sender.accountNumber.replace(/\D/g, "") : prev.payerAccountNumber,
     }));
     setShowSenderList(false);
   };

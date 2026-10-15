@@ -1,20 +1,29 @@
 /**
  * Public payment-request checkout — /pay/:token & /pay/e/:emailToken.
  *
- * Full Payer Journey:
- * 1. Dual link handling: copyable link vs email-notification link (with masked recipient).
- * 2. Pre-auth security: minimal requester info (name, amount, currency, expiry).
- * 3. Payer auth & PIN verification (inline sign-in / PIN verification).
- * 4. Compliance gating (mini-KYC / AML checks).
- * 5. 10-minute server-controlled payment session with live countdown.
- * 6. Atomic submission & locking.
- * 7. Result screens (Success with 60s redirect, Failed with Try Again, Expired with Renewal Request, Pending, Cancelled).
+ * Full Sender / Payer Journey (Mito Hosted / Rhemito Payment):
+ * 1. Initial Summary Card (SenderScreen-1): Payment breakdown + solid blue "Pay now".
+ * 2. Email Verification (SenderScreen-2, 3, 4):
+ *    - Copied link (/pay/:token): Shows ONLY Email + "Send code" initially.
+ *      After sending the 6-digit code:
+ *      - If email is already known/registered: shows ONLY Confirmation code + "Verify and pay" (no password, no mini-KYC).
+ *      - If email is new to Mito: reveals "New to Mito? [Individual | Business]", First name, Last name, Gender + Confirmation code + "Verify and pay".
+ *    - Email link (/pay/e/:emailToken): Payer arrived directly from their email inbox, so 6-digit email OTP is skipped.
+ *      - If sender details are already known: "Pay now" continues directly to the payment flow.
+ *      - If sender is brand new (no name on file): collects only "New to Mito?" details without OTP.
+ * 3. Desktop QR Handoff (SenderScreen-5): "Continue on your phone" QR code or "Continue on this browser instead".
+ * 4. Payment Method Selection (SenderScreen-6): "How would you like to pay?" (Bank transfer, Pay by Card, Interswitch / Hosted page).
+ * 5. Transfer Details Loader (SenderScreen-7): "Getting your transfer details...".
+ * 6. Bank Transfer Instructions (SenderScreen-8): Skips "Which account will you pay from?" and goes straight to
+ *    "SEND EXACT AMOUNT USING REFERENCE" with the payer's source bank account box expanded at the top (with the
+ *    manual-matching advisory note and optional "Change" link -> SenderScreen-Add-bank-account), Copy buttons,
+ *    and solid blue "I've sent the money".
  */
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -23,128 +32,131 @@ import {
   Lock,
   ShieldCheck,
   Clock,
-  User,
-  Mail,
-  KeyRound,
   CreditCard,
   Building2,
-  Wallet,
-  ArrowRight,
   RefreshCw,
   Info,
   Check,
   AlertCircle,
+  Copy,
+  ChevronLeft,
+  X,
+  Globe,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 // @ts-ignore
 import logo from "../assets/rhemito-logo-blue.png";
 import {
   getPublicRequest,
   startPayerSession,
-  checkEmailRegistered,
   sendPayerVerificationPin,
   verifyPayerVerificationPin,
+  continueFromEmailLink,
+  savePayerBankAccount,
   createIntent,
   devAuthorizeIntent,
   requestNewLink,
   METHOD_LABELS,
   type PublicRequestView,
+  type PayerSavedBankAccount,
   type Quote,
 } from "@/lib/requests";
-import { countries, genderOptions } from "@/data/countries";
-import PhoneInput from "@/pages/Auth/components/PhoneInput";
-import PasswordInput from "@/pages/Auth/components/PasswordInput";
-import ForgotPassword from "@/pages/Auth/components/ForgotPassword";
-import { PasswordInput as PasswordInputWithToggle } from "@/components/ui/password-input";
-
-// Mock directors list — in production this would come from a company lookup API
-// (same list as the /sign-in-sign-up business registration flow).
-const mockDirectors = [
-  "John Smith",
-  "Jane Doe",
-  "Robert Johnson",
-  "Sarah Williams",
-  "Michael Brown",
-];
+import { genderOptions } from "@/data/countries";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { CURRENCY_SYMBOLS } from "@shared/currencies";
 import { formatHumanDate } from "@shared/invoice-logic";
-import { DEMO_PAYER_CREDENTIALS, PROTOTYPE_MASTER_PASSWORD } from "@shared/schema";
 
 type FlowStep = "pre_auth" | "session_active" | "session_expired" | "authorizing" | "status";
+type VerifyStage = "email_only" | "code_sent" | "email_link_profile";
+type PaymentSubStep =
+  | "qr_handoff"
+  | "method_select"
+  | "loading_transfer"
+  | "bank_transfer_details"
+  | "add_bank_account";
+
+const PAYER_BANKS = [
+  "Paga Mobile Money",
+  "Access Bank Nigeria Plc",
+  "Guaranty Trust Bank (GTBank)",
+  "First Bank of Nigeria",
+  "Zenith Bank",
+  "United Bank for Africa (UBA)",
+  "Fidelity Bank",
+  "First City Monument Bank (FCMB)",
+  "Union Bank of Nigeria",
+  "Wema Bank",
+  "Moniepoint Microfinance Bank",
+  "OPay Digital Services",
+  "Kuda Bank",
+  "Sterling Bank",
+  "Stanbic IBTC Bank",
+  "Barclays",
+  "HSBC UK",
+  "Lloyds Bank",
+  "NatWest",
+  "Monzo Bank",
+  "Revolut",
+];
 
 export default function RequestCheckout() {
   const params = useParams<{ id: string }>();
   const [location, setLocation] = useLocation();
+  const { toast } = useToast();
   const token = params.id;
   const isEmailLink = location.startsWith("/pay/e/");
 
-  const { user: authUser, isAuthenticated } = useAuth();
+  const { user: authUser } = useAuth();
 
-  // Navigation & Step State
+  // Main Flow Step State
   const [step, setStep] = useState<FlowStep>("pre_auth");
-  // Identifier-first payer auth: email → (registered? password : PIN → registration)
-  const [authStep, setAuthStep] = useState<"email" | "password" | "pin" | "register">("email");
-  const [useOtherAccount, setUseOtherAccount] = useState(false);
-  // Forgot-password reset flow (replaces the payer auth card while active)
-  const [forgotPassword, setForgotPassword] = useState<{ email: string } | null>(null);
+  const [started, setStarted] = useState(false);
 
-  // Identification State
+  // Email & Code Verification State (SenderScreen-2, 3, 4)
+  const [verifyStage, setVerifyStage] = useState<VerifyStage>("email_only");
   const [payerEmail, setPayerEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [askPayerPassword, setAskPayerPassword] = useState(false);
-  const [confirmPayerPassword, setConfirmPayerPassword] = useState("");
   const [pinCode, setPinCode] = useState("");
   const [pinSent, setPinSent] = useState(false);
   const [pinCooldown, setPinCooldown] = useState(0);
-  const [verifiedRegistrationEmail, setVerifiedRegistrationEmail] = useState("");
   const [devPin, setDevPin] = useState("");
+  const [showCodeBanner, setShowCodeBanner] = useState(true);
+  const [isKnownEmailSender, setIsKnownEmailSender] = useState(false);
 
-  // Register Form State
+  // Conditional "New to Mito?" Mini-KYC State (only shown when email is NOT already registered/known)
   const [regAccountType, setRegAccountType] = useState<"individual" | "business">("individual");
   const [regFirstName, setRegFirstName] = useState("");
-  const [regMiddleName, setRegMiddleName] = useState("");
   const [regLastName, setRegLastName] = useState("");
-  const [regDob, setRegDob] = useState("");
   const [regGender, setRegGender] = useState("");
-  const [regPhoneCode, setRegPhoneCode] = useState("");
-  const [regPhoneNumber, setRegPhoneNumber] = useState("");
-  const [regCountry, setRegCountry] = useState("");
-  const [regPassword, setRegPassword] = useState("");
-
-  // Business registration — two steps, mirroring /sign-in-sign-up:
-  // step 1 business details, step 2 director details + password.
-  const [bizStep, setBizStep] = useState<1 | 2>(1);
   const [bizName, setBizName] = useState("");
-  const [bizRegNo, setBizRegNo] = useState("");
-  const [bizPhoneCode, setBizPhoneCode] = useState("");
-  const [bizPhoneNumber, setBizPhoneNumber] = useState("");
-  const [dirName, setDirName] = useState("");
-  const [dirDob, setDirDob] = useState("");
-  const [dirGender, setDirGender] = useState("");
-  const [dirPhoneCode, setDirPhoneCode] = useState("");
-  const [dirPhoneNumber, setDirPhoneNumber] = useState("");
-  const [dirPassword, setDirPassword] = useState("");
-  const [dirConfirmPassword, setDirConfirmPassword] = useState("");
 
-  // Session State
+  // Session & Active Payment Flow State (SenderScreen-5, 6, 7, 8, Add-bank-account)
+  const [paymentSubStep, setPaymentSubStep] = useState<PaymentSubStep>("qr_handoff");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<Date | null>(null);
-  const [sessionSecondsLeft, setSessionSecondsLeft] = useState<number>(600);
-  const [activeQuote, setActiveQuote] = useState<Quote | null>(null);
+  const [sessionSecondsLeft, setSessionSecondsLeft] = useState<number>(1800);
+  const [, setActiveQuote] = useState<Quote | null>(null);
   const [payerDisplayName, setPayerDisplayName] = useState<string>("");
 
-  // Payment Execution State
-  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
-  // The link opens on the payment summary; "Pay now" moves on to identification.
-  const [started, setStarted] = useState(false);
+  // Payer Source Bank Account State (SenderScreen-8 & SenderScreen-Add-bank-account)
+  const [savedAccounts, setSavedAccounts] = useState<PayerSavedBankAccount[]>([]);
+  const [selectedPayerBankAccount, setSelectedPayerBankAccount] = useState<PayerSavedBankAccount | null>(null);
+  const [newBankName, setNewBankName] = useState("");
+  const [newAccountNumber, setNewAccountNumber] = useState("");
+  const [resolvedAccountName, setResolvedAccountName] = useState("");
+  const [resolvingAccount, setResolvingAccount] = useState(false);
+  const [saveAccountForNextTime, setSaveAccountForNextTime] = useState(true);
+
+  // Payment Method & Execution State
+  const [selectedMethod, setSelectedMethod] = useState<string>("bank_transfer");
   const [intentId, setIntentId] = useState<string | null>(null);
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [complianceNotice, setComplianceNotice] = useState<string | null>(null);
@@ -172,14 +184,57 @@ export default function RequestCheckout() {
     retry: false,
   });
 
-  // Pre-fill email from auth or masked recipient — only on personally
-  // addressed email links. A copyable "share with anyone" link never
-  // presumes who is paying: the payer always identifies with their own email.
+  // Pre-populate email & known bank accounts when request loads
   useEffect(() => {
-    if (isEmailLink && authUser?.email) {
-      setPayerEmail(authUser.email);
+    if (!request) return;
+    if (isEmailLink && (request.demoPayerEmail || authUser?.email)) {
+      setPayerEmail(request.demoPayerEmail || authUser?.email || "");
     }
-  }, [authUser, isEmailLink]);
+    if (request.senderName) {
+      const parts = request.senderName.trim().split(/\s+/);
+      if (!regFirstName && parts[0]) setRegFirstName(parts[0]);
+      if (!regLastName && parts.length > 1) setRegLastName(parts.slice(1).join(" "));
+      if (!bizName && request.senderType === "business") setBizName(request.senderName);
+    }
+    if (request.payerSavedAccounts && request.payerSavedAccounts.length > 0 && savedAccounts.length === 0) {
+      setSavedAccounts(request.payerSavedAccounts);
+      setSelectedPayerBankAccount(request.payerSavedAccounts[0]);
+    } else if (request.payerSourceBankName && (request.payerSourceAccountNumber || request.payerSourceAccountMasked) && !selectedPayerBankAccount) {
+      const initialAcc: PayerSavedBankAccount = {
+        id: "req_source_acc",
+        bankName: request.payerSourceBankName,
+        accountNumber: request.payerSourceAccountNumber || request.payerSourceAccountMasked || "",
+        accountName: request.senderName || "Verified Sender",
+      };
+      setSavedAccounts([initialAcc]);
+      setSelectedPayerBankAccount(initialAcc);
+    }
+  }, [request, isEmailLink, authUser]);
+
+  // Resolve account name when adding a new bank account (SenderScreen-Add-bank-account)
+  useEffect(() => {
+    const cleanDigits = newAccountNumber.replace(/\D/g, "");
+    if (!newBankName || cleanDigits.length < 6) {
+      setResolvedAccountName("");
+      return;
+    }
+    let cancelled = false;
+    setResolvingAccount(true);
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      const fallbackName =
+        payerDisplayName
+        || [regFirstName, regLastName].filter(Boolean).join(" ")
+        || request?.senderName
+        || "Firopo Akintayo Akin-Agunbiade";
+      setResolvedAccountName(fallbackName);
+      setResolvingAccount(false);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [newBankName, newAccountNumber, payerDisplayName, regFirstName, regLastName, request?.senderName]);
 
   // Handle session timer countdown
   useEffect(() => {
@@ -214,7 +269,8 @@ export default function RequestCheckout() {
 
   // Auto-redirect timer on success
   useEffect(() => {
-    const shouldRedirect = (request?.status === "paid_out" && step === "status")
+    const shouldRedirect =
+      (request?.status === "paid_out" && step === "status")
       || ["authorisation_in_progress", "payment_processing", "payment_pending"].includes(request?.status ?? "")
       || step === "session_expired";
     if (!shouldRedirect) return;
@@ -262,146 +318,38 @@ export default function RequestCheckout() {
   const isCancelled = request.status === "cancelled";
   const isProcessing = ["authorisation_in_progress", "payment_processing", "payment_pending"].includes(request.status);
 
-  // Format session timer mm:ss
-  const formatTimer = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  // Prototype-only helper: the sender email the requester provided is seeded as
-  // a registered demo payer (fixed demo password) and shown here so the
-  // sign-in path can be demonstrated. The server only exposes demoPayerEmail
-  // in dev/demo mode — real production never shows demo credentials. Any other
-  // email follows the PIN verification + registration flow.
-  const demoPayerHint = request.demoPayerEmail ? (
-    <div className="rounded-lg border border-teal-200 bg-teal-50 p-2.5 text-[11px] text-teal-900 space-y-1" data-testid="demo-payer-hint">
-      <p className="font-semibold flex items-center gap-1.5">
-        <Info className="w-3.5 h-3.5 text-teal-600" /> Demo registered payer
-      </p>
-      <p className="font-mono break-all">
-        Email: {request.demoPayerEmail} &nbsp;·&nbsp; Password: {DEMO_PAYER_CREDENTIALS.password}
-      </p>
-      <p>The requester expects this sender to pay. Sign in with these demo credentials, or use any other email to register via PIN verification.</p>
-    </div>
-  ) : null;
-
-  // Country ↔ dial-code are linked both ways: picking a country sets the
-  // matching dial code, and picking a dial code first sets the country.
-  const handleRegPhoneCodeChange = (code: string) => {
-    setRegPhoneCode(code);
-    const match = countries.find((c) => c.dialCode === code);
-    if (match) setRegCountry(match.code);
-  };
-  const handleBizPhoneCodeChange = (code: string) => {
-    setBizPhoneCode(code);
-    const match = countries.find((c) => c.dialCode === code);
-    if (match) setRegCountry(match.code);
-  };
-  const handleRegCountryChange = (code: string) => {
-    setRegCountry(code);
-    const found = countries.find((c) => c.code === code);
-    if (found) {
-      if (regAccountType === "individual") {
-        setRegPhoneCode(found.dialCode);
-      } else {
-        setBizPhoneCode(found.dialCode);
-        setDirPhoneCode(found.dialCode);
-      }
+  const copyValue = async (key: string, value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(key);
+      setTimeout(() => setCopiedField((prev) => (prev === key ? null : prev)), 1800);
+      toast({ title: `${label} copied`, description: value });
+    } catch {
+      toast({ title: label, description: value });
     }
   };
-  const regCountrySelect = (
-    <div className="space-y-1">
-      <Label className="text-xs font-medium">
-        Country <span className="text-destructive">*</span>
-      </Label>
-      <Select value={regCountry} onValueChange={handleRegCountryChange}>
-        <SelectTrigger data-testid="select-register-country" className="bg-white">
-          <SelectValue placeholder="Select country" />
-        </SelectTrigger>
-        <SelectContent className="max-h-64">
-          {countries.map((c) => (
-            <SelectItem key={c.code} value={c.code}>
-              {c.flag} {c.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
 
-  // Demo accounts whose password is the shared demo password: the request's
-  // seeded sender email and the seeded dashboard demo user. Only meaningful in
-  // dev/demo mode (demoPayerEmail is absent in production).
-  const isDemoPayerAccount = (email: string) =>
-    !!request.demoPayerEmail
-    && (email.trim().toLowerCase() === request.demoPayerEmail || email.trim().toLowerCase() === "demo@rhemito.com");
-  const demoPasswordHint = (
-    <p className="text-[11px] text-teal-700 font-mono" data-testid="demo-password-hint">
-      Demo password: {DEMO_PAYER_CREDENTIALS.password}
-    </p>
-  );
-  // Prototype master password works for ANY account in demo mode.
-  const masterPasswordHint = request.demoPayerEmail ? (
-    <p className="text-[11px] text-teal-700 font-mono" data-testid="master-password-hint">
-      Prototype master password (any account): {PROTOTYPE_MASTER_PASSWORD}
-    </p>
-  ) : null;
+  // ─── SESSION & AUTHENTICATION HANDLERS ──────────────────────────────────────
 
-  // ─── AUTHENTICATION & PIN ACTIONS ──────────────────────────────────────────
-
-  /**
-   * Identifier-first auth: capture the email, then branch.
-   * Registered → password sign-in. Unknown → send a verification PIN.
-   */
-  const handleEmailCheck = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = payerEmail.trim().toLowerCase();
-    if (!email) {
-      setErrorMessage("Please enter your email address.");
+  const applySavedAccounts = (accounts?: PayerSavedBankAccount[], fallbackName?: string) => {
+    if (accounts && accounts.length > 0) {
+      setSavedAccounts(accounts);
+      setSelectedPayerBankAccount((prev) => prev ?? accounts[0]);
       return;
     }
-    setBusy(true);
-    setErrorMessage("");
-    try {
-      const { registered } = await checkEmailRegistered(email);
-      if (registered) {
-        setAuthStep("password");
-        return;
-      }
-      const result = await sendPayerVerificationPin(token!, email, isEmailLink);
-      setPinSent(true);
-      setPinCooldown(result.resendAfterSeconds);
-      setDevPin(result.devPin ?? "");
-      setAuthStep("pin");
-    } catch (err: any) {
-      setErrorMessage(err?.message || "Please check your email address and try again.");
-    } finally {
-      setBusy(false);
+    if (request.payerSourceBankName && (request.payerSourceAccountNumber || request.payerSourceAccountMasked)) {
+      const acc: PayerSavedBankAccount = {
+        id: "req_acc",
+        bankName: request.payerSourceBankName,
+        accountNumber: request.payerSourceAccountNumber || request.payerSourceAccountMasked || "",
+        accountName: fallbackName || request.senderName || "Verified Sender",
+      };
+      setSavedAccounts([acc]);
+      setSelectedPayerBankAccount((prev) => prev ?? acc);
     }
   };
 
-  const handleSendPin = async () => {
-    const targetEmail = payerEmail.trim().toLowerCase();
-    if (!targetEmail) {
-      setErrorMessage("Please enter your email address to receive a verification PIN.");
-      return;
-    }
-    setBusy(true);
-    setErrorMessage("");
-    try {
-      const result = await sendPayerVerificationPin(token!, targetEmail, isEmailLink);
-      setPinSent(true);
-      setPinCooldown(result.resendAfterSeconds);
-      setDevPin(result.devPin ?? "");
-    } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to send PIN. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleStartPayerFlow = async () => {
+  const handleStartPayerFlow = async (accountsFromVerify?: PayerSavedBankAccount[], verifiedName?: string) => {
     setBusy(true);
     setErrorMessage("");
     setComplianceNotice(null);
@@ -414,8 +362,12 @@ export default function RequestCheckout() {
       setActiveSessionId(session.sessionId);
       setSessionExpiresAt(new Date(session.sessionExpiresAt));
       setActiveQuote(session.quote);
-      setPayerDisplayName(session.payerName);
+      const finalName = verifiedName || session.payerName || request.senderName || payerEmail;
+      setPayerDisplayName(finalName);
+      applySavedAccounts(accountsFromVerify, finalName);
       await refetch();
+      const isMobileViewport = typeof window !== "undefined" && window.innerWidth < 640;
+      setPaymentSubStep(isMobileViewport ? "method_select" : "qr_handoff");
       setStep("session_active");
     } catch (err: any) {
       if (err?.code === "KYC_PENDING") {
@@ -433,274 +385,289 @@ export default function RequestCheckout() {
   };
 
   /**
-   * Forgot-password completion: the reset endpoint signs the payer in, so the
-   * payment journey resumes immediately with a fresh payment session.
+   * Clicking "Pay now" on the initial summary card (SenderScreen-1):
+   * - If the payer opened the emailed link (/pay/e/:token), their email was
+   *   already verified by clicking the link in their inbox (no 6-digit code needed).
+   *   - If their name/profile is already known -> proceed directly to payment!
+   *   - If they are a brand-new sender -> show only the "New to Mito?" fields (no OTP).
+   * - If the payer opened a copied link (/pay/:token), show "Verify Your Email To Continue"
+   *   with ONLY the Email input + "Send code" button initially.
    */
-  const handleForgotResetComplete = async () => {
-    setForgotPassword(null);
+  const handlePayNowClick = async () => {
     setErrorMessage("");
-    await handleStartPayerFlow();
+    if (isEmailLink) {
+      const emailToUse = (payerEmail || request.demoPayerEmail || "").trim().toLowerCase();
+      if (emailToUse) setPayerEmail(emailToUse);
+      if (request.isKnownSender && emailToUse) {
+        setBusy(true);
+        try {
+          const res = await continueFromEmailLink(token!, { email: emailToUse });
+          await handleStartPayerFlow(res.savedAccounts, res.payerName);
+          return;
+        } catch (err: any) {
+          setErrorMessage(err?.message || "Could not start payment session.");
+          setBusy(false);
+        }
+      }
+      setVerifyStage("email_link_profile");
+      setStarted(true);
+      return;
+    }
+    setVerifyStage("email_only");
+    setStarted(true);
   };
 
   /**
-   * Authenticated payer card: the first click reveals the password field, the
-   * second verifies the password against the account before the 10-minute
-   * payment session may open.
+   * Step 1 on Copied Link (/pay/:token): Payer enters their email and clicks "Send code".
+   * Sends the 6-digit confirmation code without ever asking for a password.
+   * Only reveals "New to Mito?" fields on the next view if the email is NOT already a known sender.
    */
-  const handleContinueAuthenticated = async () => {
-    if (!authUser) return;
-    if (!askPayerPassword) {
-      setAskPayerPassword(true);
-      setErrorMessage("");
-      return;
-    }
-    if (!confirmPayerPassword) {
-      setErrorMessage("Please enter your password to continue.");
+  const handleSendCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = payerEmail.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      setErrorMessage("Please enter a valid email address.");
       return;
     }
     setBusy(true);
     setErrorMessage("");
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: authUser.email, password: confirmPayerPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "Invalid password.");
+      const result = await sendPayerVerificationPin(token!, email, isEmailLink, true);
+      setPinSent(true);
+      setPinCooldown(result.resendAfterSeconds);
+      setDevPin(result.devPin ?? "");
+      setIsKnownEmailSender(Boolean(result.isKnownSender));
+      if (result.senderName && !payerDisplayName) {
+        setPayerDisplayName(result.senderName);
       }
-      setConfirmPayerPassword("");
-      await handleStartPayerFlow();
+      if (result.savedAccounts && result.savedAccounts.length > 0) {
+        setSavedAccounts(result.savedAccounts);
+        setSelectedPayerBankAccount(result.savedAccounts[0]);
+      }
+      setShowCodeBanner(true);
+      setVerifyStage("code_sent");
     } catch (err: any) {
-      setErrorMessage(err.message || "Login failed. Please verify your password.");
-      setBusy(false);
-    }
-  };
-
-  const handleLoginAndContinue = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!payerEmail.trim() || !loginPassword) {
-      setErrorMessage("Please enter both email and password.");
-      return;
-    }
-    setBusy(true);
-    setErrorMessage("");
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: payerEmail.trim(), password: loginPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "Invalid credentials.");
-      }
-      await handleStartPayerFlow();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Login failed. Please verify your password.");
-      setBusy(false);
-    }
-  };
-
-  /**
-   * Register form, details step. Individual registers directly; business first
-   * collects the company details and continues to the director-details step
-   * (same two-step flow as /sign-in-sign-up).
-   */
-  const handleRegisterDetailsSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage("");
-    if (regAccountType === "business") {
-      if (!bizName.trim() || !bizRegNo.trim()) {
-        setErrorMessage("Please enter the business name and registration number.");
-        return;
-      }
-      if (!regCountry) {
-        setErrorMessage("Please select the business country.");
-        return;
-      }
-      if (!dirPhoneCode) {
-        const found = countries.find((c) => c.code === regCountry);
-        if (found) setDirPhoneCode(found.dialCode);
-      }
-      setBizStep(2);
-      return;
-    }
-    void handleRegisterAndContinue(e);
-  };
-
-  const handleRegisterAndContinue = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!verifiedRegistrationEmail) {
-      setErrorMessage("Verify your email with the six-digit PIN before creating the account.");
-      setAuthStep("email");
-      return;
-    }
-    if (!regFirstName.trim() || !regLastName.trim()) {
-      setErrorMessage("Please enter your first and last name.");
-      return;
-    }
-    if (!regDob) {
-      setErrorMessage("Please enter your date of birth.");
-      return;
-    }
-    if (!regGender) {
-      setErrorMessage("Please select your gender.");
-      return;
-    }
-    if (!regPhoneNumber.trim()) {
-      setErrorMessage("Please enter your mobile number.");
-      return;
-    }
-    if (!regCountry) {
-      setErrorMessage("Please select your country.");
-      return;
-    }
-    if (!/^(?=.*[A-Z])(?=.*\d).{8,}$/.test(regPassword)) {
-      setErrorMessage("Password must be at least 8 characters with 1 uppercase letter and 1 number.");
-      return;
-    }
-
-    setBusy(true);
-    setErrorMessage("");
-    try {
-      const regRes = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountType: "individual",
-          email: verifiedRegistrationEmail,
-          password: regPassword,
-          firstName: regFirstName.trim(),
-          middleName: regMiddleName.trim() || null,
-          lastName: regLastName.trim(),
-          dateOfBirth: regDob,
-          gender: regGender,
-          mobileCode: regPhoneCode,
-          mobileNumber: regPhoneNumber,
-          country: regCountry,
-          paymentRequestToken: token,
-          isEmailLink,
-        }),
-      });
-      const regData = await regRes.json();
-      if (!regRes.ok) {
-        throw new Error(regData.message || "Registration failed.");
-      }
-      await handleStartPayerFlow();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Registration failed.");
-      setBusy(false);
-    }
-  };
-
-  /** Business registration, director-details step (password rules as /sign-in-sign-up). */
-  const handleBusinessRegisterAndContinue = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!verifiedRegistrationEmail) {
-      setErrorMessage("Verify your email with the six-digit PIN before creating the account.");
-      setAuthStep("email");
-      return;
-    }
-    if (!dirName) {
-      setErrorMessage("Please select the director.");
-      return;
-    }
-    if (!dirDob) {
-      setErrorMessage("Please enter the director's date of birth.");
-      return;
-    }
-    if (!dirGender) {
-      setErrorMessage("Please select the director's gender.");
-      return;
-    }
-    if (!dirPhoneNumber.trim()) {
-      setErrorMessage("Please enter the director's mobile number.");
-      return;
-    }
-    if (dirPassword !== dirConfirmPassword) {
-      setErrorMessage("Passwords do not match");
-      return;
-    }
-    if (!/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(dirPassword)) {
-      setErrorMessage("Password must be 8+ characters with 1 uppercase letter, 1 number and 1 special character.");
-      return;
-    }
-
-    setBusy(true);
-    setErrorMessage("");
-    try {
-      const regRes = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountType: "business",
-          email: verifiedRegistrationEmail,
-          country: regCountry,
-          businessName: bizName.trim(),
-          businessRegNo: bizRegNo.trim(),
-          businessPhoneCode: bizPhoneCode || undefined,
-          businessPhoneNumber: bizPhoneNumber || undefined,
-          directorName: dirName,
-          dateOfBirth: dirDob,
-          gender: dirGender,
-          mobileCode: dirPhoneCode,
-          mobileNumber: dirPhoneNumber,
-          password: dirPassword,
-          confirmPassword: dirConfirmPassword,
-          paymentRequestToken: token,
-          isEmailLink,
-        }),
-      });
-      const regData = await regRes.json();
-      if (!regRes.ok) {
-        throw new Error(regData.message || "Registration failed.");
-      }
-      await handleStartPayerFlow();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Registration failed.");
-      setBusy(false);
-    }
-  };
-
-  const handlePinVerifyAndContinue = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pinCode || pinCode.length !== 6) {
-      setErrorMessage("Please enter the complete 6-digit PIN.");
-      return;
-    }
-    setBusy(true);
-    setErrorMessage("");
-    try {
-      const email = payerEmail.trim().toLowerCase();
-      await verifyPayerVerificationPin(token!, email, pinCode, isEmailLink);
-      setVerifiedRegistrationEmail(email);
-      setAuthStep("register");
-      setPinSent(false);
-      setPinCode("");
-    } catch (err: any) {
-      setErrorMessage(err?.message || "The PIN could not be verified.");
+      setErrorMessage(err?.message || "Could not send confirmation code. Please try again.");
     } finally {
       setBusy(false);
     }
   };
 
-  // ─── PAYMENT SUBMISSION & AUTHORISATION ───────────────────────────────────
-
-  const handleMethodSelect = async (method: string) => {
-    setSelectedMethod(method);
+  const handleResendCode = async () => {
+    const email = payerEmail.trim().toLowerCase();
+    if (!email) return;
     setBusy(true);
     setErrorMessage("");
     try {
+      const result = await sendPayerVerificationPin(token!, email, isEmailLink, true);
+      setPinSent(true);
+      setPinCooldown(result.resendAfterSeconds);
+      setDevPin(result.devPin ?? "");
+      setShowCodeBanner(true);
+    } catch (err: any) {
+      setErrorMessage(err?.message || "Failed to resend code. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Step 2 on Copied Link (/pay/:token): Payer enters 6-digit confirmation code
+   * (plus "New to Mito?" fields ONLY if their email is new) and clicks "Verify and pay".
+   */
+  const handleVerifyCodeAndPay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinCode || pinCode.length !== 6) {
+      setErrorMessage("Please enter the 6-digit confirmation code.");
+      return;
+    }
+    if (!isKnownEmailSender) {
+      if (regAccountType === "individual") {
+        if (!regFirstName.trim() || !regLastName.trim()) {
+          setErrorMessage("Please enter your first name and last name.");
+          return;
+        }
+        if (!regGender) {
+          setErrorMessage("Please select your gender.");
+          return;
+        }
+      } else {
+        if (!bizName.trim()) {
+          setErrorMessage("Please enter your business name.");
+          return;
+        }
+      }
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+    try {
+      const email = payerEmail.trim().toLowerCase();
+      const verified = await verifyPayerVerificationPin(token!, email, pinCode, isEmailLink, {
+        authenticatePayer: true,
+        accountType: regAccountType,
+        firstName: regFirstName.trim() || undefined,
+        lastName: regLastName.trim() || undefined,
+        businessName: bizName.trim() || undefined,
+        gender: regGender || undefined,
+      });
+      await handleStartPayerFlow(verified.savedAccounts, verified.payerName);
+    } catch (err: any) {
+      setErrorMessage(err?.message || "The confirmation code could not be verified.");
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Email Link (/pay/e/:token) when sender is brand new: no 6-digit code required,
+   * only collects "New to Mito?" details and continues to payment.
+   */
+  const handleEmailLinkProfileContinue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = payerEmail.trim().toLowerCase();
+    if (!email) {
+      setErrorMessage("Please confirm your email address.");
+      return;
+    }
+    if (!isKnownEmailSender && !request.isKnownSender) {
+      if (regAccountType === "individual") {
+        if (!regFirstName.trim() || !regLastName.trim()) {
+          setErrorMessage("Please enter your first name and last name.");
+          return;
+        }
+        if (!regGender) {
+          setErrorMessage("Please select your gender.");
+          return;
+        }
+      } else if (!bizName.trim()) {
+        setErrorMessage("Please enter your business name.");
+        return;
+      }
+    }
+    setBusy(true);
+    setErrorMessage("");
+    try {
+      const res = await continueFromEmailLink(token!, {
+        email,
+        accountType: regAccountType,
+        firstName: regFirstName.trim() || undefined,
+        lastName: regLastName.trim() || undefined,
+        businessName: bizName.trim() || undefined,
+        gender: regGender || undefined,
+      });
+      await handleStartPayerFlow(res.savedAccounts, res.payerName);
+    } catch (err: any) {
+      setErrorMessage(err?.message || "Could not continue to payment.");
+      setBusy(false);
+    }
+  };
+
+  // ─── PAYMENT METHOD & BANK TRANSFER EXECUTION ─────────────────────────────
+
+  /**
+   * Clicking "Continue" on "How would you like to pay?" (SenderScreen-6):
+   * - If "bank_transfer" is selected: shows "Getting your transfer details..." (SenderScreen-7)
+   *   and goes straight to the Bank Transfer Instructions screen (SenderScreen-8),
+   *   skipping "Which account will you pay from?".
+   * - If "card" or "interswitch" is selected: initiates the card/hosted authorisation flow.
+   */
+  const handleContinueFromMethodSelect = async () => {
+    setErrorMessage("");
+    if (selectedMethod === "bank_transfer") {
+      setPaymentSubStep("loading_transfer");
+      setTimeout(() => {
+        setPaymentSubStep("bank_transfer_details");
+      }, 450);
+      return;
+    }
+
+    // Card or Interswitch / Hosted checkout
+    setBusy(true);
+    try {
       if (!activeSessionId) throw new Error("Start a new payment session to continue.");
-      const intent = await createIntent(token!, method, activeSessionId, isEmailLink);
+      const backendMethod = selectedMethod === "interswitch" ? "card" : selectedMethod;
+      const intent = await createIntent(token!, backendMethod, activeSessionId, isEmailLink);
       setIntentId(intent.intentId);
       setPaymentReference(intent.paymentReference);
       setStep("authorizing");
       await refetch();
     } catch (err: any) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed to initiate payment submission.");
+      setErrorMessage(err instanceof Error ? err.message : "Failed to initiate payment.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Clicking "I've sent the money" on Bank Transfer Instructions (SenderScreen-8).
+   */
+  const handleIveSentTheMoney = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErrorMessage("");
+    try {
+      let currentIntentId = intentId;
+      if (!currentIntentId) {
+        if (!activeSessionId) throw new Error("Start a new payment session to continue.");
+        const available = request.methods.length > 0 ? request.methods : (request.availableMethods ?? ["bank_transfer"]);
+        const methodToUse = available.includes("bank_transfer") ? "bank_transfer" : available[0];
+        const intent = await createIntent(token!, methodToUse, activeSessionId, isEmailLink);
+        currentIntentId = intent.intentId;
+        setIntentId(intent.intentId);
+        setPaymentReference(intent.paymentReference);
+      }
+      await devAuthorizeIntent(currentIntentId!);
+      setStep("status");
+      await refetch();
+    } catch (err: any) {
+      setErrorMessage(err instanceof Error ? err.message : "Could not confirm transfer. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Saving a new/changed payer bank account on "Add the account you'll pay from" (SenderScreen-Add-bank-account).
+   */
+  const handleSaveNewBankAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const digits = newAccountNumber.replace(/\D/g, "");
+    if (!newBankName) {
+      setErrorMessage("Please choose your bank.");
+      return;
+    }
+    if (digits.length < 6) {
+      setErrorMessage("Please enter a valid account number.");
+      return;
+    }
+    const holder =
+      resolvedAccountName
+      || payerDisplayName
+      || [regFirstName, regLastName].filter(Boolean).join(" ")
+      || request.senderName
+      || "Firopo Akintayo Akin-Agunbiade";
+
+    setBusy(true);
+    setErrorMessage("");
+    try {
+      const res = await savePayerBankAccount({
+        token: token!,
+        isEmailLink,
+        bankName: newBankName,
+        accountNumber: digits,
+        accountName: holder,
+        email: payerEmail || request.demoPayerEmail,
+        saveToProfile: saveAccountForNextTime,
+      });
+      setSelectedPayerBankAccount(res.account);
+      if (res.savedAccounts?.length) {
+        setSavedAccounts(res.savedAccounts);
+      }
+      setNewBankName("");
+      setNewAccountNumber("");
+      setPaymentSubStep("bank_transfer_details");
+    } catch (err: any) {
+      setErrorMessage(err?.message || "Could not save bank account.");
     } finally {
       setBusy(false);
     }
@@ -735,6 +702,13 @@ export default function RequestCheckout() {
     }
   };
 
+  const handleCancelPayment = () => {
+    setStarted(false);
+    setStep("pre_auth");
+    setPaymentSubStep("qr_handoff");
+    setErrorMessage("");
+  };
+
   // ─── 1. STATUS & RESULT PAGES ──────────────────────────────────────────────
 
   if (step === "session_expired") {
@@ -742,7 +716,7 @@ export default function RequestCheckout() {
       <Shell>
         <StatusCard icon={<Clock className="w-8 h-8 text-amber-600" />} title="Payment Session Expired" testId="session-expired-card">
           <p className="text-sm text-slate-700">No payment was submitted. Start a new session if this request is still available.</p>
-          <Button className="w-full" onClick={() => handleStartPayerFlow()} disabled={busy} data-testid="button-start-new-session">
+          <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleStartPayerFlow()} disabled={busy} data-testid="button-start-new-session">
             {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             Start New Payment Session
           </Button>
@@ -753,10 +727,6 @@ export default function RequestCheckout() {
     );
   }
 
-  // The explicit authorising step (provider hand-off / dev authorisation) takes
-  // precedence over the generic processing screen — otherwise the intent's
-  // `payment_processing` status would hide the authorisation UI and the payment
-  // could never be completed in development.
   if (step === "status" || terminalPaid || isExpired || isCancelled || (isProcessing && step !== "authorizing")) {
     if (isExpired) {
       return (
@@ -779,7 +749,7 @@ export default function RequestCheckout() {
             ) : (
               <div className="space-y-3 pt-2">
                 <Button
-                  className="w-full bg-primary hover:bg-primary/90"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                   onClick={handleRequestNewPaymentLink}
                   disabled={busy}
                   data-testid="button-request-new-link"
@@ -832,7 +802,7 @@ export default function RequestCheckout() {
             </div>
 
             <div className="rounded-xl border border-border divide-y divide-border text-xs">
-              <Row label="Payment Reference" value={<span className="font-mono">{paymentReference || `PAY-${request.requestNumber}`}</span>} />
+              <Row label="Payment Reference" value={<span className="font-mono">{paymentReference || request.collectionAccount?.paymentReference || `PAY-${request.requestNumber}`}</span>} />
               <Row label="Request Number" value={request.requestNumber} />
               <Row label="Paid to" value={request.requesterName} />
               {request.purpose && <Row label="Purpose" value={request.purpose.replace(/_/g, " ")} />}
@@ -841,11 +811,11 @@ export default function RequestCheckout() {
             </div>
 
             <div className="rounded-xl bg-slate-50 p-3 text-center text-xs text-muted-foreground border border-slate-200">
-              <p>Redirecting to home in <strong className="text-primary">{redirectCountdown}s</strong>…</p>
+              <p>Redirecting to home in <strong className="text-blue-600">{redirectCountdown}s</strong>…</p>
             </div>
 
             <Button
-              className="w-full bg-primary hover:bg-primary/90"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               onClick={() => setLocation("/")}
               data-testid="button-go-home-now"
             >
@@ -861,22 +831,21 @@ export default function RequestCheckout() {
         <Shell>
           <StatusCard icon={<AlertCircle className="w-8 h-8 text-red-600" />} title="Payment Was Not Completed" testId="failed-card">
             <p className="text-sm text-slate-700">Your payment was not completed. No successful payment was recorded.</p>
-            <Button className="w-full" onClick={() => handleStartPayerFlow()} disabled={busy} data-testid="button-try-again">Try Again</Button>
+            <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleStartPayerFlow()} disabled={busy} data-testid="button-try-again">Try Again</Button>
             <Button variant="outline" className="w-full" onClick={() => setLocation("/")}>Go to Home Page</Button>
           </StatusCard>
         </Shell>
       );
     }
 
-    // Pending state
     return (
       <Shell>
         <StatusCard
-          icon={<Loader2 className="w-8 h-8 animate-spin text-primary" />}
+          icon={<Loader2 className="w-8 h-8 animate-spin text-blue-600" />}
           title="Payment Processing…"
           testId="pending-card"
         >
-          <p className="text-sm text-slate-700 text-center">A payment is being processed. The actual payer will receive the final result by email.</p>
+          <p className="text-sm text-slate-700 text-center">Your transfer has been submitted and is being processed. You will receive a receipt by email once confirmed.</p>
           <div className="rounded-xl border border-border divide-y divide-border text-xs">
             <Row label="Request" value={request.requestNumber} />
             <Row label="Amount" value={`${symbol}${request.amount} ${request.currency}`} />
@@ -889,14 +858,14 @@ export default function RequestCheckout() {
     );
   }
 
-  // ─── 3. PROVIDER AUTHORISATION (DEVELOPMENT SIMULATION) ────────────────────
+  // ─── 2. CARD / HOSTED PROVIDER AUTHORISATION ──────────────────────────────
 
   if (step === "authorizing" && intentId) {
     return (
       <Shell>
         <StatusCard
-          icon={<ShieldCheck className="w-8 h-8 text-primary" />}
-          title="Authorise Your Payment"
+          icon={<ShieldCheck className="w-8 h-8 text-blue-600" />}
+          title={selectedMethod === "interswitch" ? "Interswitch Hosted Checkout" : "Authorise Your Card Payment"}
           testId="authorize-card"
         >
           <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2 text-xs">
@@ -910,7 +879,9 @@ export default function RequestCheckout() {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Method:</span>
-              <span className="font-medium text-slate-800">{METHOD_LABELS[selectedMethod ?? ""] ?? selectedMethod}</span>
+              <span className="font-medium text-slate-800">
+                {selectedMethod === "interswitch" ? "Interswitch / Hosted page" : (METHOD_LABELS[selectedMethod ?? ""] ?? selectedMethod)}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Payee:</span>
@@ -924,7 +895,7 @@ export default function RequestCheckout() {
               Development Provider Simulation
             </p>
             <p className="text-[11px] leading-relaxed">
-              In production, this step invokes the bank 3-D Secure / Open Banking screen. Clicking below simulates successful provider authorization and triggers signed webhook settlement.
+              In production, this step opens the {selectedMethod === "interswitch" ? "Interswitch Webpay hosted page" : "3-D Secure card authorisation screen"}. Clicking below simulates successful provider authorisation and triggers signed webhook settlement.
             </p>
           </div>
 
@@ -937,13 +908,14 @@ export default function RequestCheckout() {
               disabled={busy}
               onClick={() => {
                 setStep("session_active");
+                setPaymentSubStep("method_select");
                 setIntentId(null);
               }}
             >
               Back
             </Button>
             <Button
-              className="flex-1 bg-primary hover:bg-primary/90"
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
               disabled={busy}
               onClick={handleAuthorizeSimulate}
               data-testid="button-authorize"
@@ -956,109 +928,542 @@ export default function RequestCheckout() {
     );
   }
 
-  // ─── 4. SESSION ACTIVE (10-MINUTE SERVER TIMER & METHOD SELECTION) ────────
+  // ─── 3. ACTIVE RHEMITO PAYMENT FLOW (SenderScreen-5, 6, 7, 8, Add-bank) ────
 
   if (step === "session_active") {
+    const exactAmountText = `${request.currency} ${formatMoney(request.amount)}`;
+    const collectionAccountName = request.collectionAccount?.accountName || `PWA - MITO-${request.requesterName.toUpperCase()}`;
+    const collectionBankName = request.collectionAccount?.bankName || (request.currency === "NGN" ? "Fidelity" : "ClearBank");
+    const collectionAccountNumber = request.collectionAccount?.accountNumber || "4580016814";
+    const collectionReference = request.collectionAccount?.paymentReference || paymentReference || "24588534";
+    const checkoutQrUrl = typeof window !== "undefined" ? window.location.href : "";
+
     return (
       <Shell>
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
-          <Card className="shadow-xl overflow-hidden border-2 border-blue-600" data-testid="mito-payment-card">
-            {/* MITO PAYMENT header */}
-            <div className="px-6 pt-6 pb-2 space-y-4 text-center" data-testid="checkout-summary">
-              <div className="flex flex-col items-center gap-2">
-                <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
-                {/* 10-Minute Countdown */}
-                <div
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold ${
-                    sessionSecondsLeft < 120 ? "bg-red-50 text-red-600 border border-red-200 animate-pulse" : "bg-blue-50 text-blue-700 border border-blue-100"
-                  }`}
-                  data-testid="session-timer"
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{formatTimer(sessionSecondsLeft)}</span>
-                </div>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+          <Card className="shadow-xl overflow-hidden border-2 border-blue-600 bg-white rounded-2xl" data-testid="mito-payment-card">
+            {/* RHEMITO PAYMENT Header (matches SenderScreen-5, 6, 7, 8) */}
+            <div className="relative px-6 pt-6 pb-4 text-center border-b border-slate-100" data-testid="checkout-summary">
+              <button
+                type="button"
+                onClick={handleCancelPayment}
+                className="absolute right-4 top-4 p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                aria-label="Close payment"
+                data-testid="button-close-payment"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex flex-col items-center gap-1.5">
+                <RhemitoRibbonMark className="w-8 h-9 text-blue-600" />
+                <p className="text-[11px] font-bold tracking-[0.2em] text-blue-600 uppercase">Rhemito Payment</p>
               </div>
 
-              <div>
-                <p className="text-xs text-slate-500">Payment Request From</p>
-                <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
-                <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>
-              </div>
-
-              <div>
-                <p className="text-xs text-slate-500">You pay</p>
-                <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
-                  {request.currency} {formatMoney(request.amount)}
+              <div className="mt-3">
+                <p className="text-base font-bold text-slate-800 leading-snug">Payment Request From</p>
+                <p className="text-lg font-extrabold text-slate-900 uppercase tracking-tight" data-testid="checkout-requester-name">
+                  {request.requesterName}
                 </p>
               </div>
             </div>
 
-            <CardContent className="p-6 pt-3 space-y-4">
-              <PaymentBreakdown request={request} />
+            <CardContent className="p-6 space-y-5">
+              {/* ── SUB-STEP A: Continue on your phone (SenderScreen-5) ── */}
+              {paymentSubStep === "qr_handoff" && (
+                <div className="space-y-5 text-center" data-testid="screen-continue-on-phone">
+                  <div className="space-y-2">
+                    <h2 className="text-xl font-extrabold text-slate-900">Continue on your phone</h2>
+                    <p className="text-sm text-slate-500 leading-relaxed">
+                      Scan this with your camera to finish paying — it's the quickest way to confirm a bank transfer or open your banking app.
+                    </p>
+                  </div>
 
-              {request.methods.length > 1 && (
-                <div className="space-y-2" role="radiogroup" aria-label="Payment method">
-                  <Label className="text-xs font-semibold text-slate-800">Pay with</Label>
-                  <div className="grid gap-2">
-                    {request.methods.map((m) => {
-                      const active = (selectedMethod && request.methods.includes(selectedMethod) ? selectedMethod : request.methods[0]) === m;
-                      const icon =
-                        m === "card" ? <CreditCard className="w-4 h-4 text-blue-600" /> :
-                        m === "wallet" ? <Wallet className="w-4 h-4 text-teal-600" /> :
-                        <Building2 className="w-4 h-4 text-purple-600" />;
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          role="radio"
-                          aria-checked={active}
-                          disabled={busy}
-                          onClick={() => setSelectedMethod(m)}
-                          className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors disabled:opacity-50 ${
-                            active ? "border-blue-600 bg-blue-50/60 ring-1 ring-blue-600" : "border-slate-200 hover:border-blue-300"
-                          }`}
-                          data-testid={`button-method-${m}`}
-                        >
-                          <span className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">{icon}</span>
-                          <span className="text-sm font-semibold text-slate-900">{METHOD_LABELS[m] ?? m}</span>
-                        </button>
-                      );
-                    })}
+                  {/* QR Code with centered blue 'r' badge */}
+                  <div className="flex justify-center py-1">
+                    <div className="relative inline-flex items-center justify-center p-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&ecc=M&data=${encodeURIComponent(checkoutQrUrl)}`}
+                        alt="Scan QR code to continue on your phone"
+                        className="w-44 h-44 object-contain"
+                        data-testid="img-handoff-qr"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-extrabold text-lg flex items-center justify-center shadow-md border-2 border-white">
+                          r
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="h-px bg-slate-200 flex-1" />
+                    <span className="text-xs text-slate-400 font-medium">or</span>
+                    <div className="h-px bg-slate-200 flex-1" />
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full h-12 rounded-xl border-slate-200 text-slate-900 font-bold hover:bg-slate-50"
+                    onClick={() => setPaymentSubStep("method_select")}
+                    data-testid="button-continue-browser"
+                  >
+                    Continue on this browser instead
+                  </Button>
+
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    This screen only appears on desktop — the mobile site continues automatically.
+                  </p>
+
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCancelPayment}
+                      className="text-sm font-semibold text-blue-600 hover:underline"
+                      data-testid="button-cancel-payment"
+                    >
+                      Cancel Payment
+                    </button>
                   </div>
                 </div>
               )}
 
-              <Button
-                variant="outline"
-                className="w-full h-12 rounded-full border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
-                disabled={busy || request.methods.length === 0}
-                onClick={() => handleMethodSelect(selectedMethod && request.methods.includes(selectedMethod) ? selectedMethod : request.methods[0])}
-                data-testid="button-pay-now"
-              >
-                {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Initialising secure payment…</> : "Pay now"}
-              </Button>
-              {errorMessage && <p className="text-xs text-destructive" data-testid="error-checkout">{errorMessage}</p>}
+              {/* ── SUB-STEP B: How would you like to pay? (SenderScreen-6) ── */}
+              {paymentSubStep === "method_select" && (
+                <div className="space-y-5" data-testid="screen-method-select">
+                  {/* Back button + Progress bar */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentSubStep("qr_handoff")}
+                      className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-50 shrink-0"
+                      aria-label="Back"
+                      data-testid="button-back-to-qr"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div className="h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden">
+                      <div className="h-full w-5/12 bg-blue-600 rounded-full" />
+                    </div>
+                  </div>
 
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-extrabold text-slate-900">How would you like to pay?</h2>
+                    <p className="text-sm text-slate-500">Choose a method, then continue.</p>
+                  </div>
 
-              {/* Disclosures & Anti-Scam */}
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-[11px] text-slate-600 space-y-2">
-                <p>{request.senderFeeNote}</p>
-                <p className="flex items-start gap-1.5 text-amber-900 bg-amber-50 border border-amber-200/80 rounded-lg p-2 font-medium">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
-                  Anti-Scam Notice: Rhemito will never ask for your password or SMS codes. Only pay requests you expect.
-                </p>
-                <p className="text-muted-foreground">{request.legalEntity.displayName} — {request.legalEntity.safeguardingStatement}</p>
-              </div>
+                  {/* Payment Methods: Bank transfer, Pay by Card, Interswitch / Hosted page */}
+                  <div className="space-y-2.5" role="radiogroup" aria-label="How would you like to pay?">
+                    {[
+                      {
+                        id: "bank_transfer",
+                        title: "Bank transfer",
+                        badge: "No card fees",
+                        badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                        subtitle: request.currency === "NGN" ? "Instant Nigerian bank transfer" : "Instant bank transfer",
+                        icon: <Building2 className="w-4 h-4 text-slate-700" />,
+                      },
+                      {
+                        id: "card",
+                        title: "Pay by Card",
+                        badge: "Instant",
+                        badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
+                        subtitle: "Debit or credit card (Visa / Mastercard)",
+                        icon: <CreditCard className="w-4 h-4 text-slate-700" />,
+                      },
+                      {
+                        id: "interswitch",
+                        title: "Interswitch / Hosted page",
+                        badge: "Hosted",
+                        badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200",
+                        subtitle: "Pay securely via Interswitch hosted checkout",
+                        icon: <Globe className="w-4 h-4 text-slate-700" />,
+                      },
+                    ].map((m) => {
+                      const active = selectedMethod === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          disabled={busy}
+                          onClick={() => setSelectedMethod(m.id)}
+                          className={`w-full flex items-center gap-3.5 p-4 rounded-2xl border-2 text-left transition-all ${
+                            active
+                              ? "border-blue-600 bg-blue-50/50 shadow-sm"
+                              : "border-slate-200 bg-white hover:border-blue-300"
+                          }`}
+                          data-testid={`button-method-${m.id}`}
+                        >
+                          <span className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0 shadow-xs">
+                            {m.icon}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-base font-bold text-slate-900">{m.title}</span>
+                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${m.badgeClass}`}>
+                                {m.badge}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">{m.subtitle}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-              <div className="flex items-center justify-end text-xs pt-1">
-                <span className="text-muted-foreground flex items-center gap-1">
-                  <LifeBuoy className="w-3.5 h-3.5" /> Support: {request.legalEntity.supportUrl}
-                </span>
-              </div>
+                  {/* Total to pay */}
+                  <div className="rounded-2xl border border-slate-200 px-4 py-3.5 flex items-center justify-between bg-white">
+                    <span className="text-sm text-slate-500 font-medium">Total to pay</span>
+                    <span className="text-lg font-extrabold text-slate-900 tabular-nums" data-testid="method-total-to-pay">
+                      {exactAmountText}
+                    </span>
+                  </div>
+
+                  {errorMessage && <p className="text-xs text-destructive" data-testid="error-checkout">{errorMessage}</p>}
+
+                  <Button
+                    type="button"
+                    className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base shadow-sm"
+                    disabled={busy}
+                    onClick={handleContinueFromMethodSelect}
+                    data-testid="button-pay-now"
+                  >
+                    {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing…</> : "Continue"}
+                  </Button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={handleCancelPayment}
+                      className="text-sm font-semibold text-blue-600 hover:underline"
+                      data-testid="button-cancel-method"
+                    >
+                      Cancel Payment
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── SUB-STEP C: Getting your transfer details... (SenderScreen-7) ── */}
+              {paymentSubStep === "loading_transfer" && (
+                <div className="space-y-6 py-4 text-center" data-testid="screen-loading-transfer">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentSubStep("method_select")}
+                      className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-50 shrink-0"
+                      aria-label="Back"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div className="h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden">
+                      <div className="h-full w-9/12 bg-blue-600 rounded-full" />
+                    </div>
+                  </div>
+
+                  <div className="py-8 flex flex-col items-center gap-4">
+                    <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+                    <p className="text-sm font-medium text-slate-500">Getting your transfer details...</p>
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleCancelPayment}
+                      className="text-sm font-semibold text-blue-600 hover:underline"
+                    >
+                      Cancel Payment
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── SUB-STEP D: Bank Transfer Instructions (SenderScreen-8) ── */}
+              {paymentSubStep === "bank_transfer_details" && (
+                <div className="space-y-4" data-testid="screen-bank-transfer-details">
+                  {/* Back button + Progress bar */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentSubStep("method_select")}
+                      className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-50 shrink-0"
+                      aria-label="Back"
+                      data-testid="button-back-to-methods"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div className="h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden">
+                      <div className="h-full w-10/12 bg-blue-600 rounded-full" />
+                    </div>
+                  </div>
+
+                  {/* Top Payer Source Account Box — open by default with updated manual-matching advisory */}
+                  <div
+                    className="rounded-2xl border-2 border-blue-600 bg-blue-50/40 p-4 space-y-2.5"
+                    data-testid="payer-source-account-box"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="w-9 h-9 rounded-xl bg-white border border-blue-100 flex items-center justify-center text-blue-600 shrink-0 mt-0.5">
+                        <Building2 className="w-4 h-4" />
+                      </span>
+                      <div className="min-w-0 flex-1 text-xs leading-snug">
+                        <p className="font-semibold text-slate-900 text-[13px]">
+                          1. Pay by Bank Transfer from your account{" "}
+                          {selectedPayerBankAccount ? (
+                            <span className="font-extrabold">
+                              {selectedPayerBankAccount.accountNumber} · {selectedPayerBankAccount.accountName}
+                            </span>
+                          ) : (
+                            <span className="font-extrabold">{payerDisplayName || payerEmail}</span>
+                          )}
+                        </p>
+                        <p className="text-slate-500 mt-0.5">
+                          {selectedPayerBankAccount ? selectedPayerBankAccount.bankName : "Your bank account"}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <span className="w-6 h-6 rounded-full bg-white border border-blue-200 flex items-center justify-center text-blue-600">
+                          <Info className="w-3.5 h-3.5" />
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setErrorMessage("");
+                            setPaymentSubStep("add_bank_account");
+                          }}
+                          className="text-xs font-bold text-blue-600 hover:underline"
+                          data-testid="button-change-payer-account"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Open-by-default manual-matching advisory requested in the video */}
+                    <p
+                      className="text-xs text-amber-800 bg-amber-50/90 border border-amber-200/80 rounded-xl px-3 py-2 font-medium leading-relaxed"
+                      data-testid="payer-account-advisory"
+                    >
+                      Please send only from this account. If you send from a separate account, we may not be able to match it instantly and your recipient may have to match it manually.
+                    </p>
+                  </div>
+
+                  {/* SEND EXACT AMOUNT USING REFERENCE */}
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">
+                      Send Exact Amount Using Reference
+                    </p>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100 shadow-xs">
+                      {[
+                        { key: "amount", label: "Exact amount", value: exactAmountText },
+                        { key: "accountName", label: "Account name", value: collectionAccountName },
+                        { key: "bankName", label: "Bank name", value: collectionBankName },
+                        { key: "accountNumber", label: "Account number", value: collectionAccountNumber },
+                        { key: "reference", label: "Payment reference", value: collectionReference },
+                      ].map((row) => (
+                        <div key={row.key} className="flex items-center justify-between gap-3 px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="text-xs text-slate-400">{row.label}</p>
+                            <p
+                              className="text-sm font-extrabold text-slate-900 break-all"
+                              data-testid={`transfer-detail-${row.key}`}
+                            >
+                              {row.value}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void copyValue(row.key, row.value, row.label)}
+                            className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 shrink-0 transition-colors"
+                            aria-label={`Copy ${row.label}`}
+                            data-testid={`button-copy-${row.key}`}
+                          >
+                            {copiedField === row.key ? (
+                              <Check className="w-4 h-4 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {errorMessage && <p className="text-xs text-destructive" data-testid="error-transfer">{errorMessage}</p>}
+
+                  <Button
+                    type="button"
+                    className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base shadow-sm"
+                    disabled={busy}
+                    onClick={handleIveSentTheMoney}
+                    data-testid="button-ive-sent-money"
+                  >
+                    {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Confirming transfer…</> : "I've sent the money"}
+                  </Button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={handleCancelPayment}
+                      className="text-sm font-semibold text-blue-600 hover:underline"
+                      data-testid="button-cancel-transfer"
+                    >
+                      Cancel Payment
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── SUB-STEP E: Add the account you'll pay from (SenderScreen-Add-bank-account) ── */}
+              {paymentSubStep === "add_bank_account" && (
+                <form onSubmit={handleSaveNewBankAccount} className="space-y-4" data-testid="screen-add-bank-account">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentSubStep("bank_transfer_details")}
+                      className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-50 shrink-0"
+                      aria-label="Back to transfer details"
+                      data-testid="button-back-from-add-bank"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div className="h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden">
+                      <div className="h-full w-9/12 bg-blue-600 rounded-full" />
+                    </div>
+                  </div>
+
+                  <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-extrabold text-slate-900">Add the account you'll pay from</h2>
+                    <p className="text-xs text-slate-500">We use it to match your transfer to this request.</p>
+                  </div>
+
+                  {savedAccounts.length > 0 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">Saved accounts</Label>
+                      <div className="space-y-1.5">
+                        {savedAccounts.map((acc) => {
+                          const isCurrent = selectedPayerBankAccount?.id === acc.id;
+                          return (
+                            <button
+                              key={acc.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedPayerBankAccount(acc);
+                                setPaymentSubStep("bank_transfer_details");
+                              }}
+                              className={`w-full flex items-center justify-between p-3 rounded-xl border text-left text-xs transition-colors ${
+                                isCurrent ? "border-blue-600 bg-blue-50/50" : "border-slate-200 hover:border-blue-300"
+                              }`}
+                              data-testid={`button-saved-payer-account-${acc.id}`}
+                            >
+                              <div>
+                                <p className="font-bold text-slate-900">{acc.bankName} · {acc.accountNumber}</p>
+                                <p className="text-slate-500">{acc.accountName}</p>
+                              </div>
+                              <span className="text-blue-600 font-semibold">Use</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">Bank</Label>
+                    <Select value={newBankName} onValueChange={setNewBankName}>
+                      <SelectTrigger className="h-12 rounded-xl bg-white" data-testid="select-payer-bank">
+                        <SelectValue placeholder="Choose your bank" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-64">
+                        {PAYER_BANKS.map((bank) => (
+                          <SelectItem key={bank} value={bank}>
+                            {bank}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newAccountNumber" className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">
+                      Account Number
+                    </Label>
+                    <Input
+                      id="newAccountNumber"
+                      inputMode="numeric"
+                      maxLength={12}
+                      placeholder="10-digit account number"
+                      value={newAccountNumber}
+                      onChange={(e) => setNewAccountNumber(e.target.value.replace(/\D/g, ""))}
+                      className="h-12 rounded-xl bg-white"
+                      data-testid="input-payer-bank-account-number"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">Account Name</Label>
+                    <div
+                      className="h-12 rounded-xl border border-slate-200 bg-slate-100/80 px-3.5 flex items-center text-xs font-semibold text-slate-600"
+                      data-testid="text-resolved-account-name"
+                    >
+                      {resolvingAccount ? (
+                        <span className="flex items-center gap-2 text-slate-500">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Finding your account…
+                        </span>
+                      ) : resolvedAccountName ? (
+                        <span className="text-slate-900 font-bold">{resolvedAccountName}</span>
+                      ) : (
+                        <span>Shown once we find your account</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 pt-1">
+                    <Checkbox
+                      id="saveAccountForNextTime"
+                      checked={saveAccountForNextTime}
+                      onCheckedChange={(checked) => setSaveAccountForNextTime(Boolean(checked))}
+                      data-testid="checkbox-save-payer-account"
+                    />
+                    <Label htmlFor="saveAccountForNextTime" className="text-xs text-slate-600 font-normal cursor-pointer">
+                      Save this account to my profile for next time
+                    </Label>
+                  </div>
+
+                  {errorMessage && <p className="text-xs text-destructive">{errorMessage}</p>}
+
+                  <Button
+                    type="submit"
+                    className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base shadow-sm"
+                    disabled={busy || !newBankName || newAccountNumber.replace(/\D/g, "").length < 6}
+                    data-testid="button-save-payer-bank-account"
+                  >
+                    {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : "Save and continue"}
+                  </Button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={handleCancelPayment}
+                      className="text-sm font-semibold text-blue-600 hover:underline"
+                    >
+                      Cancel Payment
+                    </button>
+                  </div>
+                </form>
+              )}
             </CardContent>
+
+            {/* Bottom Blue Footer Bar */}
             <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
-              <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
-              <span className="text-lg font-bold lowercase font-display">rhemito</span>
+              <RhemitoRibbonMark className="w-6 h-6 text-white" />
             </div>
           </Card>
         </motion.div>
@@ -1066,78 +1471,75 @@ export default function RequestCheckout() {
     );
   }
 
-  // ─── 5a. FIRST SCREEN — PAYMENT SUMMARY (before identification) ────────────
+  // ─── 4. FIRST SCREEN — PAYMENT SUMMARY (SenderScreen-1, before identification) ──
 
   if (!started) {
     return (
       <Shell>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
-          <MitoSummaryCard request={request} onPay={() => setStarted(true)} />
+          <MitoSummaryCard request={request} busy={busy} onPay={handlePayNowClick} />
         </motion.div>
       </Shell>
     );
   }
 
-  // ─── 5. PRE-AUTH IDENTIFICATION & LOGIN SCREEN ─────────────────────────────
-
-  // Naira payers verify their email with a code on the Mito Payment card.
-  const ngnFlow = request.currency === "NGN";
+  // ─── 5. EMAIL VERIFICATION & CONDITIONAL MINI-KYC (SenderScreen-2, 3, 4) ────
 
   return (
     <Shell>
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
-        <Card className={`shadow-xl overflow-hidden ${ngnFlow ? "border-2 border-blue-600" : "border-border/80"}`}>
+        <Card className="shadow-xl overflow-hidden border-2 border-blue-600 bg-white">
           {/* Header Summary */}
-          <div className="bg-white text-slate-900 px-6 pt-6 pb-4 space-y-4 text-center" data-testid="checkout-summary">
+          <div className="bg-white text-slate-900 px-6 pt-6 pb-3 space-y-3 text-center" data-testid="checkout-summary">
             <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
+
+            {/* Green confirmation toast banner when 6-digit code has been sent (SenderScreen-3 & 4) */}
+            {verifyStage === "code_sent" && showCodeBanner && (
+              <div
+                className="mx-auto max-w-md rounded-xl border border-emerald-600/50 bg-white px-4 py-3.5 shadow-sm flex items-center justify-between gap-3 text-left"
+                data-testid="banner-code-sent"
+              >
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium text-emerald-800">Check your email for the confirmation code.</p>
+                  {devPin && (
+                    <button
+                      type="button"
+                      onClick={() => setPinCode(devPin)}
+                      className="text-[11px] font-mono text-teal-700 hover:underline block"
+                      data-testid="button-fill-dev-pin"
+                    >
+                      Demo code: {devPin} (click to fill)
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCodeBanner(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                  aria-label="Dismiss notice"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             <div>
-              <p className="text-xs text-slate-500">Payment Request From</p>
-              <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
+              <p className="text-sm font-semibold text-slate-700">Payment Request From</p>
+              <p className="text-xl font-extrabold text-slate-900 uppercase leading-snug" data-testid="checkout-requester-name">
+                {request.requesterName}
+              </p>
               {request.requestNumber && <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>}
             </div>
+
             <div>
               <p className="text-xs text-slate-500">You pay</p>
               <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
                 {request.currency} {formatMoney(request.amount)}
               </p>
             </div>
-
-            {!ngnFlow && (
-              <div className="space-y-1.5 text-xs border-t border-slate-100 pt-3 text-left">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Purpose</span>
-                  <span className="font-medium capitalize">{request.purpose?.replace(/_/g, " ") ?? "Payment request"}</span>
-                </div>
-                {request.reference && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Reference</span>
-                    <span className="font-medium">{request.reference}</span>
-                  </div>
-                )}
-                {request.dueDate && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Due Date</span>
-                    <span className="font-medium">{formatHumanDate(request.dueDate)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Valid Until</span>
-                  <span className="font-medium">{formatHumanDate(request.expiryDate)}</span>
-                </div>
-                {isEmailLink && request.recipientEmailMasked && (
-                  <div className="flex justify-between bg-slate-50 p-2 rounded border border-slate-200 text-[11px]">
-                    <span className="text-slate-600">Recipient Email:</span>
-                    <span className="font-mono text-blue-700 font-semibold" data-testid="masked-email">
-                      {request.recipientEmailMasked}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
-          <CardContent className="p-5 space-y-4">
-            {/* Compliance notice if KYC pending */}
+          <CardContent className="p-6 pt-3 space-y-4">
             {complianceNotice && (
               <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
                 <p className="font-semibold flex items-center gap-1.5 text-amber-800">
@@ -1147,689 +1549,206 @@ export default function RequestCheckout() {
               </div>
             )}
 
-            {/* Authenticated user quick proceed vs Switch Account — email
-                links only; a copyable "share with anyone" link never
-                auto-selects the payer's identity (identifier-first instead). */}
-            {forgotPassword ? (
-              <div data-testid="payer-auth-forgot">
-                <ForgotPassword
-                  initialEmail={forgotPassword.email}
-                  onCancel={() => setForgotPassword(null)}
-                  onResetComplete={handleForgotResetComplete}
-                  cancelLabel="Back to payment"
-                  successToast={{
-                    title: "Password Successfully Reset",
-                    description: "Please continue your payment journey.",
-                  }}
-                />
-              </div>
-            ) : isAuthenticated && authUser && !useOtherAccount && isEmailLink ? (
-              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      Paying as {authUser.firstName ? `${authUser.firstName} ${authUser.lastName || ""}` : authUser.email}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{authUser.email}</p>
-                  </div>
-                </div>
-
-                {/* Step-up authentication: an existing session is not enough to
-                    open a payment session — the sender confirms the password. */}
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void handleContinueAuthenticated();
-                  }}
-                  className="space-y-3"
-                >
-                  {askPayerPassword && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="confirmPayerPassword" className="text-xs font-medium">
-                        Confirm your password <span className="text-destructive">*</span>
-                      </Label>
-                      <PasswordInputWithToggle
-                        id="confirmPayerPassword"
-                        placeholder="Enter your password"
-                        value={confirmPayerPassword}
-                        onChange={(e) => setConfirmPayerPassword(e.target.value)}
-                        data-testid="input-confirm-payer-password"
-                        required
-                        autoFocus
-                      />
-                      {isDemoPayerAccount(authUser.email) && demoPasswordHint}
-                      {masterPasswordHint}
-                      <div className="text-right">
-                        <button
-                          type="button"
-                          className="text-xs text-primary font-medium hover:underline"
-                          onClick={() => setForgotPassword({ email: authUser.email })}
-                          data-testid="button-forgot-password-stepup"
-                        >
-                          Forgot password?
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <Button
-                    type="submit"
-                    className="w-full bg-primary hover:bg-primary/90"
-                    disabled={busy}
-                    data-testid="button-continue-authenticated"
-                  >
-                    {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
-                    {askPayerPassword ? "Confirm Password & Continue (10m Session)" : "Continue with this Account (10m Session)"}
-                  </Button>
-                </form>
-
-                <div className="text-center pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUseOtherAccount(true);
-                      setAuthStep("email");
-                      setAskPayerPassword(false);
-                      setConfirmPayerPassword("");
-                      setErrorMessage("");
-                    }}
-                    className="text-xs text-primary font-medium hover:underline"
-                    data-testid="button-switch-payer"
-                  >
-                    Not your account? Sign in or register as a different payer →
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* Identifier-first payer auth: email → password (registered) or PIN → registration (new) */
-              <div className="space-y-4" data-testid={`payer-auth-${authStep}`}>
-                <div className="flex items-center justify-between">
-                  <p className={ngnFlow ? "hidden" : "text-xs text-slate-700 font-semibold"}>
-                    {isEmailLink ? "Identify yourself to pay this request:" : "Identify yourself to open secure payment session:"}
+            {/* ── STAGE 1: Email entry ONLY (no New to Mito fields upfront, no password) ── */}
+            {verifyStage === "email_only" && (
+              <form
+                onSubmit={handleSendCodeSubmit}
+                className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 space-y-4"
+                data-testid="ngn-verify-email"
+              >
+                <div className="space-y-1">
+                  <p className="text-lg font-bold text-slate-900">Verify Your Email To Continue</p>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    Confirm the email we should use for your receipt. We will email a 6-digit code that expires in 30 minutes.
                   </p>
-                  {isAuthenticated && authUser && useOtherAccount && (
-                    <button
-                      type="button"
-                      onClick={() => setUseOtherAccount(false)}
-                      className="text-[11px] text-primary hover:underline font-medium"
-                    >
-                      ← Back to {authUser.email}
-                    </button>
-                  )}
                 </div>
 
-                {/* Locked email chip once the email step is passed */}
-                {authStep !== "email" && (
-                  <div className="flex items-center justify-between gap-3 p-3 bg-primary/5 border border-primary/20 rounded-lg" data-testid="payer-email-chip">
-                    <span className="flex items-center gap-2 text-sm font-medium text-slate-800 min-w-0">
-                      <Mail className="w-4 h-4 text-primary shrink-0" />
-                      <span className="truncate">{payerEmail}</span>
-                      {authStep === "register" && (
-                        <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 gap-1 font-medium shrink-0">
-                          <Check className="w-3 h-3" /> Verified
-                        </Badge>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-xs text-primary font-medium hover:underline shrink-0"
-                      onClick={() => {
-                        setAuthStep("email");
-                        setPinSent(false);
-                        setPinCode("");
-                        setDevPin("");
-                        setErrorMessage("");
-                      }}
-                    >
-                      Change
-                    </button>
-                  </div>
-                )}
+                <div className="space-y-1.5">
+                  <Label htmlFor="payerEmail" className="text-xs font-medium text-slate-600">Email</Label>
+                  <Input
+                    id="payerEmail"
+                    type="email"
+                    placeholder="your.email@example.com"
+                    value={payerEmail}
+                    onChange={(e) => setPayerEmail(e.target.value)}
+                    className="bg-white h-11"
+                    data-testid="input-payer-email"
+                    required
+                    autoFocus
+                  />
+                </div>
 
-                {/* Step 1: Email capture — routes to sign-in or PIN verification */}
-                {authStep === "email" && ngnFlow && (
-                  <form onSubmit={handleEmailCheck} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-4" data-testid="ngn-verify-email">
-                    <div className="space-y-1">
-                      <p className="text-lg font-bold text-slate-900">Verify Your Email To Continue</p>
-                      <p className="text-sm text-slate-500 leading-relaxed">
-                        Confirm the email we should use for your receipt. We will email a 6-digit code that expires in 30 minutes.
-                      </p>
-                    </div>
+                {errorMessage && <p className="text-xs text-destructive" data-testid="error-auth">{errorMessage}</p>}
 
-                    <div className="space-y-1.5">
-                      <Label htmlFor="payerEmail" className="text-xs font-medium">Email</Label>
-                      <Input
-                        id="payerEmail"
-                        type="email"
-                        placeholder={isEmailLink && request.recipientEmailMasked ? "Confirm your full email" : "your.email@example.com"}
-                        value={payerEmail}
-                        onChange={(e) => setPayerEmail(e.target.value)}
-                        className="bg-white"
-                        data-testid="input-payer-email"
-                        required
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-semibold text-slate-800">New to Mito?</p>
-                      <div className="inline-flex rounded-full border border-slate-200 bg-white p-0.5" role="radiogroup" aria-label="Account type">
-                        {(["individual", "business"] as const).map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            role="radio"
-                            aria-checked={regAccountType === t}
-                            onClick={() => { setRegAccountType(t); setBizStep(1); }}
-                            className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors ${
-                              regAccountType === t ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-800"
-                            }`}
-                            data-testid={`button-ngn-account-${t}`}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {regAccountType === "individual" && (
-                      <>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label htmlFor="ngnFirstName" className="text-xs font-medium">First name</Label>
-                            <Input
-                              id="ngnFirstName"
-                              value={regFirstName}
-                              onChange={(e) => setRegFirstName(e.target.value)}
-                              className="bg-white"
-                              data-testid="input-ngn-first-name"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="ngnLastName" className="text-xs font-medium">Last name</Label>
-                            <Input
-                              id="ngnLastName"
-                              value={regLastName}
-                              onChange={(e) => setRegLastName(e.target.value)}
-                              className="bg-white"
-                              data-testid="input-ngn-last-name"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-medium">Gender</Label>
-                          <Select value={regGender} onValueChange={setRegGender}>
-                            <SelectTrigger className="bg-white sm:w-1/2" data-testid="select-ngn-gender">
-                              <SelectValue placeholder="Select gender" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {genderOptions.map((g) => (
-                                <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </>
-                    )}
-
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      className="w-full h-12 rounded-full border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
-                      disabled={busy}
-                      data-testid="button-check-email"
-                    >
-                      {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                      Send code
-                    </Button>
-                    {demoPayerHint}
-                  </form>
-                )}
-
-                {authStep === "email" && !ngnFlow && (
-                  <form onSubmit={handleEmailCheck} className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="payerEmail" className="text-xs font-medium">
-                        Email address <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="payerEmail"
-                        type="email"
-                        placeholder={isEmailLink && request.recipientEmailMasked ? "Confirm your full email" : "your.email@example.com"}
-                        value={payerEmail}
-                        onChange={(e) => setPayerEmail(e.target.value)}
-                        data-testid="input-payer-email"
-                        required
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full bg-primary hover:bg-primary/90"
-                      disabled={busy}
-                      data-testid="button-check-email"
-                    >
-                      {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                      Continue
-                    </Button>
-                    <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-                      We'll check whether you already have a Rhemito account — you'll either sign in with your
-                      password or verify this email with a 6-digit PIN.
-                    </p>
-                    {demoPayerHint}
-                  </form>
-                )}
-
-                {/* Step 2a: Registered email → password sign-in */}
-                {authStep === "password" && (
-                  <form onSubmit={handleLoginAndContinue} className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="loginPassword" className="text-xs font-medium">
-                        Password <span className="text-destructive">*</span>
-                      </Label>
-                      <PasswordInputWithToggle
-                        id="loginPassword"
-                        placeholder="Enter your password"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        data-testid="input-payer-password"
-                        required
-                        autoFocus
-                      />
-                      {isDemoPayerAccount(payerEmail) && demoPasswordHint}
-                      {masterPasswordHint}
-                      <div className="text-right">
-                        <button
-                          type="button"
-                          className="text-xs text-primary font-medium hover:underline"
-                          onClick={() => setForgotPassword({ email: payerEmail })}
-                          data-testid="button-forgot-password"
-                        >
-                          Forgot password?
-                        </button>
-                      </div>
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full bg-primary hover:bg-primary/90"
-                      disabled={busy}
-                      data-testid="button-signin-pay"
-                    >
-                      {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
-                      Sign In & Open Session
-                    </Button>
-                    {demoPayerHint}
-                  </form>
-                )}
-
-                {/* Step 2b: Unknown email → verify ownership with a 6-digit PIN */}
-                {authStep === "pin" && (
-                  <form onSubmit={handlePinVerifyAndContinue} className="space-y-3">
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      We sent a 6-digit PIN to <strong className="text-slate-800">{payerEmail}</strong>. Enter it below
-                      to verify this email and continue.
-                      {devPin && <span className="block mt-1 text-[11px] text-teal-700 font-mono">Development PIN: {devPin}</span>}
-                    </p>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="pinCode" className="text-xs font-medium">
-                        6-Digit PIN <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="pinCode"
-                        type="text"
-                        maxLength={6}
-                        placeholder="Enter the 6-digit PIN from your email"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        value={pinCode}
-                        onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ""))}
-                        className="text-center font-mono tracking-widest text-lg font-bold placeholder:font-sans placeholder:text-sm placeholder:font-normal placeholder:tracking-normal"
-                        data-testid="input-pin-code"
-                        required
-                        autoFocus
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full bg-primary hover:bg-primary/90"
-                      disabled={busy || !pinSent}
-                      data-testid="button-verify-pin-pay"
-                    >
-                      {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
-                      Verify & Continue
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full text-xs"
-                      disabled={busy || pinCooldown > 0}
-                      onClick={handleSendPin}
-                      data-testid="button-send-pin"
-                    >
-                      {pinCooldown > 0 ? `Resend PIN in ${pinCooldown}s` : pinSent ? "Resend PIN" : "Send PIN"}
-                    </Button>
-                  </form>
-                )}
-
-                {/* Step 3: PIN-verified new payer → create the account.
-                    Business registrations use two steps (business details →
-                    director details), mirroring /sign-in-sign-up. */}
-                {authStep === "register" && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-900">Create your account</p>
-                      {regAccountType === "business" && (
-                        <span className="text-[11px] text-muted-foreground">
-                          {bizStep === 1 ? "Step 1 of 2 — Business details" : "Step 2 of 2 — Director details"}
-                        </span>
-                      )}
-                    </div>
-
-                    {regAccountType === "business" && bizStep === 2 ? (
-                      <form onSubmit={handleBusinessRegisterAndContinue} className="space-y-3">
-                        {/* Company summary banner */}
-                        <div className="bg-slate-50 rounded-lg px-3.5 py-2.5 border border-slate-200">
-                          <p className="text-sm font-semibold text-slate-700">{bizName}</p>
-                          <p className="text-xs text-slate-400">{bizRegNo}</p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <Label className="text-xs font-medium">
-                            Director <span className="text-destructive">*</span>
-                          </Label>
-                          <Select value={dirName} onValueChange={setDirName}>
-                            <SelectTrigger data-testid="select-director-name" className="bg-white">
-                              <SelectValue placeholder="Select director name" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-64">
-                              {mockDirectors.map((d) => (
-                                <SelectItem key={d} value={d}>
-                                  {d}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label htmlFor="dirDob" className="text-xs font-medium">
-                              Date of Birth <span className="text-destructive">*</span>
-                            </Label>
-                            <Input
-                              id="dirDob"
-                              type="date"
-                              value={dirDob}
-                              onChange={(e) => setDirDob(e.target.value)}
-                              data-testid="input-director-dob"
-                              required
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs font-medium">
-                              Gender <span className="text-destructive">*</span>
-                            </Label>
-                            <Select value={dirGender} onValueChange={setDirGender}>
-                              <SelectTrigger data-testid="select-director-gender" className="bg-white">
-                                <SelectValue placeholder="Select gender" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {genderOptions.map((g) => (
-                                  <SelectItem key={g.value} value={g.value}>
-                                    {g.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        <PhoneInput
-                          codeValue={dirPhoneCode}
-                          numberValue={dirPhoneNumber}
-                          onCodeChange={setDirPhoneCode}
-                          onNumberChange={setDirPhoneNumber}
-                        />
-
-                        <div className="space-y-2 pt-1">
-                          <PasswordInput
-                            value={dirPassword}
-                            onChange={(v) => setDirPassword(v)}
-                            label="Password"
-                            placeholder="Password"
-                          />
-                          <PasswordInput
-                            value={dirConfirmPassword}
-                            onChange={(v) => setDirConfirmPassword(v)}
-                            label="Confirm Password"
-                            placeholder="Confirm Password"
-                          />
-                          <p className="text-[11px] text-muted-foreground">
-                            Must be 8+ characters with 1 uppercase letter, 1 number and 1 special character
-                          </p>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => setBizStep(1)}
-                            disabled={busy}
-                          >
-                            Back
-                          </Button>
-                          <Button
-                            type="submit"
-                            className="flex-1 bg-primary hover:bg-primary/90"
-                            disabled={busy}
-                            data-testid="button-register-pay"
-                          >
-                            {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Building2 className="w-4 h-4 mr-2" />}
-                            Create Account & Pay
-                          </Button>
-                        </div>
-                      </form>
-                    ) : (
-                      <form onSubmit={handleRegisterDetailsSubmit} className="space-y-3">
-                        {/* Account type toggle */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant={regAccountType === "individual" ? "default" : "outline"}
-                            size="sm"
-                            className="text-xs"
-                            onClick={() => {
-                              setRegAccountType("individual");
-                              setBizStep(1);
-                            }}
-                            data-testid="button-account-individual"
-                          >
-                            <User className="w-3.5 h-3.5 mr-1.5" /> Individual
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={regAccountType === "business" ? "default" : "outline"}
-                            size="sm"
-                            className="text-xs"
-                            onClick={() => {
-                              setRegAccountType("business");
-                              setBizStep(1);
-                            }}
-                            data-testid="button-account-business"
-                          >
-                            <Building2 className="w-3.5 h-3.5 mr-1.5" /> Business
-                          </Button>
-                        </div>
-
-                        {regAccountType === "individual" ? (
-                          <>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div className="space-y-1">
-                                <Label htmlFor="regFirstName" className="text-xs font-medium">
-                                  First name <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                  id="regFirstName"
-                                  placeholder="First name"
-                                  value={regFirstName}
-                                  onChange={(e) => setRegFirstName(e.target.value)}
-                                  data-testid="input-reg-first-name"
-                                  required
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor="regLastName" className="text-xs font-medium">
-                                  Last name <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                  id="regLastName"
-                                  placeholder="Last name"
-                                  value={regLastName}
-                                  onChange={(e) => setRegLastName(e.target.value)}
-                                  data-testid="input-reg-last-name"
-                                  required
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div className="space-y-1">
-                                <Label htmlFor="regMiddleName" className="text-xs font-medium">
-                                  Middle name <span className="text-muted-foreground font-normal">(optional)</span>
-                                </Label>
-                                <Input
-                                  id="regMiddleName"
-                                  placeholder="Middle name"
-                                  value={regMiddleName}
-                                  onChange={(e) => setRegMiddleName(e.target.value)}
-                                  data-testid="input-reg-middle-name"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor="regDob" className="text-xs font-medium">
-                                  Date of Birth <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                  id="regDob"
-                                  type="date"
-                                  value={regDob}
-                                  onChange={(e) => setRegDob(e.target.value)}
-                                  data-testid="input-reg-dob"
-                                  required
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div className="space-y-1">
-                                <Label className="text-xs font-medium">
-                                  Gender <span className="text-destructive">*</span>
-                                </Label>
-                                <Select value={regGender} onValueChange={setRegGender}>
-                                  <SelectTrigger data-testid="select-reg-gender" className="bg-white">
-                                    <SelectValue placeholder="Select gender" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {genderOptions.map((g) => (
-                                      <SelectItem key={g.value} value={g.value}>
-                                        {g.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              {regCountrySelect}
-                            </div>
-
-                            <PhoneInput
-                              codeValue={regPhoneCode}
-                              numberValue={regPhoneNumber}
-                              onCodeChange={handleRegPhoneCodeChange}
-                              onNumberChange={setRegPhoneNumber}
-                            />
-
-                            <div className="space-y-1">
-                              <Label htmlFor="regPassword" className="text-xs font-medium">
-                                Password <span className="text-destructive">*</span>
-                              </Label>
-                              <PasswordInputWithToggle
-                                id="regPassword"
-                                placeholder="Create password"
-                                value={regPassword}
-                                onChange={(e) => setRegPassword(e.target.value)}
-                                data-testid="input-reg-password"
-                                required
-                              />
-                              <p
-                                className={`text-[11px] ${
-                                  regPassword && !/^(?=.*[A-Z])(?=.*\d).{8,}$/.test(regPassword) ? "text-destructive" : "text-muted-foreground"
-                                }`}
-                              >
-                                Must be 8+ characters, 1 uppercase, 1 number
-                              </p>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div className="space-y-1">
-                                <Label htmlFor="bizName" className="text-xs font-medium">
-                                  Business Name <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                  id="bizName"
-                                  placeholder="Business name"
-                                  value={bizName}
-                                  onChange={(e) => setBizName(e.target.value)}
-                                  data-testid="input-reg-business-name"
-                                  required
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor="bizRegNo" className="text-xs font-medium">
-                                  Registration No. <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                  id="bizRegNo"
-                                  placeholder="e.g. 123456789"
-                                  value={bizRegNo}
-                                  onChange={(e) => setBizRegNo(e.target.value)}
-                                  data-testid="input-reg-business-regno"
-                                  required
-                                />
-                              </div>
-                            </div>
-                            {regCountrySelect}
-
-                            <PhoneInput
-                              codeValue={bizPhoneCode}
-                              numberValue={bizPhoneNumber}
-                              onCodeChange={handleBizPhoneCodeChange}
-                              onNumberChange={setBizPhoneNumber}
-                              label="Business Phone Number"
-                            />
-                          </>
-                        )}
-
-                        <Button
-                          type="submit"
-                          className="w-full bg-primary hover:bg-primary/90"
-                          disabled={busy}
-                          data-testid={regAccountType === "business" ? "button-register-continue" : "button-register-pay"}
-                        >
-                          {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                          {regAccountType === "business" ? "Continue" : "Create Account & Pay"}
-                        </Button>
-                      </form>
-                    )}
-                  </div>
-                )}
-              </div>
+                <Button
+                  type="submit"
+                  className="w-full h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm"
+                  disabled={busy}
+                  data-testid="button-check-email"
+                >
+                  {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Send code
+                </Button>
+              </form>
             )}
 
-            {errorMessage && <p className="text-xs text-destructive" data-testid="error-auth">{errorMessage}</p>}
+            {/* ── STAGE 2: 6-Digit Confirmation Code + Conditional "New to Mito?" (SenderScreen-3 & 4) ── */}
+            {verifyStage === "code_sent" && (
+              <form
+                onSubmit={handleVerifyCodeAndPay}
+                className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 space-y-4"
+                data-testid="payer-auth-pin"
+              >
+                <div className="space-y-1">
+                  <p className="text-lg font-bold text-slate-900">Verify Your Email To Continue</p>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    Enter the 6-digit code we emailed to <span className="text-slate-700 font-medium">{payerEmail}</span>. The code expires in 30 minutes — request a new one if it has expired.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="lockedPayerEmail" className="text-xs font-medium text-slate-600">Email</Label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVerifyStage("email_only");
+                        setPinCode("");
+                        setErrorMessage("");
+                      }}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                      data-testid="button-edit-email"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                  <Input
+                    id="lockedPayerEmail"
+                    type="email"
+                    value={payerEmail}
+                    readOnly
+                    className="bg-amber-50/60 text-slate-700 border-slate-200 h-11"
+                    data-testid="payer-email-chip"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="pinCode" className="text-xs font-medium text-slate-600">Confirmation code</Label>
+                  <Input
+                    id="pinCode"
+                    type="text"
+                    maxLength={6}
+                    placeholder="Enter 6-digit code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={pinCode}
+                    onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ""))}
+                    className="bg-white h-12 text-base border-blue-600 focus-visible:ring-blue-600"
+                    data-testid="input-pin-code"
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                {/* Only show "New to Mito?" mini-KYC fields if this email has NOT been registered/verified before */}
+                {!isKnownEmailSender && (
+                  <NewToMitoFields
+                    regAccountType={regAccountType}
+                    setRegAccountType={setRegAccountType}
+                    regFirstName={regFirstName}
+                    setRegFirstName={setRegFirstName}
+                    regLastName={regLastName}
+                    setRegLastName={setRegLastName}
+                    regGender={regGender}
+                    setRegGender={setRegGender}
+                    bizName={bizName}
+                    setBizName={setBizName}
+                  />
+                )}
+
+                {errorMessage && <p className="text-xs text-destructive" data-testid="error-auth">{errorMessage}</p>}
+
+                <Button
+                  type="submit"
+                  className="w-full h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm"
+                  disabled={busy || !pinSent}
+                  data-testid="button-verify-pin-pay"
+                >
+                  {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Verify and pay
+                </Button>
+
+                <div>
+                  <button
+                    type="button"
+                    disabled={busy || pinCooldown > 0}
+                    onClick={handleResendCode}
+                    className="text-xs font-semibold text-blue-600 hover:underline disabled:text-slate-400"
+                    data-testid="button-send-pin"
+                  >
+                    {pinCooldown > 0 ? `Resend code in ${pinCooldown}s` : "Resend code"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ── STAGE 3: Email Link (/pay/e/:token) for a brand-new sender — NO 6-digit OTP needed ── */}
+            {verifyStage === "email_link_profile" && (
+              <form
+                onSubmit={handleEmailLinkProfileContinue}
+                className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 space-y-4"
+                data-testid="email-link-direct-form"
+              >
+                <div className="space-y-1">
+                  <p className="text-lg font-bold text-slate-900">Complete Your Details To Continue</p>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    Your email was verified from your payment request link. Confirm your details below to proceed to payment.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="emailLinkAddress" className="text-xs font-medium text-slate-600">Email</Label>
+                  <Input
+                    id="emailLinkAddress"
+                    type="email"
+                    placeholder="Confirm your email"
+                    value={payerEmail}
+                    onChange={(e) => setPayerEmail(e.target.value)}
+                    readOnly={Boolean(request.demoPayerEmail)}
+                    className={request.demoPayerEmail ? "bg-amber-50/60 text-slate-700 border-slate-200 h-11" : "bg-white h-11"}
+                    data-testid="input-payer-email"
+                    required
+                  />
+                </div>
+
+                {!request.isKnownSender && (
+                  <NewToMitoFields
+                    regAccountType={regAccountType}
+                    setRegAccountType={setRegAccountType}
+                    regFirstName={regFirstName}
+                    setRegFirstName={setRegFirstName}
+                    regLastName={regLastName}
+                    setRegLastName={setRegLastName}
+                    regGender={regGender}
+                    setRegGender={setRegGender}
+                    bizName={bizName}
+                    setBizName={setBizName}
+                  />
+                )}
+
+                {errorMessage && <p className="text-xs text-destructive" data-testid="error-auth">{errorMessage}</p>}
+
+                <Button
+                  type="submit"
+                  className="w-full h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm"
+                  disabled={busy}
+                  data-testid="button-email-link-continue"
+                >
+                  {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Continue to payment
+                </Button>
+              </form>
+            )}
 
             {/* Footer Notice */}
             <div className="pt-2 border-t border-border flex items-center justify-end text-xs">
@@ -1838,19 +1757,159 @@ export default function RequestCheckout() {
               </span>
             </div>
           </CardContent>
-          {ngnFlow && (
-            <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
-              <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
-              <span className="text-lg font-bold lowercase font-display">rhemito</span>
-            </div>
-          )}
+
+          <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
+            <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
+            <span className="text-lg font-bold lowercase font-display">rhemito</span>
+          </div>
         </Card>
       </motion.div>
     </Shell>
   );
 }
 
-// ─── Layout helpers ───────────────────────────────────────────────────────────
+// ─── Subcomponents & Layout Helpers ──────────────────────────────────────────
+
+function NewToMitoFields(props: {
+  regAccountType: "individual" | "business";
+  setRegAccountType: (v: "individual" | "business") => void;
+  regFirstName: string;
+  setRegFirstName: (v: string) => void;
+  regLastName: string;
+  setRegLastName: (v: string) => void;
+  regGender: string;
+  setRegGender: (v: string) => void;
+  bizName: string;
+  setBizName: (v: string) => void;
+}) {
+  const {
+    regAccountType,
+    setRegAccountType,
+    regFirstName,
+    setRegFirstName,
+    regLastName,
+    setRegLastName,
+    regGender,
+    setRegGender,
+    bizName,
+    setBizName,
+  } = props;
+
+  return (
+    <div className="space-y-3.5 pt-1" data-testid="new-to-mito-fields">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-bold text-slate-800">New to Mito?</p>
+        <div className="inline-flex rounded-full border border-slate-200 bg-white p-0.5" role="radiogroup" aria-label="Account type">
+          {(["individual", "business"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="radio"
+              aria-checked={regAccountType === t}
+              onClick={() => setRegAccountType(t)}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors ${
+                regAccountType === t ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-800"
+              }`}
+              data-testid={`button-ngn-account-${t}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {regAccountType === "individual" ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="ngnFirstName" className="text-xs font-medium text-slate-600">First name</Label>
+              <Input
+                id="ngnFirstName"
+                value={regFirstName}
+                onChange={(e) => setRegFirstName(e.target.value)}
+                className="bg-white h-10"
+                data-testid="input-ngn-first-name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ngnLastName" className="text-xs font-medium text-slate-600">Last name</Label>
+              <Input
+                id="ngnLastName"
+                value={regLastName}
+                onChange={(e) => setRegLastName(e.target.value)}
+                className="bg-white h-10"
+                data-testid="input-ngn-last-name"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-600">Gender</Label>
+            <Select value={regGender} onValueChange={setRegGender}>
+              <SelectTrigger className="bg-white sm:w-1/2 h-10" data-testid="select-ngn-gender">
+                <SelectValue placeholder="Select gender" />
+              </SelectTrigger>
+              <SelectContent>
+                {genderOptions.map((g) => (
+                  <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="ngnBusinessName" className="text-xs font-medium text-slate-600">Business name</Label>
+            <Input
+              id="ngnBusinessName"
+              placeholder="Registered company name"
+              value={bizName}
+              onChange={(e) => setBizName(e.target.value)}
+              className="bg-white h-10"
+              data-testid="input-reg-business-name"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="ngnBizFirstName" className="text-xs font-medium text-slate-600">Contact first name</Label>
+              <Input
+                id="ngnBizFirstName"
+                value={regFirstName}
+                onChange={(e) => setRegFirstName(e.target.value)}
+                className="bg-white h-10"
+                data-testid="input-ngn-first-name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ngnBizLastName" className="text-xs font-medium text-slate-600">Contact last name</Label>
+              <Input
+                id="ngnBizLastName"
+                value={regLastName}
+                onChange={(e) => setRegLastName(e.target.value)}
+                className="bg-white h-10"
+                data-testid="input-ngn-last-name"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RhemitoRibbonMark({ className = "w-7 h-7" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 36 40" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M6 4H26L18 16L26 28L16 21L6 34V4Z"
+        stroke="currentColor"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -1889,9 +1948,6 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-
-// ─── Payment breakdown (payer, post-identification) ───────────────────────────
-
 function formatMoney(v: string | number | null | undefined): string {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/,/g, ""));
   if (!Number.isFinite(n)) return "—";
@@ -1901,14 +1957,12 @@ function formatMoney(v: string | number | null | undefined): string {
 function PaymentBreakdown({ request }: { request: PublicRequestView }) {
   const total = parseFloat(request.amount);
   const fee = parseFloat(request.feeAmount ?? "0") || 0;
-  // The fee is carved out of what the payer sends in both fee models.
   const actualSent = total - fee;
   const payoutCurrency = request.payoutCurrency ?? request.currency;
   const crossCurrency = payoutCurrency !== request.currency;
   const rate = request.fxRate ?? null;
   const rateNum = (n: number) =>
     n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  // Always "<payer-currency units> = 1 <payout currency>", as in the Mito design.
   const rateText =
     rate && rate > 0
       ? rate >= 1
@@ -1984,14 +2038,16 @@ function PaymentBreakdown({ request }: { request: PublicRequestView }) {
   );
 }
 
-function MitoSummaryCard({ request, onPay }: { request: PublicRequestView; onPay: () => void }) {
+function MitoSummaryCard({ request, busy, onPay }: { request: PublicRequestView; busy?: boolean; onPay: () => void }) {
   return (
-    <Card className="shadow-xl overflow-hidden border-2 border-blue-600" data-testid="mito-summary-card">
+    <Card className="shadow-xl overflow-hidden border-2 border-blue-600 bg-white" data-testid="mito-summary-card">
       <div className="px-6 pt-6 pb-2 space-y-4 text-center" data-testid="checkout-summary">
         <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
         <div>
-          <p className="text-xs text-slate-500">Payment Request From</p>
-          <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
+          <p className="text-sm font-semibold text-slate-700">Payment Request From</p>
+          <p className="text-xl font-extrabold text-slate-900 uppercase leading-snug" data-testid="checkout-requester-name">
+            {request.requesterName}
+          </p>
           <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>
         </div>
         <div>
@@ -2004,12 +2060,12 @@ function MitoSummaryCard({ request, onPay }: { request: PublicRequestView; onPay
       <CardContent className="p-6 pt-3 space-y-4">
         <PaymentBreakdown request={request} />
         <Button
-          variant="outline"
-          className="w-full h-12 rounded-full border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+          className="w-full h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm"
           onClick={onPay}
+          disabled={busy}
           data-testid="button-start-pay"
         >
-          Pay now
+          {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading…</> : "Pay now"}
         </Button>
         <p className="flex items-start gap-1.5 text-[11px] text-amber-900 bg-amber-50 border border-amber-200/80 rounded-lg p-2 font-medium">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />

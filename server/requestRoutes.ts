@@ -32,6 +32,10 @@ import {
   processPayoutWebhook,
   startRequestSweep,
   RequestError,
+  isKnownSenderEmail,
+  markSenderEmailKnown,
+  getPayerSavedAccounts,
+  savePayerBankAccountForEmail,
 } from "./requestService";
 import { getFxRate } from "./fxService";
 import { FxError } from "./fxService";
@@ -41,7 +45,9 @@ import {
   createMoneyRequestSchema,
   createPayinIntentSchema,
   emailCheckSchema,
+  DEMO_PAYER_CREDENTIALS,
 } from "@shared/schema";
+import bcrypt from "bcryptjs";
 
 function requireStrictAuth(req: Request): string {
   const userId = req.session?.userId;
@@ -433,6 +439,78 @@ export function registerRequestMoneyRoutes(app: Express): void {
     }
   });
 
+  const ensurePayerUserSession = async (
+    req: Request,
+    request: Awaited<ReturnType<typeof getRequestByTokenOrEmailToken>>,
+    email: string,
+    profile?: {
+      accountType?: "individual" | "business";
+      firstName?: string;
+      lastName?: string;
+      businessName?: string;
+      gender?: string;
+    },
+  ) => {
+    const normalized = email.trim().toLowerCase();
+    let user = await storage.getAuthUserByEmail(normalized);
+    const firstName = profile?.firstName?.trim();
+    const lastName = profile?.lastName?.trim();
+    const businessName = profile?.businessName?.trim();
+    const accountType = profile?.accountType === "business" ? "business" : "individual";
+
+    if (!user) {
+      const [reqFirst, ...reqRest] = (request?.senderName ?? "").split(" ");
+      user = await storage.createAuthUser({
+        email: normalized,
+        password: bcrypt.hashSync(DEMO_PAYER_CREDENTIALS.password, 12),
+        accountType,
+        country: request?.senderCountry || "NG",
+        firstName: firstName || reqFirst || "Verified",
+        middleName: null,
+        lastName: lastName || reqRest.join(" ") || "Sender",
+        dateOfBirth: null,
+        gender: profile?.gender || null,
+        mobileCode: null,
+        mobileNumber: null,
+        businessName: accountType === "business" ? (businessName || request?.senderName || "Business Sender") : null,
+        businessRegNo: null,
+        businessPhoneCode: null,
+        businessPhoneNumber: null,
+        directorName: null,
+        status: "pending",
+      });
+    } else if (firstName || lastName || businessName) {
+      // Update placeholder or new sender details when provided
+      user.accountType = accountType;
+      if (firstName) user.firstName = firstName;
+      if (lastName) user.lastName = lastName;
+      if (profile?.gender) user.gender = profile.gender;
+      if (accountType === "business" && businessName) {
+        user.businessName = businessName;
+      }
+    }
+
+    await storage.activateUser(normalized);
+    const updated = (await storage.getAuthUserByEmail(normalized)) ?? user;
+    markSenderEmailKnown(normalized);
+    req.session.userId = updated.id;
+
+    const payerName =
+      updated.accountType === "business" && updated.businessName
+        ? updated.businessName
+        : [updated.firstName, updated.middleName, updated.lastName].filter(Boolean).join(" ") || normalized;
+
+    if (request && (!request.senderName || request.senderEmail?.toLowerCase() === normalized)) {
+      await storage.updateMoneyRequest(request.id, {
+        payerUserId: updated.id,
+        payerEmail: normalized,
+        payerName,
+      });
+    }
+
+    return { user: updated, payerName };
+  };
+
   // An unregistered payer must prove control of the entered email before an
   // account can be created. Opening either link never verifies the address.
   const handleSendPayerPin = async (req: Request, res: Response, isEmailLink: boolean) => {
@@ -451,23 +529,34 @@ export function registerRequestMoneyRoutes(app: Express): void {
         return res.status(409).json({ error: { code: "INVALID_STATE", message: "This request cannot accept a new payment." } });
       }
       const email = parsed.data.email.toLowerCase();
-      if (await storage.getAuthUserByEmail(email)) {
+      const allowRegistered = Boolean(req.body?.allowRegistered);
+      if (!allowRegistered && (await storage.getAuthUserByEmail(email))) {
         return res.status(409).json({ error: { code: "EMAIL_REGISTERED", message: "This email already has a Rhemito account. Please sign in." } });
       }
       const previous = req.session.paymentRequestVerification;
-      if (previous?.email === email && Date.now() - previous.lastSentAt < 60_000) {
+      if (previous?.email === email && Date.now() - previous.lastSentAt < 60_000 && !demoModeEnabled) {
         res.setHeader("Retry-After", Math.ceil((60_000 - (Date.now() - previous.lastSentAt)) / 1000));
         return res.status(429).json({ error: { code: "PIN_COOLDOWN", message: "Please wait before requesting another PIN." } });
       }
       await storage.invalidateOtps(email);
       const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-      await storage.createOtp(email, code, new Date(Date.now() + 10 * 60_000));
+      await storage.createOtp(email, code, new Date(Date.now() + 30 * 60_000));
       req.session.paymentRequestVerification = {
         email, token, isEmailLink, verified: false, failedAttempts: 0, lastSentAt: Date.now(),
       };
+      const isKnownSender = await isKnownSenderEmail(email, request);
+      const existingUser = await storage.getAuthUserByEmail(email);
+      const knownSenderName = isKnownSender
+        ? (request.senderEmail?.toLowerCase() === email && request.senderName)
+          || (existingUser ? [existingUser.firstName, existingUser.lastName].filter(Boolean).join(" ") : null)
+        : null;
+
       return res.json({ data: {
         sent: true,
-        expiresInSeconds: 600,
+        isKnownSender,
+        senderName: knownSenderName,
+        savedAccounts: getPayerSavedAccounts(email, request),
+        expiresInSeconds: 1800,
         resendAfterSeconds: 60,
         ...(demoModeEnabled ? { devPin: code } : {}),
       } });
@@ -496,7 +585,106 @@ export function registerRequestMoneyRoutes(app: Express): void {
       }
       await storage.markOtpUsed(otp.id);
       verification.verified = true;
+
+      const request = await getRequestByTokenOrEmailToken(token, isEmailLink);
+      if (req.body?.authenticatePayer && request) {
+        const { payerName } = await ensurePayerUserSession(req, request, email, {
+          accountType: req.body?.accountType,
+          firstName: req.body?.firstName,
+          lastName: req.body?.lastName,
+          businessName: req.body?.businessName,
+          gender: req.body?.gender,
+        });
+        return res.json({
+          data: {
+            verified: true,
+            payerName,
+            savedAccounts: getPayerSavedAccounts(email, request),
+          },
+        });
+      }
+
       return res.json({ data: { verified: true } });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  };
+
+  // Email-link direct continuation: when the payer arrives via /pay/e/:emailToken,
+  // their email ownership was already established by opening the emailed link.
+  const handleEmailLinkContinue = async (req: Request, res: Response) => {
+    try {
+      if (!enforceRateLimit(req, res, "paymentIntent")) return;
+      const emailToken = req.params.emailToken || String(req.body?.token ?? "");
+      const request = await getRequestByTokenOrEmailToken(emailToken, true);
+      if (!request) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "This payment link is not valid." } });
+      }
+      if (!["active", "viewed"].includes(effectiveStatus(request))) {
+        return res.status(409).json({ error: { code: "INVALID_STATE", message: "This request cannot accept a new payment." } });
+      }
+      const email = String(req.body?.email || request.senderEmail || "").trim().toLowerCase();
+      if (!email) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Enter your email address to continue." } });
+      }
+      const { payerName } = await ensurePayerUserSession(req, request, email, {
+        accountType: req.body?.accountType,
+        firstName: req.body?.firstName,
+        lastName: req.body?.lastName,
+        businessName: req.body?.businessName,
+        gender: req.body?.gender,
+      });
+      return res.json({
+        data: {
+          verified: true,
+          payerName,
+          payerEmail: email,
+          savedAccounts: getPayerSavedAccounts(email, request),
+        },
+      });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  };
+
+  const handleSavePayerBankAccount = async (req: Request, res: Response, isEmailLink: boolean) => {
+    try {
+      const token = req.params.token || req.params.emailToken || String(req.body?.token ?? "");
+      const request = await getRequestByTokenOrEmailToken(token, isEmailLink);
+      if (!request) {
+        return res.status(404).json({ error: { code: "NOT_FOUND", message: "This payment link is not valid." } });
+      }
+      const bankName = String(req.body?.bankName ?? "").trim();
+      const accountNumber = String(req.body?.accountNumber ?? "").trim().replace(/\D/g, "");
+      const accountName = String(req.body?.accountName ?? "").trim() || request.payerName || request.senderName || "Verified Sender";
+      const email = String(req.body?.email || request.payerEmail || request.senderEmail || "").trim().toLowerCase();
+      const saveToProfile = req.body?.saveToProfile !== false;
+
+      if (!bankName || accountNumber.length < 6) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Select a bank and enter a valid account number." } });
+      }
+
+      await storage.updateMoneyRequest(request.id, {
+        payerSourceBankName: bankName,
+        payerSourceAccountMasked: maskAccountNumber(accountNumber),
+      });
+
+      let savedAccount = {
+        id: `acc_${Date.now()}`,
+        bankName,
+        accountNumber,
+        accountName,
+      };
+      if (email && saveToProfile) {
+        savedAccount = savePayerBankAccountForEmail(email, { bankName, accountNumber, accountName });
+      }
+
+      return res.json({
+        data: {
+          account: savedAccount,
+          savedAccounts: getPayerSavedAccounts(email, request),
+        },
+      });
     } catch (err) {
       return handleError(res, err);
     }
@@ -512,6 +700,9 @@ export function registerRequestMoneyRoutes(app: Express): void {
   app.post("/api/public/request-verifications/e/:emailToken/verify", (req, res) => handleVerifyPayerPin(req, res, true));
   app.post("/api/public/request-verifications/send", (req, res) => handleSendPayerPin(req, res, Boolean(req.body?.isEmailLink)));
   app.post("/api/public/request-verifications/verify", (req, res) => handleVerifyPayerPin(req, res, Boolean(req.body?.isEmailLink)));
+  app.post("/api/public/requests/e/:emailToken/email-continue", handleEmailLinkContinue);
+  app.post("/api/public/requests/:token/payer-bank-account", (req, res) => handleSavePayerBankAccount(req, res, false));
+  app.post("/api/public/requests/e/:emailToken/payer-bank-account", (req, res) => handleSavePayerBankAccount(req, res, true));
 
   // 3. Start Payer 10-Minute Session
   const handleStartSession = async (req: Request, res: Response, isEmailLink: boolean) => {

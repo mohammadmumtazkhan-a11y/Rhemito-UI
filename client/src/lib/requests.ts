@@ -86,6 +86,13 @@ export interface MoneyRequestView {
   paidOutAt: string | null;
 }
 
+export interface PayerSavedBankAccount {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
 export interface PublicRequestView {
   requestNumber: string | null;
   requesterName: string;
@@ -108,6 +115,7 @@ export interface PublicRequestView {
   expiresAt: string;
   expiryDate: string;
   methods: string[];
+  availableMethods?: string[];
   estimatedDeliveryTime: string;
   senderFeeNote: string;
   status: string;
@@ -126,6 +134,19 @@ export interface PublicRequestView {
   };
   /** Prototype-only: the sender email the requester provided (registered demo payer). */
   demoPayerEmail?: string;
+  senderName?: string | null;
+  senderType?: "individual" | "business" | string;
+  isKnownSender?: boolean;
+  payerSourceBankName?: string | null;
+  payerSourceAccountMasked?: string | null;
+  payerSourceAccountNumber?: string | null;
+  payerSavedAccounts?: PayerSavedBankAccount[];
+  collectionAccount?: {
+    accountName: string;
+    bankName: string;
+    accountNumber: string;
+    paymentReference: string;
+  };
 }
 
 export interface CreateRequestInput {
@@ -302,8 +323,16 @@ export async function resetPasswordWithPin(
   return json;
 }
 
-export async function sendPayerVerificationPin(token: string, email: string, isEmailLink = false): Promise<{
+export async function sendPayerVerificationPin(
+  token: string,
+  email: string,
+  isEmailLink = false,
+  allowRegistered = true,
+): Promise<{
   sent: boolean;
+  isKnownSender?: boolean;
+  senderName?: string | null;
+  savedAccounts?: PayerSavedBankAccount[];
   expiresInSeconds: number;
   resendAfterSeconds: number;
   devPin?: string;
@@ -312,22 +341,92 @@ export async function sendPayerVerificationPin(token: string, email: string, isE
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ token, email, isEmailLink }),
+    body: JSON.stringify({ token, email, isEmailLink, allowRegistered }),
   });
   const json = await res.json().catch(() => null);
   if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? "The PIN could not be sent."), { code: json?.error?.code, status: res.status });
   return json.data;
 }
 
-export async function verifyPayerVerificationPin(token: string, email: string, code: string, isEmailLink = false): Promise<void> {
+export async function verifyPayerVerificationPin(
+  token: string,
+  email: string,
+  code: string,
+  isEmailLink = false,
+  profile?: {
+    authenticatePayer?: boolean;
+    accountType?: "individual" | "business";
+    firstName?: string;
+    lastName?: string;
+    businessName?: string;
+    gender?: string;
+  },
+): Promise<{
+  verified?: boolean;
+  payerName?: string;
+  savedAccounts?: PayerSavedBankAccount[];
+}> {
   const res = await fetch("/api/public/request-verifications/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ token, email, code, isEmailLink }),
+    body: JSON.stringify({ token, email, code, isEmailLink, ...(profile ?? {}) }),
   });
   const json = await res.json().catch(() => null);
   if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? "The PIN could not be verified."), { code: json?.error?.code, status: res.status });
+  return json?.data ?? { verified: true };
+}
+
+export async function continueFromEmailLink(
+  emailToken: string,
+  params: {
+    email?: string;
+    accountType?: "individual" | "business";
+    firstName?: string;
+    lastName?: string;
+    businessName?: string;
+    gender?: string;
+  },
+): Promise<{
+  verified: boolean;
+  payerName: string;
+  payerEmail: string;
+  savedAccounts: PayerSavedBankAccount[];
+}> {
+  const res = await fetch(`/api/public/requests/e/${encodeURIComponent(emailToken)}/email-continue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(params),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? "Could not continue with this email link."), { code: json?.error?.code, status: res.status });
+  return json.data;
+}
+
+export async function savePayerBankAccount(params: {
+  token: string;
+  isEmailLink?: boolean;
+  bankName: string;
+  accountNumber: string;
+  accountName?: string;
+  email?: string;
+  saveToProfile?: boolean;
+}): Promise<{
+  account: PayerSavedBankAccount;
+  savedAccounts: PayerSavedBankAccount[];
+}> {
+  const { token, isEmailLink = false, ...rest } = params;
+  const prefix = isEmailLink ? "/api/public/requests/e/" : "/api/public/requests/";
+  const res = await fetch(`${prefix}${encodeURIComponent(token)}/payer-bank-account`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(rest),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? "Could not save bank account."), { code: json?.error?.code, status: res.status });
+  return json.data;
 }
 
 /** GroupPay contributor identification: send a 6-digit PIN to an unregistered email (demo mode echoes devPin). */

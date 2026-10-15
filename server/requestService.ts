@@ -338,6 +338,16 @@ export async function createMoneyRequest(params: {
     if (promoApplied) await promo.releaseForRequest(requestId);
     throw err;
   }
+  if (payload.payerAccountNumber) {
+    requestPayerFullAccountById.set(request.id, payload.payerAccountNumber);
+    if (request.senderEmail && payload.payerBankName) {
+      savePayerBankAccountForEmail(request.senderEmail, {
+        bankName: payload.payerBankName,
+        accountNumber: payload.payerAccountNumber,
+        accountName: request.senderName || request.senderEmail,
+      });
+    }
+  }
   await ensureDemoPayerForRequest(request);
   // No email is sent at creation: the requester chooses to send one (Send email),
   // so creating a link never implies that an email went out.
@@ -351,6 +361,161 @@ export async function createMoneyRequest(params: {
   };
 }
 
+export interface PayerSavedBankAccount {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
+const requestPayerFullAccountById = new Map<string, string>();
+const autoSeededPlaceholderEmails = new Set<string>();
+const verifiedSenderEmails = new Set<string>([
+  "payer@rhemito.com",
+  "demo@rhemito.com",
+  "john.adeyemi@email.com",
+  "sarah.w@company.co.uk",
+  "m.chen@business.com",
+  "emma.t@mail.com",
+  "david.o@gmail.com",
+]);
+
+const payerSavedAccountsByEmail = new Map<string, PayerSavedBankAccount[]>([
+  [
+    "payer@rhemito.com",
+    [
+      {
+        id: "acc_paga_3153",
+        bankName: "Paga Mobile Money",
+        accountNumber: "3661883153",
+        accountName: "Firopo Akintayo Akin-Agunbiade",
+      },
+    ],
+  ],
+  [
+    "demo@rhemito.com",
+    [
+      {
+        id: "acc_paga_3153",
+        bankName: "Paga Mobile Money",
+        accountNumber: "3661883153",
+        accountName: "Firopo Akintayo Akin-Agunbiade",
+      },
+    ],
+  ],
+  [
+    "john.adeyemi@email.com",
+    [
+      {
+        id: "acc_john_6789",
+        bankName: "Access Bank Nigeria Plc",
+        accountNumber: "0123456789",
+        accountName: "John Oluwaseun Adeyemi",
+      },
+    ],
+  ],
+  [
+    "david.o@gmail.com",
+    [
+      {
+        id: "acc_david_7890",
+        bankName: "Guaranty Trust Bank (GTBank)",
+        accountNumber: "0234567890",
+        accountName: "David Chukwu Okonkwo",
+      },
+    ],
+  ],
+  [
+    "sarah.w@company.co.uk",
+    [
+      {
+        id: "acc_sarah_5678",
+        bankName: "Barclays",
+        accountNumber: "12345678",
+        accountName: "Sarah Williams",
+      },
+    ],
+  ],
+  [
+    "emma.t@mail.com",
+    [
+      {
+        id: "acc_emma_4321",
+        bankName: "HSBC UK",
+        accountNumber: "87654321",
+        accountName: "Emma Grace Thompson",
+      },
+    ],
+  ],
+]);
+
+export function getPayerSavedAccounts(email?: string | null, request?: MoneyRequest): PayerSavedBankAccount[] {
+  const list: PayerSavedBankAccount[] = [];
+  if (request?.payerSourceBankName && (requestPayerFullAccountById.get(request.id) || request.payerSourceAccountMasked)) {
+    const accNum = requestPayerFullAccountById.get(request.id) || request.payerSourceAccountMasked || "";
+    list.push({
+      id: `req_acc_${request.id}`,
+      bankName: request.payerSourceBankName,
+      accountNumber: accNum,
+      accountName: request.senderName || request.payerName || "Verified Sender",
+    });
+  }
+  if (email) {
+    const normalized = email.trim().toLowerCase();
+    const saved = payerSavedAccountsByEmail.get(normalized) ?? [];
+    for (const item of saved) {
+      if (!list.some((x) => x.accountNumber === item.accountNumber && x.bankName === item.bankName)) {
+        list.push(item);
+      }
+    }
+  }
+  return list;
+}
+
+export function savePayerBankAccountForEmail(
+  email: string,
+  account: { bankName: string; accountNumber: string; accountName: string },
+): PayerSavedBankAccount {
+  const normalized = email.trim().toLowerCase();
+  const current = payerSavedAccountsByEmail.get(normalized) ?? [];
+  const existing = current.find(
+    (a) => a.accountNumber === account.accountNumber && a.bankName.toLowerCase() === account.bankName.toLowerCase(),
+  );
+  if (existing) {
+    existing.accountName = account.accountName || existing.accountName;
+    return existing;
+  }
+  const created: PayerSavedBankAccount = {
+    id: `acc_${randomBytes(4).toString("hex")}`,
+    bankName: account.bankName,
+    accountNumber: account.accountNumber,
+    accountName: account.accountName,
+  };
+  payerSavedAccountsByEmail.set(normalized, [created, ...current]);
+  return created;
+}
+
+export async function isKnownSenderEmail(email: string, request?: MoneyRequest): Promise<boolean> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return false;
+  if (verifiedSenderEmails.has(normalized)) return true;
+  if (request?.senderEmail?.toLowerCase() === normalized && !!request.senderName?.trim()) {
+    return true;
+  }
+  const user = await storage.getAuthUserByEmail(normalized);
+  if (user && !autoSeededPlaceholderEmails.has(normalized)) {
+    return true;
+  }
+  return false;
+}
+
+export function markSenderEmailKnown(email: string): void {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return;
+  verifiedSenderEmails.add(normalized);
+  autoSeededPlaceholderEmails.delete(normalized);
+}
+
 /**
  * Prototype-only: register the sender email the requester provided as a demo
  * payer (fixed demo password) so the checkout's registered-user path can be
@@ -362,6 +527,12 @@ async function ensureDemoPayerForRequest(request: MoneyRequest): Promise<void> {
   const email = request.senderEmail;
   if (!email) return; // generic link: no payer registered up front
   if (await storage.getAuthUserByEmail(email)) return;
+  const hasRealName = !!request.senderName?.trim();
+  if (!hasRealName) {
+    autoSeededPlaceholderEmails.add(email.toLowerCase());
+  } else {
+    verifiedSenderEmails.add(email.toLowerCase());
+  }
   const [firstName, ...rest] = (request.senderName ?? "").split(" ");
   await storage.createAuthUser({
     email,
@@ -555,6 +726,15 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
     sessionExpired = true;
   }
 
+  const normalizedSenderEmail = request.senderEmail?.trim().toLowerCase() ?? "";
+  const isKnownSender = normalizedSenderEmail
+    ? verifiedSenderEmails.has(normalizedSenderEmail) || !!request.senderName?.trim()
+    : false;
+  const savedAccounts = getPayerSavedAccounts(isEmailLink ? request.senderEmail : (request.payerEmail || request.senderEmail), request);
+  const numericRef = String(
+    parseInt(createHash("sha256").update(request.requestNumber).digest("hex").slice(0, 8), 16) % 90_000_000 + 10_000_000,
+  );
+
   return {
     requestNumber: request.requestNumber,
     requesterName: request.requesterName,
@@ -579,6 +759,7 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
     expiresAt: request.expiresAt.toISOString(),
     expiryDate: dateInTz(request.expiresAt, EXPIRY_TIMEZONE),
     methods: currentUserId ? (corridor?.methods ?? []) : [],
+    availableMethods: corridor?.methods ?? ["bank_transfer", "card"],
     estimatedDeliveryTime: currentUserId ? (corridor?.estimatedDeliveryTime ?? "") : "",
     senderFeeNote: currentUserId ? (request.absorbFee
       ? "No Rhemito fee is charged to you — the requester covers the fee."
@@ -593,6 +774,19 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
     // registered demo payer shown on the identification screen. Hidden in real
     // production (no dev hooks) so the payer email is never disclosed pre-auth.
     demoPayerEmail: demoModeEnabled ? (request.senderEmail ?? undefined) : undefined,
+    senderName: request.senderName ?? null,
+    senderType: request.senderType ?? "individual",
+    isKnownSender,
+    payerSourceBankName: request.payerSourceBankName ?? null,
+    payerSourceAccountMasked: request.payerSourceAccountMasked ?? null,
+    payerSourceAccountNumber: requestPayerFullAccountById.get(request.id) ?? request.payerSourceAccountMasked ?? null,
+    payerSavedAccounts: savedAccounts,
+    collectionAccount: {
+      accountName: `PWA - MITO-${request.requesterName.toUpperCase()}`,
+      bankName: request.payInCurrency === "NGN" ? "Fidelity" : request.payInCurrency === "GBP" ? "ClearBank" : "Citibank",
+      accountNumber: request.payInCurrency === "NGN" ? "4580016814" : request.payInCurrency === "GBP" ? "04008291" : "8840192834",
+      paymentReference: numericRef,
+    },
     activeSessionId: currentUserId && !sessionExpired ? request.activeSessionId : null,
     sessionExpiresAt: currentUserId && !sessionExpired && request.sessionExpiresAt ? request.sessionExpiresAt.toISOString() : null,
     isReservedByOther: ["authorisation_in_progress", "payment_processing", "payment_pending"].includes(request.status)
