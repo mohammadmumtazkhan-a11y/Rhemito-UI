@@ -23,7 +23,8 @@ import {
   CalendarClock,
   ChevronDown,
   Eye,
-  MessageCircle
+  MessageCircle,
+  X
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -51,6 +52,7 @@ import {
   type Corridor, type PayoutAccountView, type Quote, type MoneyRequestView,
 } from "@/lib/requests";
 import { fromMinorUnits } from "@shared/money";
+import { PromoCodeField, usePromoCode, formatPromoMoney } from "@/features/promo";
 import {
   computeExpiry,
   dateInTz,
@@ -380,6 +382,21 @@ export default function RequestPayment() {
   // "exact amount" mode), so it always agrees with the breakdown card.
   const payerDisplay = payerDraft ?? (parsedAmount > 0 ? senderPaysAmount.toFixed(2) : formData.requestAmount);
 
+  // Receive Money promo code: earns a bonus on "You receive" (net, in the receiving currency). Mito works the bonus out and
+  // credits it to the bonus balance once the request is paid out.
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const promo = usePromoCode({
+    amount: fxFinite && receiveInPayout > 0 ? Number(receiveInPayout.toFixed(2)) : 0,
+    fee: 0,
+    sendCurrency: payoutCurrency,
+    receiveCurrency: payoutCurrency,
+    paymentMethod: null,
+    flow: "receive",
+  });
+  const promoApplied = promo.applied;
+  const promoBonus = promoApplied ? promo.discount : 0;
+  const promoCode = promo.appliedCode ?? "";
+
   // RM-01: restore the payer send amount from the latest SUCCESSFUL (paid out) Receive Money request.
   const requestsQuery = useQuery<MoneyRequestView[] | undefined>({
     queryKey: ["/api/request-money/requests"],
@@ -547,6 +564,7 @@ export default function RequestPayment() {
     if (createdRequestId) return createdRequestId;
     if (isSubmittingRequest || !corridorForSelection || !selectedPayoutAccount) return null;
     setIsSubmittingRequest(true);
+    if (promoApplied) promo.lock();
     try {
       const reference =
         [
@@ -573,6 +591,7 @@ export default function RequestPayment() {
         dueDate: formData.dueDate || undefined,
         expiry: expirySelection,
         idempotencyKey: idempotencyKeyRef.current,
+        ...(promoApplied && promoCode ? { promoCode } : {}),
       });
       setPaymentLink(result.checkoutUrl);
       setEmailPaymentLink(result.emailCheckoutUrl || result.checkoutUrl);
@@ -581,6 +600,7 @@ export default function RequestPayment() {
       void queryClient.invalidateQueries({ queryKey: ["/api/request-money/requests"] });
       return result.request.id;
     } catch (err) {
+      if (promoApplied) promo.reject(describeError(err));
       toast({ title: "Payment link not created", description: describeError(err), variant: "destructive" });
       return null;
     } finally {
@@ -1041,9 +1061,32 @@ export default function RequestPayment() {
 
                       {/* You receive */}
                       <div className="space-y-1.5">
-                        <Label htmlFor="receiveAmount" className="text-sm font-semibold text-slate-800">
-                          You receive <span className="text-destructive">*</span> <FieldTag required />
-                        </Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="receiveAmount" className="text-sm font-semibold text-slate-800">
+                            You receive <span className="text-destructive">*</span> <FieldTag required />
+                          </Label>
+                          {promo.enabled && (
+                            promoApplied ? (
+                              <div className="flex items-center gap-2 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full" data-testid="request-promo-applied-pill">
+                                <Check className="w-3.5 h-3.5 text-green-600" />
+                                <span>Promo <strong className="font-mono">{promoCode}</strong> (+{formatPromoMoney(promoBonus, payoutCurrency)} bonus)</span>
+                                <button type="button" onClick={() => setShowPromoModal(true)} className="text-blue-600 hover:underline ml-1">Change</button>
+                                <button type="button" onClick={promo.remove} className="text-gray-500 hover:text-red-600 ml-0.5" aria-label="Remove promo code">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setShowPromoModal(true)}
+                                data-testid="request-use-promo-btn"
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 px-3 py-1 rounded-full transition-colors"
+                              >
+                                <span>🏷️ Use Promo Code</span>
+                              </button>
+                            )
+                          )}
+                        </div>
                         <div className="flex items-center gap-3">
                           <div className="relative flex-1">
                             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">{payoutSymbol}</span>
@@ -1072,6 +1115,30 @@ export default function RequestPayment() {
                             : senderCurrency === payoutCurrency ? "Calculated from what the payer sends." : "Indicative. The live rate at payment time applies."}
                         </p>
                       </div>
+
+                      {showPromoModal && (
+                        <div
+                          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                          onClick={() => setShowPromoModal(false)}
+                          data-testid="request-promo-modal"
+                        >
+                          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between border-b pb-3">
+                              <h3 className="text-base font-bold text-gray-900">Insert Promo Code</h3>
+                              <button type="button" onClick={() => setShowPromoModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg" aria-label="Close promo code modal">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              Have a promo code? Enter it below to earn a bonus on the amount you receive. The bonus is paid into your bank on top of that amount once this request is paid out.
+                            </p>
+                            <PromoCodeField promo={promo} bare />
+                            <div className="flex justify-end pt-2">
+                              <Button type="button" onClick={() => setShowPromoModal(false)} className="rounded-xl px-5" data-testid="request-promo-modal-done">Done</Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Payer sends */}
                       <div className="space-y-1.5">
@@ -1167,15 +1234,21 @@ export default function RequestPayment() {
                               <span className="font-semibold tabular-nums">{fxFinite ? `${fxRate.toFixed(4)} ${payoutCurrency} per ${senderCurrency}` : "Live spot rate at payout"}</span>
                             </div>
                           )}
+                          {promoApplied && promoBonus > 0 && (
+                            <div className="flex justify-between gap-6 text-xs bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 text-emerald-900" data-testid="breakdown-promo-bonus">
+                              <span className="font-medium">Promo {promoCode} bonus (paid into your bank on top)</span>
+                              <span className="font-semibold tabular-nums">+{payoutSymbol}{promoBonus.toFixed(2)} {payoutCurrency}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="h-px bg-border" />
                         <div className="bg-primary/5 -mx-5 px-5 py-3.5 -mb-5 rounded-b-xl border-t border-primary/15">
                           <p className="text-xs text-muted-foreground mb-0.5">You receive in bank ({payoutCurrency})</p>
                           {senderCurrency === payoutCurrency ? (
-                            <span className="text-xl md:text-2xl font-extrabold text-primary tabular-nums">{payoutSymbol}{netBeforeFx.toFixed(2)}</span>
+                            <span className="text-xl md:text-2xl font-extrabold text-primary tabular-nums">{payoutSymbol}{(netBeforeFx + promoBonus).toFixed(2)}</span>
                           ) : fxFinite ? (
                             <div>
-                              <span className="text-xl md:text-2xl font-extrabold text-primary tabular-nums">{payoutSymbol}{receiveInPayout.toFixed(2)}</span>
+                              <span className="text-xl md:text-2xl font-extrabold text-primary tabular-nums">{payoutSymbol}{(receiveInPayout + promoBonus).toFixed(2)}</span>
                               <p className="text-[11px] font-medium text-amber-800 mt-1 leading-snug">Indicative. Converted at the live spot rate when the payer pays.</p>
                             </div>
                           ) : !corridorForSelection ? (
@@ -1472,12 +1545,18 @@ export default function RequestPayment() {
                         <h3 className="font-semibold text-base text-slate-900 border-b pb-2">Payment breakdown</h3>
                         <div className="flex justify-between gap-6"><span className="text-muted-foreground">Payer sends</span><span className="font-bold tabular-nums" data-testid="review-sender-pays">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span></div>
                         <div className="flex justify-between gap-6 text-muted-foreground"><span>Fee (3%)</span><span className="tabular-nums">{formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span></div>
+                        {promoApplied && promoBonus > 0 && (
+                          <div className="flex justify-between gap-6 text-emerald-700" data-testid="review-promo-bonus">
+                            <span>Promo {promoCode} bonus (paid into your bank on top)</span>
+                            <span className="tabular-nums">+{payoutSymbol}{promoBonus.toFixed(2)} {payoutCurrency}</span>
+                          </div>
+                        )}
                         <div className="flex justify-between gap-6 font-semibold text-primary border-t border-dashed border-border pt-2">
                           <span>You receive in bank</span>
                           <span className="tabular-nums">
                             {senderCurrency === payoutCurrency
-                              ? `${payoutSymbol}${netBeforeFx.toFixed(2)} ${payoutCurrency}`
-                              : fxFinite ? `${payoutSymbol}${receiveInPayout.toFixed(2)} ${payoutCurrency}` : `${senderSymbol}${netBeforeFx.toFixed(2)} ${senderCurrency}`}
+                              ? `${payoutSymbol}${(netBeforeFx + promoBonus).toFixed(2)} ${payoutCurrency}`
+                              : fxFinite ? `${payoutSymbol}${(receiveInPayout + promoBonus).toFixed(2)} ${payoutCurrency}` : `${senderSymbol}${netBeforeFx.toFixed(2)} ${senderCurrency}`}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground">Paid into {selectedPayoutAccount?.bankName} {selectedPayoutAccount?.maskedNumber}</p>

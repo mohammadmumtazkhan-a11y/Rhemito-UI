@@ -41,6 +41,8 @@ export interface SendMoneyTransaction {
   feeBeforePromoMinor?: number | null;
   /** Promo discount Mito recorded for this transfer (minor units) and when (PROMO-RHEMITO P-25). */
   promoDiscountMinor?: number | null;
+  /** What the promo discount comes off: the fee (default, when absent) or the whole amount to pay (Fixed amount promos). */
+  promoAppliesTo?: "fee" | "amount" | null;
   promoRedeemedAt?: Date | null;
   /** Bonus credit used on this transfer (minor units) and how (BONUS-RHEMITO B-24). */
   bonusCreditMinor?: number | null;
@@ -62,6 +64,9 @@ export const createSendMoneyTransactionSchema = z.object({
   exchangeRate: z.string().trim().min(1),
   promoCode: z.string().trim().max(40).optional(),
   feeBeforePromo: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid fee").optional(),
+  /** Only for promos that come off the whole amount (Fixed amount): the discount shown to the customer. */
+  promoAppliesTo: z.enum(["fee", "amount"]).optional(),
+  promoDiscount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid discount").optional(),
 });
 
 export const paySendMoneyTransactionSchema = z.object({
@@ -94,6 +99,8 @@ export interface SendMoneyTransactionView {
   promoCode: string | null;
   /** Promo discount recorded at payment, display string (2dp) or null. */
   promoDiscount?: string | null;
+  /** "amount" when the promo came off the whole amount to pay (Fixed amount); otherwise it came off the fee. */
+  promoAppliesTo?: "fee" | "amount" | null;
   /** Bonus credit used, display string (2dp), and how it was used (BONUS-RHEMITO B-24). */
   bonusCredit?: string | null;
   bonusCreditMode?: "pay_less" | "send_more" | null;

@@ -56,6 +56,8 @@ export interface PromoRequest {
   destCurrency?: string;
   paymentMethod?: string;
   transactionId?: string;
+  /** "receive" for a Receive Money request (bonus code); omitted = send. */
+  flow?: "send" | "receive";
 }
 
 /** Check a code for a transfer being built; nothing is recorded. */

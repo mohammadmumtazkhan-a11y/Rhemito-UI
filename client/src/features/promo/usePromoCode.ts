@@ -6,7 +6,7 @@ import { isCodeFormatOk, normaliseCode, shouldRevalidate, type PromoInputs } fro
 
 export type PromoState = "idle" | "checking" | "applied" | "rejected" | "unavailable";
 
-interface ValidateOk { valid: true; appliedDiscount: number; displayText?: string; currency?: string | null }
+interface ValidateOk { valid: true; appliedDiscount: number; appliesTo?: "fee" | "amount"; displayText?: string; currency?: string | null }
 
 /** Ask Rhemito (which asks Mito) whether a code works for this transfer. */
 async function validateCode(code: string, input: PromoInputs): Promise<{ ok: true; body: ValidateOk } | { ok: false; status: number; message: string; code?: string }> {
@@ -24,6 +24,7 @@ async function validateCode(code: string, input: PromoInputs): Promise<{ ok: tru
         destCurrency: input.receiveCurrency,
         // P-40: only when the customer has chosen one
         ...(input.paymentMethod ? { paymentMethod: input.paymentMethod } : {}),
+        ...(input.flow === "receive" ? { flow: "receive" } : {}),
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -52,6 +53,7 @@ export function usePromoCode(input: PromoInputs) {
   const [code, setCodeRaw] = useState("");
   const [state, setState] = useState<PromoState>("idle");
   const [discount, setDiscount] = useState(0);
+  const [appliesTo, setAppliesTo] = useState<"fee" | "amount">("fee");
   const [displayText, setDisplayText] = useState("");
   const [message, setMessage] = useState("");
   const lastInputs = useRef<PromoInputs | null>(null);
@@ -69,6 +71,7 @@ export function usePromoCode(input: PromoInputs) {
     if (r.ok) {
       setState("applied");
       setDiscount(Number(r.body.appliedDiscount) || 0);
+      setAppliesTo(r.body.appliesTo === "amount" ? "amount" : "fee");
       const text = r.body.displayText || PROMO_COPY.applied;
       setDisplayText(text);
       setMessage(text);
@@ -123,14 +126,14 @@ export function usePromoCode(input: PromoInputs) {
   const lock = useCallback(() => { locked.current = true; }, []);
 
   // P-41: re-validate (debounced) when amount, fee, currencies or payment method change while a code is applied
-  const { amount, fee, sendCurrency, receiveCurrency, paymentMethod } = input;
+  const { amount, fee, sendCurrency, receiveCurrency, paymentMethod, flow } = input;
   useEffect(() => {
     if (state !== "applied" || !appliedCode.current || locked.current) return undefined;
-    const next = { amount, fee, sendCurrency, receiveCurrency, paymentMethod };
+    const next = { amount, fee, sendCurrency, receiveCurrency, paymentMethod, ...(flow ? { flow } : {}) };
     if (!shouldRevalidate(lastInputs.current, next)) return undefined;
     const t = setTimeout(() => { if (appliedCode.current) void run(appliedCode.current, next, { revalidate: true }); }, 400);
     return () => clearTimeout(t);
-  }, [amount, fee, sendCurrency, receiveCurrency, paymentMethod, state, run]);
+  }, [amount, fee, sendCurrency, receiveCurrency, paymentMethod, flow, state, run]);
 
   return {
     enabled,
@@ -140,6 +143,7 @@ export function usePromoCode(input: PromoInputs) {
     applied: state === "applied",
     appliedCode: state === "applied" ? appliedCode.current : null,
     discount: state === "applied" ? discount : 0,
+    appliesTo: state === "applied" ? appliesTo : ("fee" as const),
     displayText,
     message,
     apply,

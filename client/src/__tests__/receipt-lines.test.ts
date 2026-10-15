@@ -22,6 +22,17 @@ describe("receiptLines", () => {
     expect(val(v, "promo")).toBe("−GBP 2.00");
     expect(val(v, "total")).toBe("GBP 100.00");
   });
+  it("amount promo: fee stays as stored and the discount comes off the total", () => {
+    const v = { ...base, promoCode: "TENOFF", promoDiscount: "10.00", promoAppliesTo: "amount" as const };
+    expect(val(v, "fee")).toBe("GBP 2.00");
+    expect(val(v, "promo")).toBe("−GBP 10.00");
+    expect(val(v, "total")).toBe("GBP 92.00");
+  });
+  it("promo label falls back when the code is missing", () => {
+    const line = receiptLines({ ...base, promoDiscount: "1.00" }).find((l) => l.key === "promo");
+    expect(line?.label).toBe("Promo code");
+    expect(line?.tone).toBe("discount");
+  });
   it("pay less bonus reduces the total", () => {
     const v = { ...base, bonusCredit: "5.00", bonusCreditMode: "pay_less" as const };
     expect(val(v, "bonus_pay_less")).toBe("−GBP 5.00");

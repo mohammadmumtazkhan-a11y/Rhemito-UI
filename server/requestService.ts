@@ -23,9 +23,10 @@ import {
   signWebhookPayload,
   type PayinWebhookEvent,
 } from "./providers";
-import { postFundingEntries, postPayoutEntry } from "./walletService";
+import { postFundingEntries, postPayoutEntry, payoutTotalMinor } from "./walletService";
 import { dispatchNotification } from "./notificationService";
 import { onMoneyRequestPaid, onMoneyRequestRefunded } from "./rewardsService";
+import * as promo from "./promo";
 import { findCorridor, validateCorridor, type CorridorConfig } from "./corridors";
 import {
   toMinorUnits,
@@ -244,8 +245,29 @@ export async function createMoneyRequest(params: {
   const requesterName = await displayNameOf(userId);
   const recipientEmailMasked = payload.senderEmail ? maskEmail(payload.senderEmail) : null;
 
+  const requestId = randomUUID();
+  // Optional Receive Money promo code: Mito checks it and reserves one use; the bonus is credited on payout.
+  let promoApplied: promo.PromoAtRequest | null = null;
+  if (payload.promoCode) {
+    if (quote.payoutAmountMinor === null) {
+      throw new RequestError(503, "PROMO_UNAVAILABLE", "Promo codes are unavailable right now. Please try again shortly.");
+    }
+    try {
+      promoApplied = await promo.applyForRequest({
+        userId,
+        requestId,
+        code: payload.promoCode,
+        receiveAmountMinor: quote.payoutAmountMinor,
+        receiveCurrency: corridor.payoutCurrency,
+      });
+    } catch (err) {
+      if (err instanceof promo.PromoPaymentError) throw new RequestError(err.status, err.code, err.message);
+      throw err;
+    }
+  }
+
   const request: MoneyRequest = {
-    id: randomUUID(),
+    id: requestId,
     requestNumber: formatDocumentNumber("RM", sequence, yearMonth),
     requesterId: userId,
     requesterName,
@@ -305,10 +327,17 @@ export async function createMoneyRequest(params: {
     payoutProviderRef: null,
     paymentMethod: null,
     idempotencyKey: payload.idempotencyKey,
+    promoCode: promoApplied?.promoCode ?? null,
+    promoBonusMinor: promoApplied?.bonusMinor ?? null,
     createdAt: now,
   };
 
-  await storage.createMoneyRequest(request);
+  try {
+    await storage.createMoneyRequest(request);
+  } catch (err) {
+    if (promoApplied) await promo.releaseForRequest(requestId);
+    throw err;
+  }
   await ensureDemoPayerForRequest(request);
   // No email is sent at creation: the requester chooses to send one (Send email),
   // so creating a link never implies that an email went out.
@@ -950,8 +979,7 @@ export async function processPayinWebhook(rawBody: Buffer, signature: string): P
     // Payout eligibility passed (single-tier prototype): submit to the payout provider.
     const payout = await devPayoutProvider.submitPayout({
       requestNumber: request.requestNumber,
-      amountMinor:
-        request.payoutAmountMinor ?? netMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee),
+      amountMinor: payoutTotalMinor(request),
       currency: request.payoutCurrency,
       maskedAccount: request.payoutAccountMasked,
     });
@@ -968,7 +996,7 @@ export async function processPayinWebhook(rawBody: Buffer, signature: string): P
       type: "payout.succeeded",
       intentId: payout.payoutRef,
       requestNumber: request.requestNumber,
-      amountMinor: request.payoutAmountMinor ?? 0,
+      amountMinor: payoutTotalMinor(request),
       currency: request.payoutCurrency,
       providerPaymentRef: payout.payoutRef,
     };
@@ -1015,6 +1043,7 @@ export async function processPayinWebhook(rawBody: Buffer, signature: string): P
     // and any Request Money bonus it earned is taken back.
     if (["funded", "payout_pending", "paid_out"].includes(request.status) && request.providerPaymentRef === event.providerPaymentRef) {
       await storage.updateMoneyRequest(request.id, { status: "refunded", failureReason: "Payment refunded to the payer." });
+      promo.onRequestStatus(request, "REFUNDED");
       void onMoneyRequestRefunded(request.requesterId, request.requestNumber);
     }
   } else if (event.type === "payment.pending" || event.type === "payment.unknown") {
@@ -1063,6 +1092,7 @@ export async function processPayoutWebhook(rawBody: Buffer, signature: string): 
   if (event.type === "payout.succeeded" && request.status === "payout_pending") {
     await postPayoutEntry(request, event.providerPaymentRef);
     await storage.updateMoneyRequest(request.id, { status: "paid_out", paidOutAt: new Date() });
+    promo.onRequestStatus(request, "PAID_OUT");
   } else if (event.type === "payout.failed" && request.status === "payout_pending") {
     // Funds remain credited; the failed payout stays visible and recoverable.
     await storage.updateMoneyRequest(request.id, {
@@ -1083,6 +1113,7 @@ export async function cancelRequest(userId: string, requestId: string): Promise<
     throw new RequestError(409, "INVALID_STATE", "This request can no longer be cancelled.");
   }
   await storage.updateMoneyRequest(request.id, { status: "cancelled", cancelledAt: new Date() });
+  promo.onRequestStatus(request, "CANCELLED");
   const attempts = await storage.listPaymentAttempts(request.id);
   const activePayerEmails = attempts
     .filter((attempt) => attempt.status === "session_open" && !!attempt.sessionExpiresAt && attempt.sessionExpiresAt.getTime() > Date.now())
@@ -1181,6 +1212,7 @@ export function toRequestJSON(request: MoneyRequest) {
 async function materializeExpiry(request: MoneyRequest): Promise<void> {
   if (request.status === "active" || request.status === "viewed") {
     await storage.updateMoneyRequest(request.id, { status: "expired" });
+    promo.onRequestStatus(request, "EXPIRED");
     const requester = await storage.getAuthUserById(request.requesterId);
     if (requester?.email) {
       await sendLifecycleEmail(

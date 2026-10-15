@@ -83,6 +83,7 @@ function toView(tx: SendMoneyTransaction): SendMoneyTransactionView {
     exchangeRate: tx.exchangeRate,
     promoCode: tx.promoCode,
     promoDiscount: tx.promoDiscountMinor ? fromMinorUnits(tx.promoDiscountMinor, tx.sendCurrency) : null,
+    ...(tx.promoAppliesTo === "amount" ? { promoAppliesTo: "amount" as const } : {}),
     bonusCredit: tx.bonusCreditMinor ? fromMinorUnits(tx.bonusCreditMinor, tx.sendCurrency) : null,
     bonusCreditMode: tx.bonusCreditMinor ? tx.bonusCreditMode ?? null : null,
     status: tx.status,
@@ -125,6 +126,9 @@ export function registerSendMoneyRoutes(app: Express): void {
       if (feeBeforePromoMinor !== null && feeBeforePromoMinor < feeMinor) {
         throw new SendMoneyError(400, "VALIDATION_ERROR", "The fee before the promo cannot be less than the fee charged.");
       }
+      const amountPromo = Boolean(input.promoCode) && input.promoAppliesTo === "amount";
+      const sendAmountMinor = toMinorUnits(input.sendAmount, input.sendCurrency);
+      const amountPromoDiscountMinor = amountPromo ? Math.min(toMinorUnits(input.promoDiscount ?? "0", input.sendCurrency), sendAmountMinor) : 0;
       const now = new Date();
       const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
       const transaction: SendMoneyTransaction = {
@@ -135,13 +139,14 @@ export function registerSendMoneyRoutes(app: Express): void {
         service: input.service,
         paymentMethod: null,
         sendCurrency: input.sendCurrency.toUpperCase(),
-        sendAmountMinor: toMinorUnits(input.sendAmount, input.sendCurrency),
+        sendAmountMinor,
         receiveCurrency: input.receiveCurrency.toUpperCase(),
         receiveAmountMinor: toMinorUnits(input.receiveAmount, input.receiveCurrency),
         feeMinor,
         exchangeRate: input.exchangeRate,
         promoCode: input.promoCode ?? null,
         feeBeforePromoMinor,
+        ...(amountPromo ? { promoAppliesTo: "amount" as const, promoDiscountMinor: amountPromoDiscountMinor } : {}),
         status: "awaiting_payment",
         createdAt: now,
         paidAt: null,
@@ -203,7 +208,7 @@ export function registerSendMoneyRoutes(app: Express): void {
           status,
           paidAt: status === "completed" ? now : null,
           ...(promoAtPayment
-            ? { promoCode: promoAtPayment.promoCode, feeBeforePromoMinor: promoAtPayment.feeBeforePromoMinor, feeMinor: promoAtPayment.feeMinor, promoDiscountMinor: promoAtPayment.promoDiscountMinor, promoRedeemedAt: now }
+            ? { promoCode: promoAtPayment.promoCode, feeBeforePromoMinor: promoAtPayment.feeBeforePromoMinor, feeMinor: promoAtPayment.feeMinor, promoDiscountMinor: promoAtPayment.promoDiscountMinor, ...(promoAtPayment.promoAppliesTo === "amount" ? { promoAppliesTo: "amount" as const } : {}), promoRedeemedAt: now }
             : {}),
           ...(bonusAtPayment ? { bonusCreditMinor: bonusAtPayment.amountMinor, bonusCreditMode: bonusAtPayment.mode } : {}),
         });
