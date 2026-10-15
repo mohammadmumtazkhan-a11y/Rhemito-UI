@@ -14,6 +14,7 @@ let ratesStatus = 200;
 let lastAuth = "";
 let lastApiKey = "";
 let lastLoginBody: any = null;
+let lastRatesUrl = "";
 
 const ROWS = [
   { rateId: "1", fromCurrency: "GBP", toCurrency: "NGN", fromCountry: "All", toCountry: "All", rateMoneyTransfer: 1831.01, partnerRateMoneyTransfer: 1831.01, rateExpiry: null, rateDirection: "BUY" },
@@ -38,8 +39,9 @@ beforeAll(async () => {
         res.end(JSON.stringify({ data: { token: validToken, expiresOn: new Date(Date.now() + 3600_000).toISOString() }, code: 200 }));
         return;
       }
-      if (req.url === "/Exchange/affiliateRates") {
+      if ((req.url ?? "").split("?")[0] === "/Exchange/affiliateRates") {
         rateCalls += 1;
+        lastRatesUrl = req.url ?? "";
         lastAuth = String(req.headers.authorization ?? "");
         if (ratesStatus !== 200) {
           res.statusCode = ratesStatus;
@@ -66,12 +68,13 @@ beforeAll(async () => {
   process.env.FURP_PASSWORD = "pass";
   process.env.FURP_SERVICE_NO = "21060";
   process.env.FURP_AFFILIATE_ID = "1112";
+  process.env.FURP_USER_ID = "41844246-bfc9-44a6-b611-d2345a16c276";
   mod = await import("../../../server/stagingRates");
   fx = await import("../../../server/fxService");
 });
 
 afterAll(async () => {
-  for (const k of ["FURP_BASE_URL", "FURP_API_KEY", "FURP_USERNAME", "FURP_PASSWORD", "FURP_SERVICE_NO", "FURP_AFFILIATE_ID"]) delete process.env[k];
+  for (const k of ["FURP_BASE_URL", "FURP_API_KEY", "FURP_USERNAME", "FURP_PASSWORD", "FURP_SERVICE_NO", "FURP_AFFILIATE_ID", "FURP_USER_ID"]) delete process.env[k];
   await new Promise((r) => server.close(r));
 });
 
@@ -89,6 +92,11 @@ describe("staging affiliate rates", () => {
     expect(lastApiKey).toBe("key-123");
     expect(lastLoginBody).toEqual({ username: "user", password: "pass", accessServiceNumber: "21060", accessAffiliateNumber: "1112" });
     expect(lastAuth).toBe("Bearer tok-1");
+  });
+
+  it("sends the configured user id as the userId query parameter", async () => {
+    await mod.getAffiliateRates();
+    expect(lastRatesUrl).toBe("/Exchange/affiliateRates?userId=41844246-bfc9-44a6-b611-d2345a16c276");
   });
 
   it("BUY rows multiply, SELL rows divide", async () => {
