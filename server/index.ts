@@ -6,6 +6,14 @@ import { createServer } from "http";
 import { seedDemoNotifications } from "./notificationService";
 import { storage } from "./storage";
 
+// Optional local settings (git-ignored .env). Never overrides real environment
+// variables; absent in production where the host injects them.
+try {
+  process.loadEnvFile();
+} catch {
+  /* no .env file */
+}
+
 // Extend session to include userId
 declare module "express-session" {
   interface SessionData {

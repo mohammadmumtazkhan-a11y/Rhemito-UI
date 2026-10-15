@@ -48,6 +48,8 @@ export default defineConfig({
         timeout: 120000,
         // E2E journeys simulate overdue/expiry via /api/dev/invoices/* — the
         // production server only exposes them when this flag is set.
-        env: { ...process.env, RHEMITO_DEV_HOOKS: '1' },
+        // FURP_BASE_URL is blanked so e2e rates stay deterministic even when a
+        // local .env points the app at the staging rates API.
+        env: { ...process.env, RHEMITO_DEV_HOOKS: '1', FURP_BASE_URL: '' },
     },
 });
