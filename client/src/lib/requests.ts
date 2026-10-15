@@ -97,6 +97,11 @@ export interface PublicRequestView {
   currency: string;
   payoutCurrency?: string | null;
   absorbFee?: boolean | null;
+  payoutAmount?: string | null;
+  fxRate?: number | null;
+  fxRateIsIndicative?: boolean | null;
+  payoutBankName?: string | null;
+  payoutAccountMasked?: string | null;
   purpose: string | null;
   reference: string | null;
   dueDate: string | null;

@@ -252,10 +252,21 @@ test.describe('Request Money E2E', () => {
     await expect(page.getByTestId('checkout-amount')).toBeVisible();
     await expect(page.getByText('Anti-Scam Notice')).toBeVisible();
     await expect(page.getByText('No Rhemito fee is charged to you')).toBeVisible();
+    // Mito Payment layout: requester, breakdown card, locked amount, masked bank, Pay now
+    await expect(page.getByText('Mito Payment')).toBeVisible();
+    await expect(page.getByTestId('checkout-requester-name')).toBeVisible();
+    await expect(page.getByTestId('payment-breakdown')).toBeVisible();
+    await expect(page.getByTestId('payment-breakdown').getByText('Locked')).toBeVisible();
+    await expect(page.getByTestId('breakdown-actual-sent')).toBeVisible();
+    await expect(page.getByTestId('breakdown-receive')).toBeVisible();
+    await expect(page.getByTestId('breakdown-bank')).toContainText('Paid into');
+    await expect(page.getByTestId('button-pay-now')).toBeVisible();
     expect(await page.locator('text=/scan/i').count()).toBe(0);
 
     // Pay by Bank → development provider authorisation → settlement through the signed webhook boundary
     await page.getByTestId('button-method-pay_by_bank').click();
+
+    await page.getByTestId('button-pay-now').click();
     await expect(page.getByTestId('dev-provider-notice')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('button-authorize').click();
 
@@ -609,6 +620,8 @@ test.describe('Request Money E2E', () => {
     await page.getByTestId('button-signin-pay').click();
     await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('button-method-pay_by_bank').click();
+
+    await page.getByTestId('button-pay-now').click();
     await expect(page.getByTestId('dev-provider-notice')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('button-authorize').click();
     await expect(page.getByText('Payment Successful!')).toBeVisible({ timeout: 30000 });
@@ -644,6 +657,8 @@ test.describe('Request Money E2E', () => {
     await payerPage.getByTestId('input-payer-password').fill('Passw0rd!x');
     await payerPage.getByTestId('button-signin-pay').click();
     await payerPage.getByTestId('button-method-pay_by_bank').click();
+
+    await payerPage.getByTestId('button-pay-now').click();
     await payerPage.getByTestId('button-authorize').click();
     await expect(payerPage.getByText('Payment Successful!')).toBeVisible({ timeout: 30000 });
     await payerContext.close();

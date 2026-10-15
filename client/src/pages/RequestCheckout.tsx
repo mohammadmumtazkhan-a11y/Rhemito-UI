@@ -961,19 +961,14 @@ export default function RequestCheckout() {
       <Shell>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
           <Card className="shadow-xl overflow-hidden border-border/80">
-            {/* Header with Timer */}
-            <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 space-y-3">
+            {/* MITO PAYMENT header */}
+            <div className="px-6 pt-6 pb-2 space-y-4" data-testid="checkout-summary">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-white/10 text-white border-white/20 text-xs px-2.5 py-0.5 font-normal">
-                    Session Active
-                  </Badge>
-                  <span className="text-xs text-white/70 font-mono">{request.requestNumber}</span>
-                </div>
+                <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
                 {/* 10-Minute Countdown */}
                 <div
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold ${
-                    sessionSecondsLeft < 120 ? "bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse" : "bg-primary/20 text-teal-300 border border-teal-500/30"
+                    sessionSecondsLeft < 120 ? "bg-red-50 text-red-600 border border-red-200 animate-pulse" : "bg-blue-50 text-blue-700 border border-blue-100"
                   }`}
                   data-testid="session-timer"
                 >
@@ -983,75 +978,65 @@ export default function RequestCheckout() {
               </div>
 
               <div>
-                <p className="text-xs text-white/60 uppercase font-semibold">Total Payable</p>
-                <p className="text-4xl font-bold tracking-tight mt-0.5" data-testid="checkout-amount">
-                  {symbol}{request.amount} <span className="text-lg font-normal text-white/70">{request.currency}</span>
-                </p>
+                <p className="text-xs text-slate-500">Payment Request From</p>
+                <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">Ref {request.requestNumber}</p>
               </div>
 
-              <div className="space-y-1 text-xs border-t border-white/10 pt-3">
-                <div className="flex justify-between">
-                  <span className="text-white/60">Paying as</span>
-                  <span className="font-medium">{payerDisplayName || payerEmail || "Guest Payer"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/60">Pay to</span>
-                  <span className="font-medium">{request.requesterName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/60">Purpose</span>
-                  <span className="font-medium capitalize">{request.purpose?.replace(/_/g, " ") ?? "Payment request"}</span>
-                </div>
-                {request.reference && (
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Reference</span>
-                    <span className="font-medium">{request.reference}</span>
-                  </div>
-                )}
+              <div>
+                <p className="text-xs text-slate-500">You pay</p>
+                <p className="text-4xl font-bold tracking-tight text-blue-600 mt-0.5" data-testid="checkout-amount">
+                  {request.currency} {formatMoney(request.amount)}
+                </p>
               </div>
             </div>
 
-            <CardContent className="p-5 space-y-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-800">Select Payment Method</Label>
-                <div className="space-y-2">
-                  {request.methods.map((m) => {
-                    const icon =
-                      m === "card" ? <CreditCard className="w-4 h-4 text-blue-600" /> :
-                      m === "pay_by_bank" ? <Building2 className="w-4 h-4 text-purple-600" /> :
-                      m === "wallet" ? <Wallet className="w-4 h-4 text-teal-600" /> :
-                      <Building2 className="w-4 h-4 text-emerald-600" />;
+            <CardContent className="p-6 pt-3 space-y-4">
+              <PaymentBreakdown request={request} />
 
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => handleMethodSelect(m)}
-                        className="w-full flex items-center justify-between p-3.5 rounded-xl border border-slate-200 hover:border-primary hover:bg-primary/5 transition-all text-left group disabled:opacity-50"
-                        data-testid={`button-method-${m}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                            {icon}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{METHOD_LABELS[m] ?? m}</p>
-                            <p className="text-[11px] text-muted-foreground">Instant & secure processing</p>
-                          </div>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-primary transition-colors" />
-                      </button>
-                    );
-                  })}
+              {request.methods.length > 1 && (
+                <div className="space-y-2" role="radiogroup" aria-label="Payment method">
+                  <Label className="text-xs font-semibold text-slate-800">Pay with</Label>
+                  <div className="grid gap-2">
+                    {request.methods.map((m) => {
+                      const active = (selectedMethod && request.methods.includes(selectedMethod) ? selectedMethod : request.methods[0]) === m;
+                      const icon =
+                        m === "card" ? <CreditCard className="w-4 h-4 text-blue-600" /> :
+                        m === "wallet" ? <Wallet className="w-4 h-4 text-teal-600" /> :
+                        <Building2 className="w-4 h-4 text-purple-600" />;
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          disabled={busy}
+                          onClick={() => setSelectedMethod(m)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors disabled:opacity-50 ${
+                            active ? "border-blue-600 bg-blue-50/60 ring-1 ring-blue-600" : "border-slate-200 hover:border-blue-300"
+                          }`}
+                          data-testid={`button-method-${m}`}
+                        >
+                          <span className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">{icon}</span>
+                          <span className="text-sm font-semibold text-slate-900">{METHOD_LABELS[m] ?? m}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                {busy && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-1">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Initialising secure transaction…
-                  </p>
-                )}
-                {errorMessage && <p className="text-xs text-destructive" data-testid="error-checkout">{errorMessage}</p>}
-              </div>
+              )}
+
+              <Button
+                variant="outline"
+                className="w-full h-11 border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+                disabled={busy || request.methods.length === 0}
+                onClick={() => handleMethodSelect(selectedMethod && request.methods.includes(selectedMethod) ? selectedMethod : request.methods[0])}
+                data-testid="button-pay-now"
+              >
+                {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Initialising secure payment…</> : "Pay now"}
+              </Button>
+              {errorMessage && <p className="text-xs text-destructive" data-testid="error-checkout">{errorMessage}</p>}
+
 
               {/* Disclosures & Anti-Scam */}
               <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-[11px] text-slate-600 space-y-2">
@@ -1082,48 +1067,48 @@ export default function RequestCheckout() {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
         <Card className="shadow-xl overflow-hidden border-border/80">
           {/* Header Summary */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 space-y-3" data-testid="checkout-summary">
+          <div className="bg-white text-slate-900 px-6 pt-6 pb-4 space-y-4" data-testid="checkout-summary">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/60">Payment Request</p>
-              <p className="text-xs font-mono text-white/70">{request.requestNumber}</p>
+              <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
+              {request.requestNumber && <p className="text-xs font-mono text-slate-500">Ref {request.requestNumber}</p>}
             </div>
 
             <div>
-              <p className="text-xs text-white/60 uppercase font-semibold">Requested Amount</p>
-              <p className="text-4xl font-bold tracking-tight mt-0.5" data-testid="checkout-amount">
-                {symbol}{request.amount} <span className="text-lg font-normal text-white/70">{request.currency}</span>
+              <p className="text-xs text-slate-500">Payment Request From</p>
+              <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">You pay</p>
+              <p className="text-4xl font-bold tracking-tight text-blue-600 mt-0.5" data-testid="checkout-amount">
+                {symbol}{request.amount} <span className="text-lg font-normal text-blue-400">{request.currency}</span>
               </p>
             </div>
 
-            <div className="space-y-1.5 text-xs border-t border-white/10 pt-3">
+            <div className="space-y-1.5 text-xs border-t border-slate-100 pt-3">
               <div className="flex justify-between">
-                <span className="text-white/60">Requested by</span>
-                <span className="font-medium">{request.requesterName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-white/60">Purpose</span>
+                <span className="text-slate-500">Purpose</span>
                 <span className="font-medium capitalize">{request.purpose?.replace(/_/g, " ") ?? "Payment request"}</span>
               </div>
               {request.reference && (
                 <div className="flex justify-between">
-                  <span className="text-white/60">Reference</span>
+                  <span className="text-slate-500">Reference</span>
                   <span className="font-medium">{request.reference}</span>
                 </div>
               )}
               {request.dueDate && (
                 <div className="flex justify-between">
-                  <span className="text-white/60">Due Date</span>
+                  <span className="text-slate-500">Due Date</span>
                   <span className="font-medium">{formatHumanDate(request.dueDate)}</span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-white/60">Valid Until</span>
+                <span className="text-slate-500">Valid Until</span>
                 <span className="font-medium">{formatHumanDate(request.expiryDate)}</span>
               </div>
               {isEmailLink && request.recipientEmailMasked && (
-                <div className="flex justify-between bg-white/5 p-2 rounded border border-white/10 text-[11px]">
-                  <span className="text-white/70">Recipient Email:</span>
-                  <span className="font-mono text-teal-300 font-semibold" data-testid="masked-email">
+                <div className="flex justify-between bg-slate-50 p-2 rounded border border-slate-200 text-[11px]">
+                  <span className="text-slate-600">Recipient Email:</span>
+                  <span className="font-mono text-blue-700 font-semibold" data-testid="masked-email">
                     {request.recipientEmailMasked}
                   </span>
                 </div>
@@ -1776,6 +1761,93 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="flex justify-between px-3.5 py-2">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-right">{value}</span>
+    </div>
+  );
+}
+
+
+// ─── Payment breakdown (payer, post-identification) ───────────────────────────
+
+function formatMoney(v: string | number | null | undefined): string {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function PaymentBreakdown({ request }: { request: PublicRequestView }) {
+  const total = parseFloat(request.amount);
+  const fee = parseFloat(request.feeAmount ?? "0") || 0;
+  // The fee is carved out of what the payer sends in both fee models.
+  const actualSent = total - fee;
+  const payoutCurrency = request.payoutCurrency ?? request.currency;
+  const crossCurrency = payoutCurrency !== request.currency;
+  const rate = request.fxRate ?? null;
+  const rateText =
+    rate && rate > 0
+      ? rate >= 1
+        ? `1 ${request.currency} = ${formatMoney(rate)} ${payoutCurrency}`
+        : `${formatMoney(1 / rate)} ${request.currency} = 1 ${payoutCurrency}`
+      : "Not available";
+  const last4 = (request.payoutAccountMasked ?? "").replace(/\D/g, "").slice(-4);
+  const line = "flex items-center justify-between gap-4 px-4 py-2.5 text-sm";
+
+  return (
+    <div className="space-y-3" data-testid="payment-breakdown">
+      <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+        <p className="px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-50">Payment breakdown</p>
+        <div className={line}>
+          <span className="text-slate-600">You pay</span>
+          <span className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 bg-blue-50 rounded px-1.5 py-0.5">Locked</span>
+            <span className="font-semibold tabular-nums text-slate-900">{formatMoney(total)}</span>
+          </span>
+        </div>
+        <div className={line}>
+          <span className="text-slate-600">Transaction fee ({request.currency})</span>
+          <span className="font-semibold tabular-nums text-red-600" data-testid="breakdown-fee">
+            {request.absorbFee ? "Covered by requester" : `− ${formatMoney(fee)}`}
+          </span>
+        </div>
+        {request.absorbFee && fee > 0 && (
+          <div className={line}>
+            <span className="text-slate-600">Fee taken from payout ({request.currency})</span>
+            <span className="font-semibold tabular-nums text-red-600">− {formatMoney(fee)}</span>
+          </div>
+        )}
+        <div className={line}>
+          <span className="text-slate-600">Actual sent</span>
+          <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-actual-sent">{request.currency} {formatMoney(actualSent)}</span>
+        </div>
+        {crossCurrency && (
+          <div className={line}>
+            <span className="text-slate-600">Exchange rate</span>
+            <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-rate">{rateText}</span>
+          </div>
+        )}
+        <div className={line}>
+          <span className="text-slate-600">They receive in bank</span>
+          <span className="flex items-center gap-2">
+            {request.fxRateIsIndicative !== false && crossCurrency && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600 bg-slate-100 rounded px-1.5 py-0.5">Indicative</span>
+            )}
+            <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-receive">
+              {request.payoutAmount
+                ? `${payoutCurrency} ${formatMoney(request.payoutAmount)}`
+                : !crossCurrency
+                  ? `${payoutCurrency} ${formatMoney(actualSent)}`
+                  : "Not available"}
+            </span>
+          </span>
+        </div>
+        {request.payoutBankName && (
+          <p className="px-4 py-2.5 text-xs text-slate-500" data-testid="breakdown-bank">
+            Paid into {request.payoutBankName}{last4 ? ` · ····${last4}` : ""}
+          </p>
+        )}
+      </div>
+      <p className="rounded-lg bg-orange-50 border border-orange-100 px-3 py-2 text-xs text-orange-900">
+        This is the amount you send. The fee and what they receive are calculated from it.
+      </p>
     </div>
   );
 }

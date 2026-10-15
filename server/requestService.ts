@@ -536,6 +536,14 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
     currency: request.payInCurrency,
     payoutCurrency: currentUserId ? request.payoutCurrency : null,
     absorbFee: currentUserId ? request.absorbFee : null,
+    // Breakdown fields — only after the payer is identified. The account is masked (bank + last 4 only).
+    payoutAmount: currentUserId && request.payoutAmountMinor !== null
+      ? fromMinorUnits(request.payoutAmountMinor, request.payoutCurrency)
+      : null,
+    fxRate: currentUserId && request.fxRate !== null ? Number(request.fxRate) : null,
+    fxRateIsIndicative: currentUserId ? request.fxRateIsIndicative : null,
+    payoutBankName: currentUserId ? request.payoutAccountBankName : null,
+    payoutAccountMasked: currentUserId ? request.payoutAccountMasked : null,
     purpose: currentUserId ? request.purpose : null,
     reference: currentUserId ? (request.reference ?? null) : null,
     dueDate: request.dueDate ?? null,
