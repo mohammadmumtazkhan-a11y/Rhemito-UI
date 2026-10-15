@@ -991,7 +991,94 @@ export default function Dashboard() {
 
         <OfferBanner latestOffer={rewards.data?.latestOffer ?? null} onView={viewReferOffer} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6">
+        {/* Account Summary at the top of Overview (Sent, Wallet Balance, Collection Account) */}
+        <motion.div variants={itemVariants} data-testid="section-account-summary">
+          <Card className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300">
+            <CardHeader className="pb-3 px-5 pt-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100/80 shadow-xs">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <CardTitle className="text-base font-bold text-slate-800 tracking-tight">Account Summary</CardTitle>
+                </div>
+                <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                  #210145
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-3 px-5 pb-4 pt-0">
+              {/* Sent Section */}
+              <div className="flex flex-col justify-center p-3 rounded-xl bg-slate-50/70 border border-slate-100 hover:border-slate-200 transition-colors">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                    <ArrowUpRight className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Sent</span>
+                  </div>
+                  <Select defaultValue="GBP">
+                    <SelectTrigger className="h-6 w-[70px] text-[11px] bg-white border-slate-200 shadow-2xs font-medium">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GBP">GBP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs text-slate-400 font-medium">£</span>
+                  <span className="text-base md:text-lg font-bold text-slate-900 tracking-tight">750,895.75</span>
+                </div>
+              </div>
+
+              {/* Wallet Section */}
+              <div className="flex flex-col justify-center p-3 rounded-xl bg-blue-50/40 border border-blue-100/60 hover:border-blue-200/80 transition-colors">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
+                    <Wallet className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Wallet Balance</span>
+                  </div>
+                  <Select defaultValue="GBP">
+                    <SelectTrigger className="h-6 w-[70px] text-[11px] bg-white border-blue-200/80 shadow-2xs font-medium">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GBP">GBP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs text-blue-400 font-medium">£</span>
+                  <span className="text-base md:text-lg font-bold text-blue-700 tracking-tight">253,007.92</span>
+                </div>
+              </div>
+
+              {/* Collection Account Section */}
+              <div className="flex flex-col justify-center p-3 rounded-xl bg-purple-50/40 border border-purple-100/60 hover:border-purple-200/80 transition-colors">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-700">
+                    <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Collection Account</span>
+                  </div>
+                  <Select defaultValue="GBP">
+                    <SelectTrigger className="h-6 w-[70px] text-[11px] bg-white border-purple-200/80 shadow-2xs font-medium">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GBP">GBP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs text-purple-400 font-medium">£</span>
+                  <span className="text-base md:text-lg font-bold text-purple-800 tracking-tight">4,357,384.08</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Quick Services & Refer & Earn underneath Account Summary */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
           <motion.div variants={itemVariants}>
             <Card className="h-full rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300 relative overflow-hidden flex flex-col">
               {/* Subtle background mesh gradient */}
@@ -1073,91 +1160,6 @@ export default function Dashboard() {
               onRetry={() => rewards.refetch()}
               highlighted={referHighlighted}
             />
-          </motion.div>
-
-          <motion.div variants={itemVariants}>
-            <Card className="h-full rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col">
-              <CardHeader className="pb-3 px-5 pt-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100/80 shadow-xs">
-                      <CreditCard className="w-4 h-4" />
-                    </div>
-                    <CardTitle className="text-base font-bold text-slate-800 tracking-tight">Account Summary</CardTitle>
-                  </div>
-                  <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-                    #210145
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col gap-2.5 px-5 pb-5 pt-0">
-                {/* Sent Section */}
-                <div className="flex flex-1 flex-col justify-center p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 hover:border-slate-200 transition-colors">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                      <ArrowUpRight className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Sent</span>
-                    </div>
-                    <Select defaultValue="GBP">
-                      <SelectTrigger className="h-6 w-[70px] text-[11px] bg-white border-slate-200 shadow-2xs font-medium">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="GBP">GBP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-xs text-slate-400 font-medium">£</span>
-                    <span className="text-base md:text-lg font-bold text-slate-900 tracking-tight">750,895.75</span>
-                  </div>
-                </div>
-
-                {/* Wallet Section */}
-                <div className="flex flex-1 flex-col justify-center p-2.5 rounded-xl bg-blue-50/40 border border-blue-100/60 hover:border-blue-200/80 transition-colors">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
-                      <Wallet className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Wallet Balance</span>
-                    </div>
-                    <Select defaultValue="GBP">
-                      <SelectTrigger className="h-6 w-[70px] text-[11px] bg-white border-blue-200/80 shadow-2xs font-medium">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="GBP">GBP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-xs text-blue-400 font-medium">£</span>
-                    <span className="text-base md:text-lg font-bold text-blue-700 tracking-tight">253,007.92</span>
-                  </div>
-                </div>
-
-                {/* Collection Account Section */}
-                <div className="flex flex-1 flex-col justify-center p-2.5 rounded-xl bg-purple-50/40 border border-purple-100/60 hover:border-purple-200/80 transition-colors">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-700">
-                      <Building2 className="w-3.5 h-3.5 text-purple-600" />
-                      <span>Collection Account</span>
-                    </div>
-                    <Select defaultValue="GBP">
-                      <SelectTrigger className="h-6 w-[70px] text-[11px] bg-white border-purple-200/80 shadow-2xs font-medium">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="GBP">GBP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-xs text-purple-400 font-medium">£</span>
-                    <span className="text-base md:text-lg font-bold text-purple-800 tracking-tight">4,357,384.08</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </motion.div>
         </div>
 
