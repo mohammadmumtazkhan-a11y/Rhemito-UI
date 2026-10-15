@@ -29,6 +29,24 @@ export const STATIC_FX_RATES: Record<string, Record<string, number>> = {
   CNY: { CNY: 1, GBP: 0.11, USD: 0.14, EUR: 0.129, NGN: 221, GHS: 2.16, KES: 18.1, ZAR: 2.6, INR: 11.7, AED: 0.515, CAD: 0.189, AUD: 0.213, JPY: 20.85 },
 };
 
+/** Dummy per-GBP rates for common currencies missing from the table above (EGP, TZS, UGX, XOF, RWF). */
+const STATIC_GBP_EXTRA: Record<string, number> = { EGP: 62, TZS: 3350, UGX: 4750, XOF: 770, RWF: 1780 };
+
+/**
+ * Dummy rate used when no live or affiliate rate is available: the direct
+ * table entry, else a cross rate through GBP. Undefined for unknown currencies
+ * (those still fail loudly — never a silent 1:1).
+ */
+export function staticFxRate(from: string, to: string): number | undefined {
+  if (from === to) return 1;
+  const direct = STATIC_FX_RATES[from]?.[to];
+  if (typeof direct === "number" && direct > 0) return direct;
+  const perGbp = (c: string) => (c === "GBP" ? 1 : STATIC_FX_RATES.GBP[c] ?? STATIC_GBP_EXTRA[c]);
+  const f = perGbp(from);
+  const t = perGbp(to);
+  return f && t ? t / f : undefined;
+}
+
 const rateCache = new Map<string, { rates: Record<string, number>; fetchedAt: number }>();
 
 export class FxError extends Error {
@@ -105,7 +123,15 @@ export async function getFxRate(from: string, to: string): Promise<number> {
     }
   }
 
-  const rate = rates?.[to];
+  let rate = rates?.[to];
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
+    // Last resort: dummy rates so the journey keeps working while rates are down.
+    const dummy = staticFxRate(from, to);
+    if (dummy !== undefined) {
+      console.warn(`[fxService] using dummy rate for ${from}→${to}`);
+      return dummy;
+    }
+  }
   if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
     throw new FxError(
       "FX_UNAVAILABLE",

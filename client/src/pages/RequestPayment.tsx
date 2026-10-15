@@ -174,6 +174,7 @@ export default function RequestPayment() {
   const [createdRequestNumber, setCreatedRequestNumber] = useState("");
   const [restoredAmount, setRestoredAmount] = useState(false);
   const [receiveDraft, setReceiveDraft] = useState<string | null>(null);
+  const [payerDraft, setPayerDraft] = useState<string | null>(null);
   const [showFxNoticeModal, setShowFxNoticeModal] = useState(false);
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const [selectedPayoutAccount, setSelectedPayoutAccount] = useState<PayoutAccountView | null>(null);
@@ -375,6 +376,9 @@ export default function RequestPayment() {
   const fxFinite = Number.isFinite(fxRate) && fxRate > 0;
   const receiveInPayout = fxFinite ? netBeforeFx * fxRate : NaN;
   const receiveDisplay = receiveDraft ?? (fxFinite && parsedAmount > 0 ? receiveInPayout.toFixed(2) : "");
+  // "Payer sends" shows what the payer is actually charged (incl. the 3% fee in
+  // "exact amount" mode), so it always agrees with the breakdown card.
+  const payerDisplay = payerDraft ?? (parsedAmount > 0 ? senderPaysAmount.toFixed(2) : formData.requestAmount);
 
   // RM-01: restore the payer send amount from the latest SUCCESSFUL (paid out) Receive Money request.
   const requestsQuery = useQuery<MoneyRequestView[] | undefined>({
@@ -409,7 +413,11 @@ export default function RequestPayment() {
     amountTouchedRef.current = true;
     setRestoredAmount(false);
     setReceiveDraft(null);
-    handleInputChange("requestAmount", value);
+    setPayerDraft(value);
+    const v = parseFloat(value);
+    // Exact-amount mode: the payer total includes the fee, so the base requested amount is total / 1.03.
+    const base = formData.absorbFee || !Number.isFinite(v) ? value : (v / (1 + platformFeeRate)).toFixed(2);
+    handleInputChange("requestAmount", base);
   };
 
   // Editing "You receive" derives the payer amount from the current indicative rate.
@@ -417,6 +425,7 @@ export default function RequestPayment() {
     amountTouchedRef.current = true;
     setRestoredAmount(false);
     setReceiveDraft(value);
+    setPayerDraft(null);
     const v = parseFloat(value);
     if (!Number.isFinite(v) || v <= 0 || !fxFinite) {
       handleInputChange("requestAmount", "");
@@ -1010,7 +1019,7 @@ export default function RequestPayment() {
                           <button
                             type="button"
                             aria-pressed={!formData.absorbFee}
-                            onClick={() => handleInputChange("absorbFee", false)}
+                            onClick={() => { setPayerDraft(null); handleInputChange("absorbFee", false); }}
                             className={`text-left rounded-xl border-2 p-3.5 min-h-[44px] transition-colors ${!formData.absorbFee ? "border-primary bg-primary/5" : "border-border bg-card hover:border-slate-300"}`}
                             data-testid="mode-exact"
                           >
@@ -1020,7 +1029,7 @@ export default function RequestPayment() {
                           <button
                             type="button"
                             aria-pressed={formData.absorbFee}
-                            onClick={() => handleInputChange("absorbFee", true)}
+                            onClick={() => { setPayerDraft(null); handleInputChange("absorbFee", true); }}
                             className={`text-left rounded-xl border-2 p-3.5 min-h-[44px] transition-colors ${formData.absorbFee ? "border-primary bg-primary/5" : "border-border bg-card hover:border-slate-300"}`}
                             data-testid="mode-less"
                           >
@@ -1079,8 +1088,9 @@ export default function RequestPayment() {
                               step="any"
                               inputMode="decimal"
                               placeholder="0.00"
-                              value={formData.requestAmount}
+                              value={payerDisplay}
                               onChange={(e) => handleAmountChange(e.target.value)}
+                              onBlur={() => setPayerDraft(null)}
                               aria-invalid={belowMin}
                               aria-describedby="payer-sends-help"
                               className={`${senderSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl md:text-2xl font-bold h-12 md:h-14 bg-white shadow-sm ${belowMin ? "border-destructive" : ""}`}

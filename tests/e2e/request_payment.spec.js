@@ -203,6 +203,9 @@ test.describe('Request Money E2E', () => {
     await page.getByTestId('mode-exact').click();
     await expect(page.getByTestId('breakdown-sender-pays')).toHaveText('£257.50 GBP');
     await expect(page.getByText('+£7.50 GBP').first()).toBeVisible();
+    // The "Payer sends" field agrees with the breakdown, and the receive figure is the exact amount
+    await expect(page.getByTestId('input-request-amount')).toHaveValue('257.50');
+    await expect(page.getByTestId('input-receive-amount')).toHaveValue('250.00');
     await page.getByTestId('button-step-next').click();
 
     // Step 2: purpose only, then create (no payer)
@@ -307,10 +310,10 @@ test.describe('Request Money E2E', () => {
     });
     expect(res.status()).toBe(403);
 
-    // Disabled corridor (NG→GB) is rejected server-side
+    // An unknown corridor is rejected server-side
     const disabled = await request.post('/api/request-money/requests', {
       data: {
-        corridorId: 'NG-GB-NGN-GBP',
+        corridorId: 'XX-YY-AAA-BBB',
         payoutAccountId: accountId,
         payInAmount: '50000.00',
         senderType: 'individual',
@@ -469,13 +472,14 @@ test.describe('Request Money E2E', () => {
     }
     await page.keyboard.press('Escape');
 
-    // With a KES payout account the default aligns to KES (the GBP default has
-    // no corridor for this account) and the corridor warning never appears
-    await expect(page.getByTestId('select-sender-currency')).toContainText('KES');
+    // With a KES payout account the default GBP payer currency now has a demo
+    // cross route (GBP to KES), so the corridor warning never appears
     await page.getByTestId('input-request-amount').fill('5000');
     await expect(page.getByTestId('corridor-unavailable')).toHaveCount(0);
     await expect(page.getByTestId('button-step-next')).toBeEnabled();
     await page.getByTestId('button-step-next').click();
+    // GBP payer to a KES account is a cross-currency route: confirm the FX notice
+    await page.getByRole('dialog').getByRole('button', { name: 'Continue' }).click();
 
     // Complete the journey: purpose → create link
     await page.getByTestId('select-reason').click();

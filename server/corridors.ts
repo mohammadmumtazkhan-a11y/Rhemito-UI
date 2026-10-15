@@ -165,9 +165,7 @@ export const CORRIDORS: CorridorConfig[] = [
     fxProvider: "dev:fx",
     payoutProvider: "dev:payout-fps",
     estimatedDeliveryTime: "Typically within 1 business day",
-    enabled: false,
-    unavailabilityReason:
-      "Nigeria → UK requests are unavailable while the outward-remittance route is being finalised with our local partners.",
+    enabled: true,
   },
 ];
 
@@ -178,6 +176,19 @@ export function findCorridor(id: string): CorridorConfig | undefined {
   // ("XX" is the placeholder for an empty country). Regenerated with the same
   // coverage rule as corridorsForRequester so reviewed configuration stays
   // authoritative for the currencies it enables.
+  const cross = /^DEMO-([A-Z]{2}|XX)-([A-Z]{3})-([A-Z]{3})$/.exec(id);
+  if (cross) {
+    const [, rc, payIn, payout] = cross;
+    const payInInfo = COMMON_PAYIN_CURRENCIES.find((c) => c.code === payIn);
+    const payoutInfo = COMMON_PAYIN_CURRENCIES.find((c) => c.code === payout);
+    if (!payInInfo || !payoutInfo || payIn === payout) return undefined;
+    const country = rc === "XX" ? "" : rc;
+    // A reviewed corridor for the same route (even a disabled one) always wins.
+    if (CORRIDORS.some((c) => c.requesterCountry === country && c.payInCurrency === payIn && c.payoutCurrency === payout)) {
+      return undefined;
+    }
+    return demoCrossCorridor(payIn, payInInfo.homeCountry, payout, country);
+  }
   const match = /^DEMO-([A-Z]{2}|XX)-([A-Z]{3})$/.exec(id);
   if (match) {
     const [, requesterCountry, code] = match;
@@ -234,6 +245,19 @@ function demoCatchAllCorridor(code: string, homeCountry: string, requesterCountr
     estimatedDeliveryTime: "Typically within minutes",
     enabled: true,
     demoCatchAll: true,
+  };
+}
+
+/**
+ * Generated demo cross-currency corridor (payer currency → a different payout
+ * currency). Development only: indicative/dummy rates, no reviewed partner.
+ */
+function demoCrossCorridor(payIn: string, payerCountry: string, payout: string, requesterCountry: string): CorridorConfig {
+  return {
+    ...demoCatchAllCorridor(payIn, payerCountry, requesterCountry),
+    id: `DEMO-${requesterCountry || "XX"}-${payIn}-${payout}`,
+    payoutCurrency: payout,
+    estimatedDeliveryTime: "Typically within minutes to 1 hour",
   };
 }
 
@@ -298,5 +322,16 @@ export function corridorsForRequester(requesterCountry: string): CorridorConfig[
   const generated = COMMON_PAYIN_CURRENCIES
     .filter(({ code }) => !covered.has(code))
     .map(({ code, homeCountry }) => demoCatchAllCorridor(code, homeCountry, requesterCountry));
-  return [...configured, ...generated];
+  // Demo cross-currency routes for every other common pair, so any payer
+  // currency can pay into any payout account currency. A reviewed corridor for
+  // the same pair (enabled or deliberately disabled) is never overridden.
+  const reviewedPairs = new Set(configured.map((c) => `${c.payInCurrency}>${c.payoutCurrency}`));
+  const cross: CorridorConfig[] = [];
+  for (const payIn of COMMON_PAYIN_CURRENCIES) {
+    for (const payout of COMMON_PAYIN_CURRENCIES) {
+      if (payIn.code === payout.code || reviewedPairs.has(`${payIn.code}>${payout.code}`)) continue;
+      cross.push(demoCrossCorridor(payIn.code, payIn.homeCountry, payout.code, requesterCountry));
+    }
+  }
+  return [...configured, ...generated, ...cross];
 }
