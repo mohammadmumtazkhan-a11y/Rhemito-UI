@@ -315,7 +315,11 @@ export function registerRequestMoneyRoutes(app: Express): void {
   app.post("/api/request-money/requests/:id/resend-email", async (req, res) => {
     try {
       const userId = requireStrictAuth(req);
-      await resendRequestEmail(userId, req.params.id);
+      const body = (req.body ?? {}) as { email?: unknown; name?: unknown };
+      await resendRequestEmail(userId, req.params.id, {
+        email: typeof body.email === "string" ? body.email : undefined,
+        name: typeof body.name === "string" ? body.name : undefined,
+      });
       res.json({ success: true });
     } catch (err) {
       return handleError(res, err);

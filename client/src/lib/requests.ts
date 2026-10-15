@@ -56,8 +56,8 @@ export interface MoneyRequestView {
   id: string;
   requestNumber: string;
   status: string;
-  senderName: string;
-  senderEmail: string;
+  senderName: string | null;
+  senderEmail: string | null;
   payInAmount: string;
   payInCurrency: string;
   senderPaysAmount: string;
@@ -69,7 +69,7 @@ export interface MoneyRequestView {
   fxRateIsIndicative: boolean;
   fxMarkupApplied: number | null;
   payoutAccount: { bankName: string; maskedNumber: string; holderName: string; country: string };
-  purpose: string;
+  purpose: string | null;
   reference: string | null;
   corridorId: string;
   paymentMethod: string | null;
@@ -128,8 +128,12 @@ export interface CreateRequestInput {
   payoutAccountId: string;
   payInAmount: string;
   senderType: "individual" | "business";
-  senderName: string;
-  senderEmail: string;
+  /** Optional: a generic payment link has no payer. */
+  senderName?: string;
+  senderEmail?: string;
+  senderId?: string;
+  payerBankName?: string;
+  payerAccountNumber?: string;
   senderPhone?: string;
   senderDob?: string;
   purpose: PaymentPurpose;
@@ -202,8 +206,8 @@ export async function extendExpiry(id: string): Promise<string> {
   return ((await res.json()) as { data: { expiresAt: string } }).data.expiresAt;
 }
 
-export async function resendEmail(id: string): Promise<void> {
-  await apiRequest("POST", `/api/request-money/requests/${id}/resend-email`, {});
+export async function resendEmail(id: string, payer?: { email?: string; name?: string }): Promise<void> {
+  await apiRequest("POST", `/api/request-money/requests/${id}/resend-email`, payer ?? {});
 }
 
 // ─── Public checkout APIs ─────────────────────────────────────────────────────
@@ -407,3 +411,19 @@ export const METHOD_LABELS: Record<string, string> = {
   bank_transfer: "Local bank transfer",
   wallet: "Rhemito wallet",
 };
+
+/**
+ * RM-01: the payer send amount to restore for a new Receive Money request is the
+ * one from the latest SUCCESSFUL (paid out) request. Pending, cancelled, failed
+ * and expired requests never replace it.
+ */
+export function lastSuccessfulPayerAmount(
+  requests: MoneyRequestView[],
+): { amount: string; currency: string } | null {
+  const last = requests
+    .filter((r) => r.status === "paid_out" && !!r.payInAmount && !!r.payInCurrency)
+    .sort((a, b) =>
+      String(b.paidOutAt ?? b.createdAt ?? "").localeCompare(String(a.paidOutAt ?? a.createdAt ?? "")),
+    )[0];
+  return last ? { amount: last.payInAmount, currency: last.payInCurrency } : null;
+}

@@ -64,37 +64,44 @@ export const TYPE_BADGES: Record<TransactionType, { label: string; dot: string }
 };
 
 // Mirrors PaymentRequests.tsx STATUS_LABELS / STATUS_STYLES (plus dot colours).
+// Traffic-light scheme (RM-02): green = completed (only a confirmed payout),
+// amber = in progress / awaiting, red = failed, cancelled or expired. The text
+// label always stays visible so meaning never depends on colour alone.
+const TL_GREEN = { pill: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" };
+const TL_AMBER = { pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" };
+const TL_RED = { pill: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500" };
+
 const REQUEST_STATUS: Record<string, { label: string; pill: string; dot: string }> = {
-  active: { label: "Sent", pill: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
-  viewed: { label: "Viewed", pill: "bg-indigo-50 text-indigo-700 border-indigo-200", dot: "bg-indigo-500" },
-  authorisation_in_progress: { label: "Authorisation in Progress", pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
-  payment_processing: { label: "Payment Processing", pill: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" },
-  payment_pending: { label: "Payment Pending", pill: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" },
-  funded: { label: "Funded", pill: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" },
-  payout_pending: { label: "Paying Out", pill: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" },
-  paid_out: { label: "Paid Out", pill: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  failed: { label: "Failed", pill: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500" },
-  expired: { label: "Expired", pill: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" },
-  cancelled: { label: "Cancelled", pill: "bg-slate-100 text-slate-500 border-slate-200", dot: "bg-slate-400" },
+  active: { label: "Sent", ...TL_AMBER },
+  viewed: { label: "Viewed", ...TL_AMBER },
+  authorisation_in_progress: { label: "Authorisation in Progress", ...TL_AMBER },
+  payment_processing: { label: "Payment Processing", ...TL_AMBER },
+  payment_pending: { label: "Payment Pending", ...TL_AMBER },
+  funded: { label: "Funded", ...TL_AMBER },
+  payout_pending: { label: "Paying Out", ...TL_AMBER },
+  paid_out: { label: "Paid Out", ...TL_GREEN },
+  failed: { label: "Failed", ...TL_RED },
+  expired: { label: "Expired", ...TL_RED },
+  cancelled: { label: "Cancelled", ...TL_RED },
   refunded: { label: "Refunded", pill: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" },
 };
 
 // Mirrors components/invoices/InvoiceStatusBadge.tsx.
 const INVOICE_STATUS: Record<string, { label: string; pill: string; dot: string }> = {
-  sent: { label: "Sent", pill: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
-  overdue: { label: "Overdue", pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
-  payment_processing: { label: "Payment Processing", pill: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" },
-  paid: { label: "Paid", pill: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  expired: { label: "Expired", pill: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" },
-  cancelled: { label: "Cancelled", pill: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500" },
+  sent: { label: "Sent", ...TL_AMBER },
+  overdue: { label: "Overdue", ...TL_RED },
+  payment_processing: { label: "Payment Processing", ...TL_AMBER },
+  paid: { label: "Paid", ...TL_GREEN },
+  expired: { label: "Expired", ...TL_RED },
+  cancelled: { label: "Cancelled", ...TL_RED },
 };
 
 // Mirrors the GroupPayDashboard status pill colours.
 const CAMPAIGN_STATUS: Record<string, { label: string; pill: string; dot: string }> = {
-  active: { label: "Active", pill: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500" },
-  completed: { label: "Completed", pill: "bg-blue-100 text-blue-700 border-blue-200", dot: "bg-blue-500" },
-  paused: { label: "Paused", pill: "bg-slate-100 text-slate-700 border-slate-200", dot: "bg-slate-400" },
-  cancelled: { label: "Cancelled", pill: "bg-gray-100 text-gray-700 border-gray-200", dot: "bg-gray-400" },
+  active: { label: "Active", ...TL_AMBER },
+  completed: { label: "Completed", ...TL_GREEN },
+  paused: { label: "Paused", ...TL_AMBER },
+  cancelled: { label: "Cancelled", ...TL_RED },
 };
 
 const FALLBACK_STATUS = { label: "", pill: "bg-gray-50 text-gray-600 border-gray-200", dot: "bg-gray-400" };
@@ -111,8 +118,8 @@ export function fromMoneyRequest(req: MoneyRequestView): UnifiedTransactionRow {
     key: `receive_money-${req.requestNumber}`,
     type: "receive_money",
     ref: req.requestNumber,
-    name: req.senderName,
-    email: req.senderEmail,
+    name: req.senderName ?? "Any payer",
+    email: req.senderEmail ?? "",
     service: "Money Request",
     dateLabel: toDisplayDate(req.createdAt).label,
     dateSort: toDisplayDate(req.createdAt).sort,

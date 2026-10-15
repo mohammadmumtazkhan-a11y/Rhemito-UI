@@ -162,8 +162,8 @@ function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled:
       <TableCell className="text-center py-4">
         {scheduled ? (
           <div className="flex items-center justify-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+            <span title="Scheduled" className="status-light inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
               Scheduled
             </span>
           </div>
@@ -171,25 +171,25 @@ function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled:
           <div className="flex items-center justify-center gap-2">
             <AnimatePresence mode="wait">
               {tx.status === "cancelled" ? (
-                <motion.span
+                <motion.span title="Cancelled"
                   key="cancelled"
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                  className="status-light inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200 shadow-2xs"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
                   Cancelled
                 </motion.span>
               ) : tx.status === "completed" ? (
-                <motion.span
+                <motion.span title="Completed"
                   key="completed"
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
+                  className="status-light inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   Completed
@@ -210,13 +210,13 @@ function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled:
                   Awaiting Payment
                 </motion.span>
               ) : (
-                <motion.span
+                <motion.span title="Pending"
                   key="pending"
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs"
+                  className="status-light inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                   Pending
@@ -394,7 +394,7 @@ function UnifiedRow({
       </TableCell>
       <TableCell className="text-center py-4">
         <div className="flex items-center justify-center gap-2">
-          <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border shadow-2xs", row.statusClass)}>
+          <span title={row.statusLabel} className={cn("status-light inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border shadow-2xs", row.statusClass)}>
             <span className={cn("w-1.5 h-1.5 rounded-full", row.dotClass)} />
             {row.statusLabel}
           </span>
@@ -488,17 +488,17 @@ function MobileSendMoneyCard({
             {tx.amount}
           </span>
           {scheduled ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+            <span title="Scheduled" className="status-light inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
               Scheduled
             </span>
           ) : tx.status === "cancelled" ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+            <span title="Cancelled" className="status-light inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
               Cancelled
             </span>
           ) : tx.status === "completed" ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span title="Completed" className="status-light inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               Completed
             </span>
@@ -511,7 +511,7 @@ function MobileSendMoneyCard({
               Awaiting Payment
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            <span title="Pending" className="status-light inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
               Pending
             </span>
@@ -609,7 +609,7 @@ function MobileUnifiedCard({
           <span className="font-bold text-base text-slate-900 tracking-tight whitespace-nowrap">
             {row.amountLabel}
           </span>
-          <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border shadow-2xs", row.statusClass)}>
+          <span title={row.statusLabel} className={cn("status-light inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border shadow-2xs", row.statusClass)}>
             <span className={cn("w-1.5 h-1.5 rounded-full", row.dotClass)} />
             {row.statusLabel}
           </span>

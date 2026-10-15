@@ -20,7 +20,10 @@ import {
   QrCode,
   Share2,
   ShieldCheck,
-  CalendarClock
+  CalendarClock,
+  ChevronDown,
+  Eye,
+  MessageCircle
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -28,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -44,10 +47,9 @@ import { knownSenders, type KnownSender } from "@/data/knownSenders";
 import { PayoutAccountSelector } from "@/components/payout/PayoutAccountSelector";
 import {
   createRequest, getCorridors, getRequests,
-  getEligibility, getQuote, resendEmail,
-  type Corridor, type PayoutAccountView, type Quote,
+  getEligibility, getQuote, resendEmail, lastSuccessfulPayerAmount,
+  type Corridor, type PayoutAccountView, type Quote, type MoneyRequestView,
 } from "@/lib/requests";
-import { DIALING_CODES } from "@/data/dialing-codes";
 import { fromMinorUnits } from "@shared/money";
 import {
   computeExpiry,
@@ -104,17 +106,17 @@ interface FormData {
   requestAmount: string;
   senderCurrency: string;
   selectedPayoutAccountId: string;
-  paymentMethod: string;
+  /** true = requester receives the amount less charges; false = payer covers the fee on top. */
   absorbFee: boolean;
   senderType: "individual" | "business";
-  senderFirstName: string;
-  senderMiddleName: string;
-  senderLastName: string;
-  senderBusinessName: string;
+  /** Saved-sender ID when the payer was picked from the saved list (never inferred from name/email). */
+  senderId: string;
+  payerName: string;
   senderEmail: string;
-  senderCountryCode: string;
-  senderPhone: string;
-  senderDob: string;
+  payerBankName: string;
+  payerAccountNumber: string;
+  invoiceReference: string;
+  note: string;
   reason: string;
   otherReason: string;
   dueDate: string;
@@ -122,12 +124,26 @@ interface FormData {
   customExpiryDate: string;
 }
 
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
+const isValidAccountNumber = (value: string) => /^\d{6,12}$/.test(value.trim());
+
+function FieldTag({ required }: { required?: boolean }) {
+  return required ? (
+    <span className="ml-2 inline-flex items-center rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+      Mandatory
+    </span>
+  ) : (
+    <span className="ml-2 inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+      Optional
+    </span>
+  );
+}
+
 // Country dialing codes come from @/data/dialing-codes (full ISO list).
 
 const steps = [
   { id: 1, title: "Amount & Currencies", description: "Set amount & payout destination" },
-  { id: 2, title: "Sender Information", description: "Who's paying you?" },
-  { id: 3, title: "Review & Confirm", description: "Verify details & send" },
+  { id: 2, title: "Payment request", description: "Add optional details and share your link" },
 ];
 
 export default function RequestPayment() {
@@ -147,12 +163,17 @@ export default function RequestPayment() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSuccess, setIsSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [copiedEmail, setCopiedEmail] = useState(false);
   const [paymentLink, setPaymentLink] = useState("");
   const [emailPaymentLink, setEmailPaymentLink] = useState("");
   const [createdRequestId, setCreatedRequestId] = useState("");
-  const [senderSearch, setSenderSearch] = useState("");
-  const [showSenderSuggestions, setShowSenderSuggestions] = useState(false);
+  const [showSenderList, setShowSenderList] = useState(false);
+  const [showPayerDetails, setShowPayerDetails] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const [createdRequestNumber, setCreatedRequestNumber] = useState("");
+  const [restoredAmount, setRestoredAmount] = useState(false);
+  const [receiveDraft, setReceiveDraft] = useState<string | null>(null);
   const [showFxNoticeModal, setShowFxNoticeModal] = useState(false);
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const [selectedPayoutAccount, setSelectedPayoutAccount] = useState<PayoutAccountView | null>(null);
@@ -196,23 +217,19 @@ export default function RequestPayment() {
     refetchOnMount: "always",
   });
 
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
   const [formData, setFormData] = useState<FormData>({
     requestAmount: "",
     senderCurrency: "GBP",
     selectedPayoutAccountId: "",
-    paymentMethod: "sender_choice",
     absorbFee: true,
     senderType: "individual",
-    senderFirstName: "",
-    senderMiddleName: "",
-    senderLastName: "",
-    senderBusinessName: "",
+    senderId: "",
+    payerName: "",
     senderEmail: "",
-    senderCountryCode: "+44",
-    senderPhone: "",
-    senderDob: "",
+    payerBankName: "",
+    payerAccountNumber: "",
+    invoiceReference: "",
+    note: "",
     reason: "",
     otherReason: "",
     dueDate: "",
@@ -249,55 +266,48 @@ export default function RequestPayment() {
     return options;
   }, [enabledPayInCurrencies]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const senderEmail = params.get("sender");
-    if (senderEmail) {
-      const sender = knownSenders.find(s => s.email === senderEmail);
-      if (sender) {
-        setFormData(prev => ({
-          ...prev,
-          senderType: sender.senderType,
-          senderFirstName: sender.firstName,
-          senderMiddleName: sender.middleName,
-          senderLastName: sender.lastName,
-          senderBusinessName: sender.businessName,
-          senderEmail: sender.email,
-          senderCountryCode: sender.countryCode,
-          senderPhone: sender.phone,
-          senderDob: sender.dob,
-        }));
-      }
-    }
-  }, []);
-
-  const payoutCurrency = selectedPayoutAccount?.currency || "GBP";
-  const senderCurrency = formData.senderCurrency;
-
-  const filteredSenders = knownSenders.filter(sender => {
-    const displayName = sender.senderType === "business"
-      ? sender.businessName.toLowerCase()
-      : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.toLowerCase();
-    const searchLower = senderSearch.toLowerCase();
-    return displayName.includes(searchLower) || sender.email.toLowerCase().includes(searchLower);
-  });
+  const knownSenderName = (sender: KnownSender) =>
+    sender.senderType === "business"
+      ? sender.businessName
+      : [sender.firstName, sender.middleName, sender.lastName].filter(Boolean).join(" ");
+  const knownSenderId = (sender: KnownSender) => sender.id ?? sender.uniqueCode ?? sender.email;
 
   const selectKnownSender = (sender: KnownSender) => {
     setFormData(prev => ({
       ...prev,
       senderType: sender.senderType,
-      senderFirstName: sender.firstName,
-      senderMiddleName: sender.middleName,
-      senderLastName: sender.lastName,
-      senderBusinessName: sender.businessName,
+      senderId: knownSenderId(sender),
+      payerName: knownSenderName(sender),
       senderEmail: sender.email,
-      senderCountryCode: sender.countryCode,
-      senderPhone: sender.phone,
-      senderDob: sender.dob,
     }));
-    setSenderSearch("");
-    setShowSenderSuggestions(false);
+    setShowSenderList(false);
   };
+
+  // Typing a different email detaches the previously selected sender so the
+  // request never carries one payer's name/ID with another payer's email.
+  const handlePayerEmailChange = (value: string) => {
+    setFormData(prev => {
+      if (!prev.senderId) return { ...prev, senderEmail: value };
+      const current = knownSenders.find(s => knownSenderId(s) === prev.senderId);
+      if (current && current.email.toLowerCase() === value.trim().toLowerCase()) {
+        return { ...prev, senderEmail: value };
+      }
+      return { ...prev, senderEmail: value, senderId: "", payerName: "", senderType: "individual" };
+    });
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const senderEmail = params.get("sender");
+    if (senderEmail) {
+      const sender = knownSenders.find(s => s.email === senderEmail);
+      if (sender) selectKnownSender(sender);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const payoutCurrency = selectedPayoutAccount?.currency || "GBP";
+  const senderCurrency = formData.senderCurrency;
 
   // Indicative quote from the server (live-first). Cross-currency previews
   // never assume 1:1 — if no quote is available the notice stays qualitative.
@@ -326,13 +336,13 @@ export default function RequestPayment() {
   }, [enabledPayInCurrencies.join(","), selectedPayoutAccount, corridorForSelection]);
   useEffect(() => {
     let cancelled = false;
-    if (!corridorForSelection || !formData.requestAmount || parseFloat(formData.requestAmount) <= 0) {
+    if (!corridorForSelection) {
       setIndicativeQuote(null);
       return;
     }
     const t = setTimeout(async () => {
       try {
-        const q = await getQuote(corridorForSelection.id, formData.requestAmount, formData.absorbFee);
+        const q = await getQuote(corridorForSelection.id, parseFloat(formData.requestAmount) > 0 ? formData.requestAmount : "100", formData.absorbFee);
         if (!cancelled) setIndicativeQuote(q);
       } catch {
         if (!cancelled) setIndicativeQuote(null);
@@ -340,6 +350,7 @@ export default function RequestPayment() {
     }, 350);
     return () => { cancelled = true; clearTimeout(t); };
   }, [corridorForSelection?.id, formData.requestAmount, formData.absorbFee]);
+
   const getExchangeRate = () => {
     if (senderCurrency === payoutCurrency) return 1;
     return indicativeQuote?.fxRate ?? NaN; // NaN → show "Live Spot Rate at Payout" only
@@ -355,6 +366,66 @@ export default function RequestPayment() {
 
   const senderSymbol = CURRENCY_SYMBOLS[senderCurrency] || "";
   const payoutSymbol = CURRENCY_SYMBOLS[payoutCurrency] || "";
+
+  // RM-03: the minimum comes from the selected corridor (authoritative config), in the payer currency.
+  const minAmount = corridorForSelection
+    ? Number(fromMinorUnits(corridorForSelection.minAmountMinor, senderCurrency))
+    : null;
+  const belowMin = parsedAmount > 0 && minAmount !== null && parsedAmount < minAmount;
+  const fxFinite = Number.isFinite(fxRate) && fxRate > 0;
+  const receiveInPayout = fxFinite ? netBeforeFx * fxRate : NaN;
+  const receiveDisplay = receiveDraft ?? (fxFinite && parsedAmount > 0 ? receiveInPayout.toFixed(2) : "");
+
+  // RM-01: restore the payer send amount from the latest SUCCESSFUL (paid out) Receive Money request.
+  const requestsQuery = useQuery<MoneyRequestView[] | undefined>({
+    queryKey: ["/api/request-money/requests"],
+    queryFn: async () => {
+      try {
+        return await getRequests();
+      } catch (err) {
+        if ((err as { status?: number }).status === 401) return undefined;
+        throw err;
+      }
+    },
+    enabled: eligibilityQuery.data?.kind === "ok",
+    retry: false,
+    refetchOnMount: "always",
+  });
+  const amountTouchedRef = useRef(false);
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || amountTouchedRef.current) return;
+    if (!requestsQuery.data || !corridorsQuery.data) return;
+    restoredRef.current = true;
+    const last = lastSuccessfulPayerAmount(requestsQuery.data);
+    if (!last || !currencyOptions.includes(last.currency)) return;
+    currencyAlignedRef.current = true;
+    setFormData((prev) => ({ ...prev, requestAmount: last.amount, senderCurrency: last.currency }));
+    setRestoredAmount(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestsQuery.data, corridorsQuery.data, currencyOptions]);
+
+  const handleAmountChange = (value: string) => {
+    amountTouchedRef.current = true;
+    setRestoredAmount(false);
+    setReceiveDraft(null);
+    handleInputChange("requestAmount", value);
+  };
+
+  // Editing "You receive" derives the payer amount from the current indicative rate.
+  const handleReceiveChange = (value: string) => {
+    amountTouchedRef.current = true;
+    setRestoredAmount(false);
+    setReceiveDraft(value);
+    const v = parseFloat(value);
+    if (!Number.isFinite(v) || v <= 0 || !fxFinite) {
+      handleInputChange("requestAmount", "");
+      return;
+    }
+    const net = v / fxRate;
+    const gross = formData.absorbFee ? net / (1 - platformFeeRate) : net;
+    handleInputChange("requestAmount", gross.toFixed(2));
+  };
 
   const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
@@ -427,29 +498,68 @@ export default function RequestPayment() {
 
   const today = useMemo(() => dateInTz(new Date(), EXPIRY_TIMEZONE), []);
 
-  const handleSubmitRequest = async () => {
-    if (isSubmittingRequest || !corridorForSelection || !selectedPayoutAccount) return;
+  const emailError =
+    formData.senderEmail.trim() !== "" && !isValidEmail(formData.senderEmail)
+      ? "Enter a valid email such as name@example.com."
+      : "";
+  const accountError =
+    formData.payerAccountNumber.trim() !== "" && !isValidAccountNumber(formData.payerAccountNumber)
+      ? "Enter the account number using 6 to 12 digits."
+      : "";
+  const hasEmail = formData.senderEmail.trim() !== "";
+
+  const canContinueStep1 =
+    parsedAmount > 0 &&
+    !belowMin &&
+    !!selectedPayoutAccount &&
+    selectedPayoutAccount.verificationStatus === "verified" &&
+    !!corridorForSelection;
+
+  // Mandatory on this step: purpose of payment (cross-border compliance) and a valid link expiry.
+  // Everything else (payer, invoice, bank details) is optional.
+  const canCreate =
+    !!formData.reason &&
+    (formData.reason !== "other" || !!formData.otherReason.trim()) &&
+    !emailError &&
+    !accountError &&
+    Object.keys(dateErrors).length === 0 &&
+    !isSubmittingRequest &&
+    !isSendingEmail;
+  const canSendEmail = canCreate && hasEmail;
+
+  const describeError = (err: unknown) =>
+    (err instanceof Error ? err.message : undefined) ??
+    (typeof err === "string" ? err : undefined) ??
+    (typeof (err as { message?: unknown })?.message === "string" ? (err as { message: string }).message : undefined) ??
+    "Something went wrong. Please try again.";
+
+  /** Creates the request once (idempotent). Returns the new/existing request id, or null on failure. */
+  const createLink = async (): Promise<string | null> => {
+    if (createdRequestId) return createdRequestId;
+    if (isSubmittingRequest || !corridorForSelection || !selectedPayoutAccount) return null;
     setIsSubmittingRequest(true);
     try {
-      const preferredLabel =
-        formData.paymentMethod === "sender_choice" ? null : formData.paymentMethod.replace(/_/g, " ");
+      const reference =
+        [
+          formData.note.trim() || null,
+          formData.invoiceReference.trim() ? `Invoice: ${formData.invoiceReference.trim()}` : null,
+          formData.reason === "other" && formData.otherReason.trim() ? `Reason: ${formData.otherReason.trim()}` : null,
+        ]
+          .filter(Boolean)
+          .join(" | ")
+          .slice(0, 140) || undefined;
       const result = await createRequest({
         corridorId: corridorForSelection.id,
         payoutAccountId: selectedPayoutAccount.id,
         payInAmount: parsedAmount.toFixed(2),
         senderType: formData.senderType,
-        senderName:
-          formData.senderType === "business"
-            ? formData.senderBusinessName
-            : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" "),
-        senderEmail: formData.senderEmail,
-        senderPhone: formData.senderPhone ? `${formData.senderCountryCode} ${formData.senderPhone}` : undefined,
-        senderDob: formData.senderType === "individual" && formData.senderDob ? formData.senderDob : undefined,
+        senderName: formData.payerName.trim() || undefined,
+        senderEmail: formData.senderEmail.trim() || undefined,
+        senderId: formData.senderId || undefined,
+        payerBankName: formData.payerAccountNumber.trim() ? formData.payerBankName.trim() || undefined : undefined,
+        payerAccountNumber: formData.payerAccountNumber.trim() || undefined,
         purpose: formData.reason as never,
-        reference: [
-          preferredLabel ? `Preferred: ${preferredLabel}` : null,
-          formData.reason === "other" && formData.otherReason.trim() ? `Reason: ${formData.otherReason.trim()}` : null,
-        ].filter(Boolean).join(" | ") || undefined,
+        reference,
         absorbFee: formData.absorbFee,
         dueDate: formData.dueDate || undefined,
         expiry: expirySelection,
@@ -458,62 +568,89 @@ export default function RequestPayment() {
       setPaymentLink(result.checkoutUrl);
       setEmailPaymentLink(result.emailCheckoutUrl || result.checkoutUrl);
       setCreatedRequestId(result.request.id);
-      setIsSuccess(true);
+      setCreatedRequestNumber(result.request.requestNumber);
+      void queryClient.invalidateQueries({ queryKey: ["/api/request-money/requests"] });
+      return result.request.id;
     } catch (err) {
-      // Surface the real reason for every failure shape — server error JSON,
-      // network TypeErrors and any stray non-Error throwable — so the user is
-      // never left with a dead-end message.
-      const description =
-        (err instanceof Error ? err.message : undefined) ??
-        (typeof err === "string" ? err : undefined) ??
-        (typeof (err as { message?: unknown })?.message === "string" ? (err as { message: string }).message : undefined) ??
-        "Something went wrong. Please try again.";
-      toast({
-        title: "Request not generated",
-        description,
-        variant: "destructive",
-      });
+      toast({ title: "Payment link not created", description: describeError(err), variant: "destructive" });
+      return null;
     } finally {
       setIsSubmittingRequest(false);
     }
   };
 
-  const handleNext = () => {
-    if (currentStep === 1) {
-      if (!selectedPayoutAccount || selectedPayoutAccount.verificationStatus !== "verified") {
-        toast({
-          title: "Active Settlement Bank Account Required",
-          description: "Please add or select a verified destination settlement bank account before proceeding.",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (parsedAmount <= 0) {
-        toast({
-          title: "Amount Required",
-          description: "Please enter an amount to request.",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (!corridorForSelection) {
-        toast({
-          title: "Corridor Unavailable",
-          description: "This currency route is currently unavailable for your account.",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (senderCurrency !== payoutCurrency) {
-        setShowFxNoticeModal(true);
-        return;
-      }
-      setCurrentStep(2);
-    } else if (currentStep < 3) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      void handleSubmitRequest();
+  const sendEmailFor = async (id: string) => {
+    setIsSendingEmail(true);
+    try {
+      await resendEmail(id, { email: formData.senderEmail.trim(), name: formData.payerName.trim() || undefined });
+      toast({ title: "Email sent", description: `The payment request was emailed to ${formData.senderEmail.trim()}.` });
+    } catch (err) {
+      toast({
+        title: "Email not sent",
+        description: `${describeError(err)} Your payment link is still ready to copy.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingEmail(false);
     }
+  };
+
+  const handleCreateLink = async () => {
+    const id = await createLink();
+    if (!id) return;
+    setIsSuccess(true);
+    toast({ title: "Payment link created", description: "Copy it, share it on WhatsApp, or send it by email." });
+  };
+
+  const handleSendEmail = async () => {
+    if (!hasEmail || emailError) {
+      toast({ title: "Check the payer email", description: emailError || "Enter the payer's email to send the request.", variant: "destructive" });
+      return;
+    }
+    const alreadyCreated = !!createdRequestId;
+    const id = await createLink();
+    if (!id) return;
+    if (!alreadyCreated) {
+      setIsSuccess(true);
+      toast({ title: "Payment link created", description: "Now sending the email." });
+    }
+    await sendEmailFor(id);
+  };
+
+  const handleNext = () => {
+    if (!selectedPayoutAccount || selectedPayoutAccount.verificationStatus !== "verified") {
+      toast({
+        title: "Active Settlement Bank Account Required",
+        description: "Please add or select a verified destination settlement bank account before proceeding.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (parsedAmount <= 0) {
+      toast({ title: "Amount Required", description: "Please enter an amount to request.", variant: "destructive" });
+      return;
+    }
+    if (belowMin) {
+      toast({
+        title: "Amount below the minimum",
+        description: `The payer must send at least ${senderSymbol}${(minAmount ?? 0).toFixed(2)} ${senderCurrency}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!corridorForSelection) {
+      toast({
+        title: "Corridor Unavailable",
+        description: "This currency route is currently unavailable for your account.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (senderCurrency !== payoutCurrency) {
+      setShowFxNoticeModal(true);
+      return;
+    }
+    setCurrentStep(2);
   };
 
   const handleConfirmFxAndProceed = () => {
@@ -529,11 +666,27 @@ export default function RequestPayment() {
     }
   };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(paymentLink);
-    setCopied(true);
-    toast({ title: "Link Copied!", description: "Payment link has been copied to your clipboard." });
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(paymentLink);
+      setCopied(true);
+      setCopyFailed(false);
+      toast({ title: "Link copied", description: "The payment link is on your clipboard." });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyFailed(true);
+      toast({
+        title: "Could not copy automatically",
+        description: "Select the link shown below and copy it manually.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleWhatsApp = () => {
+    const text = `Payment request from ${requesterName}. ${paymentLink}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+    toast({ title: "Opening WhatsApp", description: "Your payment link is ready to send." });
   };
 
   const handleShareLink = async () => {
@@ -544,49 +697,47 @@ export default function RequestPayment() {
         // user cancelled
       }
     } else {
-      handleCopyLink();
+      void handleCopyLink();
     }
   };
 
-  const handleResendEmail = async () => {
-    if (!createdRequestId) return;
-    try {
-      await resendEmail(createdRequestId);
-      toast({ title: "Email sent", description: `The money request email was sent to ${formData.senderEmail}.` });
-    } catch (err) {
-      toast({
-        title: "Email not sent",
-        description: err instanceof Error ? err.message : "Please try again shortly.",
-        variant: "destructive",
-      });
-    }
+  const resetForm = () => {
+    setFormData({
+      requestAmount: "",
+      senderCurrency: "GBP",
+      selectedPayoutAccountId: "",
+      absorbFee: true,
+      senderType: "individual",
+      senderId: "",
+      payerName: "",
+      senderEmail: "",
+      payerBankName: "",
+      payerAccountNumber: "",
+      invoiceReference: "",
+      note: "",
+      reason: "",
+      otherReason: "",
+      dueDate: "",
+      expiryPeriod: "30",
+      customExpiryDate: "",
+    });
+    setSelectedPayoutAccount(null);
+    setCurrentStep(1);
+    setIsSuccess(false);
+    setPaymentLink("");
+    setEmailPaymentLink("");
+    setCreatedRequestId("");
+    setCreatedRequestNumber("");
+    setShowPayerDetails(false);
+    setShowSenderList(false);
+    setReceiveDraft(null);
+    setRestoredAmount(false);
+    setCopyFailed(false);
+    setExpiryTouched(false);
+    amountTouchedRef.current = true; // do not re-restore the previous amount for a deliberate fresh request
+    currencyAlignedRef.current = false;
+    idempotencyKeyRef.current = crypto.randomUUID();
   };
-
-  const canProceed = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          parsedAmount > 0 &&
-          !!selectedPayoutAccount &&
-          selectedPayoutAccount.verificationStatus === "verified" &&
-          !!corridorForSelection
-        );
-      case 2:
-        // Purpose of payment is mandatory for cross-border compliance.
-        return (
-          !!formData.senderEmail &&
-          !!formData.reason &&
-          (formData.reason !== "other" || !!formData.otherReason.trim()) &&
-          (formData.senderType === "individual" ? !!formData.senderFirstName : !!formData.senderBusinessName) &&
-          Object.keys(dateErrors).length === 0
-        );
-      case 3:
-        return !isSubmittingRequest;
-      default:
-        return false;
-    }
-  };
-
 
   // Server-authoritative eligibility gates
   if (eligibilityQuery.isLoading) {
@@ -599,218 +750,175 @@ export default function RequestPayment() {
 
 
 
+  const previewDialog = (
+    <Dialog open={showPreview} onOpenChange={setShowPreview}>
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto" data-testid="dialog-preview">
+        <DialogHeader className="items-center text-center space-y-1">
+          <p className="text-xs font-extrabold tracking-[0.14em] uppercase text-primary">Rhemito Payment</p>
+          <DialogTitle className="font-display text-lg text-slate-900">
+            Payment request from{" "}
+            <span className="block" data-testid="preview-requester-name">{requesterName}</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Ref {createdRequestNumber || "pending"} · Preview only, no new request is created
+          </DialogDescription>
+        </DialogHeader>
+        <div className="text-center">
+          <p className="text-xs text-muted-foreground">You pay</p>
+          <p className="text-3xl font-extrabold font-display text-primary tabular-nums" data-testid="preview-amount">
+            {senderSymbol}{senderPaysAmount.toFixed(2)} <span className="text-lg">{senderCurrency}</span>
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 space-y-2 text-sm">
+          <div className="flex justify-between gap-4"><span className="text-muted-foreground">Requested amount</span><span className="font-medium tabular-nums">{senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-muted-foreground">Transaction fee (3%)</span><span className="font-medium tabular-nums">{formData.absorbFee ? "Paid by requester" : `+${senderSymbol}${platformFeeAmount.toFixed(2)} ${senderCurrency}`}</span></div>
+          {senderCurrency !== payoutCurrency && fxFinite && (
+            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Exchange rate (indicative)</span><span className="font-medium tabular-nums">{fxRate.toFixed(4)} {payoutCurrency} per {senderCurrency}</span></div>
+          )}
+          <div className="flex justify-between gap-4 border-t border-dashed border-border pt-2 font-semibold text-primary">
+            <span>They receive in bank</span>
+            <span className="tabular-nums">
+              {senderCurrency === payoutCurrency
+                ? `${payoutSymbol}${netBeforeFx.toFixed(2)} ${payoutCurrency}`
+                : fxFinite ? `${payoutSymbol}${receiveInPayout.toFixed(2)} ${payoutCurrency}` : "Live rate at payout"}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">Paid into {selectedPayoutAccount?.bankName} {selectedPayoutAccount?.maskedNumber}</p>
+        </div>
+        <Button disabled className="w-full h-11">Pay now</Button>
+        <Button variant="outline" className="w-full" onClick={() => setShowPreview(false)} data-testid="button-close-preview">
+          Close preview
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (isSuccess) {
     return (
       <DashboardLayout>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-lg mx-auto mt-10 md:mt-14"
-        >
-          <Card className="text-center shadow-lg border-teal/20">
-            <CardContent className="pt-10 pb-8 space-y-6">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, delay: 0.15 }}
-                className="w-16 h-16 bg-teal-500 rounded-full flex items-center justify-center mx-auto shadow-md"
-              >
-                <CheckCircle2 className="w-9 h-9 text-white" />
-              </motion.div>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto pb-24">
+          <div className="mb-4 md:mb-6">
+            <h1 className="text-xl md:text-2xl font-bold font-display text-slate-900">Receive Money</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              Your request is ready. Copy the link into any messaging app, or send it by email.
+            </p>
+          </div>
 
-              <div className="space-y-1.5">
-                <h2 className="text-2xl font-bold font-display text-slate-900">Money Request Sent!</h2>
-                <p className="text-sm text-muted-foreground">
-                  The payment link has been sent to{" "}
-                  <span className="font-semibold text-foreground">{formData.senderEmail}</span> for{" "}
-                  <span className="font-semibold text-foreground">
-                    {formData.senderType === "business"
-                      ? formData.senderBusinessName
-                      : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}
-                  </span>.
+          <Card className="border-border shadow-sm">
+            <CardContent className="space-y-5 p-5 md:p-6">
+              <div className="flex items-center gap-2.5 rounded-xl bg-teal/10 px-3.5 py-2.5 text-sm font-semibold text-teal" role="status" data-testid="banner-link-created">
+                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                Payment link created
+              </div>
+
+              <div>
+                <h2 className="font-display text-lg font-bold text-slate-900">Payment link</h2>
+                <p className="text-xs text-muted-foreground" data-testid="text-link-summary">
+                  {senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency} · {createdRequestNumber}
+                  {computedExpiry ? ` · Expires ${formatHumanDate(computedExpiry.expiryDate)}` : ""}
                 </p>
               </div>
 
-              <div className="p-4 bg-muted/40 rounded-xl space-y-2 text-left border border-border">
-                <div className="flex flex-col gap-0.5 text-xs text-muted-foreground md:flex-row md:justify-between md:gap-6">
-                  <span>Requested Amount:</span>
-                  <span className="font-medium text-foreground">{senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}</span>
+              <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-3" data-testid="qr-panel">
+                <Input
+                  value={paymentLink}
+                  readOnly
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="bg-card font-mono text-sm"
+                  aria-label="Payment link"
+                  data-testid="input-payment-link"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={handleCopyLink} className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground" data-testid="button-copy-link">
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied ? "Copied" : "Copy link"}
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowPreview(true)} className="gap-1.5 border-primary text-primary hover:text-primary" data-testid="button-preview">
+                    <Eye className="w-4 h-4" /> Preview
+                  </Button>
+                  <Button onClick={handleWhatsApp} className="gap-1.5 bg-[hsl(142,70%,36%)] hover:bg-[hsl(142,70%,32%)] text-white" data-testid="button-share-whatsapp">
+                    <MessageCircle className="w-4 h-4" /> Share on WhatsApp
+                  </Button>
+                  <Button variant="outline" onClick={handleShareLink} className="gap-1.5" data-testid="button-share">
+                    <Share2 className="w-4 h-4" /> Share
+                  </Button>
                 </div>
-                <div className="flex flex-col gap-0.5 text-xs text-muted-foreground md:flex-row md:justify-between md:gap-6">
-                  <span>Sender Pays:</span>
-                  <span className="font-medium text-foreground">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span>
-                </div>
-                <div className="flex flex-col gap-0.5 text-xs text-muted-foreground md:flex-row md:justify-between md:gap-6">
-                  <span>Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
-                  <span className="font-medium text-foreground">{formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span>
-                </div>
-                <div className="flex flex-col gap-0.5 text-xs font-semibold pt-1 border-t border-border/60 md:flex-row md:justify-between md:gap-6">
-                  <span className="text-primary">You Receive in Bank:</span>
-                  <span className="text-primary font-bold">
-                    {senderCurrency === payoutCurrency
-                      ? `${payoutSymbol}${netBeforeFx.toFixed(2)} ${payoutCurrency}`
-                      : `${senderSymbol}${netBeforeFx.toFixed(2)} ${senderCurrency}`}
-                  </span>
-                </div>
-                {senderCurrency !== payoutCurrency && (
-                  <p className="text-[11px] text-amber-800 font-medium">
-                    Converted to {payoutCurrency} on FX spot rate when payment is completed.
+                {copyFailed && (
+                  <p className="text-xs text-destructive break-all" role="alert" data-testid="text-copy-fallback">
+                    Copying was blocked. Select this link and copy it manually: {paymentLink}
                   </p>
                 )}
-                <div className="text-[11px] text-muted-foreground">
-                  Payout to: {selectedPayoutAccount?.bankName} ({payoutCurrency})
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-4 space-y-4 border border-primary/10" data-testid="qr-panel">
-                {/* 1. Copyable Link */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-slate-800">Copyable Payment Link (Share with anyone)</p>
-                    <span className="text-[10px] text-muted-foreground">General Payer</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={paymentLink}
-                      readOnly
-                      className="text-sm bg-white font-mono"
-                      data-testid="input-payment-link"
-                    />
-                    <Button
-                      onClick={handleCopyLink}
-                      variant="outline"
-                      className="shrink-0 gap-1.5"
-                      data-testid="button-copy-link"
-                    >
-                      {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                      <span>{copied ? "Copied" : "Copy"}</span>
-                    </Button>
-                  </div>
-                </div>
-
-                {/* 2. Email-Notification Link */}
-                {emailPaymentLink && (
-                  <div className="space-y-1.5 pt-2 border-t border-slate-200/60">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-slate-800">Email Notification Link (Pre-linked to recipient)</p>
-                      <span className="text-[10px] text-teal-700 font-mono">Masked recipient</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={emailPaymentLink}
-                        readOnly
-                        className="text-sm bg-white font-mono text-xs"
-                        data-testid="input-email-payment-link"
-                      />
-                      <Button
-                        onClick={() => {
-                          navigator.clipboard.writeText(emailPaymentLink);
-                          setCopiedEmail(true);
-                          toast({ title: "Email Link Copied!", description: "Recipient notification link copied to clipboard." });
-                          setTimeout(() => setCopiedEmail(false), 2000);
-                        }}
-                        variant="outline"
-                        className="shrink-0 gap-1.5"
-                        data-testid="button-copy-email-link"
-                      >
-                        {copiedEmail ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                        <span>{copiedEmail ? "Copied" : "Copy"}</span>
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
                 {createdRequestId && (
-                  <div className="flex flex-col sm:flex-row items-center gap-4 pt-1">
+                  <div className="flex flex-col sm:flex-row items-center gap-4 pt-1 border-t border-border/60">
                     <img
                       src={`/api/request-money/requests/${createdRequestId}/qr.png`}
-                      alt={`QR code for money request`}
-                      className="w-36 h-36 border border-border rounded-xl bg-white"
+                      alt="QR code for money request"
+                      className="w-28 h-28 border border-border rounded-xl bg-white"
                       data-testid="img-qr"
                     />
                     <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
-                      <Button variant="outline" size="sm" onClick={handleShareLink} data-testid="button-share">
-                        <Share2 className="w-3.5 h-3.5 mr-1.5" /> Share
-                      </Button>
                       <Button variant="outline" size="sm" onClick={() => window.open(`/api/request-money/requests/${createdRequestId}/qr.png`, "_blank")} data-testid="button-download-qr-png">
                         <Download className="w-3.5 h-3.5 mr-1.5" /> QR (PNG)
                       </Button>
                       <Button variant="outline" size="sm" onClick={() => window.open(`/api/request-money/requests/${createdRequestId}/qr.svg`, "_blank")} data-testid="button-download-qr-svg">
                         <QrCode className="w-3.5 h-3.5 mr-1.5" /> QR (SVG)
                       </Button>
-                      <Button variant="outline" size="sm" onClick={handleResendEmail} data-testid="button-resend-email">
-                        <Mail className="w-3.5 h-3.5 mr-1.5" /> Send email
-                      </Button>
                     </div>
                   </div>
                 )}
-                <p className="text-[11px] text-muted-foreground">
-                  On mobile the link opens the checkout directly — no QR scanning needed. The QR contains only the secure payment link.
-                </p>
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setLocation("/")}
-                  data-testid="button-back-to-dashboard"
-                >
+              <div className="space-y-1.5">
+                <Label htmlFor="payerEmailAfter" className="text-sm font-semibold">
+                  Payer email <FieldTag />
+                </Label>
+                <Input
+                  id="payerEmailAfter"
+                  type="email"
+                  autoComplete="off"
+                  placeholder="Enter Payer's email to send email request"
+                  value={formData.senderEmail}
+                  onChange={(e) => handlePayerEmailChange(e.target.value)}
+                  aria-invalid={!!emailError}
+                  data-testid="input-payer-email-after"
+                />
+                {emailError && <p className="text-xs text-destructive" role="alert" data-testid="error-payer-email-after">{emailError}</p>}
+                {hasEmail && (
+                  <Button
+                    onClick={handleSendEmail}
+                    disabled={!!emailError || isSendingEmail}
+                    className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
+                    data-testid="button-resend-email"
+                  >
+                    {isSendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                    {isSendingEmail ? "Sending…" : "Send email"}
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-col-reverse gap-3 border-t border-border/60 pt-4 sm:flex-row">
+                <Button variant="outline" className="flex-1" onClick={() => setLocation("/")} data-testid="button-back-to-dashboard">
                   Back to Dashboard
                 </Button>
-                <Button
-                  className="flex-1 bg-primary hover:bg-primary/90"
-                  onClick={() => {
-                    setFormData({
-                      requestAmount: "",
-                      senderCurrency: "GBP",
-                      selectedPayoutAccountId: "",
-                      paymentMethod: "sender_choice",
-                      absorbFee: true,
-                      senderType: "individual",
-                      senderFirstName: "",
-                      senderMiddleName: "",
-                      senderLastName: "",
-                      senderBusinessName: "",
-                      senderEmail: "",
-                      senderCountryCode: "+44",
-                      senderPhone: "",
-                      senderDob: "",
-                      reason: "",
-                      otherReason: "",
-                      dueDate: "",
-                      expiryPeriod: "30",
-                      customExpiryDate: "",
-                    });
-                    setSelectedPayoutAccount(null);
-                    setCurrentStep(1);
-                    setIsSuccess(false);
-                    setPaymentLink("");
-                    setCreatedRequestId("");
-                    setExpiryTouched(false);
-                    currencyAlignedRef.current = false;
-                    idempotencyKeyRef.current = crypto.randomUUID();
-                  }}
-                  data-testid="button-new-request"
-                >
-                  New Request
+                <Button variant="outline" className="flex-1 border-primary text-primary hover:text-primary" onClick={resetForm} data-testid="button-new-request">
+                  Create another request
                 </Button>
               </div>
             </CardContent>
           </Card>
         </motion.div>
+        {previewDialog}
       </DashboardLayout>
     );
   }
 
+  const stickyBar =
+    "flex gap-3 pt-4 border-t border-border/60 sticky bottom-0 z-10 -mx-5 md:-mx-6 px-5 md:px-6 py-3 bg-background/95 backdrop-blur md:static md:bg-transparent md:backdrop-blur-none";
+
   return (
     <DashboardLayout>
       <div className="max-w-4xl mx-auto pb-24">
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-4 md:mb-6"
-        >
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mb-4 md:mb-6">
           <Button
             variant="ghost"
             onClick={handleBack}
@@ -820,16 +928,17 @@ export default function RequestPayment() {
             <ArrowLeft className="w-4 h-4 mr-1 md:mr-2" />
             Back
           </Button>
-
           <h1 className="text-xl md:text-2xl font-bold font-display text-slate-900">Receive Money</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Receive money from customers or clients worldwide with instant payout</p>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Set up a request to receive money from friends, family or for an invoice, paid straight to your verified bank account.
+          </p>
         </motion.div>
 
         {/* Step Indicator */}
-        <div className="flex items-center justify-between mb-6 md:mb-8 overflow-x-auto pb-2 no-scrollbar">
+        <div className="flex items-center mb-6 md:mb-8 overflow-x-auto pb-2 no-scrollbar" aria-label="Progress">
           {steps.map((step, index) => (
             <div key={step.id} className="flex items-center flex-shrink-0">
-              <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3">
+              <div className="flex items-center gap-2 md:gap-3">
                 <motion.div
                   initial={false}
                   animate={{
@@ -848,7 +957,7 @@ export default function RequestPayment() {
                 </div>
               </div>
               {index < steps.length - 1 && (
-                <div className={`w-4 sm:w-8 md:w-16 h-0.5 mx-1 sm:mx-2 md:mx-4 ${currentStep > step.id ? "bg-primary" : "bg-muted"}`} />
+                <div className={`w-8 md:w-16 h-0.5 mx-2 md:mx-4 ${currentStep > step.id ? "bg-primary" : "bg-muted"}`} />
               )}
             </div>
           ))}
@@ -865,16 +974,16 @@ export default function RequestPayment() {
             <Card className="border-border shadow-sm">
               <CardHeader className="px-5 md:px-6 py-4 md:py-5 border-b border-border/50">
                 <CardTitle className="font-display text-base md:text-lg">{steps[currentStep - 1].title}</CardTitle>
-                <CardDescription className="text-xs md:text-sm">{steps[currentStep - 1].description}</CardDescription>
+                <CardDescription className="text-xs md:text-sm">
+                  <span className="text-destructive">*</span> marks mandatory fields. Everything else is optional.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 px-5 md:px-6 pt-6">
 
-                {/* ================= STEP 1: AMOUNT & CURRENCY ================= */}
+                {/* ================= STEP 1: AMOUNT & CURRENCIES ================= */}
                 {currentStep === 1 && (
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 space-y-6">
-
-                      {/* Receiving Payout Account */}
                       <PayoutAccountSelector
                         requesterName={requesterName}
                         selectedAccountId={selectedPayoutAccount?.id ?? ""}
@@ -894,649 +1003,494 @@ export default function RequestPayment() {
                         </div>
                       )}
 
-                      {/* Request Amount Input */}
-                      <div className="bg-gradient-to-br from-primary/5 to-teal/5 rounded-xl p-5 space-y-4 border border-primary/10">
-                        <div className="space-y-2">
-                          <Label htmlFor="requestAmount" className="text-sm font-semibold text-slate-800">
-                            Amount to Request from Sender *
-                          </Label>
-                          <div className="flex items-center gap-3">
+                      {/* How should this request work? */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-700">How should this request work?</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="group" aria-label="Request type">
+                          <button
+                            type="button"
+                            aria-pressed={!formData.absorbFee}
+                            onClick={() => handleInputChange("absorbFee", false)}
+                            className={`text-left rounded-xl border-2 p-3.5 min-h-[44px] transition-colors ${!formData.absorbFee ? "border-primary bg-primary/5" : "border-border bg-card hover:border-slate-300"}`}
+                            data-testid="mode-exact"
+                          >
+                            <span className={`block text-sm font-bold font-display ${!formData.absorbFee ? "text-primary" : "text-slate-900"}`}>Receive exact amount</span>
+                            <span className="block text-xs text-muted-foreground">School fees, invoices. The payer covers the 3% fee on top.</span>
+                          </button>
+                          <button
+                            type="button"
+                            aria-pressed={formData.absorbFee}
+                            onClick={() => handleInputChange("absorbFee", true)}
+                            className={`text-left rounded-xl border-2 p-3.5 min-h-[44px] transition-colors ${formData.absorbFee ? "border-primary bg-primary/5" : "border-border bg-card hover:border-slate-300"}`}
+                            data-testid="mode-less"
+                          >
+                            <span className={`block text-sm font-bold font-display ${formData.absorbFee ? "text-primary" : "text-slate-900"}`}>Receive amount less charges</span>
+                            <span className="block text-xs text-muted-foreground">Gifts, donations. The 3% fee comes out of what you receive.</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* You receive */}
+                      <div className="space-y-1.5">
+                        <Label htmlFor="receiveAmount" className="text-sm font-semibold text-slate-800">
+                          You receive <span className="text-destructive">*</span> <FieldTag required />
+                        </Label>
+                        <div className="flex items-center gap-3">
                           <div className="relative flex-1">
-                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">
-                              {senderSymbol}
-                            </span>
+                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">{payoutSymbol}</span>
+                            <Input
+                              id="receiveAmount"
+                              type="number"
+                              min="0"
+                              step="any"
+                              inputMode="decimal"
+                              placeholder={fxFinite ? "0.00" : "Rate loading"}
+                              value={receiveDisplay}
+                              disabled={!fxFinite}
+                              onChange={(e) => handleReceiveChange(e.target.value)}
+                              onBlur={() => setReceiveDraft(null)}
+                              className={`${payoutSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl font-bold h-12 bg-white shadow-sm`}
+                              data-testid="input-receive-amount"
+                            />
+                          </div>
+                          <div className="w-24 md:w-28 h-12 rounded-md border border-input bg-muted flex items-center justify-center font-bold" data-testid="text-receive-currency">
+                            {payoutCurrency}
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {senderCurrency === payoutCurrency ? "Calculated from what the payer sends." : "Indicative. The live rate at payment time applies."}
+                        </p>
+                      </div>
+
+                      {/* Payer sends */}
+                      <div className="space-y-1.5">
+                        <Label htmlFor="requestAmount" className="text-sm font-semibold text-slate-800">
+                          Payer sends <span className="text-destructive">*</span> <FieldTag required />
+                        </Label>
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex-1">
+                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">{senderSymbol}</span>
                             <Input
                               id="requestAmount"
                               type="number"
                               min="1"
                               step="any"
+                              inputMode="decimal"
                               placeholder="0.00"
                               value={formData.requestAmount}
-                              onChange={(e) => handleInputChange("requestAmount", e.target.value)}
-                              className={`${senderSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl md:text-2xl font-bold h-12 md:h-14 bg-white shadow-sm`}
+                              onChange={(e) => handleAmountChange(e.target.value)}
+                              aria-invalid={belowMin}
+                              aria-describedby="payer-sends-help"
+                              className={`${senderSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl md:text-2xl font-bold h-12 md:h-14 bg-white shadow-sm ${belowMin ? "border-destructive" : ""}`}
                               data-testid="input-request-amount"
                             />
                           </div>
-                            <Select
-                              value={formData.senderCurrency}
-                              onValueChange={(value) => handleInputChange("senderCurrency", value)}
-                            >
-                              <SelectTrigger className="w-24 md:w-28 h-12 md:h-14 bg-white font-bold text-base shadow-sm" data-testid="select-sender-currency">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {currencyOptions.map(currency => (
-                                  <SelectItem key={currency} value={currency}>
-                                    {currency} ({CURRENCY_SYMBOLS[currency] ?? ""})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            The sender will be billed in <strong>{senderCurrency}</strong>.
-                          </p>
-                          {parsedAmount > 0 && !corridorForSelection && (
-                            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5" data-testid="corridor-unavailable">
-                              This sender currency / settlement bank account combination has no enabled corridor.{" "}
-                              {(() => {
-                                const disabled = (corridorsQuery.data ?? []).find(c => !c.enabled && c.payInCurrency === senderCurrency && c.payoutCurrency === payoutCurrency);
-                                return disabled?.unavailabilityReason ?? "Try a different currency or settlement bank account.";
-                              })()}
+                          <Select value={formData.senderCurrency} onValueChange={(value) => { setReceiveDraft(null); handleInputChange("senderCurrency", value); }}>
+                            <SelectTrigger className="w-24 md:w-28 h-12 md:h-14 bg-white font-bold text-base shadow-sm" data-testid="select-sender-currency">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {currencyOptions.map((currency) => (
+                                <SelectItem key={currency} value={currency}>
+                                  {currency} ({CURRENCY_SYMBOLS[currency] ?? ""})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div id="payer-sends-help" className="space-y-1">
+                          {restoredAmount && (
+                            <p className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary" data-testid="chip-restored-amount">
+                              <Check className="w-3.5 h-3.5" /> Restored from your last successful request. Rate and fees are current.
+                            </p>
+                          )}
+                          {minAmount !== null && (
+                            <p className="text-xs text-muted-foreground" data-testid="text-minimum">
+                              Minimum the payer can send: <strong className="text-foreground tabular-nums">{senderSymbol}{minAmount.toFixed(2)} {senderCurrency}</strong>
+                            </p>
+                          )}
+                          {belowMin && minAmount !== null && (
+                            <p className="flex items-start gap-1.5 text-xs text-destructive" role="alert" data-testid="error-minimum">
+                              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                              The payer must send at least {senderSymbol}{minAmount.toFixed(2)} {senderCurrency}.
                             </p>
                           )}
                         </div>
-                      </div>
-
-                      {/* Fee Absorption Checkbox */}
-                      {parsedAmount > 0 && (
-                        <div className="flex items-start space-x-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors" data-testid="absorb-fee-section">
-                          <Checkbox
-                            id="absorbFee"
-                            checked={formData.absorbFee}
-                            onCheckedChange={(checked) => handleInputChange("absorbFee", checked === true)}
-                            data-testid="checkbox-absorb-fee"
-                            className="mt-0.5"
-                          />
-                          <div className="grid gap-1 leading-none cursor-pointer" onClick={() => handleInputChange("absorbFee", !formData.absorbFee)}>
-                            <Label
-                              htmlFor="absorbFee"
-                              className="text-sm font-semibold cursor-pointer text-slate-900"
-                            >
-                              Absorb the 3% transaction fee
-                            </Label>
-                            <p className="text-xs text-muted-foreground leading-relaxed">
-                              {formData.absorbFee
-                                ? `The sender pays the exact amount you requested (${senderSymbol}${parsedAmount.toFixed(2)} ${senderCurrency}), and the 3% fee is deducted from the amount you receive.`
-                                : `The 3% fee (${senderSymbol}${platformFeeAmount.toFixed(2)} ${senderCurrency}) is added to the sender's payment (${senderSymbol}${senderPaysAmount.toFixed(2)} ${senderCurrency} total), and you receive the full requested amount.`}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Optional Payment Method */}
-                      <div className="space-y-2">
-                        <Label htmlFor="paymentMethod" className="text-sm font-medium">
-                          Preferred Payment Method (Optional)
-                        </Label>
-                        <Select
-                          value={formData.paymentMethod}
-                          onValueChange={(value) => handleInputChange("paymentMethod", value)}
-                        >
-                          <SelectTrigger id="paymentMethod" data-testid="select-payment-method" className="h-11">
-                            <SelectValue placeholder="How will the sender pay?" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="sender_choice">Let the Sender Choose</SelectItem>
-                            <SelectItem value="card">Card Payment (Debit/Credit)</SelectItem>
-                            <SelectItem value="bank_transfer">Instant Bank Transfer</SelectItem>
-                            <SelectItem value="mobile_money">Mobile Money</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {parsedAmount > 0 && !corridorForSelection && (
+                          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5" data-testid="corridor-unavailable">
+                            This payer currency / settlement bank account combination has no enabled corridor.{" "}
+                            {(() => {
+                              const disabled = (corridorsQuery.data ?? []).find((c) => !c.enabled && c.payInCurrency === senderCurrency && c.payoutCurrency === payoutCurrency);
+                              return disabled?.unavailabilityReason ?? "Try a different currency or settlement bank account.";
+                            })()}
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    {/* Right Column: Dynamic Fee & Payout Sidebar */}
+                    {/* Payment breakdown */}
                     <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
-                      <div className="border border-border rounded-xl p-5 space-y-4 bg-white shadow-sm" data-testid="fee-breakdown">
-                        <h3 className="font-semibold text-base text-slate-900 border-b pb-2">Calculation Breakdown</h3>
-
+                      <div className="border border-border rounded-xl p-5 space-y-4 bg-card shadow-sm" data-testid="fee-breakdown">
+                        <h3 className="font-semibold text-base text-slate-900 border-b pb-2">Payment breakdown</h3>
                         <div className="space-y-3 text-sm">
-                          <div className="flex flex-col gap-0.5 md:flex-row md:justify-between md:gap-6">
-                            <span className="text-xs text-muted-foreground md:text-sm">Sender Pays:</span>
-                            <span className="font-bold text-slate-800" data-testid="breakdown-sender-pays">
+                          <div className="flex justify-between gap-6">
+                            <span className="text-muted-foreground">Payer sends</span>
+                            <span className="font-bold text-slate-800 tabular-nums" data-testid="breakdown-sender-pays">
                               {senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}
                             </span>
                           </div>
-
-                          <div className="flex flex-col gap-0.5 text-muted-foreground md:flex-row md:justify-between md:gap-6">
-                            <span className="text-xs md:text-sm">Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
-                            <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
+                          <div className="flex justify-between gap-6 text-muted-foreground">
+                            <span>Fee (3%{formData.absorbFee ? ", taken from what you receive" : ", added for the payer"})</span>
+                            <span className={`font-medium tabular-nums ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
                               {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
                             </span>
                           </div>
-
-                          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground md:flex-row md:justify-between md:gap-6">
-                            <span>Net before FX:</span>
-                            <span className="font-semibold text-slate-700">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
+                          <div className="flex justify-between gap-6 text-xs text-muted-foreground">
+                            <span>Net before FX</span>
+                            <span className="font-semibold text-slate-700 tabular-nums">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
                           </div>
-
                           {senderCurrency !== payoutCurrency && (
-                            <div className="flex flex-col gap-0.5 text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900 md:flex-row md:items-center md:justify-between md:gap-6">
-                              <span className="font-medium">FX Conversion:</span>
-                              <span className="font-semibold">Live Spot Rate at Payout</span>
+                            <div className="flex justify-between gap-6 text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900">
+                              <span className="font-medium">Exchange rate</span>
+                              <span className="font-semibold tabular-nums">{fxFinite ? `${fxRate.toFixed(4)} ${payoutCurrency} per ${senderCurrency}` : "Live spot rate at payout"}</span>
                             </div>
                           )}
                         </div>
-
                         <div className="h-px bg-border" />
-
                         <div className="bg-primary/5 -mx-5 px-5 py-3.5 -mb-5 rounded-b-xl border-t border-primary/15">
-                          <p className="text-xs text-muted-foreground mb-0.5">You Receive in Bank ({payoutCurrency}):</p>
+                          <p className="text-xs text-muted-foreground mb-0.5">You receive in bank ({payoutCurrency})</p>
                           {senderCurrency === payoutCurrency ? (
-                            <div className="flex items-baseline justify-between">
-                              <span className="text-xl md:text-2xl font-extrabold text-primary">
-                                {payoutSymbol}{netBeforeFx.toFixed(2)}
-                              </span>
-                              <span className="text-xs font-bold text-primary">{payoutCurrency}</span>
+                            <span className="text-xl md:text-2xl font-extrabold text-primary tabular-nums">{payoutSymbol}{netBeforeFx.toFixed(2)}</span>
+                          ) : fxFinite ? (
+                            <div>
+                              <span className="text-xl md:text-2xl font-extrabold text-primary tabular-nums">{payoutSymbol}{receiveInPayout.toFixed(2)}</span>
+                              <p className="text-[11px] font-medium text-amber-800 mt-1 leading-snug">Indicative. Converted at the live spot rate when the payer pays.</p>
                             </div>
                           ) : (
                             <div>
-                              <div className="flex items-baseline justify-between">
-                                <span className="text-xl md:text-2xl font-extrabold text-primary">
-                                  {senderSymbol}{netBeforeFx.toFixed(2)}
-                                </span>
-                                <span className="text-xs font-bold text-slate-600">{senderCurrency}</span>
-                              </div>
-                              <p className="text-[11px] font-medium text-amber-800 mt-1 leading-snug">
-                                Converted to {payoutCurrency} at live spot rate when sender pays
-                              </p>
+                              <span className="text-xl md:text-2xl font-extrabold text-primary tabular-nums">{senderSymbol}{netBeforeFx.toFixed(2)}</span>
+                              <p className="text-[11px] font-medium text-amber-800 mt-1 leading-snug">Converted to {payoutCurrency} at the live spot rate when the payer pays.</p>
                             </div>
                           )}
-                          <p className="text-[10px] text-muted-foreground mt-1.5">
-                            Deposited to {selectedPayoutAccount?.bankName || "Default Account"}
-                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-1.5">Paid into {selectedPayoutAccount?.bankName || "your default account"}</p>
                         </div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* ================= STEP 2: SENDER DETAILS ================= */}
+                {/* ================= STEP 2: PAYMENT REQUEST ================= */}
                 {currentStep === 2 && (
-                  <div className="max-w-2xl mx-auto space-y-6">
-                    {/* Search Known Senders */}
-                    <div className="space-y-2 relative">
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                        Search Existing Sender
-                      </Label>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          ref={searchInputRef}
-                          placeholder="Search saved senders by name or email..."
-                          value={senderSearch}
-                          onChange={(e) => {
-                            setSenderSearch(e.target.value);
-                            setShowSenderSuggestions(true);
-                          }}
-                          onFocus={() => setShowSenderSuggestions(true)}
-                          onBlur={() => setTimeout(() => setShowSenderSuggestions(false), 200)}
-                          className="pl-9 bg-slate-50"
-                          data-testid="input-sender-search"
-                          autoComplete="off"
-                        />
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    <div className="lg:col-span-3 space-y-5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/50 px-3.5 py-2.5 text-sm" data-testid="request-summary">
+                        <span>You receive <strong className="tabular-nums">{senderCurrency === payoutCurrency ? `${payoutSymbol}${netBeforeFx.toFixed(2)}` : fxFinite ? `${payoutSymbol}${receiveInPayout.toFixed(2)}` : `${senderSymbol}${netBeforeFx.toFixed(2)}`} {senderCurrency === payoutCurrency || fxFinite ? payoutCurrency : senderCurrency}</strong></span>
+                        <span>Payer sends <strong className="tabular-nums">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</strong></span>
+                        <button type="button" onClick={() => setCurrentStep(1)} className="font-semibold text-primary" data-testid="button-edit-amount">Edit amount</button>
                       </div>
-                      <AnimatePresence>
-                        {showSenderSuggestions && senderSearch && filteredSenders.length > 0 && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -6 }}
-                            className="absolute z-50 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-56 overflow-auto"
-                          >
-                            {filteredSenders.map((sender) => (
-                              <button
-                                key={sender.email}
-                                type="button"
-                                className="w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors flex items-center gap-3 border-b last:border-b-0"
-                                onClick={() => selectKnownSender(sender)}
-                                data-testid={`suggestion-sender-${sender.email.replace(/[@.]/g, '-')}`}
-                              >
-                                <div className="w-9 h-9 bg-primary/10 text-primary rounded-full flex items-center justify-center shrink-0">
-                                  {sender.senderType === "business" ? <Building2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
-                                </div>
-                                <div className="truncate">
-                                  <p className="font-medium text-sm text-foreground">
-                                    {sender.senderType === "business"
-                                      ? sender.businessName
-                                      : `${sender.firstName} ${sender.middleName} ${sender.lastName}`.trim()}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground truncate">{sender.email}</p>
-                                </div>
-                              </button>
-                            ))}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
 
-                    <div className="h-px bg-border" />
-
-                    {/* Sender Type Toggle */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Sender Type *</Label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handleInputChange("senderType", "individual")}
-                          className={`flex items-center justify-center gap-2.5 p-3.5 rounded-xl border-2 transition-all ${
-                            formData.senderType === "individual"
-                              ? "border-primary bg-primary/5 font-semibold text-primary"
-                              : "border-border hover:border-slate-300 text-slate-700"
-                          }`}
-                          data-testid="button-sender-type-individual"
-                        >
-                          <User className="w-4 h-4" />
-                          <span>Individual</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleInputChange("senderType", "business");
-                            handleInputChange("senderDob", "");
-                          }}
-                          className={`flex items-center justify-center gap-2.5 p-3.5 rounded-xl border-2 transition-all ${
-                            formData.senderType === "business"
-                              ? "border-primary bg-primary/5 font-semibold text-primary"
-                              : "border-border hover:border-slate-300 text-slate-700"
-                          }`}
-                          data-testid="button-sender-type-business"
-                        >
-                          <Building2 className="w-4 h-4" />
-                          <span>Business</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Names Form */}
-                    {formData.senderType === "individual" ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="senderFirstName" className="text-xs font-medium">First Name *</Label>
-                          <Input
-                            id="senderFirstName"
-                            placeholder="First name"
-                            value={formData.senderFirstName}
-                            onChange={(e) => handleInputChange("senderFirstName", e.target.value)}
-                            data-testid="input-sender-first-name"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="senderMiddleName" className="text-xs font-medium">Middle Name (Optional)</Label>
-                          <Input
-                            id="senderMiddleName"
-                            placeholder="Middle name"
-                            value={formData.senderMiddleName}
-                            onChange={(e) => handleInputChange("senderMiddleName", e.target.value)}
-                            data-testid="input-sender-middle-name"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="senderLastName" className="text-xs font-medium">Last Name</Label>
-                          <Input
-                            id="senderLastName"
-                            placeholder="Last name"
-                            value={formData.senderLastName}
-                            onChange={(e) => handleInputChange("senderLastName", e.target.value)}
-                            data-testid="input-sender-last-name"
-                          />
-                        </div>
-                      </div>
-                    ) : (
                       <div className="space-y-1.5">
-                        <Label htmlFor="senderBusinessName" className="text-xs font-medium">Business Name *</Label>
-                        <Input
-                          id="senderBusinessName"
-                          placeholder="e.g. Acme Corp Ltd"
-                          value={formData.senderBusinessName}
-                          onChange={(e) => handleInputChange("senderBusinessName", e.target.value)}
-                          data-testid="input-sender-business-name"
+                        <Label htmlFor="note" className="text-sm font-semibold">Description / Invoice Note <FieldTag /></Label>
+                        <Textarea
+                          id="note"
+                          rows={3}
+                          maxLength={100}
+                          placeholder="What is this payment for?"
+                          value={formData.note}
+                          onChange={(e) => handleInputChange("note", e.target.value)}
+                          data-testid="input-note"
                         />
                       </div>
-                    )}
 
-                    {/* Email */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="senderEmail" className="text-xs font-medium">Sender Email Address *</Label>
-                      <Input
-                        id="senderEmail"
-                        type="email"
-                        placeholder="sender@example.com"
-                        value={formData.senderEmail}
-                        onChange={(e) => handleInputChange("senderEmail", e.target.value)}
-                        data-testid="input-sender-email"
-                      />
-                    </div>
-
-                    {/* Phone (Optional) */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="senderPhone" className="text-xs font-medium">Sender Mobile Number</Label>
-                        <span className="text-[11px] text-muted-foreground">Optional</span>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="invoiceReference" className="text-sm font-semibold">Invoice Reference <FieldTag /></Label>
+                        <Input
+                          id="invoiceReference"
+                          placeholder="e.g. INV-2041"
+                          maxLength={40}
+                          value={formData.invoiceReference}
+                          onChange={(e) => handleInputChange("invoiceReference", e.target.value)}
+                          data-testid="input-invoice-reference"
+                        />
+                        <p className="text-xs text-muted-foreground">No invoice needed. Add a reference only if you have one.</p>
                       </div>
-                      <div className="flex gap-2">
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="reason" className="text-sm font-semibold">
+                          Purpose of Payment <span className="text-destructive">*</span> <FieldTag required />
+                        </Label>
+                        <Select value={formData.reason} onValueChange={(value) => handleInputChange("reason", value)}>
+                          <SelectTrigger id="reason" data-testid="select-reason">
+                            <SelectValue placeholder="Select a payment category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="invoice_payment">Invoice / Services</SelectItem>
+                            <SelectItem value="business_payment">Business Payment</SelectItem>
+                            <SelectItem value="family_support">Family Support</SelectItem>
+                            <SelectItem value="education_fees">Education / Tuition</SelectItem>
+                            <SelectItem value="medical_expenses">Medical Expenses</SelectItem>
+                            <SelectItem value="rent_payment">Rent Payment</SelectItem>
+                            <SelectItem value="gift">Gift / Donation</SelectItem>
+                            <SelectItem value="loan_repayment">Loan Repayment</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {formData.reason === "other" && (
+                          <div className="space-y-1.5 pt-1" data-testid="container-other-reason">
+                            <Label htmlFor="otherReason" className="text-xs font-medium">
+                              Please specify <span className="text-destructive">*</span> <FieldTag required />
+                            </Label>
+                            <Input
+                              id="otherReason"
+                              placeholder="e.g. Consulting services, Event sponsorship"
+                              value={formData.otherReason}
+                              onChange={(e) => handleInputChange("otherReason", e.target.value)}
+                              data-testid="input-other-reason"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Payment link expiry (default applied) */}
+                      <div className="space-y-1.5">
+                        <Label htmlFor="expiryPeriod" className="text-sm font-semibold">
+                          Payment Link Expiry <span className="ml-1 text-[11px] font-medium text-muted-foreground">Default applied</span>
+                        </Label>
                         <Select
-                          value={formData.senderCountryCode}
-                          onValueChange={(value) => handleInputChange("senderCountryCode", value)}
+                          value={formData.expiryPeriod}
+                          onValueChange={(value) => {
+                            setExpiryTouched(true);
+                            handleInputChange("expiryPeriod", value as ExpiryPeriod);
+                          }}
                         >
-                          <SelectTrigger className="w-36" data-testid="select-country-code">
+                          <SelectTrigger id="expiryPeriod" data-testid="select-expiry-period">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="max-h-72">
-                            {DIALING_CODES.map((country) => (
-                              <SelectItem key={country.value} value={country.value}>
-                                {country.flag} {country.code} {country.country}
-                              </SelectItem>
+                          <SelectContent>
+                            {EXPIRY_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        <Input
-                          id="senderPhone"
-                          type="tel"
-                          placeholder="e.g. 7123456789"
-                          value={formData.senderPhone}
-                          onChange={(e) => handleInputChange("senderPhone", e.target.value)}
-                          className="flex-1"
-                          data-testid="input-sender-phone"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Date of Birth (Optional) */}
-                    {formData.senderType === "individual" && (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="senderDob" className="text-xs font-medium">Sender Date of Birth</Label>
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground font-normal">Optional</Badge>
-                        </div>
-                        <Input
-                          id="senderDob"
-                          type="date"
-                          value={formData.senderDob}
-                          onChange={(e) => handleInputChange("senderDob", e.target.value)}
-                          data-testid="input-sender-dob"
-                        />
-                      </div>
-                    )}
-
-                    {/* Reason for Payment — mandatory for cross-border compliance */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="reason" className="text-xs font-medium">
-                          Reason for Payment <span className="text-destructive">*</span>
-                        </Label>
-                      </div>
-                      <Select
-                        value={formData.reason}
-                        onValueChange={(value) => handleInputChange("reason", value)}
-                      >
-                        <SelectTrigger id="reason" data-testid="select-reason">
-                          <SelectValue placeholder="Select a payment category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="invoice_payment">Invoice / Services</SelectItem>
-                          <SelectItem value="business_payment">Business Payment</SelectItem>
-                          <SelectItem value="family_support">Family Support</SelectItem>
-                          <SelectItem value="education_fees">Education / Tuition</SelectItem>
-                          <SelectItem value="medical_expenses">Medical Expenses</SelectItem>
-                          <SelectItem value="rent_payment">Rent Payment</SelectItem>
-                          <SelectItem value="gift">Gift / Donation</SelectItem>
-                          <SelectItem value="loan_repayment">Loan Repayment</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {formData.reason === "other" && (
-                      <div className="space-y-1.5" data-testid="container-other-reason">
-                        <Label htmlFor="otherReason" className="text-xs font-medium">
-                          Please specify reason <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id="otherReason"
-                          placeholder="e.g. Consulting services, Event sponsorship, etc."
-                          value={formData.otherReason}
-                          onChange={(e) => handleInputChange("otherReason", e.target.value)}
-                          className="h-10 text-sm"
-                          data-testid="input-other-reason"
-                          required
-                        />
-                      </div>
-                    )}
-
-                    <div className="h-px bg-border" />
-
-                    {/* Due Date (Optional) */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="dueDate" className="text-xs font-medium">Due Date (Optional)</Label>
-                      <Input
-                        id="dueDate"
-                        type="date"
-                        min={today}
-                        value={formData.dueDate}
-                        onChange={(e) => handleDueDateChange(e.target.value)}
-                        data-testid="input-due-date"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        The date by which you expect the sender to make payment. Payment may still be made after this
-                        date until the payment link expires.
-                      </p>
-                      {dateErrors.dueDate && (
-                        <p className="text-xs text-destructive" data-testid="error-due-date">{dateErrors.dueDate}</p>
-                      )}
-                    </div>
-
-                    {/* Payment Link Expiry (required) */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="expiryPeriod" className="text-xs font-medium">
-                        Payment Link Expiry <span className="text-destructive">*</span>
-                      </Label>
-                      <Select
-                        value={formData.expiryPeriod}
-                        onValueChange={(value) => {
-                          setExpiryTouched(true);
-                          handleInputChange("expiryPeriod", value as ExpiryPeriod);
-                        }}
-                      >
-                        <SelectTrigger id="expiryPeriod" data-testid="select-expiry-period">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {EXPIRY_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        After this date, the sender will no longer be able to start a payment using this link.
-                      </p>
-
-                      {formData.expiryPeriod === "custom" && (
-                        <div className="space-y-1.5 pt-1">
-                          <Label htmlFor="customExpiryDate" className="text-xs font-medium">Expiry Date</Label>
-                          <Input
-                            id="customExpiryDate"
-                            type="date"
-                            min={formData.dueDate || today}
-                            value={formData.customExpiryDate}
-                            onChange={(e) => handleCustomExpiryChange(e.target.value)}
-                            data-testid="input-custom-expiry-date"
-                          />
-                        </div>
-                      )}
-
-                      {computedExpiry && (
-                        <p className="text-xs font-medium text-primary flex items-center gap-1.5 pt-1" data-testid="text-expiry-preview">
-                          <CalendarClock className="w-3.5 h-3.5 shrink-0" />
-                          This payment link will expire on {formatHumanDate(computedExpiry.expiryDate)} at 11:59 p.m.{" "}
-                          {EXPIRY_TIMEZONE_LABEL}.
-                        </p>
-                      )}
-                      {dateErrors.expiry && (
-                        <p className="text-xs text-destructive" data-testid="error-expiry">{dateErrors.expiry}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ================= STEP 3: REVIEW & CONFIRM ================= */}
-                {currentStep === 3 && (
-                  <div className="max-w-2xl mx-auto space-y-6">
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 md:p-6 space-y-5">
-                      <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-200">
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase font-semibold">Sender Pays</p>
-                          <p className="text-2xl font-bold text-slate-900 mt-0.5" data-testid="review-sender-pays">
-                            {senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}
+                        {formData.expiryPeriod === "custom" && (
+                          <div className="space-y-1.5 pt-1">
+                            <Label htmlFor="customExpiryDate" className="text-xs font-medium">Expiry Date <span className="text-destructive">*</span></Label>
+                            <Input
+                              id="customExpiryDate"
+                              type="date"
+                              min={formData.dueDate || today}
+                              value={formData.customExpiryDate}
+                              onChange={(e) => handleCustomExpiryChange(e.target.value)}
+                              data-testid="input-custom-expiry-date"
+                            />
+                          </div>
+                        )}
+                        {computedExpiry && (
+                          <p className="text-xs font-medium text-primary flex items-center gap-1.5 pt-1" data-testid="text-expiry-preview">
+                            <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                            This payment link will expire on {formatHumanDate(computedExpiry.expiryDate)} at 11:59 p.m. {EXPIRY_TIMEZONE_LABEL}.
                           </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase font-semibold">You Receive in Bank</p>
-                          <p className="text-2xl font-bold text-primary mt-0.5">
-                            {senderCurrency === payoutCurrency
-                              ? `${payoutSymbol}${netBeforeFx.toFixed(2)} ${payoutCurrency}`
-                              : `${senderSymbol}${netBeforeFx.toFixed(2)} ${senderCurrency}`}
+                        )}
+                        {dateErrors.expiry && <p className="text-xs text-destructive" role="alert" data-testid="error-expiry">{dateErrors.expiry}</p>}
+                      </div>
+
+                      {/* Payer email + saved senders */}
+                      <div className="space-y-2">
+                        <Label htmlFor="senderEmail" className="text-sm font-semibold">Payer Email <FieldTag /></Label>
+                        <Input
+                          id="senderEmail"
+                          type="email"
+                          autoComplete="off"
+                          placeholder="Enter Payer's email to send email request"
+                          value={formData.senderEmail}
+                          onChange={(e) => handlePayerEmailChange(e.target.value)}
+                          aria-invalid={!!emailError}
+                          className={emailError ? "border-destructive" : ""}
+                          data-testid="input-sender-email"
+                        />
+                        {emailError && <p className="text-xs text-destructive" role="alert" data-testid="error-payer-email">{emailError}</p>}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 border-primary text-primary hover:text-primary"
+                          aria-expanded={showSenderList}
+                          onClick={() => setShowSenderList((v) => !v)}
+                          data-testid="button-select-sender"
+                        >
+                          <User className="w-3.5 h-3.5" /> Select from saved senders
+                        </Button>
+                        {showSenderList && (
+                          <div className="rounded-xl border border-border bg-card overflow-hidden" role="listbox" aria-label="Saved senders" data-testid="list-saved-senders">
+                            {knownSenders.length === 0 && (
+                              <p className="p-3 text-xs text-muted-foreground">No saved senders yet. Type the payer's email above, or create a link without a payer.</p>
+                            )}
+                            {knownSenders.map((sender) => (
+                              <button
+                                key={knownSenderId(sender)}
+                                type="button"
+                                role="option"
+                                aria-selected={formData.senderId === knownSenderId(sender)}
+                                onClick={() => selectKnownSender(sender)}
+                                className="w-full px-3.5 py-3 min-h-[52px] text-left hover:bg-muted/60 transition-colors flex items-center gap-3 border-b last:border-b-0 border-border"
+                                data-testid={`suggestion-sender-${sender.email.replace(/[@.]/g, "-")}`}
+                              >
+                                <span className="w-9 h-9 bg-primary/10 text-primary rounded-full flex items-center justify-center shrink-0">
+                                  {sender.senderType === "business" ? <Building2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block font-medium text-sm text-foreground truncate">{knownSenderName(sender)}</span>
+                                  <span className="block text-xs text-muted-foreground truncate">{sender.email}</span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {formData.senderId && (
+                          <p className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary" data-testid="chip-selected-sender">
+                            <Check className="w-3.5 h-3.5" /> {formData.payerName}
                           </p>
-                          {senderCurrency !== payoutCurrency && (
-                            <p className="text-[11px] text-amber-800 font-medium mt-0.5">
-                              Converted to {payoutCurrency} on live spot rate upon payment
-                            </p>
+                        )}
+                      </div>
+
+                      {/* Payer details (collapsible, optional) */}
+                      <div className="rounded-xl border border-border">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-3 p-3.5 min-h-[52px] text-left"
+                          aria-expanded={showPayerDetails}
+                          onClick={() => setShowPayerDetails((v) => !v)}
+                          data-testid="toggle-payer-details"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-bold font-display">Payer details <FieldTag /></span>
+                            <span className="block text-xs text-muted-foreground">
+                              Add the payer's bank details to help us match their payment when it arrives. This does not verify the payer.
+                            </span>
+                          </span>
+                          <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${showPayerDetails ? "rotate-180" : ""}`} />
+                        </button>
+                        {showPayerDetails && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-border p-3.5" data-testid="section-payer-details">
+                            <div className="space-y-1.5 sm:col-span-2">
+                              <Label htmlFor="payerName" className="text-xs font-medium">Person or company name</Label>
+                              <Input
+                                id="payerName"
+                                placeholder="Full name or company"
+                                value={formData.payerName}
+                                onChange={(e) => handleInputChange("payerName", e.target.value)}
+                                data-testid="input-payer-name"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor="payerBankName" className="text-xs font-medium">Bank</Label>
+                              <Input
+                                id="payerBankName"
+                                placeholder="e.g. Fidelity Bank"
+                                value={formData.payerBankName}
+                                onChange={(e) => handleInputChange("payerBankName", e.target.value)}
+                                data-testid="input-payer-bank"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor="payerAccountNumber" className="text-xs font-medium">Account number</Label>
+                              <Input
+                                id="payerAccountNumber"
+                                inputMode="numeric"
+                                placeholder="6 to 12 digits"
+                                value={formData.payerAccountNumber}
+                                onChange={(e) => handleInputChange("payerAccountNumber", e.target.value.replace(/[^\d]/g, ""))}
+                                aria-invalid={!!accountError}
+                                data-testid="input-payer-account"
+                              />
+                              {accountError && <p className="text-xs text-destructive" role="alert" data-testid="error-payer-account">{accountError}</p>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Share */}
+                      <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold">Share this request</p>
+                          <p className="text-xs text-muted-foreground">Create the payment link first, then copy it, share it on WhatsApp, or send it by email.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            onClick={handleCreateLink}
+                            disabled={!canCreate}
+                            className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
+                            data-testid="button-create-link"
+                          >
+                            {isSubmittingRequest ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                            {isSubmittingRequest ? "Creating…" : "Create payment link"}
+                          </Button>
+                          {hasEmail && (
+                            <Button
+                              onClick={handleSendEmail}
+                              disabled={!canSendEmail}
+                              className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
+                              data-testid="button-send-email"
+                            >
+                              {isSendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                              {isSendingEmail ? "Sending…" : "Send email"}
+                            </Button>
                           )}
                         </div>
-                      </div>
-
-                      <div className="space-y-2.5 text-sm">
-                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                          <span className="text-xs text-muted-foreground md:text-sm">Platform Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
-                          <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
-                            {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                          <span className="text-xs text-muted-foreground md:text-sm">Net Payout Amount:</span>
-                          <span className="font-semibold text-slate-800">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
-                        </div>
-
-                        {senderCurrency !== payoutCurrency && (
-                          <div className="flex flex-col gap-0.5 py-1 border-b border-slate-100 text-amber-900 bg-amber-50/70 px-2 py-1.5 rounded md:flex-row md:justify-between md:gap-6">
-                            <span className="font-medium text-xs">FX Conversion:</span>
-                            <span className="font-semibold text-xs">Applied at live spot rate upon payout</span>
-                          </div>
+                        <p className="text-xs text-muted-foreground" data-testid="text-send-email-help">
+                          {!hasEmail
+                            ? "Add a payer email above to get a Send email button."
+                            : emailError
+                            ? "Fix the email above to send."
+                            : `Creates the link and emails it to ${formData.senderEmail.trim()}.`}
+                        </p>
+                        {!formData.reason && (
+                          <p className="text-xs text-muted-foreground" data-testid="text-purpose-required">Choose a Purpose of Payment to create the link.</p>
                         )}
-
-                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                          <span className="text-xs text-muted-foreground md:text-sm">Destination Settlement Bank Account:</span>
-                          <span className="font-semibold text-slate-800">
-                            {selectedPayoutAccount?.bankName} ({payoutCurrency})
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                          <span className="text-xs text-muted-foreground md:text-sm">Sender:</span>
-                          <span className="font-medium text-slate-800">
-                            {formData.senderType === "business"
-                              ? formData.senderBusinessName
-                              : [formData.senderFirstName, formData.senderMiddleName, formData.senderLastName].filter(Boolean).join(" ")}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                          <span className="text-xs text-muted-foreground md:text-sm">Sender Email:</span>
-                          <span className="font-medium text-slate-800">{formData.senderEmail}</span>
-                        </div>
-
-                        {formData.senderPhone && (
-                          <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                            <span className="text-xs text-muted-foreground md:text-sm">Sender Phone:</span>
-                            <span className="font-medium">{formData.senderCountryCode} {formData.senderPhone}</span>
-                          </div>
-                        )}
-
-                        {formData.senderType === "individual" && formData.senderDob && (
-                          <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                            <span className="text-xs text-muted-foreground md:text-sm">Sender DOB:</span>
-                            <span className="font-medium">{formData.senderDob}</span>
-                          </div>
-                        )}
-
-                        {formData.reason && (
-                          <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                            <span className="text-xs text-muted-foreground md:text-sm">Reason:</span>
-                            <span className="font-medium">
-                              {formData.reason === "other" && formData.otherReason.trim()
-                                ? `Other (${formData.otherReason.trim()})`
-                                : formData.reason.replace(/_/g, " ")}
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                          <span className="text-xs text-muted-foreground md:text-sm">Due Date:</span>
-                          <span className="font-medium" data-testid="review-due-date">
-                            {formData.dueDate ? formatHumanDate(formData.dueDate) : "No due date"}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-100 md:flex-row md:justify-between md:gap-6 md:py-1">
-                          <span className="text-xs text-muted-foreground md:text-sm">Payment Link Expiry Date:</span>
-                          <span className="font-medium" data-testid="review-expiry-date">
-                            {computedExpiry
-                              ? `${formatHumanDate(computedExpiry.expiryDate)} at 11:59 p.m. ${EXPIRY_TIMEZONE_LABEL} (${computedExpiry.expiryDate})`
-                              : "—"}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-0.5 py-1.5 md:flex-row md:justify-between md:gap-6 md:py-1">
-                          <span className="text-xs text-muted-foreground md:text-sm">Payment Method:</span>
-                          <span className="font-medium capitalize">{formData.paymentMethod.replace("_", " ")}</span>
-                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-800 leading-relaxed">
-                        <strong>Security Reminder:</strong> Ensure you communicate directly with your sender to verify this request.
-                        Funds will be automatically credited to your destination bank account once paid.
-                      </p>
+                    <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
+                      <div className="border border-border rounded-xl p-5 space-y-3 bg-card shadow-sm text-sm" data-testid="request-breakdown">
+                        <h3 className="font-semibold text-base text-slate-900 border-b pb-2">Payment breakdown</h3>
+                        <div className="flex justify-between gap-6"><span className="text-muted-foreground">Payer sends</span><span className="font-bold tabular-nums" data-testid="review-sender-pays">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span></div>
+                        <div className="flex justify-between gap-6 text-muted-foreground"><span>Fee (3%)</span><span className="tabular-nums">{formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span></div>
+                        <div className="flex justify-between gap-6 font-semibold text-primary border-t border-dashed border-border pt-2">
+                          <span>You receive in bank</span>
+                          <span className="tabular-nums">
+                            {senderCurrency === payoutCurrency
+                              ? `${payoutSymbol}${netBeforeFx.toFixed(2)} ${payoutCurrency}`
+                              : fxFinite ? `${payoutSymbol}${receiveInPayout.toFixed(2)} ${payoutCurrency}` : `${senderSymbol}${netBeforeFx.toFixed(2)} ${senderCurrency}`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Paid into {selectedPayoutAccount?.bankName} {selectedPayoutAccount?.maskedNumber}</p>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* Step Navigation Buttons */}
-                <div className="flex gap-3 pt-4 border-t border-border/60">
-                  <Button
-                    variant="outline"
-                    onClick={handleBack}
-                    className="flex-1"
-                    data-testid="button-step-back"
-                  >
+                {/* Navigation */}
+                <div className={stickyBar}>
+                  <Button variant="outline" onClick={handleBack} className="flex-1" data-testid="button-step-back">
                     {currentStep === 1 ? "Cancel" : "Back"}
                   </Button>
-                  <Button
-                    onClick={handleNext}
-                    disabled={!canProceed()}
-                    className="flex-1 bg-primary hover:bg-primary/90"
-                    data-testid="button-step-next"
-                  >
-                    {currentStep === 3 ? "Generate Payment Link" : "Continue"}
-                    {currentStep < 3 && <ArrowRight className="w-4 h-4 ml-2" />}
-                  </Button>
+                  {currentStep === 1 && (
+                    <Button
+                      onClick={handleNext}
+                      disabled={!canContinueStep1}
+                      className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                      data-testid="button-step-next"
+                    >
+                      Continue
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  )}
                 </div>
+                {currentStep === 1 && !canContinueStep1 && (
+                  <p className="text-xs text-muted-foreground -mt-3" data-testid="text-continue-hint">
+                    {belowMin ? "Enter an amount at or above the minimum to continue." : "Enter an amount to continue."}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -1551,11 +1505,8 @@ export default function RequestPayment() {
               <ArrowRightLeft className="w-5 h-5 text-primary" />
               <span>FX Conversion Notice</span>
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Cross-currency payout information
-            </DialogDescription>
+            <DialogDescription className="text-xs text-muted-foreground">Cross-currency payout information</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-4 py-2 text-sm">
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
               <div className="flex items-start gap-2.5">
@@ -1565,48 +1516,37 @@ export default function RequestPayment() {
                 </p>
               </div>
             </div>
-
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 text-xs">
-              <div className="flex flex-col gap-0.5 md:flex-row md:justify-between md:gap-6">
-                <span className="text-muted-foreground">Requested Amount (Sender Pays):</span>
+              <div className="flex justify-between gap-6">
+                <span className="text-muted-foreground">Requested Amount (Payer Pays):</span>
                 <span className="font-semibold text-slate-800">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span>
               </div>
-              <div className="flex flex-col gap-0.5 md:flex-row md:justify-between md:gap-6">
-                <span className="text-muted-foreground">Fee (3%{formData.absorbFee ? " absorbed by you" : " added to sender"}):</span>
+              <div className="flex justify-between gap-6">
+                <span className="text-muted-foreground">Fee (3%{formData.absorbFee ? " absorbed by you" : " added to payer"}):</span>
                 <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
                   {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
                 </span>
               </div>
-              <div className="flex flex-col gap-0.5 md:flex-row md:justify-between md:gap-6">
+              <div className="flex justify-between gap-6">
                 <span className="text-muted-foreground">Net Payout Amount:</span>
                 <span className="font-semibold text-slate-800">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
               </div>
-              <div className="flex flex-col gap-0.5 pt-1 border-t border-slate-200/60 md:flex-row md:justify-between md:gap-6">
+              <div className="flex justify-between gap-6 pt-1 border-t border-slate-200/60">
                 <span className="text-muted-foreground">Destination Settlement Bank Account:</span>
                 <span className="font-semibold text-slate-800">{selectedPayoutAccount?.bankName} ({payoutCurrency})</span>
               </div>
             </div>
           </div>
-
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowFxNoticeModal(false)}
-            >
-              Go Back
-            </Button>
-            <Button
-              type="button"
-              onClick={handleConfirmFxAndProceed}
-              className="bg-primary hover:bg-primary/90 gap-1.5"
-            >
+            <Button type="button" variant="outline" onClick={() => setShowFxNoticeModal(false)}>Go Back</Button>
+            <Button type="button" onClick={handleConfirmFxAndProceed} className="bg-primary hover:bg-primary/90 gap-1.5">
               <span>Continue</span>
               <ArrowRight className="w-4 h-4" />
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {previewDialog}
     </DashboardLayout>
   );
 }

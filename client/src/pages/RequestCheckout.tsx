@@ -1375,10 +1375,12 @@ export default function RequestCheckout() {
                         id="pinCode"
                         type="text"
                         maxLength={6}
-                        placeholder="123456"
+                        placeholder="Enter the 6-digit PIN from your email"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
                         value={pinCode}
                         onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ""))}
-                        className="text-center font-mono tracking-widest text-lg font-bold"
+                        className="text-center font-mono tracking-widest text-lg font-bold placeholder:font-sans placeholder:text-sm placeholder:font-normal placeholder:tracking-normal"
                         data-testid="input-pin-code"
                         required
                         autoFocus

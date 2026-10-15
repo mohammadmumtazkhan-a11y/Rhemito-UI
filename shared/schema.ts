@@ -834,11 +834,17 @@ export const moneyRequests = pgTable("money_requests", {
   payoutAccountCountry: text("payout_account_country").notNull(),
   // Sender
   senderType: text("sender_type").notNull(),
-  senderName: text("sender_name").notNull(),
-  senderEmail: text("sender_email").notNull(),
+  // Payer details are optional: a generic payment link can be created with no payer.
+  senderName: text("sender_name"),
+  senderEmail: text("sender_email"),
   senderPhone: text("sender_phone"),
   senderDob: text("sender_dob"),
   purpose: text("purpose").notNull(),
+  // Optional payer details supplied by the requester (help matching; do not verify the payer).
+  senderId: varchar("sender_id"),
+  payerSourceBankName: text("payer_source_bank_name"),
+  payerSourceAccountMasked: text("payer_source_account_masked"),
+  payerSourceOrigin: text("payer_source_origin"), // "requester" | "saved_sender"
   reference: text("reference"),
   // Dual secure link tokens
   token: text("token").notNull(),
@@ -999,11 +1005,15 @@ export const createMoneyRequestSchema = z
       .string()
       .regex(/^\d+(\.\d{1,2})?$/, "Enter a valid amount.")
       .refine((v) => parseFloat(v) > 0, "Enter a valid amount."),
-    senderType: z.enum(["individual", "business"]),
-    senderName: z.string().trim().min(2, "Sender name is required."),
-    senderEmail: z.string().email("Please enter a valid email address."),
+    senderType: z.enum(["individual", "business"]).optional().default("individual"),
+    // Payer details are optional; blank strings are treated as "not provided".
+    senderName: z.string().trim().min(2, "Payer name must be at least 2 characters.").optional().or(z.literal("")).transform((v) => v || undefined),
+    senderEmail: z.string().trim().email("Please enter a valid email address.").optional().or(z.literal("")).transform((v) => v || undefined),
     senderPhone: z.string().trim().optional(),
     senderDob: isoDate.optional(),
+    senderId: z.string().trim().max(64).optional(),
+    payerBankName: z.string().trim().max(80).optional(),
+    payerAccountNumber: z.string().trim().regex(/^\d{6,12}$/, "Enter the payer account number using digits only.").optional().or(z.literal("")).transform((v) => v || undefined),
     purpose: z.enum(PAYMENT_PURPOSES, {
       errorMap: () => ({ message: "Select a purpose for this payment." }),
     }),

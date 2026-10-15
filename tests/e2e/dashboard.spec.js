@@ -68,25 +68,33 @@ test.describe('Rhemito Dashboard', () => {
     test('Unified Transactions table displays data', async ({ page }) => {
         await page.goto('/');
 
-        // Verify transactions table has rows
+        // The server is shared with other specs, so rows can spill onto later
+        // pages: locate seeded rows by searching for their reference.
+        const search = page.getByTestId('input-search-transactions');
+        await search.fill('22502784');
         await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
 
         // Verify Resend button is present on completed transaction
+        await search.fill('22502785');
         await expect(page.getByTestId('button-resend-22502785')).toBeVisible();
     });
 
     test('Transaction type filters narrow the unified table', async ({ page }) => {
         await page.goto('/');
 
-        // All paginates the merged list — recent rows stay on page 1
+        // Rows are located by search so other specs' data cannot push them off page 1.
+        const search = page.getByTestId('input-search-transactions');
+        await search.fill('22502784');
         await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
 
-        // Send Money chip keeps the recent + scheduled rows on one page
+        // Send Money chip keeps the send-money rows
         await page.getByTestId('chip-type-send-money').click();
         await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
+        await search.fill('SCH001');
         await expect(page.getByTestId('row-scheduled-SCH001')).toBeVisible();
 
         // Invoices chip hides the send-money prototype rows
+        await search.fill('22502784');
         await page.getByTestId('chip-type-invoice').click();
         await expect(page.getByTestId('row-transaction-22502784')).toBeHidden();
     });
@@ -98,8 +106,8 @@ test.describe('Rhemito Dashboard', () => {
         await expect(page.getByTestId('row-transaction-22502787')).toBeVisible();
         await expect(page.getByTestId('row-transaction-22502784')).toBeHidden();
 
-        // Clearing the search restores the rows
-        await page.getByTestId('input-search-transactions').fill('');
+        // Searching for another seeded row brings it back (independent of paging)
+        await page.getByTestId('input-search-transactions').fill('22502784');
         await expect(page.getByTestId('row-transaction-22502784')).toBeVisible();
     });
 
@@ -116,7 +124,8 @@ test.describe('Rhemito Dashboard', () => {
         await page.getByTestId('button-next-page').click();
         await expect(rows.first()).toBeVisible();
         expect(await rows.count()).toBeGreaterThan(0);
-        expect(await rows.count()).toBeLessThan(20);
+        // Other specs add rows to the shared server, so only assert the page cap.
+        expect(await rows.count()).toBeLessThanOrEqual(20);
         await expect(page.getByTestId('transactions-pagination')).toContainText('Page 2 of');
 
         // Back to page 1
