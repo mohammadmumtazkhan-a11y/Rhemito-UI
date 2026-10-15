@@ -960,10 +960,10 @@ export default function RequestCheckout() {
     return (
       <Shell>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl">
-          <Card className="shadow-xl overflow-hidden border-border/80">
+          <Card className="shadow-xl overflow-hidden border-2 border-blue-600" data-testid="mito-payment-card">
             {/* MITO PAYMENT header */}
-            <div className="px-6 pt-6 pb-2 space-y-4" data-testid="checkout-summary">
-              <div className="flex items-center justify-between">
+            <div className="px-6 pt-6 pb-2 space-y-4 text-center" data-testid="checkout-summary">
+              <div className="flex flex-col items-center gap-2">
                 <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
                 {/* 10-Minute Countdown */}
                 <div
@@ -980,12 +980,12 @@ export default function RequestCheckout() {
               <div>
                 <p className="text-xs text-slate-500">Payment Request From</p>
                 <p className="text-xl font-bold text-slate-900 leading-snug" data-testid="checkout-requester-name">{request.requesterName}</p>
-                <p className="text-xs text-slate-500 font-mono mt-0.5">Ref {request.requestNumber}</p>
+                <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>
               </div>
 
               <div>
                 <p className="text-xs text-slate-500">You pay</p>
-                <p className="text-4xl font-bold tracking-tight text-blue-600 mt-0.5" data-testid="checkout-amount">
+                <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
                   {request.currency} {formatMoney(request.amount)}
                 </p>
               </div>
@@ -1028,7 +1028,7 @@ export default function RequestCheckout() {
 
               <Button
                 variant="outline"
-                className="w-full h-11 border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
+                className="w-full h-12 rounded-full border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 font-semibold"
                 disabled={busy || request.methods.length === 0}
                 onClick={() => handleMethodSelect(selectedMethod && request.methods.includes(selectedMethod) ? selectedMethod : request.methods[0])}
                 data-testid="button-pay-now"
@@ -1054,6 +1054,10 @@ export default function RequestCheckout() {
                 </span>
               </div>
             </CardContent>
+            <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
+              <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
+              <span className="text-lg font-bold lowercase font-display">rhemito</span>
+            </div>
           </Card>
         </motion.div>
       </Shell>
@@ -1782,72 +1786,80 @@ function PaymentBreakdown({ request }: { request: PublicRequestView }) {
   const payoutCurrency = request.payoutCurrency ?? request.currency;
   const crossCurrency = payoutCurrency !== request.currency;
   const rate = request.fxRate ?? null;
+  const rateNum = (n: number) =>
+    n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  // Always "<payer-currency units> = 1 <payout currency>", as in the Mito design.
   const rateText =
     rate && rate > 0
       ? rate >= 1
-        ? `1 ${request.currency} = ${formatMoney(rate)} ${payoutCurrency}`
-        : `${formatMoney(1 / rate)} ${request.currency} = 1 ${payoutCurrency}`
+        ? `1 ${request.currency} = ${rateNum(rate)} ${payoutCurrency}`
+        : `${rateNum(1 / rate)} ${request.currency} = 1 ${payoutCurrency}`
       : "Not available";
   const last4 = (request.payoutAccountMasked ?? "").replace(/\D/g, "").slice(-4);
-  const line = "flex items-center justify-between gap-4 px-4 py-2.5 text-sm";
+  const payoutSymbol = CURRENCY_SYMBOLS[payoutCurrency] ?? `${payoutCurrency} `;
+  const receiveValue = request.payoutAmount
+    ? `${payoutSymbol}${formatMoney(request.payoutAmount)}`
+    : !crossCurrency
+      ? `${payoutSymbol}${formatMoney(actualSent)}`
+      : "Not available";
+  const line = "flex items-start justify-between gap-4 text-[15px]";
 
   return (
     <div className="space-y-3" data-testid="payment-breakdown">
-      <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
-        <p className="px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-50">Payment breakdown</p>
+      <div className="rounded-2xl border border-slate-200 p-5 space-y-4 shadow-sm">
+        <p className="text-base font-semibold text-slate-900">Payment breakdown</p>
+
         <div className={line}>
-          <span className="text-slate-600">You pay</span>
-          <span className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 bg-blue-50 rounded px-1.5 py-0.5">Locked</span>
-            <span className="font-semibold tabular-nums text-slate-900">{formatMoney(total)}</span>
-          </span>
-        </div>
-        <div className={line}>
-          <span className="text-slate-600">Transaction fee ({request.currency})</span>
-          <span className="font-semibold tabular-nums text-red-600" data-testid="breakdown-fee">
-            {request.absorbFee ? "Covered by requester" : `− ${formatMoney(fee)}`}
-          </span>
-        </div>
-        {request.absorbFee && fee > 0 && (
-          <div className={line}>
-            <span className="text-slate-600">Fee taken from payout ({request.currency})</span>
-            <span className="font-semibold tabular-nums text-red-600">− {formatMoney(fee)}</span>
+          <div>
+            <p className="font-semibold text-blue-600">You pay</p>
+            <p className="text-xs text-slate-500">Locked</p>
           </div>
-        )}
-        <div className={line}>
-          <span className="text-slate-600">Actual sent</span>
-          <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-actual-sent">{request.currency} {formatMoney(actualSent)}</span>
+          <span className="font-semibold tabular-nums text-blue-600" data-testid="breakdown-you-pay">
+            {request.currency} {formatMoney(total)}
+          </span>
         </div>
+
+        <div className={line}>
+          <span className="text-slate-700">Transaction fee ({request.currency})</span>
+          <span className="font-semibold tabular-nums text-red-600" data-testid="breakdown-fee">
+            {request.currency} {formatMoney(fee)}
+          </span>
+        </div>
+
+        <div className={line}>
+          <span className="text-slate-700">Actual sent</span>
+          <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-actual-sent">
+            {request.currency} {formatMoney(actualSent)}
+          </span>
+        </div>
+
         {crossCurrency && (
           <div className={line}>
-            <span className="text-slate-600">Exchange rate</span>
+            <span className="text-slate-700">Exchange rate</span>
             <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-rate">{rateText}</span>
           </div>
         )}
+
         <div className={line}>
-          <span className="text-slate-600">They receive in bank</span>
-          <span className="flex items-center gap-2">
-            {request.fxRateIsIndicative !== false && crossCurrency && (
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600 bg-slate-100 rounded px-1.5 py-0.5">Indicative</span>
+          <div>
+            <p className="font-semibold text-blue-600">They receive in bank</p>
+            {crossCurrency && request.fxRateIsIndicative !== false && (
+              <p className="text-xs text-slate-500">Indicative</p>
             )}
-            <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-receive">
-              {request.payoutAmount
-                ? `${payoutCurrency} ${formatMoney(request.payoutAmount)}`
-                : !crossCurrency
-                  ? `${payoutCurrency} ${formatMoney(actualSent)}`
-                  : "Not available"}
-            </span>
-          </span>
+          </div>
+          <span className="font-semibold tabular-nums text-blue-600" data-testid="breakdown-receive">{receiveValue}</span>
         </div>
+
         {request.payoutBankName && (
-          <p className="px-4 py-2.5 text-xs text-slate-500" data-testid="breakdown-bank">
-            Paid into {request.payoutBankName}{last4 ? ` · ····${last4}` : ""}
+          <p className="text-sm text-slate-700" data-testid="breakdown-bank">
+            Paid into {request.payoutBankName}{last4 ? ` · ****${last4}` : ""}.
           </p>
         )}
+
+        <p className="rounded-lg bg-orange-50 px-3.5 py-3 text-sm text-slate-700">
+          This is the amount you send. The fee and what they receive are calculated from it.
+        </p>
       </div>
-      <p className="rounded-lg bg-orange-50 border border-orange-100 px-3 py-2 text-xs text-orange-900">
-        This is the amount you send. The fee and what they receive are calculated from it.
-      </p>
     </div>
   );
 }

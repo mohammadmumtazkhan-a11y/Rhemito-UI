@@ -257,7 +257,10 @@ test.describe('Request Money E2E', () => {
     await expect(page.getByTestId('checkout-requester-name')).toBeVisible();
     await expect(page.getByTestId('payment-breakdown')).toBeVisible();
     await expect(page.getByTestId('payment-breakdown').getByText('Locked')).toBeVisible();
-    await expect(page.getByTestId('breakdown-actual-sent')).toBeVisible();
+    await expect(page.getByTestId('breakdown-you-pay')).toContainText('GBP 120.00');
+    await expect(page.getByTestId('breakdown-fee')).toContainText('GBP 3.60');
+    await expect(page.getByTestId('breakdown-actual-sent')).toContainText('GBP 116.40');
+    await expect(page.getByTestId('checkout-footer')).toContainText('rhemito');
     await expect(page.getByTestId('breakdown-receive')).toBeVisible();
     await expect(page.getByTestId('breakdown-bank')).toContainText('Paid into');
     await expect(page.getByTestId('button-pay-now')).toBeVisible();
