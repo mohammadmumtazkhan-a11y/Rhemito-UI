@@ -1044,7 +1044,7 @@ export default function RequestPayment() {
                               min="0"
                               step="any"
                               inputMode="decimal"
-                              placeholder={fxFinite ? "0.00" : "Rate loading"}
+                              placeholder={fxFinite ? "0.00" : !corridorForSelection ? "Route not available" : "Loading rate…"}
                               value={receiveDisplay}
                               disabled={!fxFinite}
                               onChange={(e) => handleReceiveChange(e.target.value)}
@@ -1058,7 +1058,9 @@ export default function RequestPayment() {
                           </div>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {senderCurrency === payoutCurrency ? "Calculated from what the payer sends." : "Indicative. The live rate at payment time applies."}
+                          {!corridorForSelection
+                            ? `No rate is available for ${senderCurrency} to ${payoutCurrency}. Choose a different payer currency or settlement account.`
+                            : senderCurrency === payoutCurrency ? "Calculated from what the payer sends." : "Indicative. The live rate at payment time applies."}
                         </p>
                       </div>
 
@@ -1165,6 +1167,11 @@ export default function RequestPayment() {
                             <div>
                               <span className="text-xl md:text-2xl font-extrabold text-primary tabular-nums">{payoutSymbol}{receiveInPayout.toFixed(2)}</span>
                               <p className="text-[11px] font-medium text-amber-800 mt-1 leading-snug">Indicative. Converted at the live spot rate when the payer pays.</p>
+                            </div>
+                          ) : !corridorForSelection ? (
+                            <div>
+                              <span className="text-xl md:text-2xl font-extrabold text-muted-foreground">Not available</span>
+                              <p className="text-[11px] font-medium text-amber-800 mt-1 leading-snug">There is no route from {senderCurrency} to {payoutCurrency}. Choose a different payer currency or settlement account.</p>
                             </div>
                           ) : (
                             <div>
