@@ -9,6 +9,8 @@
     "build": "tsx script/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test:contracts": "vitest run client/src/__tests__/contracts",
+    "e2e:contracts": "playwright test tests/e2e/rewards_contract.spec.js --reporter=line",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

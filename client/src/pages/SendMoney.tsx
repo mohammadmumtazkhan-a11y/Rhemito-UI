@@ -136,7 +136,10 @@ export default function SendMoney() {
     const promoApplied = promo.applied;
     const promoDiscount = promo.discount;
     const promoCode = promo.appliedCode ?? "";
-    const effectiveFee = Math.max(0, fee - (promoApplied ? promoDiscount : 0));
+    const promoOnAmount = promoApplied && promo.appliesTo === "amount";
+    // Fee promos reduce the fee (never below 0); a Fixed amount promo comes off the whole amount to pay instead
+    const effectiveFee = Math.max(0, fee - (promoApplied && !promoOnAmount ? promoDiscount : 0));
+    const amountPromoDiscount = promoOnAmount ? Math.min(promoDiscount, parseFloat(amount || "0")) : 0;
 
     // Bonus Calculations
     const bonusAmount = useBonus ? creditToApply(bonusBalance, parseFloat(amount || "0"), SEND_CURRENCY) : 0;
@@ -154,7 +157,7 @@ export default function SendMoney() {
     };
 
     // Total Pay = You Send + fee (after promo) - (Pay Less bonus). Never below 0 (AC-5.2.7)
-    const totalPay = Math.max(0, (parseFloat(amount || "0") + effectiveFee) - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0));
+    const totalPay = Math.max(0, (parseFloat(amount || "0") + effectiveFee) - amountPromoDiscount - (useBonus && bonusType === 'pay_less' ? bonusAmount : 0));
 
     // Amount Summary rows:
     //   You Send     = amount the customer entered (never includes fee or bonus)
@@ -264,7 +267,7 @@ export default function SendMoney() {
                 receiveAmount: finalReceiveAmount,
                 fee: effectiveFee.toFixed(2),
                 exchangeRate: String(EXCHANGE_RATE),
-                ...(promoApplied && promoCode ? { promoCode, feeBeforePromo: fee.toFixed(2) } : {}),
+                ...(promoApplied && promoCode ? { promoCode, feeBeforePromo: fee.toFixed(2), ...(promoOnAmount ? { promoAppliesTo: "amount" as const, promoDiscount: amountPromoDiscount.toFixed(2) } : {}) } : {}),
             });
             setTransactionId(created.id);
             setTransactionRef(created.reference);
