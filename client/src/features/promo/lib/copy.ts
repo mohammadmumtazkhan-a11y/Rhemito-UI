@@ -1,0 +1,20 @@
+/** All promo strings in one place (PROMO-RHEMITO §6.3 – §6.6). */
+export const PROMO_COPY = {
+  cardTitle: "Promo Code",
+  label: "Have a promo code?",
+  placeholder: "Enter promo code",
+  apply: "Apply",
+  checking: "Checking...",
+  remove: "Remove",
+  empty: "Please enter a promo code.",
+  applied: "Promo code applied!",
+  unavailable: "Promo codes are unavailable right now. Please try again shortly.",
+  appliedToast: "Promo code applied",
+  removedToast: "Promo code removed",
+  summaryLabel: (code: string) => `Promo (${code})`,
+  includes: "Includes promo code",
+  savingsError: "We couldn't load your promo savings.",
+  savingsRow: (code: string) => `Promo code ${code}`,
+  saved: "Saved",
+  tryAgain: "Try again",
+} as const;

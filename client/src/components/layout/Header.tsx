@@ -1,13 +1,15 @@
 import { ChevronDown, Menu } from "lucide-react";
 import { motion } from "framer-motion";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { useAuth } from "@/hooks/use-auth";
+import { profileLabel, userInitials } from "@/lib/userDisplay";
 
 interface HeaderProps {
-  userName: string;
   onMenuClick?: () => void;
 }
 
-export function Header({ userName, onMenuClick }: HeaderProps) {
+export function Header({ onMenuClick }: HeaderProps) {
+  const { user } = useAuth();
   return (
     <motion.header 
       initial={{ y: -10, opacity: 0 }}
@@ -29,10 +31,10 @@ export function Header({ userName, onMenuClick }: HeaderProps) {
 
         <div className="flex items-center gap-2 cursor-pointer" data-testid="button-profile-menu">
           <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-teal flex items-center justify-center">
-            <span className="text-white font-semibold text-xs md:text-sm">OM</span>
+            <span className="text-white font-semibold text-xs md:text-sm" data-testid="header-initials">{userInitials(user)}</span>
           </div>
           <div className="hidden sm:flex items-center gap-2">
-            <span className="text-sm font-medium">Individual Profile</span>
+            <span className="text-sm font-medium" data-testid="header-profile-label">{profileLabel(user)}</span>
             <ChevronDown className="w-4 h-4 text-muted-foreground" />
           </div>
         </div>

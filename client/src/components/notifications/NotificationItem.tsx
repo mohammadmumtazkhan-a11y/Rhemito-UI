@@ -217,6 +217,13 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
   reward_bonus_expiring: { icon: Clock, containerClass: "bg-amber/10", iconClass: "text-amber" },
   reward_bonus_expired: { icon: Clock, containerClass: "bg-slate-100", iconClass: "text-slate-600" },
   reward_bonus_reversed: { icon: XCircle, containerClass: "bg-destructive/10", iconClass: "text-destructive" },
+  bonus_earned: { icon: Gift, containerClass: "bg-teal/10", iconClass: "text-teal" },
+  bonus_used: { icon: Gift, containerClass: "bg-slate-100", iconClass: "text-slate-600" },
+  bonus_returned: { icon: Gift, containerClass: "bg-teal/10", iconClass: "text-teal" },
+  bonus_expiring: { icon: Clock, containerClass: "bg-amber/10", iconClass: "text-amber" },
+  bonus_expired: { icon: Clock, containerClass: "bg-slate-100", iconClass: "text-slate-600" },
+  bonus_reversed: { icon: XCircle, containerClass: "bg-destructive/10", iconClass: "text-destructive" },
+  bonus_unblocked: { icon: Gift, containerClass: "bg-teal/10", iconClass: "text-teal" },
 };
 
 // ─── Relative timestamp ───────────────────────────────────────────────────────
@@ -267,7 +274,7 @@ export function NotificationItem({
       onRead(notification.id);
     }
     // Reward notifications deep-link to Bonus & Discounts (AC-6.2.2)
-    if (notification.type.startsWith("reward_")) {
+    if (notification.type.startsWith("reward_") || notification.type.startsWith("bonus_")) {
       navigate(notification.type === "reward_friend_joined" ? "/bonus-discounts?tab=referrals" : notification.type === "reward_offer" ? "/" : "/bonus-discounts");
       return;
     }

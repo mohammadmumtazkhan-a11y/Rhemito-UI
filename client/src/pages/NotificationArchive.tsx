@@ -69,6 +69,13 @@ function matchesCategory(n: Notification, cat: CategoryFilter): boolean {
       "reward_bonus_expiring",
       "reward_bonus_expired",
       "reward_bonus_reversed",
+      "bonus_earned",
+      "bonus_used",
+      "bonus_returned",
+      "bonus_expiring",
+      "bonus_expired",
+      "bonus_reversed",
+      "bonus_unblocked",
     ],
     system: systemTypes,
   };

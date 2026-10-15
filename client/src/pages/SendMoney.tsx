@@ -19,19 +19,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
-import { balanceFor, bonusToApply, expiringSoon, formatMoney } from "@/lib/rewards";
-import { BonusRedemption, type BonusChoice } from "@/components/rewards/BonusRedemption";
+import { BONUS_COPY, UseBonusCredit, balanceFor, creditToApply, formatMoney, type BonusChoice } from "@/features/bonus";
+import { PromoCodeField, usePromoCode, PROMO_COPY, formatPromoMoney } from "@/features/promo";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
 import {
     cancelSendMoneyTransaction,
     createSendMoneyTransaction,
     paySendMoneyTransaction,
+    SendMoneyApiError,
 } from "@/lib/sendMoney";
 import type { SendMoneyPaymentMethod, SendMoneyService } from "@shared/sendMoney";
 
 // Mock Data
 const EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN
 const FEE_PERCENTAGE = 0.01; // 1%
+const SEND_CURRENCY = "GBP"; // Send Money is GBP-only for now (known limit L4)
 
 const recentRecipients = [
     { id: 1, name: "Akshita Gupta",   bank: "Barclays",        account: "12345678",  sortCode: "20-45-67", iban: "",                       swift: "",          currency: "GBP", country: "UK",            narration: "",                    initials: "AG", color: "bg-blue-100 text-blue-600" },
@@ -58,11 +60,6 @@ export default function SendMoney() {
     const [amount, setAmount] = useState<string>("500");
     const [receiveAmount, setReceiveAmount] = useState<string>("");
     const [deliveryMethod, setDeliveryMethod] = useState("bank_deposit");
-    const [promoCode, setPromoCode] = useState("");
-    const [promoApplied, setPromoApplied] = useState(false);
-    const [promoMessage, setPromoMessage] = useState("");
-    const [promoDiscount, setPromoDiscount] = useState(0);
-    const [promoLoading, setPromoLoading] = useState(false);
 
     const [selectedRecipient, setSelectedRecipient] = useState<any>(null);
     const [recipientDetails, setRecipientDetails] = useState({
@@ -117,10 +114,9 @@ export default function SendMoney() {
 
     // Referral bonus — live wallet from the rewards API (US-5.2 / US-5.3)
     const rewards = useRewards();
-    const bonusWallet = balanceFor(rewards.data?.wallet, "GBP");
+    // One bonus balance, in the currency of this transfer; no minimum to use it (BONUS-RHEMITO 7.5)
+    const bonusWallet = balanceFor(rewards.data?.wallet, SEND_CURRENCY);
     const bonusBalance = bonusWallet.available;
-    const bonusMinRedeem = rewards.data?.offer?.currency === "GBP" ? Number(rewards.data.offer.min_redeem_amount || 0) : 0;
-    const bonusExpiring = expiringSoon((rewards.data?.wallet.unused ?? []).filter((c) => c.currency === "GBP"))[0];
     const [bonusChoice, setBonusChoiceState] = useState<BonusChoice>("none");
     const useBonus = bonusChoice !== "none" && bonusBalance > 0;
     const bonusType: 'pay_less' | 'send_more' = bonusChoice === "send_more" ? "send_more" : "pay_less";
@@ -128,16 +124,32 @@ export default function SendMoney() {
     // Calculations
     const fee = parseFloat(amount || "0") * FEE_PERCENTAGE;
 
-    // Promo codes are validated by Mito Admin; the discount it approves comes off the fee.
+    // Promo codes are validated by Mito Money; the discount it approves comes off the fee (features/promo).
+    const promo = usePromoCode({
+        amount: parseFloat(amount || "0"),
+        fee,
+        sendCurrency: SEND_CURRENCY,
+        receiveCurrency: recipientDetails.currency || "NGN",
+        paymentMethod: paymentMethod || null,
+    });
+    const promoApplied = promo.applied;
+    const promoDiscount = promo.discount;
+    const promoCode = promo.appliedCode ?? "";
     const effectiveFee = Math.max(0, fee - (promoApplied ? promoDiscount : 0));
 
     // Bonus Calculations
-    const bonusAmount = useBonus ? bonusToApply(bonusBalance, parseFloat(amount || "0")) : 0;
+    const bonusAmount = useBonus ? creditToApply(bonusBalance, parseFloat(amount || "0"), SEND_CURRENCY) : 0;
     const setBonusChoice = (choice: BonusChoice) => {
         setBonusChoiceState(choice);
-        const value = bonusToApply(bonusBalance, parseFloat(amount || "0"));
-        if (choice === "pay_less") toast({ title: `${formatMoney(value, "GBP")} bonus applied`, description: `You'll pay ${formatMoney(value, "GBP")} less.` });
-        if (choice === "send_more") toast({ title: `${formatMoney(value, "GBP")} bonus added`, description: "Your recipient will get more." });
+        const value = formatMoney(creditToApply(bonusBalance, parseFloat(amount || "0"), SEND_CURRENCY), SEND_CURRENCY);
+        if (choice === "pay_less") toast(BONUS_COPY.toastPayLess(value));
+        if (choice === "send_more") toast(BONUS_COPY.toastSendMore(value));
+    };
+    /** The server refused the bonus: reset the choice and reload the balance (BONUS-RHEMITO 7.5). */
+    const bonusRefused = (e: SendMoneyApiError) => {
+        if (e.code !== "BONUS_UNAVAILABLE") setBonusChoiceState("none");
+        void rewards.refetch();
+        toast({ title: e.code === "BONUS_CHANGED" ? BONUS_COPY.changedTitle : "Bonus not applied", description: e.message, variant: "destructive" });
     };
 
     // Total Pay = You Send + fee (after promo) - (Pay Less bonus). Never below 0 (AC-5.2.7)
@@ -180,49 +192,6 @@ export default function SendMoney() {
         }
     }, [selectedRecipient]);
 
-    const handleApplyPromo = async () => {
-        const code = promoCode.trim().toUpperCase();
-        if (!code) {
-            setPromoMessage("Please enter a promo code.");
-            setPromoApplied(false);
-            return;
-        }
-
-        setPromoLoading(true);
-
-        try {
-            const response = await fetch("/api/promocodes/validate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    code,
-                    amount: parseFloat(amount),
-                    fee: fee.toFixed(2),
-                    currency: "GBP",
-                    sourceCurrency: "GBP",
-                    destCurrency: "NGN",
-                    paymentMethod: paymentMethod || "bank_deposit",
-                }),
-            });
-
-            const data = await response.json();
-            if (response.ok) {
-                setPromoApplied(true);
-                setPromoDiscount(data.appliedDiscount || 0);
-                setPromoMessage(data.displayText || "Promo code applied!");
-            } else {
-                setPromoApplied(false);
-                setPromoDiscount(0);
-                setPromoMessage(data.error || "Invalid promo code");
-            }
-        } catch (error) {
-            setPromoApplied(false);
-            setPromoDiscount(0);
-            setPromoMessage("Failed to validate promo code");
-        } finally {
-            setPromoLoading(false);
-        }
-    };
 
 
 
@@ -420,13 +389,13 @@ export default function SendMoney() {
         <DashboardLayout>
             <div className="max-w-5xl mx-auto pb-10">
                 {/* Header */}
-                <div className="mb-6 flex items-center justify-between">
-                    <h1 className="text-2xl font-bold">Send Money</h1>
+                <div className="mb-4 flex items-center justify-between">
+                    <h1 className="text-xl font-bold">Send Money</h1>
                     <div className="text-sm text-muted-foreground">step {currentStep} of {steps.length}</div>
                 </div>
 
                 {/* Stepper */}
-                <div className="flex items-center justify-between mb-6 sm:mb-8 px-1 sm:px-4 md:px-12 relative overflow-hidden">
+                <div className="flex items-center justify-between mb-5 px-1 sm:px-4 md:px-12 relative overflow-hidden">
                     <div className="absolute left-6 right-6 top-4 h-0.5 bg-gray-200 -z-10" />
                     {steps.map((step) => (
                         <div key={step.id} className="flex flex-col items-center bg-background px-1 sm:px-2 z-10">
@@ -450,22 +419,22 @@ export default function SendMoney() {
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="grid grid-cols-1 lg:grid-cols-5 gap-8 w-full"
+                                className="grid grid-cols-1 lg:grid-cols-5 gap-6 w-full"
                             >
-                                <div className="lg:col-span-3 space-y-8">
+                                <div className="lg:col-span-3 space-y-5">
                                     <div className="space-y-2">
                                         <Label className="text-gray-500">You Send</Label>
-                                        <div className="flex bg-white border rounded-xl overflow-hidden h-14 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
+                                        <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
                                             <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
                                                 <img src="https://flagcdn.com/w40/gb.png" alt="GBP" className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
-                                                <span className="font-semibold text-base sm:text-lg">GBP</span>
+                                                <span className="font-semibold text-base">GBP</span>
                                                 <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
                                             </div>
                                             <input
                                                 type="number"
                                                 value={amount}
                                                 onChange={e => setAmount(e.target.value)}
-                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base sm:text-lg font-medium outline-none bg-transparent"
+                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base font-medium outline-none bg-transparent"
                                                 placeholder="0.00"
                                             />
                                         </div>
@@ -473,22 +442,22 @@ export default function SendMoney() {
 
                                     <div className="space-y-2">
                                         <Label className="text-gray-500">They Receive</Label>
-                                        <div className="flex bg-white border rounded-xl overflow-hidden h-14 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
+                                        <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
                                             <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
                                                 <img src="https://flagcdn.com/w40/ng.png" alt="NGN" className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
-                                                <span className="font-semibold text-base sm:text-lg">NGN</span>
+                                                <span className="font-semibold text-base">NGN</span>
                                                 <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
                                             </div>
                                             <input
                                                 readOnly
                                                 value={receiveAmount}
-                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base sm:text-lg font-medium outline-none bg-gray-50/70 text-gray-500"
+                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base font-medium outline-none bg-gray-50/70 text-gray-500"
                                             />
                                         </div>
                                     </div>
 
                                     <div className="space-y-4">
-                                        <h3 className="font-semibold text-base sm:text-lg">How will they receive the money?</h3>
+                                        <h3 className="font-semibold text-base">How will they receive the money?</h3>
                                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                                             {[
                                                 { id: "bank_deposit", label: "Bank Deposit", icon: Landmark },
@@ -512,7 +481,20 @@ export default function SendMoney() {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-4 pt-4">
+                                    {/* Bonus is offered as soon as the customer lands, not only at payment */}
+                                    <UseBonusCredit
+                                        balance={bonusWallet}
+                                        unused={rewards.data?.wallet.unused}
+                                        currency={SEND_CURRENCY}
+                                        sendAmount={parseFloat(amount || "0")}
+                                        receiveCurrency={recipientDetails.currency || "NGN"}
+                                        exchangeRate={EXCHANGE_RATE}
+                                        choice={bonusChoice}
+                                        onChoice={setBonusChoice}
+                                        blocked={rewards.data?.wallet.bonus_blocked}
+                                    />
+
+                                    <div className="space-y-1 pt-2 lg:hidden">
                                         <div className="flex items-center justify-between py-2">
                                             <div className="flex items-center gap-3 text-gray-600">
                                                 <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
@@ -542,17 +524,17 @@ export default function SendMoney() {
                                         </div>
                                     </div>
 
-                                    <div className="pt-4 flex gap-3">
+                                    <div className="pt-2 flex gap-3">
                                         <Button
                                             variant="outline"
                                             onClick={handleBack}
-                                            className="flex-1 h-14 text-lg rounded-xl"
+                                            className="flex-1 h-12 text-base rounded-xl"
                                         >
                                             Back
                                         </Button>
                                         <Button
                                             onClick={handleNext}
-                                            className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
+                                            className="flex-1 h-12 text-base bg-blue-600 hover:bg-blue-700 rounded-xl"
                                         >
                                             Continue
                                         </Button>
@@ -579,6 +561,12 @@ export default function SendMoney() {
                                                     <span className="text-gray-600">Fee</span>
                                                     <span className="font-medium text-gray-900">{fee.toFixed(2)} GBP</span>
                                                 </div>
+                                                {useBonus && (
+                                                    <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus-step1">
+                                                        <span>{bonusType === "pay_less" ? "Bonus discount" : "Bonus credit"}</span>
+                                                        <span>{bonusType === "pay_less" ? "-" : "+"} {bonusAmount.toFixed(2)} {SEND_CURRENCY}</span>
+                                                    </div>
+                                                )}
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Exchange Rate</span>
                                                     <span className="font-medium text-gray-900">1 GBP = {EXCHANGE_RATE.toFixed(2)} USD</span>
@@ -601,10 +589,10 @@ export default function SendMoney() {
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="grid grid-cols-1 lg:grid-cols-5 gap-8 w-full"
+                                className="grid grid-cols-1 lg:grid-cols-5 gap-6 w-full"
                             >
                                 {/* Left Column: Recipient Selection */}
-                                <div className="lg:col-span-3 space-y-8">
+                                <div className="lg:col-span-3 space-y-5">
                                     <div className="space-y-6">
                                         <Button
                                             variant="outline"
@@ -614,7 +602,7 @@ export default function SendMoney() {
                                             <ArrowLeft className="w-4 h-4" />
                                             Back
                                         </Button>
-                                        <h2 className="text-xl font-bold text-gray-900">Who are you sending to?</h2>
+                                        <h2 className="text-lg font-bold text-gray-900">Who are you sending to?</h2>
 
                                         {/* Recent Recipients - Circles */}
                                         <div className="space-y-4">
@@ -756,13 +744,13 @@ export default function SendMoney() {
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="grid grid-cols-1 lg:grid-cols-5 gap-8 w-full"
+                                className="grid grid-cols-1 lg:grid-cols-5 gap-6 w-full"
                             >
                                 {/* Left Column: Form Details */}
-                                <div className="lg:col-span-3 space-y-8">
+                                <div className="lg:col-span-3 space-y-5">
                                     <Card>
                                         <CardHeader>
-                                            <CardTitle className="text-lg">Recipient Details</CardTitle>
+                                            <CardTitle className="text-base">Recipient Details</CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -853,7 +841,7 @@ export default function SendMoney() {
                                     {/* Banking Details Card — conditional by destination */}
                                     <Card>
                                         <CardHeader>
-                                            <CardTitle className="text-lg">Banking Details</CardTitle>
+                                            <CardTitle className="text-base">Banking Details</CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             <div className="space-y-2">
@@ -933,7 +921,7 @@ export default function SendMoney() {
                                         <Button
                                             variant="outline"
                                             onClick={handleBack}
-                                            className="flex-1 h-14 text-lg rounded-xl"
+                                            className="flex-1 h-12 text-base rounded-xl"
                                             disabled={submittingTransaction}
                                         >
                                             Back
@@ -941,7 +929,7 @@ export default function SendMoney() {
                                         <Button
                                             onClick={handleSubmitTransaction}
                                             disabled={submittingTransaction}
-                                            className="flex-1 h-14 text-lg bg-blue-600 hover:bg-blue-700 rounded-xl"
+                                            className="flex-1 h-12 text-base bg-blue-600 hover:bg-blue-700 rounded-xl"
                                         >
                                             {submittingTransaction ? (
                                                 <div className="flex items-center gap-2">
@@ -996,63 +984,31 @@ export default function SendMoney() {
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="grid grid-cols-1 lg:grid-cols-5 gap-8 pb-24"
+                                className="grid grid-cols-1 lg:grid-cols-5 gap-6 pb-24"
                             >
                                 {/* Left Column: Input Sections */}
                                 <div className="lg:col-span-3 space-y-6">
 
                                     {/* Bonus Redemption Section (spec §6) */}
-                                    <BonusRedemption
-                                        available={bonusBalance}
-                                        currency="GBP"
+                                    <UseBonusCredit
+                                        balance={bonusWallet}
+                                        unused={rewards.data?.wallet.unused}
+                                        currency={SEND_CURRENCY}
                                         sendAmount={parseFloat(amount || "0")}
-                                        receiveCurrency="NGN"
+                                        receiveCurrency={recipientDetails.currency || "NGN"}
                                         exchangeRate={EXCHANGE_RATE}
-                                        minRedeem={bonusMinRedeem}
-                                        expiringCredit={bonusExpiring}
                                         choice={bonusChoice}
                                         onChoice={setBonusChoice}
+                                        blocked={rewards.data?.wallet.bonus_blocked}
                                     />
 
-                                    {/* Promo Code Section */}
-                                    <Card>
-                                        <CardHeader className="pb-4">
-                                            <CardTitle className="text-base">Promo Code</CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="space-y-3">
-                                            <Label className="text-sm">Have a promo code?</Label>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    placeholder="Enter promo code"
-                                                    value={promoCode}
-                                                    onChange={(e) => {
-                                                        setPromoCode(e.target.value.toUpperCase());
-                                                        setPromoApplied(false);
-                                                        setPromoMessage("");
-                                                    }}
-                                                    className="uppercase font-mono"
-                                                    disabled={promoLoading}
-                                                />
-                                                <Button
-                                                    variant="outline"
-                                                    onClick={handleApplyPromo}
-                                                    disabled={promoLoading || !promoCode}
-                                                >
-                                                    {promoLoading ? "Checking..." : "Apply"}
-                                                </Button>
-                                            </div>
-                                            {promoMessage && (
-                                                <p className={`text-xs mt-1 font-medium ${promoApplied ? "text-green-600" : "text-red-500"}`}>
-                                                    {promoApplied ? "✓ " : "✗ "}{promoMessage}
-                                                </p>
-                                            )}
-                                        </CardContent>
-                                    </Card>
+                                    {/* Promo Code Section (features/promo) */}
+                                    <PromoCodeField promo={promo} />
 
                                     {/* Payment Method Selection */}
                                     <Card>
                                         <CardHeader>
-                                            <CardTitle className="text-lg">How would you like to pay?</CardTitle>
+                                            <CardTitle className="text-base">How would you like to pay?</CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             {[
@@ -1064,38 +1020,32 @@ export default function SendMoney() {
                                                 <div
                                                     key={method.id}
                                                     onClick={async () => {
-                                                        // Use the bonus first so a changed balance never takes payment (AC-5.2.9)
-                                                        if (useBonus && transactionId) {
-                                                            try {
-                                                                const res = await fetch("/api/rewards/apply", {
-                                                                    method: "POST",
-                                                                    headers: { "Content-Type": "application/json" },
-                                                                    credentials: "include",
-                                                                    body: JSON.stringify({ transactionId, amount: bonusAmount, mode: bonusType }),
-                                                                });
-                                                                if (!res.ok) {
-                                                                    const body = await res.json().catch(() => ({}));
-                                                                    const message = body?.error?.code === "ALREADY_APPLIED" ? null : (body?.error?.message ?? "Your bonus balance has changed. Please review your transfer.");
-                                                                    if (message) {
-                                                                        setBonusChoiceState("none");
-                                                                        void rewards.refetch();
-                                                                        toast({ title: "Bonus not applied", description: message, variant: "destructive" });
-                                                                        return;
-                                                                    }
-                                                                }
-                                                            } catch {
-                                                                toast({ title: "Bonus not applied", description: "Rewards are unavailable right now. Please try again or continue without the bonus.", variant: "destructive" });
-                                                                return;
-                                                            }
-                                                        }
                                                         setPaymentMethod(method.id);
                                                         // Record the payment method on the server-owned
                                                         // transaction (instant methods complete it).
                                                         if (transactionId) {
                                                             try {
-                                                                await paySendMoneyTransaction(transactionId, method.id as SendMoneyPaymentMethod);
+                                                                if (promoApplied) promo.lock();
+                                                                await paySendMoneyTransaction(transactionId, method.id as SendMoneyPaymentMethod, promoApplied ? { code: promoCode, discount: promoDiscount } : null, useBonus ? { mode: bonusType, amount: bonusAmount } : null);
                                                             } catch (e) {
+                                                                // The bonus is used with the payment; if it can't be, the transfer is not paid (BONUS-RHEMITO B-23)
+                                                                if (e instanceof SendMoneyApiError && e.code.startsWith("BONUS_")) {
+                                                                    bonusRefused(e);
+                                                                    setPaymentMethod("");
+                                                                    return;
+                                                                }
+                                                                // A promo code that can no longer be used stops the payment before any money moves (PROMO-RHEMITO §6.4)
+                                                                if (e instanceof SendMoneyApiError && e.code.startsWith("PROMO_")) {
+                                                                    promo.reject(e.message);
+                                                                    setPaymentMethod("");
+                                                                    toast({ title: "Payment not made", description: e.message, variant: "destructive" });
+                                                                    return;
+                                                                }
                                                                 console.error("Failed to record payment method", e);
+                                                                const description = e instanceof SendMoneyApiError ? e.message : "We couldn't complete your payment. Please try again.";
+                                                                toast({ title: "Payment not completed", description, variant: "destructive" });
+                                                                setPaymentMethod("");
+                                                                return;
                                                             }
                                                         }
                                                         void rewards.refetch();
@@ -1139,25 +1089,25 @@ export default function SendMoney() {
                                             <CardContent className="space-y-3 text-sm pt-4">
                                                 {/* Promo Discount Row (shown when a code is applied) */}
                                                 {promoApplied && promoDiscount > 0 && (
-                                                    <div className="flex justify-between font-medium text-gray-900">
-                                                        <span>Discount: ({promoCode})</span>
-                                                        <span>{promoDiscount.toFixed(2)} GBP</span>
+                                                    <div className="flex justify-between font-medium text-green-700" data-testid="summary-promo">
+                                                        <span>{PROMO_COPY.summaryLabel(promoCode)}</span>
+                                                        <span>−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
                                                     </div>
                                                 )}
 
                                                 {/* Bonus Applied Row - Pay Less */}
                                                 {useBonus && bonusType === "pay_less" && (
                                                     <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus">
-                                                        <span>Referral bonus</span>
-                                                        <span>- {bonusAmount.toFixed(2)} GBP</span>
+                                                        <span>{BONUS_COPY.summaryPayLess}</span>
+                                                        <span>- {bonusAmount.toFixed(2)} {SEND_CURRENCY}</span>
                                                     </div>
                                                 )}
 
                                                 {/* Bonus Applied Row - Send More */}
                                                 {useBonus && bonusType === "send_more" && (
                                                     <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus">
-                                                        <span>Referral bonus (recipient)</span>
-                                                        <span>+ {bonusAmount.toFixed(2)} GBP</span>
+                                                        <span>{BONUS_COPY.summarySendMore}</span>
+                                                        <span>+ {bonusAmount.toFixed(2)} {SEND_CURRENCY}</span>
                                                     </div>
                                                 )}
 
@@ -1200,7 +1150,7 @@ export default function SendMoney() {
                                                     </div>
                                                     {(promoApplied || useBonus) && (
                                                         <p className="text-xs text-green-600 font-medium mt-1">
-                                                            Includes {promoApplied && "Promo Code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
+                                                            Includes {promoApplied && "promo code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
                                                         </p>
                                                     )}
                                                 </div>
@@ -1461,7 +1411,7 @@ export default function SendMoney() {
                                             <Button
                                                 onClick={() => setLocation("/")}
                                                 variant="outline"
-                                                className="w-full h-14 text-base rounded-xl font-semibold border-2 border-gray-300 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
+                                                className="w-full h-12 text-base rounded-xl font-semibold border-2 border-gray-300 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
                                             >
                                                 <div className="flex flex-col items-center gap-0.5">
                                                     <span>I've noted the details — take me to Dashboard</span>
@@ -1477,7 +1427,7 @@ export default function SendMoney() {
                                             >
                                                 <Button
                                                     onClick={() => setLocation("/")}
-                                                    className="w-full h-14 text-base bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
+                                                    className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
                                                 >
                                                     Done — Go to Dashboard
                                                 </Button>
@@ -1574,11 +1524,11 @@ export default function SendMoney() {
                                 <h3 className="text-xl font-bold text-gray-900">Success!</h3>
                                 <p className="text-gray-600 text-base">
                                     {promoApplied && useBonus
-                                        ? `Promo Code and Referral Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} have been applied to your transaction.`
+                                        ? `Your promo code and Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} have been applied to your transaction.`
                                         : promoApplied
-                                            ? "Promo Code has been applied to your transaction."
+                                            ? "Your promo code has been applied to your transaction."
                                             : useBonus
-                                                ? `Referral Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} has been applied to your transaction.`
+                                                ? `Bonus ${bonusType === 'pay_less' ? 'discount' : 'credit'} has been applied to your transaction.`
                                                 : "Transaction submitted successfully."
                                     }
                                 </p>
@@ -1628,9 +1578,31 @@ export default function SendMoney() {
                                             // transaction stays awaiting_payment inside the 30-min window.
                                             if (transactionId) {
                                                 try {
-                                                    await paySendMoneyTransaction(transactionId, "manual_transfer");
+                                                    if (promoApplied) promo.lock();
+                                                    await paySendMoneyTransaction(transactionId, "manual_transfer", promoApplied ? { code: promoCode, discount: promoDiscount } : null, useBonus ? { mode: bonusType, amount: bonusAmount } : null);
                                                 } catch (e) {
+                                                    if (e instanceof SendMoneyApiError && e.code.startsWith("BONUS_")) {
+                                                        bonusRefused(e);
+                                                        setIsSubmittingTransaction(false);
+                                                        setShowManualTransferConfirm(false);
+                                                        setPaymentMethod("");
+                                                        return;
+                                                    }
+                                                    if (e instanceof SendMoneyApiError && e.code.startsWith("PROMO_")) {
+                                                        promo.reject(e.message);
+                                                        setIsSubmittingTransaction(false);
+                                                        setShowManualTransferConfirm(false);
+                                                        setPaymentMethod("");
+                                                        toast({ title: "Payment not made", description: e.message, variant: "destructive" });
+                                                        return;
+                                                    }
                                                     console.error("Failed to record payment method", e);
+                                                    const description = e instanceof SendMoneyApiError ? e.message : "We couldn't complete your payment. Please try again.";
+                                                    toast({ title: "Payment not completed", description, variant: "destructive" });
+                                                    setIsSubmittingTransaction(false);
+                                                    setShowManualTransferConfirm(false);
+                                                    setPaymentMethod("");
+                                                    return;
                                                 }
                                             }
                                             setIsSubmittingTransaction(false);

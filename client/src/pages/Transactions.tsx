@@ -13,8 +13,11 @@ import {
   XCircle,
   Copy,
   FilePlus2,
+  Receipt,
 } from "lucide-react";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
+import { SendMoneyReceiptDialog } from "@/components/transactions/SendMoneyReceiptDialog";
+import type { SendMoneyTransactionView } from "@shared/sendMoney";
 import { CancelMoneyRequestDialog } from "@/components/transactions/CancelMoneyRequestDialog";
 import { MoneyRequestDetailsDialog } from "@/components/transactions/MoneyRequestDetailsDialog";
 import { CancelInvoiceDialog } from "@/components/invoices/CancelInvoiceDialog";
@@ -72,6 +75,7 @@ interface SendMoneyTx {
   date: string;
   amount: string;
   status: string;
+  receipt?: SendMoneyTransactionView;
 }
 
 type TypeFilter = "all" | TransactionType;
@@ -90,7 +94,7 @@ type MergedRow =
   | { kind: "send_money"; scheduled: boolean; dateSort: number; tx: SendMoneyTx }
   | { kind: "receive_money" | "invoice" | "campaign"; dateSort: number; row: UnifiedTransactionRow };
 
-function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled: boolean; onCancel: (tx: SendMoneyTx) => void }) {
+function SendMoneyRow({ tx, scheduled, onCancel, onReceipt }: { tx: SendMoneyTx; scheduled: boolean; onCancel: (tx: SendMoneyTx) => void; onReceipt: (tx: SendMoneyTx) => void }) {
   const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
   const isTerminal = (TERMINAL_STATUSES as readonly string[]).includes(tx.status);
   const canCancel = tx.status === "awaiting_payment";
@@ -201,11 +205,23 @@ function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled:
           </Button>
         ) : (
           (() => {
-            if (!isTerminal && !canCancel) {
+            if (!isTerminal && !canCancel && !tx.receipt) {
               return <span className="text-gray-300 text-sm">—</span>;
             }
             return (
               <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2">
+                {tx.receipt && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95"
+                    data-testid={`button-receipt-${tx.id}`}
+                    onClick={() => onReceipt(tx)}
+                  >
+                    <Receipt className="w-3.5 h-3.5 mr-1" />
+                    Receipt
+                  </Button>
+                )}
                 {isTerminal && (
                   <Button
                     size="sm"
@@ -390,10 +406,12 @@ function MobileSendMoneyCard({
   tx,
   scheduled,
   onCancel,
+  onReceipt,
 }: {
   tx: SendMoneyTx;
   scheduled?: boolean;
   onCancel: (tx: SendMoneyTx) => void;
+  onReceipt: (tx: SendMoneyTx) => void;
 }) {
   const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
   const isTerminal = (TERMINAL_STATUSES as readonly string[]).includes(tx.status);
@@ -467,7 +485,7 @@ function MobileSendMoneyCard({
         </div>
       </div>
 
-      {(scheduled || isTerminal || canCancel) && (
+      {(scheduled || isTerminal || canCancel || tx.receipt) && (
         <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 justify-end">
           {scheduled ? (
             <Button
@@ -480,6 +498,18 @@ function MobileSendMoneyCard({
             </Button>
           ) : (
             <>
+              {tx.receipt && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 flex-1 text-xs font-medium rounded-lg border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95"
+                  data-testid={`button-receipt-${tx.id}`}
+                  onClick={() => onReceipt(tx)}
+                >
+                  <Receipt className="w-3.5 h-3.5 mr-1" />
+                  Receipt
+                </Button>
+              )}
               {isTerminal && (
                 <Button
                   size="sm"
@@ -669,6 +699,7 @@ export default function Transactions() {
 
   const [cancelTarget, setCancelTarget] = useState<TransactionDetails | null>(null);
   const [requestDetails, setRequestDetails] = useState<MoneyRequestView | null>(null);
+  const [receiptTx, setReceiptTx] = useState<SendMoneyTx | null>(null);
   const [requestToCancel, setRequestToCancel] = useState<MoneyRequestView | null>(null);
   const [invoiceToCancel, setInvoiceToCancel] = useState<InvoiceListItem | null>(null);
   const [resendingInvoiceId, setResendingInvoiceId] = useState<string | null>(null);
@@ -838,6 +869,11 @@ export default function Transactions() {
         onConfirm={handleCancelConfirm}
         onCancel={handleCancelModalClose}
       />
+      <SendMoneyReceiptDialog
+        transaction={receiptTx?.receipt ?? null}
+        open={receiptTx !== null}
+        onOpenChange={(open) => { if (!open) setReceiptTx(null); }}
+      />
       <MoneyRequestDetailsDialog
         request={requestDetails}
         open={requestDetails !== null}
@@ -926,7 +962,7 @@ export default function Transactions() {
                       ) : (
                         pageRows.map((row) =>
                           row.kind === "send_money" ? (
-                            <MobileSendMoneyCard key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} />
+                            <MobileSendMoneyCard key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} onReceipt={setReceiptTx} />
                           ) : (
                             <MobileUnifiedCard
                               key={row.row.key}
@@ -967,7 +1003,7 @@ export default function Transactions() {
                         ) : (
                           pageRows.map((row) =>
                             row.kind === "send_money" ? (
-                              <SendMoneyRow key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} />
+                              <SendMoneyRow key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} onReceipt={setReceiptTx} />
                             ) : (
                               <UnifiedRow
                                 key={row.row.key}

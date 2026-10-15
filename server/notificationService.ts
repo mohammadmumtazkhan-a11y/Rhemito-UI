@@ -94,6 +94,13 @@ const EVENT_CATEGORY_MAP: Record<NotificationEventType, EventCategory> = {
   reward_bonus_expiring: "transactionEvents",
   reward_bonus_expired: "transactionEvents",
   reward_bonus_reversed: "transactionEvents",
+  bonus_earned: "transactionEvents",
+  bonus_used: "transactionEvents",
+  bonus_returned: "transactionEvents",
+  bonus_expiring: "transactionEvents",
+  bonus_expired: "transactionEvents",
+  bonus_reversed: "transactionEvents",
+  bonus_unblocked: "transactionEvents",
 };
 
 /** Promotional types that still appear in the bell when marketing is off (AC-6.1.6). */
@@ -335,6 +342,14 @@ export function buildNotificationContent(
       title: "Referral bonus removed",
       body: `Your ${amount} referral bonus has been removed because the related transfer was reversed.`,
     },
+    // ─── Bonus credit (title and body are written by the feed poller) ─────
+    bonus_earned: { title: String(data.title ?? "Bonus credit"), body: String(data.message ?? "") },
+    bonus_used: { title: String(data.title ?? "Bonus credit"), body: String(data.message ?? "") },
+    bonus_returned: { title: String(data.title ?? "Bonus credit"), body: String(data.message ?? "") },
+    bonus_expiring: { title: String(data.title ?? "Bonus credit"), body: String(data.message ?? "") },
+    bonus_expired: { title: String(data.title ?? "Bonus credit"), body: String(data.message ?? "") },
+    bonus_reversed: { title: String(data.title ?? "Bonus credit"), body: String(data.message ?? "") },
+    bonus_unblocked: { title: String(data.title ?? "Bonus credit"), body: String(data.message ?? "") },
   };
 
   return templates[type] ?? { title: "Notification", body: "You have a new notification." };

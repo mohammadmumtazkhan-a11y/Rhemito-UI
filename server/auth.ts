@@ -15,6 +15,7 @@ import {
 } from "@shared/schema";
 import { log } from "./index";
 import { onCustomerVerified } from "./rewardsService";
+import { syncCustomer as syncPromoCustomer } from "./promo";
 import { rememberDevice } from "./deviceId";
 
 const RESET_PIN_TTL_MS = 10 * 60 * 1000;
@@ -150,6 +151,7 @@ export function registerAuthRoutes(app: Express) {
         delete req.session.paymentRequestVerification;
         rememberDevice(user.id, req);
         void onCustomerVerified(user.id, referralCode || null);
+        void syncPromoCustomer(user.id, { force: true }).catch(() => {});
         const activated = await storage.getAuthUserById(user.id);
         const { password: _, ...safeUser } = activated ?? user;
         return res.json({ success: true, message: "Registration complete.", user: { ...safeUser, status: "active" } });
@@ -213,6 +215,7 @@ export function registerAuthRoutes(app: Express) {
       pendingReferralCodes.delete(email.toLowerCase());
       rememberDevice(user.id, req);
       void onCustomerVerified(user.id, pendingCode);
+      void syncPromoCustomer(user.id, { force: true }).catch(() => {});
 
       const { password: _, ...safeUser } = user;
       return res.json({

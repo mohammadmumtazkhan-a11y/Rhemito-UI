@@ -55,6 +55,12 @@ function summary(overrides = {}) {
 
 async function mockRewards(page, data = summary()) {
     await page.route('**/api/rewards/summary**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data }) }));
+    // Promo savings now come from the promo module (PROMO-RHEMITO P-12); serve the same rows
+    const promoRows = data.wallet?.promo_redemptions ?? [];
+    const items = promoRows.map((p) => ({ id: p.id, code: p.code, amount: Math.abs(p.amount), currency: p.currency, transferId: p.transfer_id, createdAt: p.created_at }));
+    const saved = {};
+    for (const i of items) saved[i.currency] = (saved[i.currency] ?? 0) + i.amount;
+    await page.route('**/api/promocodes/savings**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { items, saved } }) }));
 }
 
 test.describe('Refer & Earn on the Dashboard', () => {
@@ -65,12 +71,14 @@ test.describe('Refer & Earn on the Dashboard', () => {
         await expect(card).toBeVisible();
         await expect(card.getByTestId('refer-offer-text')).toContainText('You get £5.00 and your friend gets £10.00');
         await expect(card.getByLabel('Your referral link')).toHaveValue('localhost:5000/ref/JOHN2880');
-        await expect(card.getByText('Kemi L.')).toBeVisible();
-        await expect(card.getByText('Transfer in progress')).toBeVisible();
-        await expect(card.getByText('£5.00 earned')).toBeVisible();
-        await expect(card.getByRole('link', { name: 'See all referrals (3)' })).toBeVisible();
+        // Totals only — individual friends are listed on the Referrals tab, so the card never grows
+        await expect(card.getByTestId('refer-count')).toHaveText('3');
+        await expect(card.getByTestId('refer-earned')).toHaveText('£5.00');
+        await expect(card.getByTestId('refer-waiting')).toContainText('2 friends are yet to send £50.00+');
+        await expect(card.getByText('Kemi L.')).toHaveCount(0);
+        await expect(card.getByRole('link', { name: 'View all referrals' })).toBeVisible();
         await expect(page.getByTestId('bonus-credit-card')).toHaveCount(0);
-        await expect(page.getByTestId('bonus-earned-pill')).toContainText('£7.00 Referral Bonus Credit');
+        await expect(page.getByTestId('bonus-earned-pill')).toContainText('£7.00 bonus credit');
     });
 
     test('offer banner can be dismissed and stays dismissed', async ({ page }) => {
@@ -129,8 +137,8 @@ test.describe('Bonus & Discounts page', () => {
         const list = page.getByTestId('bonus-history');
         await expect(list).toContainText('Referral bonus – Sarah S.');
         await expect(list).toContainText('Promo code WELCOME');
-        await page.getByRole('button', { name: 'Used' }).click();
-        await expect(list).toContainText('Used on transfer TXN-202609-00042');
+        await page.getByRole('button', { name: 'Bonus used' }).click();
+        await expect(list).toContainText('Bonus used on transfer TXN-202609-00042');
         await expect(list).not.toContainText('Promo code WELCOME');
     });
 
