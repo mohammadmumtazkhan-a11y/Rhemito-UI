@@ -215,24 +215,24 @@ Title `Create Promo Code` / `Edit Promo Code`. Header includes a disabled `"Gene
 | Promo Code | code | text, uppercased as typed, monospace, placeholder `e.g. SAVE20` | Yes | — | empty → `Enter a promo code.`; not `^[A-Z0-9-]{3,20}$` → `Use 3–20 letters, numbers or hyphens.`; duplicate → `This promo code already exists.` Editable while code has 0 uses. |
 | Internal note | description | text, max 200 | No | — | `Keep the note under 200 characters.` |
 | Type | type | select: `Fixed amount off the fee`, `Percentage of the fee`, `Fee waiver` (legacy types only shown, disabled, when editing a legacy code) | Yes | Fixed | — |
-| Send Currency | currency | select, all 13 supported currencies (GBP, USD, EUR, NGN, CAD, AUD, JPY, CNY, INR, ZAR, KES, GHS, AED) | Yes | GBP | Positioned at top so currency indicator is reflected across all value/threshold/budget fields. |
-| Applies to transaction flow | applies_to_flow | select: `Send Money`, `Receive Money`, `Both (Send & Receive)` | Yes | `send` | Stored in `restrictions.applies_to_flow`. |
-| Discount Value (`<CUR>` or `%`) | value | number; prefix currency symbol (Fixed) or suffix `%` (Percentage); hidden for Waiver | Fixed/Percentage | — | Fixed: > 0, ≤ 1,000,000, decimals per currency → `Enter an amount greater than 0.`; Percentage: > 0 and ≤ 100, max 2 dp → `Enter a percentage between 0.01 and 100.` |
-| Max discount (`<CUR>`, optional) | max_discount | number with currency symbol prefix (Percentage only) | No | blank | if set: > 0 → `Enter a cap greater than 0, or leave it blank.` |
-| Minimum send amount (`<CUR>`, optional) | min_threshold | number with currency symbol prefix | No | blank (=0) | ≥ 0 → `Enter 0 or more.` Hint `The customer must send at least this amount.` |
+| Where it can be used (Corridors) | allCorridors / corridors | `All corridors (all receive currencies)` checkbox (default ticked). When unticked: Send Currency select (`ALL (All Send Currencies)` + 13 currencies) → Receive Currency select (`ALL (All Receive Currencies)` + 13 currencies) + `Add` button + typeahead search box + removable corridor chips | Yes | `All corridors` | Replaces standalone `Send Currency*`. Supports `All Currencies → <CUR>` (`ALL-NGN`), `<CUR> → All Currencies` (`GBP-ALL`), and `<CUR> → <CUR>` (`GBP-NGN`). Currency is automatically derived from the selected corridor(s). |
+| Applies to transaction flow | applies_to_flow | radio: `Send Money`, `Receive Money`, `Both` | Yes | `send` | Stored in `restrictions.applies_to_flow`. |
+| Discount Value (`<CUR>` or `%`) | value | number; prefix currency symbol (Fixed, when single send currency) or suffix `%` (Percentage); hidden for Waiver | Fixed/Percentage | — | Fixed: > 0, ≤ 1,000,000, decimals per currency → `Enter an amount greater than 0.`; Percentage: > 0 and ≤ 100, max 2 dp → `Enter a percentage between 0.01 and 100.` |
+| Max discount (`<CUR>`, optional) | max_discount | number (Percentage only) | No | blank | if set: > 0 → `Enter a cap greater than 0, or leave it blank.` |
+| Minimum send amount (`<CUR>`, optional) | min_threshold | number | No | blank (=0) | ≥ 0 → `Enter 0 or more.` Hint `The customer must send at least this amount.` |
 
 **Limits**
 
 | Label | Key | Default | Validation |
 |---|---|---|---|
 | Total uses (optional) | usage_limit_global | blank = Unlimited | whole number 1–10,000,000 → `Enter a whole number, or leave it blank for unlimited.` |
-| Total budget (`<CUR>`, optional) | budget_limit | blank = Unlimited | number with currency symbol prefix; > 0 → `Enter an amount greater than 0, or leave it blank for unlimited.` Hint `Stops the code when this much discount has been given.` |
+| Total budget (`<CUR>`, optional) | budget_limit | blank = Unlimited | > 0 → `Enter an amount greater than 0, or leave it blank for unlimited.` Hint `Stops the code when this much discount has been given.` |
 | Uses per customer | usage_limit_per_user | 1, with checkbox `Unlimited` | whole number 1–1,000 → `Enter a whole number from 1 to 1,000.` |
 
 **Dates** — Start, End (`datetime-local`, admin's local time, sent as UTC ISO). Start required → `Choose a start date.`; End required → `Choose an end date.`; End ≤ Start → `End date must be after the start date.`; on create, End in the past → `End date must be in the future.`
 
-**Where it can be used**
-- Corridors: checkbox `All corridors` (default ticked). Unticked: Send currency select (auto-synced with code's Send Currency) + **Receive currency / country typeahead search box** and dropdown (`Add` button) that adds removable pill tags (`GBP → NGN ×`) below. Unticked with no corridors → `Add at least one corridor, or tick All corridors.` Duplicates ignored.
+**Where it can be used (Corridors & Payment Methods)**
+- Corridors (positioned at the top of the form in place of standalone Send Currency): checkbox `All corridors (all receive currencies)` (default ticked). Unticked: Send currency select (`ALL (All Send Currencies)` or any of the 13 currencies) → Receive currency select (`ALL (All Receive Currencies)` or any of the 13 currencies) + **typeahead search box** (`All Currencies → <CUR>`, `<CUR> → All Currencies`, or `<Send> → <Recv>`) that adds removable pill tags (`All Currencies → NGN ×`, `GBP → All Currencies ×`, `GBP → NGN ×`). Unticked with no corridors → `Add at least one corridor, or tick All corridors.`
 - Payment methods: checkbox `All payment methods` (default). Unticked: checkboxes `Bank Transfer`, `Card`, `Mobile Money`, `USSD`. None selected → `Choose at least one payment method, or tick All payment methods.`
 
 **Who can use it** (radio)
