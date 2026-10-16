@@ -34,6 +34,7 @@ import LandingPage from "@/pages/LandingPage";
 import NotificationPreferences from "@/pages/NotificationPreferences";
 import NotificationArchive from "@/pages/NotificationArchive";
 import NotificationDetail from "@/pages/NotificationDetail";
+import BankTransferDesigns from "@/pages/BankTransferDesigns";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -103,6 +104,7 @@ function Router() {
       <Route path="/settings/notifications" component={NotificationPreferences} />
       <Route path="/notifications/archive" component={NotificationArchive} />
       <Route path="/notifications/:id" component={NotificationDetail} />
+      <Route path="/bank-transfer-designs" component={BankTransferDesigns} />
       <Route component={NotFound} />
     </Switch>
   );
