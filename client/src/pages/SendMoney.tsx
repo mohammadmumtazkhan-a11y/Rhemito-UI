@@ -244,7 +244,7 @@ export default function SendMoney() {
 
     // Copy all bank details
     const handleCopyAll = () => {
-        const allDetails = `Transaction Reference No: ${transactionRef}\nAccount Name: Topupnigeria.com Nigeria Ltd\nBank Name: United Bank of Africa PLC (UBA)\nBank Account Number: 1018984719\nSort Code: 20-45-45`;
+        const allDetails = `Amount to Pay: GBP ${totalPay.toFixed(2)}\nPayee Name: Rhemito – Firopo Akin-Agunbiade\nAccount Number: 20739483\nSort Code: 04-14-04\nPayment Reference: 20092400804\nTransaction Ref: ${transactionRef}`;
         navigator.clipboard.writeText(allDetails);
         setCopiedField('all');
         setTimeout(() => setCopiedField(null), 2000);
@@ -395,24 +395,26 @@ export default function SendMoney() {
                 {/* Header */}
                 <div className="mb-4 flex items-center justify-between">
                     <h1 className="text-xl font-bold">Send Money</h1>
-                    <div className="text-sm text-muted-foreground">step {currentStep} of {steps.length}</div>
+                    <div className="text-sm text-muted-foreground">Step {currentStep} of {steps.length}</div>
                 </div>
 
-                {/* Stepper */}
-                <div className="flex items-center justify-between mb-5 px-1 sm:px-4 md:px-12 relative overflow-hidden">
-                    <div className="absolute left-6 right-6 top-4 h-0.5 bg-gray-200 -z-10" />
-                    {steps.map((step) => (
-                        <div key={step.id} className="flex flex-col items-center bg-background px-1 sm:px-2 z-10">
-                            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-semibold mb-1.5 transition-colors ${currentStep >= step.id ? "bg-primary text-white shadow-xs" : "bg-gray-100 text-gray-400"
-                                }`}>
-                                {currentStep > step.id ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : step.id}
+                {/* Stepper — hidden on Bank Transfer payment screen per design spec */}
+                {!(currentStep === 4 && showBankTransferPage) && (
+                    <div className="flex items-center justify-between mb-5 px-1 sm:px-4 md:px-12 relative overflow-hidden">
+                        <div className="absolute left-6 right-6 top-4 h-0.5 bg-gray-200 -z-10" />
+                        {steps.map((step) => (
+                            <div key={step.id} className="flex flex-col items-center bg-background px-1 sm:px-2 z-10">
+                                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-semibold mb-1.5 transition-colors ${currentStep >= step.id ? "bg-primary text-white shadow-xs" : "bg-gray-100 text-gray-400"
+                                    }`}>
+                                    {currentStep > step.id ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : step.id}
+                                </div>
+                                <span className={`text-[11px] sm:text-xs text-center leading-tight ${currentStep >= step.id ? "text-primary font-medium" : "text-gray-400"}`}>
+                                    {step.title}
+                                </span>
                             </div>
-                            <span className={`text-[11px] sm:text-xs text-center leading-tight ${currentStep >= step.id ? "text-primary font-medium" : "text-gray-400"}`}>
-                                {step.title}
-                            </span>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
 
                 <div className={currentStep >= 1 && currentStep <= steps.length ? "block w-full" : "grid grid-cols-1 lg:grid-cols-3 gap-8"}>
                     {/* Main Content Area */}
@@ -1269,292 +1271,347 @@ export default function SendMoney() {
                             </motion.div>
                         )}
 
-                        {/* Step 4 — Bank Transfer Details (Inline Page) */}
+                        {/* Step 4 — Bank Transfer Details (Inline Page — Payment Brief 05/06 Web & 06/06 Mobile) */}
                         {currentStep === 4 && showBankTransferPage && (
                             <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="w-full max-w-3xl mx-auto space-y-6 pb-10"
+                                className="w-full max-w-3xl mx-auto space-y-5 pb-10"
                             >
                                 {/* Back Button */}
                                 <button
                                     onClick={() => { setShowBankTransferPage(false); setPaymentTimerActive(false); }}
-                                    className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors group"
+                                    className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors group"
                                 >
                                     <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
                                     <span className="text-sm font-medium">Back to Payment Methods</span>
                                 </button>
 
-                                {/* Status Tracker */}
-                                <Card className="border-2 border-gray-100 shadow-sm overflow-hidden">
-                                    <div className="h-1 bg-gradient-to-r from-blue-500 via-blue-400 to-blue-500" />
-                                    <CardContent className="pt-6 pb-5 px-6">
-                                        <div className="flex items-center justify-between relative">
-                                            {/* Progress line behind circles */}
-                                            <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-200 z-0" />
-                                            <div className="absolute top-4 left-0 h-0.5 bg-green-500 z-0 transition-all duration-1000" style={{ width: transferComplete ? '100%' : '12%' }} />
-
-                                            {[
-                                                { label: "Transaction\nCreated", icon: Check, active: true, completed: true },
-                                                { label: "Awaiting\nPayment", icon: Clock, active: !transferComplete, completed: transferComplete },
-                                                { label: "Payment\nReceived", icon: Banknote, active: false, completed: transferComplete },
-                                                { label: "Processing\nTransfer", icon: ArrowRightLeft, active: false, completed: transferComplete },
-                                            ].map((step, idx) => (
-                                                <div key={idx} className="flex flex-col items-center z-10 relative">
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                                                        step.completed ? 'bg-green-500 text-white ring-4 ring-green-100' :
-                                                        step.active ? 'bg-blue-500 text-white ring-4 ring-blue-100 animate-pulse' :
-                                                        'bg-gray-100 text-gray-400 ring-2 ring-gray-50'
-                                                    }`}>
-                                                        {step.completed ? <Check className="w-4 h-4" /> : <step.icon className="w-3.5 h-3.5" />}
-                                                    </div>
-                                                    <span className={`text-[10px] mt-2 text-center leading-tight font-medium whitespace-pre-line ${
-                                                        step.completed ? 'text-green-700' : step.active ? 'text-blue-700' : 'text-gray-400'
-                                                    }`}>{step.label}</span>
+                                {/* 4-Stage Status Card */}
+                                <div className="rounded-2xl border border-slate-200/80 bg-white px-3 sm:px-6 py-4 shadow-2xs">
+                                    <div className="grid grid-cols-4 gap-2 text-center">
+                                        {[
+                                            { label: "Transaction\nCreated", icon: Check, active: false, completed: true },
+                                            { label: "Awaiting\nPayment", icon: Clock, active: !transferComplete, completed: transferComplete },
+                                            { label: "Payment\nReceived", icon: Banknote, active: false, completed: transferComplete },
+                                            { label: "Processing\nTransfer", icon: ArrowRightLeft, active: false, completed: transferComplete },
+                                        ].map((step, idx) => (
+                                            <div key={idx} className="flex flex-col items-center gap-1.5">
+                                                <div
+                                                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                                                        step.completed
+                                                            ? "bg-emerald-50 text-emerald-600"
+                                                            : step.active
+                                                            ? "bg-blue-50 text-[#2563EB]"
+                                                            : "bg-slate-100 text-slate-500"
+                                                    }`}
+                                                >
+                                                    {step.completed ? (
+                                                        <Check className="w-4 h-4 stroke-[2.5]" />
+                                                    ) : (
+                                                        <step.icon className="w-4 h-4" />
+                                                    )}
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Transaction Created Banner */}
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="relative overflow-hidden rounded-xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-5 shadow-sm"
-                                >
-                                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-400 to-emerald-500" />
-                                    <div className="flex items-start gap-4">
-                                        <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 ring-4 ring-green-50">
-                                            <Check className="w-6 h-6 text-green-600" />
-                                        </div>
-                                        <div className="space-y-1.5 flex-1">
-                                            <h3 className="text-lg font-bold text-green-900">Your transaction has been created!</h3>
-                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                                                <span className="text-gray-600">Reference: <span className="font-semibold text-gray-900">#{transactionRef}</span></span>
-                                                <span className="text-gray-600">Amount: <span className="font-semibold text-green-700">NGN {finalReceiveAmount}</span></span>
+                                                <span
+                                                    className={`text-[11px] sm:text-xs leading-tight whitespace-pre-line ${
+                                                        step.completed
+                                                            ? "font-medium text-slate-700"
+                                                            : step.active
+                                                            ? "font-bold text-[#2563EB]"
+                                                            : "font-medium text-slate-500"
+                                                    }`}
+                                                >
+                                                    {step.label}
+                                                </span>
                                             </div>
-                                            <p className="text-sm text-gray-600 mt-1">Please complete your payment below to finalise your transfer.</p>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Unified Mint "Transaction created" + Timer Banner */}
+                                <motion.div
+                                    initial={{ opacity: 0, y: -6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="rounded-2xl bg-[#EAFBF3] border border-emerald-200/80 p-4 sm:p-5 space-y-2"
+                                >
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2.5">
+                                            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                                            <span className="text-sm sm:text-base font-bold text-emerald-900">
+                                                Transaction created
+                                            </span>
                                         </div>
+                                        <span
+                                            className={`text-lg sm:text-2xl font-extrabold tabular-nums tracking-tight ${
+                                                paymentTimeLeft <= 300 ? "text-red-700" : "text-[#92400E]"
+                                            }`}
+                                        >
+                                            {formatPaymentTime(paymentTimeLeft)} left
+                                        </span>
+                                    </div>
+                                    <div className="pl-0 sm:pl-7 space-y-1">
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm sm:text-base font-extrabold text-emerald-950">
+                                            <span>Ref: {transactionRef || "TXN-202610-00001"}</span>
+                                            <span>Amount: GBP {totalPay.toFixed(2)}</span>
+                                        </div>
+                                        <p className="text-xs sm:text-sm text-emerald-800 leading-relaxed">
+                                            Pay within 30 minutes to complete your transfer. Unpaid transfers are automatically cancelled.
+                                        </p>
                                     </div>
                                 </motion.div>
 
-                                {/* Payment Countdown Timer */}
-                                <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 shadow-sm overflow-hidden">
-                                    <CardContent className="pt-5 pb-5 px-6">
-                                        <div className="flex items-center gap-4">
-                                            {(() => {
-                                                const total = 1800;
-                                                const circumference = 2 * Math.PI * 24; // r=24 → ~150.8
-                                                const isUrgent = paymentTimeLeft <= 300;
-                                                const ringColor = isUrgent ? '#ef4444' : '#f59e0b';
-                                                const textColor = isUrgent ? '#b91c1c' : '#92400e';
-                                                // Monotonically increasing angle — no wrap-around jank
-                                                const secondAngle = (total - paymentTimeLeft) * 6;
-                                                const dashOffset = circumference * (1 - paymentTimeLeft / total);
-                                                return (
-                                                    <div className="relative w-20 h-20 shrink-0">
-                                                        <svg viewBox="0 0 64 64" className="w-full h-full">
-                                                            {/* Track ring */}
-                                                            <circle cx="32" cy="32" r="24" fill="none" stroke="#e5e7eb" strokeWidth="3.5" />
-                                                            {/* Sweeping progress ring — starts at 12 o'clock */}
-                                                            <circle
-                                                                cx="32" cy="32" r="24"
-                                                                fill="none"
-                                                                stroke={ringColor}
-                                                                strokeWidth="3.5"
-                                                                strokeLinecap="round"
-                                                                strokeDasharray={circumference}
-                                                                strokeDashoffset={dashOffset}
-                                                                transform="rotate(-90, 32, 32)"
-                                                                style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.5s ease' }}
-                                                            />
-                                                            {/* Second hand */}
-                                                            <line
-                                                                x1="32" y1="32" x2="32" y2="11"
-                                                                stroke={ringColor}
-                                                                strokeWidth="1.5"
-                                                                strokeLinecap="round"
-                                                                style={{
-                                                                    transformOrigin: '32px 32px',
-                                                                    transform: `rotate(${secondAngle}deg)`,
-                                                                    transition: 'transform 1s linear, stroke 0.5s ease',
-                                                                }}
-                                                            />
-                                                            {/* Centre pivot dot */}
-                                                            <circle cx="32" cy="32" r="2.5" fill={ringColor} style={{ transition: 'fill 0.5s ease' }} />
-                                                        </svg>
-                                                        {/* Time label */}
-                                                        <div className="absolute inset-0 flex items-center justify-center">
-                                                            <motion.span
-                                                                animate={{ color: textColor }}
-                                                                transition={{ duration: 0.5 }}
-                                                                className="text-xs font-bold font-mono leading-none"
-                                                            >
-                                                                {formatPaymentTime(paymentTimeLeft)}
-                                                            </motion.span>
+                                {/* Main Payment Brief Card (05/06 Web 2-Col Split & 06/06 Mobile Stacked) */}
+                                <div className="rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden">
+                                    {/* Top Header Row inside Card */}
+                                    <div className="px-5 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+                                        <div>
+                                            <p className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-slate-500">
+                                                PAY BY BANK TRANSFER
+                                            </p>
+                                            <p className="text-3xl sm:text-[34px] font-extrabold text-slate-950 tabular-nums tracking-tight mt-1">
+                                                GBP {totalPay.toFixed(2)}
+                                            </p>
+                                            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                                                Send the exact amount to this account.
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={handleCopyAll}
+                                            className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold inline-flex items-center gap-2 transition-colors shrink-0 shadow-2xs"
+                                            title="Copy all details"
+                                        >
+                                            {copiedField === "all" ? (
+                                                <>
+                                                    <Check className="w-4 h-4 text-emerald-600" />
+                                                    <span className="text-emerald-700">Copied!</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Copy className="w-4 h-4 text-slate-600" />
+                                                    <span>Copy All</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    {/* Split Body: Left Blue Panel + Right White Details Panel (Stacks on Mobile) */}
+                                    <div className="grid grid-cols-1 md:grid-cols-12 border-b border-slate-100">
+                                        {/* Left Royal Blue Payee Panel */}
+                                        <div className="md:col-span-6 bg-[#2563EB] text-white p-5 sm:p-6 flex flex-col justify-between">
+                                            <div>
+                                                <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-blue-100">
+                                                    USE THIS ACCOUNT / PAYEE NAME
+                                                </p>
+                                                <span className="inline-block mt-2.5 px-2.5 py-1 rounded-md bg-white/15 border border-white/25 text-xs font-semibold text-white">
+                                                    Type exactly as shown
+                                                </span>
+                                                <p className="mt-3.5 text-2xl sm:text-[28px] font-extrabold leading-tight text-white break-words">
+                                                    Rhemito – Firopo Akin-Agunbiade
+                                                </p>
+                                                <p className="mt-3 text-xs sm:text-sm text-blue-50 leading-relaxed">
+                                                    Enter this exact name as the payee in your banking app.
+                                                </p>
+                                                <p className="mt-2.5 text-xs sm:text-sm text-blue-100/95 leading-relaxed">
+                                                    (Ensure you enter this name as is in your bank account — this is your dedicated Rhemito funding account, not your personal savings.)
+                                                </p>
+                                            </div>
+                                            <div className="mt-5 pt-1">
+                                                <button
+                                                    onClick={() => handleCopy("Rhemito – Firopo Akin-Agunbiade", "name")}
+                                                    className="px-4 py-2.5 rounded-xl bg-white hover:bg-blue-50 text-[#2563EB] text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-colors shadow-2xs"
+                                                >
+                                                    {copiedField === "name" ? (
+                                                        <>
+                                                            <Check className="w-4 h-4 text-emerald-600" />
+                                                            <span className="text-emerald-700">Copied payee name!</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Copy className="w-4 h-4" />
+                                                            <span>Copy payee name</span>
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Right White Account / Sort Code / Payment Reference Panel */}
+                                        <div className="md:col-span-6 bg-white p-5 sm:p-6 flex flex-col justify-between divide-y divide-slate-100">
+                                            {/* Account number */}
+                                            <div className="pb-4 flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-xs sm:text-sm text-slate-500 font-medium">Account number</p>
+                                                    <p className="text-xl sm:text-2xl font-extrabold text-slate-950 font-mono tabular-nums mt-0.5">
+                                                        20739483
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleCopy("20739483", "account")}
+                                                    className="w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition-colors shrink-0"
+                                                    title="Copy Account number"
+                                                >
+                                                    {copiedField === "account" ? (
+                                                        <Check className="w-4 h-4 text-emerald-600" />
+                                                    ) : (
+                                                        <Copy className="w-4 h-4" />
+                                                    )}
+                                                </button>
+                                            </div>
+
+                                            {/* Sort code */}
+                                            <div className="py-4 flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-xs sm:text-sm text-slate-500 font-medium">Sort code</p>
+                                                    <p className="text-xl sm:text-2xl font-extrabold text-slate-950 font-mono tabular-nums mt-0.5">
+                                                        04-14-04
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleCopy("04-14-04", "sort")}
+                                                    className="w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition-colors shrink-0"
+                                                    title="Copy Sort code"
+                                                >
+                                                    {copiedField === "sort" ? (
+                                                        <Check className="w-4 h-4 text-emerald-600" />
+                                                    ) : (
+                                                        <Copy className="w-4 h-4" />
+                                                    )}
+                                                </button>
+                                            </div>
+
+                                            {/* Payment reference */}
+                                            <div className="pt-4">
+                                                <div className="rounded-2xl bg-[#EEF5FF] p-4 flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs sm:text-sm font-bold text-[#2563EB]">
+                                                                Payment reference
+                                                            </span>
+                                                            <span className="px-2 py-0.5 rounded-md bg-white text-[#2563EB] text-[11px] font-semibold shadow-2xs">
+                                                                Required
+                                                            </span>
                                                         </div>
-                                                        {/* Urgency ping */}
-                                                        {isUrgent && (
-                                                            <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full animate-ping" />
-                                                        )}
+                                                        <p className="text-xl sm:text-2xl font-extrabold text-slate-950 font-mono tabular-nums mt-1">
+                                                            20092400804
+                                                        </p>
                                                     </div>
-                                                );
-                                            })()}
-                                            <div className="flex-1">
-                                                <h4 className={`font-bold text-sm ${paymentTimeLeft <= 300 ? 'text-red-800' : 'text-amber-900'}`}>
-                                                    {paymentTimeLeft <= 300 ? 'Time is running out!' : 'Complete your payment'}
-                                                </h4>
-                                                <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">
-                                                    Please transfer the funds within {Math.ceil(paymentTimeLeft / 60)} minutes. Your transaction will be automatically cancelled if payment is not received in time.
+                                                    <button
+                                                        onClick={() => handleCopy("20092400804", "ref")}
+                                                        className="w-10 h-10 rounded-xl border border-blue-100 bg-white hover:bg-blue-50 flex items-center justify-center text-slate-700 transition-colors shrink-0"
+                                                        title="Copy Payment reference"
+                                                    >
+                                                        {copiedField === "ref" ? (
+                                                            <Check className="w-4 h-4 text-emerald-600" />
+                                                        ) : (
+                                                            <Copy className="w-4 h-4" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Bottom Section inside Main Card */}
+                                    <div className="p-5 sm:p-6 space-y-4">
+                                        {/* Email Confirmation Banner */}
+                                        <div className="rounded-2xl bg-[#F2F7FF] px-4 py-3.5 flex items-start gap-3">
+                                            <Mail className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-xs sm:text-sm font-bold text-slate-900">
+                                                    Bank details sent to your email
+                                                </p>
+                                                <p className="text-xs text-slate-600 mt-0.5">
+                                                    These details are also available in your registered email.
                                                 </p>
                                             </div>
                                         </div>
-                                    </CardContent>
-                                </Card>
+
+                                        {/* Completed your bank transfer? + Instant verification */}
+                                        <div className="pt-1 flex flex-wrap items-center justify-center gap-2 text-center">
+                                            <span className="text-sm sm:text-base font-bold text-slate-900">
+                                                Completed your bank transfer?
+                                            </span>
+                                            <span className="px-2.5 py-0.5 rounded-md bg-[#EEF5FF] text-[#2563EB] text-xs font-semibold">
+                                                Instant verification
+                                            </span>
+                                        </div>
+
+                                        {/* Primary CTA: I have made the Payment */}
+                                        {!transferComplete ? (
+                                            <button
+                                                onClick={() => {
+                                                    setTransferComplete(true);
+                                                    setPaymentTimerActive(false);
+                                                    toast({
+                                                        title: "Payment confirmation received",
+                                                        description: "We are verifying your bank transfer and processing your transaction.",
+                                                    });
+                                                }}
+                                                className="w-full py-3.5 px-6 rounded-xl bg-[#2563EB] hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base shadow-xs transition-all text-center cursor-pointer"
+                                            >
+                                                I have made the Payment
+                                            </button>
+                                        ) : (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 6 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                            >
+                                                <button
+                                                    onClick={() => setLocation("/")}
+                                                    className="w-full py-3.5 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm sm:text-base shadow-xs transition-all text-center cursor-pointer"
+                                                >
+                                                    Done — Go to Dashboard
+                                                </button>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Secondary CTA: I've noted the details — take me to Dashboard */}
+                                        {!transferComplete && (
+                                            <button
+                                                onClick={() => setLocation("/")}
+                                                className="w-full py-3.5 px-6 rounded-xl bg-white hover:bg-slate-50 text-slate-900 font-semibold text-sm border border-slate-200 transition-colors text-center cursor-pointer"
+                                            >
+                                                I've noted the details — take me to Dashboard
+                                            </button>
+                                        )}
+
+                                        {/* Footer helper text + Cancel Transaction + Currency Cloud */}
+                                        <div className="pt-1 text-center space-y-2.5">
+                                            {!transferComplete && (
+                                                <p className="text-xs text-slate-500">
+                                                    I'll complete the payment within 30 minutes
+                                                </p>
+                                            )}
+
+                                            {!transferComplete && (
+                                                <div>
+                                                    <button
+                                                        onClick={handleCancelClick}
+                                                        className="text-xs sm:text-sm font-semibold text-red-600 hover:text-red-700 transition-colors cursor-pointer"
+                                                    >
+                                                        Cancel Transaction
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            <p className="text-xs text-slate-500 pt-1">
+                                                (Payment account solution provided by Currency Cloud)
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 {/* Simulate Expiry - Demo Only */}
                                 <div className="flex justify-center">
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="text-xs text-gray-400 hover:text-red-500"
+                                        className="text-xs text-slate-400 hover:text-red-500"
                                         onClick={() => setPaymentTimeLeft(3)}
                                     >
                                         Simulate Expiry (Demo)
                                     </Button>
                                 </div>
-
-                                {/* Bank Details Card */}
-                                <Card className="border-2 border-gray-100 shadow-sm overflow-hidden">
-                                    <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-600" />
-
-                                    {/* Header with Rhemito branding */}
-                                    <CardHeader className="pb-4 border-b">
-                                        <div className="flex items-center justify-center mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                                                    <span className="text-white font-bold text-sm">R</span>
-                                                </div>
-                                                <span className="text-lg font-bold text-gray-900 font-display">Rhemito</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <CardTitle className="text-lg font-bold">Pay with Bank Transfer</CardTitle>
-                                            <button
-                                                onClick={handleCopyAll}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                                                title="Copy all details"
-                                            >
-                                                {copiedField === 'all' ? (
-                                                    <>
-                                                        <Check className="w-4 h-4 text-green-600" />
-                                                        <span className="text-green-600">Copied!</span>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Copy className="w-4 h-4" />
-                                                        <span>Copy All</span>
-                                                    </>
-                                                )}
-                                            </button>
-                                        </div>
-                                    </CardHeader>
-
-                                    <CardContent className="pt-5 space-y-5">
-                                        <div className="space-y-1">
-                                            <p className="text-gray-700 text-sm leading-relaxed">
-                                                Kindly make a payment of <span className="font-bold text-gray-900">GBP {totalPay.toFixed(2)}</span> to the bank account details below
-                                            </p>
-                                        </div>
-
-                                        {/* Bank Detail Rows */}
-                                        <div className="space-y-0 divide-y divide-gray-100 border rounded-xl overflow-hidden">
-                                            {[
-                                                { label: "Transaction Reference No.", value: transactionRef, key: "ref" },
-                                                { label: "Account Name", value: "Funtech Global Communications Ltd.", key: "name" },
-                                                { label: "Bank Name", value: "The Currency Cloud Limited", key: "bank" },
-                                                { label: "Bank Account Number", value: "1018984719", key: "account" },
-                                                { label: "Sort Code", value: "20-45-45", key: "sort" },
-                                            ].map((item) => (
-                                                <div key={item.key} className="flex items-center justify-between py-3.5 px-4 hover:bg-gray-50/50 transition-colors">
-                                                    <div className="space-y-0.5 flex-1 min-w-0">
-                                                        <p className="text-xs text-gray-500 font-medium">{item.label}</p>
-                                                        <p className="text-sm font-semibold text-gray-900 truncate">{item.value}</p>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleCopy(item.value, item.key)}
-                                                        className="ml-3 p-2 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
-                                                        title={`Copy ${item.label}`}
-                                                    >
-                                                        {copiedField === item.key ? (
-                                                            <Check className="w-4 h-4 text-green-600" />
-                                                        ) : (
-                                                            <Copy className="w-4 h-4 text-gray-400" />
-                                                        )}
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-
-                                        {/* Email Confirmation — Prominent */}
-                                        <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
-                                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                                                <Mail className="w-5 h-5 text-blue-600" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-blue-900">Bank details sent to your email</p>
-                                                <p className="text-xs text-blue-700 mt-0.5 leading-relaxed">
-                                                    We've sent the bank account details to your registered email address for your reference. You can also make the payment using those details.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Navigate Away / Done */}
-                                <Card className="border-2 border-gray-100 shadow-sm">
-                                    <CardContent className="pt-5 pb-5 px-6 space-y-4">
-                                        {!transferComplete && (
-                                            <Button
-                                                onClick={() => setLocation("/")}
-                                                variant="outline"
-                                                className="w-full h-12 text-base rounded-xl font-semibold border-2 border-gray-300 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
-                                            >
-                                                <div className="flex flex-col items-center gap-0.5">
-                                                    <span>I've noted the details — take me to Dashboard</span>
-                                                    <span className="text-xs font-normal text-gray-500">I'll complete the payment within 30 minutes</span>
-                                                </div>
-                                            </Button>
-                                        )}
-
-                                        {transferComplete && (
-                                            <motion.div
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                            >
-                                                <Button
-                                                    onClick={() => setLocation("/")}
-                                                    className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold"
-                                                >
-                                                    Done — Go to Dashboard
-                                                </Button>
-                                            </motion.div>
-                                        )}
-
-                                        {!transferComplete && (
-                                            <div className="pt-1 text-center">
-                                                <Button
-                                                    variant="ghost"
-                                                    className="text-destructive hover:text-destructive hover:bg-destructive/10 text-sm font-medium"
-                                                    onClick={handleCancelClick}
-                                                >
-                                                    Cancel Transaction
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
                             </motion.div>
                         )}
 

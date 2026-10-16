@@ -23,7 +23,7 @@ export default function BankTransferDesigns() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<ConceptTab>("all");
+  const [activeTab, setActiveTab] = useState<ConceptTab>("brief");
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilter>("all");
   const [usePrefix, setUsePrefix] = useState<boolean>(true);
   const [secondsLeft, setSecondsLeft] = useState<number>(29 * 60 + 9);
@@ -83,14 +83,19 @@ export default function BankTransferDesigns() {
     setTimeout(() => setCopiedId(null), 1600);
   };
 
-  /* Shared Top Shell inside each payment screen (Header + Back Link + Status + Banners) */
+  /* Shared Top Shell inside each payment screen (Header + Back Link + Status + Unified Mint Banner) */
   const SharedTopShell = ({ isMobile = false }: { isMobile?: boolean }) => (
     <div className="space-y-4">
-      {/* Send Money Title & Back Link */}
+      {/* Send Money Title & Step 4 of 4 */}
       <div className="flex items-center justify-between">
         <h2 className={`${isMobile ? "text-xl" : "text-2xl"} font-bold text-slate-900 tracking-tight`}>
           Send Money
         </h2>
+        <span className="text-xs sm:text-sm font-medium text-slate-500">Step 4 of 4</span>
+      </div>
+
+      {/* Back to Payment Methods */}
+      <div>
         <button
           type="button"
           onClick={() => setLocation("/send-money")}
@@ -108,7 +113,7 @@ export default function BankTransferDesigns() {
             <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <Check className="w-4 h-4 stroke-[2.5]" />
             </div>
-            <span className="text-xs font-medium text-emerald-800 leading-tight">
+            <span className="text-xs font-medium text-slate-700 leading-tight">
               Transaction
               <br />
               Created
@@ -119,7 +124,7 @@ export default function BankTransferDesigns() {
             <div className="w-8 h-8 rounded-full bg-blue-50 text-[#2563EB] flex items-center justify-center">
               <Clock className="w-4 h-4 stroke-[2.2]" />
             </div>
-            <span className="text-xs font-semibold text-[#2563EB] leading-tight">
+            <span className="text-xs font-bold text-[#2563EB] leading-tight">
               Awaiting
               <br />
               Payment
@@ -150,66 +155,65 @@ export default function BankTransferDesigns() {
         </div>
       </div>
 
-      {/* Soft Mint Created Banner */}
-      <div className="rounded-2xl bg-[#EAFBF3] border border-emerald-200/70 px-4 py-3.5 flex items-start gap-3">
-        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-        <div className="space-y-0.5 text-sm">
-          <p className="font-bold text-emerald-950">Your transaction has been created!</p>
-          <p className="text-xs text-emerald-800/90">
-            Reference: #{txnRef} · Recipient gets: {receiveNGN}
-          </p>
-          <p className="text-xs text-emerald-800/80">
-            Complete your payment below to finalise your transfer.
+      {/* Unified Mint "Transaction created" + Timer Banner */}
+      <div className="rounded-2xl bg-[#EAFBF3] border border-emerald-200/80 p-4 sm:p-5 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span className="text-sm sm:text-base font-bold text-emerald-900">
+              Transaction created
+            </span>
+          </div>
+          <span className="text-lg sm:text-2xl font-extrabold text-[#92400E] tabular-nums tracking-tight">
+            {formatTimer(secondsLeft)} left
+          </span>
+        </div>
+        <div className={`${isMobile ? "pl-0" : "pl-7"} space-y-1`}>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm sm:text-base font-extrabold text-emerald-950">
+            <span>Ref: TXN-202610-00001</span>
+            <span>Amount: {amountGBP}</span>
+          </div>
+          <p className="text-xs sm:text-sm text-emerald-800 leading-relaxed">
+            Pay within 30 minutes to complete your transfer. Unpaid transfers are automatically cancelled.
           </p>
         </div>
-      </div>
-
-      {/* Soft Amber 30-Minute Countdown Strip */}
-      <div className="rounded-2xl bg-[#FFF8EB] border border-amber-200/70 px-4 py-3.5 flex items-center justify-between gap-3">
-        <div className="text-xs sm:text-sm text-amber-950 space-y-0.5">
-          <p className="font-semibold">Complete your payment within 30 minutes.</p>
-          <p className="text-xs text-amber-800/90">
-            Unpaid transactions are automatically cancelled.
-          </p>
-        </div>
-        <span className="shrink-0 font-mono text-sm sm:text-base font-extrabold text-amber-950 tabular-nums">
-          {formatTimer(secondsLeft)} left
-        </span>
       </div>
     </div>
   );
 
-  /* Shared Bottom Footer inside each payment screen */
-  const SharedBottomFooter = () => (
-    <div className="space-y-3.5 pt-2">
-      {/* Prominent Primary Action Block */}
-      <div className="bg-white rounded-2xl border-2 border-emerald-500/80 p-4 shadow-[0_10px_25px_-5px_rgba(16,185,129,0.15)] space-y-2.5">
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-bold uppercase tracking-wider text-emerald-700">
-            Completed your bank transfer?
-          </span>
-          <span className="text-slate-500 font-medium">Instant verification</span>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            toast({
-              title: "Payment confirmation recorded",
-              description:
-                "Thank you! We are checking for your bank transfer and will notify you once received.",
-            });
-          }}
-          className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white font-extrabold text-base sm:text-lg tracking-tight shadow-[0_8px_20px_-4px_rgba(5,150,105,0.45)] ring-4 ring-emerald-500/15 transition-all flex items-center justify-center gap-2.5 cursor-pointer"
-        >
-          <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
-          <span>I have made the Payment</span>
-        </button>
+  /* Shared Bottom Footer inside the Main White Payment Card */
+  const SharedBottomFooter = ({ isMobile = false }: { isMobile?: boolean }) => (
+    <div className={`${isMobile ? "px-5 pb-5" : "px-6 pb-6"} space-y-4 pt-2`}>
+      {/* Completed your bank transfer? + Instant verification */}
+      <div className="pt-1 flex flex-wrap items-center justify-center gap-2 text-center">
+        <span className="text-sm sm:text-base font-bold text-slate-900">
+          Completed your bank transfer?
+        </span>
+        <span className="px-2.5 py-0.5 rounded-md bg-[#EEF5FF] text-[#2563EB] text-xs font-semibold">
+          Instant verification
+        </span>
       </div>
 
+      {/* Primary Royal Blue Button */}
+      <button
+        type="button"
+        onClick={() => {
+          toast({
+            title: "Payment confirmation recorded",
+            description:
+              "Thank you! We are checking for your bank transfer and will notify you once received.",
+          });
+        }}
+        className="w-full py-3.5 px-6 rounded-xl bg-[#2563EB] hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base shadow-xs transition-all text-center cursor-pointer"
+      >
+        I have made the Payment
+      </button>
+
+      {/* Secondary Outlined Button */}
       <button
         type="button"
         onClick={() => setLocation("/")}
-        className="w-full py-3.5 px-5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-semibold text-sm border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors cursor-pointer"
+        className="w-full py-3.5 px-5 rounded-xl bg-white hover:bg-slate-50 text-slate-900 font-semibold text-sm border border-slate-200 transition-colors cursor-pointer"
       >
         I&apos;ve noted the details — take me to Dashboard
       </button>
@@ -219,15 +223,14 @@ export default function BankTransferDesigns() {
         <div>
           <button
             type="button"
-            className="text-xs font-semibold text-red-600 hover:text-red-700 cursor-pointer"
+            className="text-xs sm:text-sm font-semibold text-red-600 hover:text-red-700 cursor-pointer"
           >
             Cancel Transaction
           </button>
         </div>
-        <div className="pt-1 flex items-center justify-center gap-1.5 text-xs text-slate-400">
-          <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <span>(Payment account solution provided by Currency Cloud)</span>
-        </div>
+        <p className="text-xs text-slate-500 pt-1">
+          (Payment account solution provided by Currency Cloud)
+        </p>
       </div>
     </div>
   );
@@ -247,7 +250,7 @@ export default function BankTransferDesigns() {
     <button
       type="button"
       onClick={() => copyValue(value, label, id)}
-      className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
+      className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
         lightBg
           ? "bg-white border-blue-200/80 hover:border-blue-400 text-slate-700"
           : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
@@ -400,7 +403,7 @@ export default function BankTransferDesigns() {
                 <div className="py-3.5 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs text-slate-500 font-medium">Account number</p>
-                    <p className="text-base font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
+                    <p className="text-lg font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
                       {accountNumber}
                     </p>
                   </div>
@@ -414,11 +417,11 @@ export default function BankTransferDesigns() {
                 <div className="py-3.5 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs text-slate-500 font-medium">Sort code</p>
-                    <p className="text-base font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
+                    <p className="text-lg font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
                       {sortCode}
                     </p>
                   </div>
-                  <CopyIconBtn value="041404" label="Sort code" id={`${prefixId}-sort`} />
+                  <CopyIconBtn value={sortCode} label="Sort code" id={`${prefixId}-sort`} />
                 </div>
               </div>
 
@@ -426,7 +429,7 @@ export default function BankTransferDesigns() {
               <div className="rounded-2xl bg-[#F2F7FF] px-4 py-3.5 flex items-start gap-3">
                 <Mail className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
                 <div className="text-xs space-y-0.5">
-                  <p className="font-bold text-[#1E40AF]">Bank details sent to your email</p>
+                  <p className="font-bold text-slate-900">Bank details sent to your email</p>
                   <p className="text-slate-600">
                     These details are also available in your registered email.
                   </p>
@@ -471,18 +474,9 @@ export default function BankTransferDesigns() {
                   <p className="text-xs sm:text-sm text-slate-600">
                     Enter this exact name as the payee in your banking app.{" "}
                     <span className="font-medium text-slate-700">
-                      (Ensure you enter this name as is in your bank account)
+                      (Ensure you enter this name as is in your bank account — this is your dedicated Rhemito funding account, not your personal savings.)
                     </span>
                   </p>
-
-                  {/* Warm Amber Personal Account Clarification from PDF 3 */}
-                  <div className="rounded-xl bg-[#FFFBEB] border border-amber-200/80 p-3 flex items-start gap-2.5 text-xs text-amber-950">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <span>
-                      This is <strong>not your own personal or savings account</strong>, even if the
-                      name looks familiar. It was opened specifically to fund your Rhemito transfer.
-                    </span>
-                  </div>
 
                   <div className="pt-1">
                     <button
@@ -519,7 +513,7 @@ export default function BankTransferDesigns() {
                   <div className="py-3 flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs text-slate-500 font-medium">Account number</p>
-                      <p className="text-base font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
+                      <p className="text-lg font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
                         {accountNumber}
                       </p>
                     </div>
@@ -533,11 +527,11 @@ export default function BankTransferDesigns() {
                   <div className="py-3 flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs text-slate-500 font-medium">Sort code</p>
-                      <p className="text-base font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
+                      <p className="text-lg font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
                         {sortCode}
                       </p>
                     </div>
-                    <CopyIconBtn value="041404" label="Sort code" id={`${prefixId}-sort`} />
+                    <CopyIconBtn value={sortCode} label="Sort code" id={`${prefixId}-sort`} />
                   </div>
                 </div>
               </div>
@@ -554,9 +548,14 @@ export default function BankTransferDesigns() {
                 </div>
 
                 <div className="pl-8 space-y-2">
-                  <div className="rounded-xl bg-[#F0F6FF] border-l-4 border-[#2563EB] px-4 py-3.5 flex items-center justify-between gap-3">
+                  <div className="rounded-xl bg-[#EEF5FF] px-4 py-3.5 flex items-center justify-between gap-3">
                     <div className="space-y-1">
-                      <span className="text-xs font-bold text-[#2563EB]">Payment reference</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#2563EB]">Payment reference</span>
+                        <span className="px-2 py-0.5 rounded-md bg-white text-[#2563EB] text-[11px] font-semibold shadow-2xs">
+                          Required
+                        </span>
+                      </div>
                       <p
                         className={`${
                           isMobile ? "text-xl" : "text-2xl"
@@ -572,9 +571,6 @@ export default function BankTransferDesigns() {
                       lightBg
                     />
                   </div>
-                  <p className="text-xs text-slate-500">
-                    Use this payment reference to help us match your payment immediately.
-                  </p>
                 </div>
               </div>
 
@@ -583,7 +579,7 @@ export default function BankTransferDesigns() {
                 <div className="rounded-2xl bg-[#F2F7FF] px-4 py-3.5 flex items-start gap-3">
                   <Mail className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
                   <div className="text-xs space-y-0.5">
-                    <p className="font-bold text-[#1E40AF]">Bank details sent to your email</p>
+                    <p className="font-bold text-slate-900">Bank details sent to your email</p>
                     <p className="text-slate-600">
                       These details are also available in your registered email.
                     </p>
@@ -594,42 +590,45 @@ export default function BankTransferDesigns() {
           )}
 
           {/* =============================================================== */}
-          {/* CONCEPT 3 BODY: ROYAL BLUE PAYMENT BRIEF + RIGHT/WRONG CHECK    */}
+          {/* CONCEPT 3 BODY: RHEMITO / PAYMENT BRIEF (05/06 Web & 06/06 Mob) */}
           {/* =============================================================== */}
           {concept === "brief" && (
             <div>
-              {/* Split Grid on Web, Stacked on Mobile */}
-              <div className={isMobile ? "block" : "grid grid-cols-12 border-b border-slate-100"}>
+              {/* Split Grid on Web (05/06), Stacked on Mobile (06/06) */}
+              <div className={isMobile ? "block border-b border-slate-100" : "grid grid-cols-12 border-b border-slate-100"}>
                 {/* Left / Top Solid Royal Blue Payee Panel */}
                 <div
                   className={`${
-                    isMobile ? "p-5" : "col-span-5 p-6"
-                  } bg-[#2563EB] text-white flex flex-col justify-between space-y-4`}
+                    isMobile ? "p-5" : "col-span-6 p-6"
+                  } bg-[#2563EB] text-white flex flex-col justify-between`}
                 >
-                  <div className="space-y-3">
-                    <p className="text-xs font-extrabold uppercase tracking-wider text-blue-100">
+                  <div>
+                    <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-blue-100">
                       USE THIS ACCOUNT / PAYEE NAME
                     </p>
+                    <span className="inline-block mt-2.5 px-2.5 py-1 rounded-md bg-white/15 border border-white/25 text-xs font-semibold text-white">
+                      Type exactly as shown
+                    </span>
                     <p
-                      className={`${
-                        isMobile ? "text-2xl" : "text-[26px]"
-                      } font-extrabold text-white tracking-tight leading-snug break-words`}
+                      className={`mt-3.5 ${
+                        isMobile ? "text-2xl" : "text-[28px]"
+                      } font-extrabold text-white tracking-tight leading-tight break-words`}
                     >
                       {payeeName}
                     </p>
-                    <p className="text-xs sm:text-sm text-blue-100 leading-relaxed">
-                      Enter this exact name as the payee in your banking app.{" "}
-                      <span className="text-white font-medium">
-                        (Ensure you enter this name as is in your bank account)
-                      </span>
+                    <p className="mt-3 text-xs sm:text-sm text-blue-50 leading-relaxed">
+                      Enter this exact name as the payee in your banking app.
+                    </p>
+                    <p className="mt-2.5 text-xs sm:text-sm text-blue-100/95 leading-relaxed">
+                      (Ensure you enter this name as is in your bank account — this is your dedicated Rhemito funding account, not your personal savings.)
                     </p>
                   </div>
 
-                  <div className="pt-1">
+                  <div className="mt-5 pt-1">
                     <button
                       type="button"
                       onClick={() => copyValue(payeeName, "Payee Name", `${prefixId}-payee`)}
-                      className="px-4 py-2.5 rounded-xl bg-white hover:bg-blue-50 text-[#2563EB] text-xs sm:text-sm font-extrabold inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+                      className="px-4 py-2.5 rounded-xl bg-white hover:bg-blue-50 text-[#2563EB] text-xs sm:text-sm font-bold inline-flex items-center gap-2 shadow-2xs transition-colors cursor-pointer"
                     >
                       {copiedId === `${prefixId}-payee` ? (
                         <>
@@ -649,13 +648,13 @@ export default function BankTransferDesigns() {
                 {/* Right / Bottom Account Details Panel */}
                 <div
                   className={`${
-                    isMobile ? "p-5" : "col-span-7 p-6"
-                  } bg-white divide-y divide-slate-100`}
+                    isMobile ? "p-5" : "col-span-6 p-6"
+                  } bg-white flex flex-col justify-between divide-y divide-slate-100`}
                 >
-                  <div className="pb-3.5 flex items-center justify-between gap-3">
+                  <div className="pb-4 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs text-slate-500 font-medium">Account number</p>
-                      <p className="text-base font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
+                      <p className="text-xs sm:text-sm text-slate-500 font-medium">Account number</p>
+                      <p className="text-xl sm:text-2xl font-extrabold text-slate-950 font-mono tabular-nums mt-0.5">
                         {accountNumber}
                       </p>
                     </div>
@@ -666,24 +665,31 @@ export default function BankTransferDesigns() {
                     />
                   </div>
 
-                  <div className="py-3.5 flex items-center justify-between gap-3">
+                  <div className="py-4 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs text-slate-500 font-medium">Sort code</p>
-                      <p className="text-base font-extrabold text-slate-900 font-mono tabular-nums mt-0.5">
+                      <p className="text-xs sm:text-sm text-slate-500 font-medium">Sort code</p>
+                      <p className="text-xl sm:text-2xl font-extrabold text-slate-950 font-mono tabular-nums mt-0.5">
                         {sortCode}
                       </p>
                     </div>
-                    <CopyIconBtn value="041404" label="Sort code" id={`${prefixId}-sort`} />
+                    <CopyIconBtn value={sortCode} label="Sort code" id={`${prefixId}-sort`} />
                   </div>
 
-                  <div className="pt-3.5">
-                    <div className="rounded-2xl bg-[#F0F6FF] border border-blue-100 px-4 py-3.5 flex items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <span className="text-xs font-bold text-[#2563EB]">Payment reference</span>
+                  <div className="pt-4">
+                    <div className="rounded-2xl bg-[#EEF5FF] p-4 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs sm:text-sm font-bold text-[#2563EB]">
+                            Payment reference
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-white text-[#2563EB] text-[11px] font-semibold shadow-2xs">
+                            Required
+                          </span>
+                        </div>
                         <p
                           className={`${
                             isMobile ? "text-xl" : "text-2xl"
-                          } font-extrabold text-slate-950 font-mono tabular-nums`}
+                          } font-extrabold text-slate-950 font-mono tabular-nums mt-1`}
                         >
                           {paymentRef}
                         </p>
@@ -699,45 +705,13 @@ export default function BankTransferDesigns() {
                 </div>
               </div>
 
-              {/* "Check before you pay" Right vs. Wrong Visual Comparison (from PDF 3 Page 3) */}
-              <div className={`${isMobile ? "p-5" : "p-6"} space-y-4`}>
-                <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 space-y-3">
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-                    Check before you pay in your banking app
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="bg-white rounded-xl p-3 border border-emerald-200/80 flex items-start gap-2.5">
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                      </div>
-                      <div className="text-xs">
-                        <p className="font-extrabold text-slate-900">{payeeName}</p>
-                        <p className="text-emerald-700 font-medium mt-0.5">
-                          Right: your Rhemito funding account
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-xl p-3 border border-red-200/70 flex items-start gap-2.5">
-                      <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
-                        <X className="w-3.5 h-3.5 stroke-[2.5]" />
-                      </div>
-                      <div className="text-xs">
-                        <p className="font-bold text-slate-400 line-through">{rawCustomerName}</p>
-                        <p className="text-red-600 font-medium mt-0.5">
-                          Wrong: your own personal or savings account
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Email Notification Banner */}
+              {/* Email Notification Banner inside Main Card */}
+              <div className={`${isMobile ? "px-5 pt-5 pb-2" : "px-6 pt-6 pb-2"}`}>
                 <div className="rounded-2xl bg-[#F2F7FF] px-4 py-3.5 flex items-start gap-3">
                   <Mail className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
-                  <div className="text-xs space-y-0.5">
-                    <p className="font-bold text-[#1E40AF]">Bank details sent to your email</p>
-                    <p className="text-slate-600">
+                  <div className="text-xs sm:text-sm space-y-0.5">
+                    <p className="font-bold text-slate-900">Bank details sent to your email</p>
+                    <p className="text-xs text-slate-600">
                       These details are also available in your registered email.
                     </p>
                   </div>
@@ -745,9 +719,21 @@ export default function BankTransferDesigns() {
               </div>
             </div>
           )}
+
+          {/* Shared Bottom Footer inside the Main White Payment Card */}
+          <SharedBottomFooter isMobile={isMobile} />
         </div>
 
-        <SharedBottomFooter />
+        {/* Simulate Expiry (Demo) below the Main Card */}
+        <div className="text-center pt-1">
+          <button
+            type="button"
+            onClick={() => setSecondsLeft(3)}
+            className="text-xs text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+          >
+            Simulate Expiry (Demo)
+          </button>
+        </div>
       </div>
     );
   };
