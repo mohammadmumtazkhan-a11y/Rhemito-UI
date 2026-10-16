@@ -1,23 +1,35 @@
 /**
  * Public payment-request checkout — /pay/:token & /pay/e/:emailToken.
  *
- * Full Sender / Payer Journey (Mito Hosted / Rhemito Payment):
- * 1. Initial Summary Card (SenderScreen-1): Payment breakdown + solid blue "Pay now".
- * 2. Email Verification (SenderScreen-2, 3, 4):
- *    - Copied link (/pay/:token): Shows ONLY Email + "Send code" initially.
- *      After sending the 6-digit code:
- *      - If email is already known/registered: shows ONLY Confirmation code + "Verify and pay" (no password, no mini-KYC).
- *      - If email is new to Mito: reveals "New to Mito? [Individual | Business]", First name, Last name, Gender + Confirmation code + "Verify and pay".
- *    - Email link (/pay/e/:emailToken): Payer arrived directly from their email inbox, so 6-digit email OTP is skipped.
- *      - If sender details are already known: "Pay now" continues directly to the payment flow.
- *      - If sender is brand new (no name on file): collects only "New to Mito?" details without OTP.
- * 3. Desktop QR Handoff (SenderScreen-5): "Continue on your phone" QR code or "Continue on this browser instead".
- * 4. Payment Method Selection (SenderScreen-6): "How would you like to pay?" (Bank transfer, Pay by Card, Interswitch / Hosted page).
- * 5. Transfer Details Loader (SenderScreen-7): "Getting your transfer details...".
- * 6. Bank Transfer Instructions (SenderScreen-8): Skips "Which account will you pay from?" and goes straight to
- *    "SEND EXACT AMOUNT USING REFERENCE" with the payer's source bank account box expanded at the top (with the
- *    manual-matching advisory note and optional "Change" link -> SenderScreen-Add-bank-account), Copy buttons,
- *    and solid blue "I've sent the money".
+ * Implements both the NGN send flow ("Receive money..mp4" + "Receive money.docx" + SenderScreen-1..8)
+ * and the GBP send flow ("Call with Bisoye Akin-Agunbiade-20261015_164655-Meeting Recording.mp4"):
+ *
+ * 1. Initial Summary Card (Mito Payment):
+ *    - Displays `£15.00` (for GBP) or `NGN 10,000.00` (for NGN), full `Payment breakdown`
+ *      (including `Exchange rate: No conversion` when same-currency GBP->GBP, or FX rate when cross-currency),
+ *      `Paid into <BANK> · ****last4`, orange explanatory note, and `Pay now`.
+ * 2. Verify Your Email To Continue (`Send code` -> `Verify and pay`):
+ *    - Pre-fills the payer email when known on the request.
+ *    - Checks whether the entered email belongs to an existing user vs. a new user:
+ *      - Existing user (`bisoyeakin@gmail.com`, `payer@rhemito.com`, etc.) or empty email:
+ *        hides `"New to Mito?"` fields on both the `Send code` and `Confirmation code` screens.
+ *      - New user (`bisoyeakin+1@gmail.com`, `ropo@yahoo.co.uk`, etc.):
+ *        shows `"New to Mito?"` (`Individual` / `Business`, `First name`, `Last name`, `Gender`) on the
+ *        `Verify Your Email To Continue` card and preserves the values on the `Confirmation code` step.
+ *    - Never asks for a password.
+ *    - When opened via the direct email link (`/pay/e/:emailToken`) for a known sender, can also proceed directly.
+ * 3. Brief Journey Loading Skeleton -> `Continue on your phone` (QR code with centered blue `r` badge,
+ *    `Continue on this browser instead`, `Cancel Payment`).
+ * 4. `Cancel this payment?` & `Payment cancelled` screens (from the GBP recording 05:59–06:26):
+ *    - Shows `Amount`, `Requested by`, `Reference`, optional reason chips (`I paid another way`,
+ *      `The amount is wrong`, `I don't recognise this request`, `I'll pay later`, `Something else`),
+ *      red `Yes, cancel payment` button, and `Keep paying` button.
+ *    - Confirming cancellation shows `STATUS · CANCELLED` (`Payment cancelled`) with `Done` button,
+ *      which returns to the initial `Mito Payment` summary card.
+ * 5. `Continue on this browser instead` -> `How would you like to pay?` (`Bank transfer`, `Pay by Card`,
+ *    `Interswitch / Hosted page`) -> `Getting your transfer details...` -> `SEND EXACT AMOUNT USING REFERENCE`
+ *    (with open-by-default manual-matching advisory + `Change` -> `Add the account you'll pay from` +
+ *    `I've sent the money`).
  */
 
 import { useEffect, useState } from "react";
@@ -34,6 +46,7 @@ import {
   Clock,
   CreditCard,
   Building2,
+  Globe,
   RefreshCw,
   Info,
   Check,
@@ -41,7 +54,6 @@ import {
   Copy,
   ChevronLeft,
   X,
-  Globe,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +66,7 @@ import logo from "../assets/rhemito-logo-blue.png";
 import {
   getPublicRequest,
   startPayerSession,
+  checkEmailRegistered,
   sendPayerVerificationPin,
   verifyPayerVerificationPin,
   continueFromEmailLink,
@@ -72,76 +85,106 @@ import { useToast } from "@/hooks/use-toast";
 import { CURRENCY_SYMBOLS } from "@shared/currencies";
 import { formatHumanDate } from "@shared/invoice-logic";
 
-type FlowStep = "pre_auth" | "session_active" | "session_expired" | "authorizing" | "status";
-type VerifyStage = "email_only" | "code_sent" | "email_link_profile";
+type FlowStep =
+  | "pre_auth"
+  | "journey_loading"
+  | "session_active"
+  | "session_expired"
+  | "authorizing"
+  | "status";
+
+type VerifyStage = "email_entry" | "code_sent" | "email_link_profile";
+
 type PaymentSubStep =
   | "qr_handoff"
   | "method_select"
   | "loading_transfer"
   | "bank_transfer_details"
-  | "add_bank_account";
+  | "add_bank_account"
+  | "cancel_confirm"
+  | "cancel_done";
+
+const CANCEL_REASONS = [
+  "I paid another way",
+  "The amount is wrong",
+  "I don't recognise this request",
+  "I'll pay later",
+  "Something else",
+] as const;
 
 const PAYER_BANKS = [
   "Paga Mobile Money",
-  "Access Bank Nigeria Plc",
-  "Guaranty Trust Bank (GTBank)",
-  "First Bank of Nigeria",
-  "Zenith Bank",
-  "United Bank for Africa (UBA)",
+  "Access Bank",
   "Fidelity Bank",
-  "First City Monument Bank (FCMB)",
-  "Union Bank of Nigeria",
-  "Wema Bank",
-  "Moniepoint Microfinance Bank",
-  "OPay Digital Services",
+  "First Bank of Nigeria",
+  "Guaranty Trust Bank (GTBank)",
   "Kuda Bank",
-  "Sterling Bank",
+  "Moniepoint MFB",
+  "OPay",
+  "PalmPay",
   "Stanbic IBTC Bank",
-  "Barclays",
-  "HSBC UK",
+  "United Bank for Africa (UBA)",
+  "Wema Bank",
+  "Zenith Bank",
+  "Barclays Bank UK PLC",
+  "HSBC UK Bank PLC",
   "Lloyds Bank",
   "NatWest",
-  "Monzo Bank",
+  "Monzo",
   "Revolut",
 ];
 
 export default function RequestCheckout() {
   const params = useParams<{ id: string }>();
   const [location, setLocation] = useLocation();
-  const { toast } = useToast();
   const token = params.id;
   const isEmailLink = location.startsWith("/pay/e/");
 
   const { user: authUser } = useAuth();
+  const { toast } = useToast();
 
-  // Main Flow Step State
+  // Navigation & Step State
   const [step, setStep] = useState<FlowStep>("pre_auth");
   const [started, setStarted] = useState(false);
+  const [verifyStage, setVerifyStage] = useState<VerifyStage>("email_entry");
+  const [paymentSubStep, setPaymentSubStep] = useState<PaymentSubStep>("qr_handoff");
+  const [previousPaymentSubStep, setPreviousPaymentSubStep] = useState<PaymentSubStep>("qr_handoff");
+  const [selectedCancelReason, setSelectedCancelReason] = useState<string | null>(null);
 
-  // Email & Code Verification State (SenderScreen-2, 3, 4)
-  const [verifyStage, setVerifyStage] = useState<VerifyStage>("email_only");
+  // Identification & Email OTP State
   const [payerEmail, setPayerEmail] = useState("");
   const [pinCode, setPinCode] = useState("");
   const [pinSent, setPinSent] = useState(false);
   const [pinCooldown, setPinCooldown] = useState(0);
   const [devPin, setDevPin] = useState("");
   const [showCodeBanner, setShowCodeBanner] = useState(true);
-  const [isKnownEmailSender, setIsKnownEmailSender] = useState(false);
+  // Tri-state for whether the typed email belongs to a known/existing user:
+  // null = no valid email typed yet (hide "New to Mito?"),
+  // true = existing/known user (hide "New to Mito?"),
+  // false = new user (show "New to Mito?").
+  const [emailKnownStatus, setEmailKnownStatus] = useState<boolean | null>(null);
 
-  // Conditional "New to Mito?" Mini-KYC State (only shown when email is NOT already registered/known)
+  // New-to-Mito Mini-KYC State
   const [regAccountType, setRegAccountType] = useState<"individual" | "business">("individual");
   const [regFirstName, setRegFirstName] = useState("");
   const [regLastName, setRegLastName] = useState("");
   const [regGender, setRegGender] = useState("");
   const [bizName, setBizName] = useState("");
 
-  // Session & Active Payment Flow State (SenderScreen-5, 6, 7, 8, Add-bank-account)
-  const [paymentSubStep, setPaymentSubStep] = useState<PaymentSubStep>("qr_handoff");
+  // Session State
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<Date | null>(null);
-  const [sessionSecondsLeft, setSessionSecondsLeft] = useState<number>(1800);
+  const [, setSessionSecondsLeft] = useState<number>(600);
   const [, setActiveQuote] = useState<Quote | null>(null);
   const [payerDisplayName, setPayerDisplayName] = useState<string>("");
+
+  // Payment Method State
+  const [selectedMethod, setSelectedMethod] = useState<string>("bank_transfer");
+  const [intentId, setIntentId] = useState<string | null>(null);
+  const [paymentReference, setPaymentReference] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [complianceNotice, setComplianceNotice] = useState<string | null>(null);
 
   // Payer Source Bank Account State (SenderScreen-8 & SenderScreen-Add-bank-account)
   const [savedAccounts, setSavedAccounts] = useState<PayerSavedBankAccount[]>([]);
@@ -151,15 +194,7 @@ export default function RequestCheckout() {
   const [resolvedAccountName, setResolvedAccountName] = useState("");
   const [resolvingAccount, setResolvingAccount] = useState(false);
   const [saveAccountForNextTime, setSaveAccountForNextTime] = useState(true);
-
-  // Payment Method & Execution State
-  const [selectedMethod, setSelectedMethod] = useState<string>("bank_transfer");
-  const [intentId, setIntentId] = useState<string | null>(null);
-  const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [complianceNotice, setComplianceNotice] = useState<string | null>(null);
 
   // Renewal State
   const [renewalRequested, setRenewalRequested] = useState(false);
@@ -179,61 +214,91 @@ export default function RequestCheckout() {
     queryFn: () => getPublicRequest(token!, isEmailLink),
     refetchInterval: (query) => {
       const s = query.state.data?.status;
-      return ["authorisation_in_progress", "payment_processing", "payment_pending", "funded", "payout_pending"].includes(s ?? "") ? 1500 : false;
+      return ["authorisation_in_progress", "payment_processing", "payment_pending", "funded", "payout_pending"].includes(s ?? "")
+        ? 1500
+        : false;
     },
     retry: false,
   });
 
-  // Pre-populate email & known bank accounts when request loads
+  // Pre-fill email & known-sender state when request loads
   useEffect(() => {
     if (!request) return;
-    if (isEmailLink && (request.demoPayerEmail || authUser?.email)) {
-      setPayerEmail(request.demoPayerEmail || authUser?.email || "");
+    const prefilledEmail = request.demoPayerEmail || (isEmailLink ? authUser?.email : undefined);
+    if (prefilledEmail && !payerEmail) {
+      setPayerEmail(prefilledEmail);
+      setEmailKnownStatus(Boolean(request.isKnownSender));
     }
-    if (request.senderName) {
-      const parts = request.senderName.trim().split(/\s+/);
-      if (!regFirstName && parts[0]) setRegFirstName(parts[0]);
-      if (!regLastName && parts.length > 1) setRegLastName(parts.slice(1).join(" "));
-      if (!bizName && request.senderType === "business") setBizName(request.senderName);
+    if (request.senderName && !payerDisplayName) {
+      setPayerDisplayName(request.senderName);
     }
-    if (request.payerSavedAccounts && request.payerSavedAccounts.length > 0 && savedAccounts.length === 0) {
+    if (request.payerSavedAccounts && request.payerSavedAccounts.length > 0) {
       setSavedAccounts(request.payerSavedAccounts);
-      setSelectedPayerBankAccount(request.payerSavedAccounts[0]);
-    } else if (request.payerSourceBankName && (request.payerSourceAccountNumber || request.payerSourceAccountMasked) && !selectedPayerBankAccount) {
-      const initialAcc: PayerSavedBankAccount = {
+      setSelectedPayerBankAccount((prev) => prev ?? request.payerSavedAccounts![0]);
+    } else if (request.payerSourceBankName && (request.payerSourceAccountNumber || request.payerSourceAccountMasked)) {
+      const fallbackAcc: PayerSavedBankAccount = {
         id: "req_source_acc",
         bankName: request.payerSourceBankName,
-        accountNumber: request.payerSourceAccountNumber || request.payerSourceAccountMasked || "",
-        accountName: request.senderName || "Verified Sender",
+        accountNumber: request.payerSourceAccountNumber || request.payerSourceAccountMasked || "3661883153",
+        accountName: request.senderName || payerDisplayName || "Firopo Akintayo Akin-Agunbiade",
       };
-      setSavedAccounts([initialAcc]);
-      setSelectedPayerBankAccount(initialAcc);
+      setSavedAccounts([fallbackAcc]);
+      setSelectedPayerBankAccount((prev) => prev ?? fallbackAcc);
     }
-  }, [request, isEmailLink, authUser]);
+  }, [request, authUser, isEmailLink]);
 
-  // Resolve account name when adding a new bank account (SenderScreen-Add-bank-account)
+  // Live check whether the entered email is already registered/known vs brand-new:
+  // - Empty or invalid email -> emailKnownStatus = null (hide "New to Mito?" upfront as requested in Receive money..mp4)
+  // - Existing user email -> emailKnownStatus = true (hide "New to Mito?" as shown in GBP video 04:58)
+  // - Unregistered/new email (e.g. bisoyeakin+1@gmail.com) -> emailKnownStatus = false (show "New to Mito?" as shown in GBP video 09:09)
   useEffect(() => {
-    const cleanDigits = newAccountNumber.replace(/\D/g, "");
-    if (!newBankName || cleanDigits.length < 6) {
-      setResolvedAccountName("");
+    const trimmed = payerEmail.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed)) {
+      setEmailKnownStatus(null);
+      return;
+    }
+    if (request?.demoPayerEmail && trimmed === request.demoPayerEmail.toLowerCase()) {
+      setEmailKnownStatus(Boolean(request.isKnownSender));
       return;
     }
     let cancelled = false;
-    setResolvingAccount(true);
-    const timer = setTimeout(() => {
-      if (cancelled) return;
-      const fallbackName =
-        payerDisplayName
-        || [regFirstName, regLastName].filter(Boolean).join(" ")
-        || request?.senderName
-        || "Firopo Akintayo Akin-Agunbiade";
-      setResolvedAccountName(fallbackName);
-      setResolvingAccount(false);
-    }, 250);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await checkEmailRegistered(trimmed);
+        if (!cancelled) {
+          // Note: emails with "+1", "+2" etc. that aren't registered return registered=false,
+          // revealing "New to Mito?" automatically!
+          setEmailKnownStatus(res.registered);
+        }
+      } catch {
+        if (!cancelled) setEmailKnownStatus(false);
+      }
+    }, 220);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
+  }, [payerEmail, request?.demoPayerEmail, request?.isKnownSender]);
+
+  // Simulate instant account-name resolution when 10-digit account number + bank are chosen
+  useEffect(() => {
+    const digits = newAccountNumber.replace(/\D/g, "");
+    if (!newBankName || digits.length < 8) {
+      setResolvedAccountName("");
+      setResolvingAccount(false);
+      return;
+    }
+    setResolvingAccount(true);
+    const timer = setTimeout(() => {
+      const candidateName =
+        payerDisplayName
+        || [regFirstName, regLastName].filter(Boolean).join(" ")
+        || request?.senderName
+        || "Firopo Akintayo Akin-Agunbiade";
+      setResolvedAccountName(candidateName);
+      setResolvingAccount(false);
+    }, 280);
+    return () => clearTimeout(timer);
   }, [newBankName, newAccountNumber, payerDisplayName, regFirstName, regLastName, request?.senderName]);
 
   // Handle session timer countdown
@@ -317,6 +382,7 @@ export default function RequestCheckout() {
   const isExpired = request.status === "expired";
   const isCancelled = request.status === "cancelled";
   const isProcessing = ["authorisation_in_progress", "payment_processing", "payment_pending"].includes(request.status);
+  const requesterFirstName = (request.requesterName || "Requester").split(" ")[0];
 
   const copyValue = async (key: string, value: string, label: string) => {
     try {
@@ -368,7 +434,11 @@ export default function RequestCheckout() {
       await refetch();
       const isMobileViewport = typeof window !== "undefined" && window.innerWidth < 640;
       setPaymentSubStep(isMobileViewport ? "method_select" : "qr_handoff");
-      setStep("session_active");
+      // Brief skeleton transition matching GBP video (05:40–05:44 & 10:22–10:29)
+      setStep("journey_loading");
+      setTimeout(() => {
+        setStep("session_active");
+      }, 320);
     } catch (err: any) {
       if (err?.code === "KYC_PENDING") {
         setComplianceNotice(
@@ -386,12 +456,8 @@ export default function RequestCheckout() {
 
   /**
    * Clicking "Pay now" on the initial summary card (SenderScreen-1):
-   * - If the payer opened the emailed link (/pay/e/:token), their email was
-   *   already verified by clicking the link in their inbox (no 6-digit code needed).
-   *   - If their name/profile is already known -> proceed directly to payment!
-   *   - If they are a brand-new sender -> show only the "New to Mito?" fields (no OTP).
-   * - If the payer opened a copied link (/pay/:token), show "Verify Your Email To Continue"
-   *   with ONLY the Email input + "Send code" button initially.
+   * - If opened via `/pay/e/:emailToken` and the sender is already known, proceeds directly without OTP.
+   * - Otherwise opens "Verify Your Email To Continue" (`verifyStage = "email_entry"`).
    */
   const handlePayNowClick = async () => {
     setErrorMessage("");
@@ -409,18 +475,16 @@ export default function RequestCheckout() {
           setBusy(false);
         }
       }
-      setVerifyStage("email_link_profile");
-      setStarted(true);
-      return;
     }
-    setVerifyStage("email_only");
+    setVerifyStage("email_entry");
     setStarted(true);
   };
 
   /**
-   * Step 1 on Copied Link (/pay/:token): Payer enters their email and clicks "Send code".
+   * Clicking "Send code" on "Verify Your Email To Continue":
    * Sends the 6-digit confirmation code without ever asking for a password.
-   * Only reveals "New to Mito?" fields on the next view if the email is NOT already a known sender.
+   * Updates `emailKnownStatus` from server `isKnownSender` response so "New to Mito?"
+   * is shown if and only if the sender is new.
    */
   const handleSendCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -436,7 +500,7 @@ export default function RequestCheckout() {
       setPinSent(true);
       setPinCooldown(result.resendAfterSeconds);
       setDevPin(result.devPin ?? "");
-      setIsKnownEmailSender(Boolean(result.isKnownSender));
+      setEmailKnownStatus(Boolean(result.isKnownSender));
       if (result.senderName && !payerDisplayName) {
         setPayerDisplayName(result.senderName);
       }
@@ -472,8 +536,8 @@ export default function RequestCheckout() {
   };
 
   /**
-   * Step 2 on Copied Link (/pay/:token): Payer enters 6-digit confirmation code
-   * (plus "New to Mito?" fields ONLY if their email is new) and clicks "Verify and pay".
+   * Clicking "Verify and pay" after entering the 6-digit confirmation code
+   * (plus "New to Mito?" fields when `emailKnownStatus === false`).
    */
   const handleVerifyCodeAndPay = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -481,7 +545,7 @@ export default function RequestCheckout() {
       setErrorMessage("Please enter the 6-digit confirmation code.");
       return;
     }
-    if (!isKnownEmailSender) {
+    if (emailKnownStatus === false) {
       if (regAccountType === "individual") {
         if (!regFirstName.trim() || !regLastName.trim()) {
           setErrorMessage("Please enter your first name and last name.");
@@ -518,59 +582,8 @@ export default function RequestCheckout() {
     }
   };
 
-  /**
-   * Email Link (/pay/e/:token) when sender is brand new: no 6-digit code required,
-   * only collects "New to Mito?" details and continues to payment.
-   */
-  const handleEmailLinkProfileContinue = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = payerEmail.trim().toLowerCase();
-    if (!email) {
-      setErrorMessage("Please confirm your email address.");
-      return;
-    }
-    if (!isKnownEmailSender && !request.isKnownSender) {
-      if (regAccountType === "individual") {
-        if (!regFirstName.trim() || !regLastName.trim()) {
-          setErrorMessage("Please enter your first name and last name.");
-          return;
-        }
-        if (!regGender) {
-          setErrorMessage("Please select your gender.");
-          return;
-        }
-      } else if (!bizName.trim()) {
-        setErrorMessage("Please enter your business name.");
-        return;
-      }
-    }
-    setBusy(true);
-    setErrorMessage("");
-    try {
-      const res = await continueFromEmailLink(token!, {
-        email,
-        accountType: regAccountType,
-        firstName: regFirstName.trim() || undefined,
-        lastName: regLastName.trim() || undefined,
-        businessName: bizName.trim() || undefined,
-        gender: regGender || undefined,
-      });
-      await handleStartPayerFlow(res.savedAccounts, res.payerName);
-    } catch (err: any) {
-      setErrorMessage(err?.message || "Could not continue to payment.");
-      setBusy(false);
-    }
-  };
-
   // ─── PAYMENT METHOD & BANK TRANSFER EXECUTION ─────────────────────────────
 
-  /**
-   * Clicking "Continue" on "How would you like to pay?" (SenderScreen-6):
-   * - If "bank_transfer" is selected: shows "Getting your transfer details..." (SenderScreen-7)
-   *   and goes straight to the Bank Transfer Instructions screen (SenderScreen-8),
-   *   skipping "Which account will you pay from?".
-   * - If "card" or "interswitch" is selected: initiates the card/hosted authorisation flow.
-   */
   const handleContinueFromMethodSelect = async () => {
     setErrorMessage("");
     if (selectedMethod === "bank_transfer") {
@@ -581,7 +594,6 @@ export default function RequestCheckout() {
       return;
     }
 
-    // Card or Interswitch / Hosted checkout
     setBusy(true);
     try {
       if (!activeSessionId) throw new Error("Start a new payment session to continue.");
@@ -598,9 +610,6 @@ export default function RequestCheckout() {
     }
   };
 
-  /**
-   * Clicking "I've sent the money" on Bank Transfer Instructions (SenderScreen-8).
-   */
   const handleIveSentTheMoney = async () => {
     if (busy) return;
     setBusy(true);
@@ -626,9 +635,6 @@ export default function RequestCheckout() {
     }
   };
 
-  /**
-   * Saving a new/changed payer bank account on "Add the account you'll pay from" (SenderScreen-Add-bank-account).
-   */
   const handleSaveNewBankAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     const digits = newAccountNumber.replace(/\D/g, "");
@@ -702,10 +708,28 @@ export default function RequestCheckout() {
     }
   };
 
-  const handleCancelPayment = () => {
+  /**
+   * Clicking "Cancel Payment" or top-right "X" opens the "Cancel this payment?" confirmation screen
+   * shown in the GBP recording (05:59–06:15).
+   */
+  const handlePromptCancelPayment = () => {
+    if (paymentSubStep !== "cancel_confirm" && paymentSubStep !== "cancel_done") {
+      setPreviousPaymentSubStep(paymentSubStep);
+    }
+    setSelectedCancelReason(null);
+    setPaymentSubStep("cancel_confirm");
+    setErrorMessage("");
+  };
+
+  const handleConfirmCancelPayment = () => {
+    setPaymentSubStep("cancel_done");
+  };
+
+  const handleCancelDoneReturn = () => {
     setStarted(false);
     setStep("pre_auth");
     setPaymentSubStep("qr_handoff");
+    setSelectedCancelReason(null);
     setErrorMessage("");
   };
 
@@ -928,10 +952,28 @@ export default function RequestCheckout() {
     );
   }
 
-  // ─── 3. ACTIVE RHEMITO PAYMENT FLOW (SenderScreen-5, 6, 7, 8, Add-bank) ────
+  // ─── 2B. BRIEF LOADING SKELETON OVERLAY (matches GBP video 05:40–05:44 & 10:22–10:29) ──
+
+  if (step === "journey_loading") {
+    return (
+      <div className="min-h-screen bg-slate-900/55 flex items-center justify-center p-4" data-testid="screen-journey-loading">
+        <div className="w-full max-w-xs rounded-2xl bg-white p-6 shadow-2xl flex flex-col items-center gap-4 animate-pulse">
+          <div className="w-12 h-12 rounded-full bg-orange-100/80 border-4 border-slate-100" />
+          <div className="h-3 w-40 rounded bg-slate-200" />
+          <div className="h-2.5 w-32 rounded bg-slate-100" />
+        </div>
+      </div>
+    );
+  }
+
+  // ─── 3. ACTIVE RHEMITO PAYMENT FLOW (SenderScreen-5..8, Add-bank, Cancel Payment) ────
 
   if (step === "session_active") {
-    const exactAmountText = `${request.currency} ${formatMoney(request.amount)}`;
+    const formattedCurrencyAmount = formatDisplayCurrencyAmount(request.currency, request.amount);
+    const exactAmountText =
+      request.currency === "NGN"
+        ? `NGN ${formatMoney(request.amount)}`
+        : formattedCurrencyAmount;
     const collectionAccountName = request.collectionAccount?.accountName || `PWA - MITO-${request.requesterName.toUpperCase()}`;
     const collectionBankName = request.collectionAccount?.bankName || (request.currency === "NGN" ? "Fidelity" : "ClearBank");
     const collectionAccountNumber = request.collectionAccount?.accountNumber || "4580016814";
@@ -942,17 +984,19 @@ export default function RequestCheckout() {
       <Shell>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
           <Card className="shadow-xl overflow-hidden border-2 border-blue-600 bg-white rounded-2xl" data-testid="mito-payment-card">
-            {/* RHEMITO PAYMENT Header (matches SenderScreen-5, 6, 7, 8) */}
+            {/* RHEMITO PAYMENT Header (matches SenderScreen-5, 6, 7, 8 & GBP Cancel screens) */}
             <div className="relative px-6 pt-6 pb-4 text-center border-b border-slate-100" data-testid="checkout-summary">
-              <button
-                type="button"
-                onClick={handleCancelPayment}
-                className="absolute right-4 top-4 p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
-                aria-label="Close payment"
-                data-testid="button-close-payment"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {paymentSubStep !== "cancel_done" && (
+                <button
+                  type="button"
+                  onClick={handlePromptCancelPayment}
+                  className="absolute right-4 top-4 p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                  aria-label="Close payment"
+                  data-testid="button-close-payment"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
 
               <div className="flex flex-col items-center gap-1.5">
                 <RhemitoRibbonMark className="w-8 h-9 text-blue-600" />
@@ -968,7 +1012,7 @@ export default function RequestCheckout() {
             </div>
 
             <CardContent className="p-6 space-y-5">
-              {/* ── SUB-STEP A: Continue on your phone (SenderScreen-5) ── */}
+              {/* ── SUB-STEP A: Continue on your phone (SenderScreen-5 & GBP video 05:45 / 10:30) ── */}
               {paymentSubStep === "qr_handoff" && (
                 <div className="space-y-5 text-center" data-testid="screen-continue-on-phone">
                   <div className="space-y-2">
@@ -1018,7 +1062,7 @@ export default function RequestCheckout() {
                   <div className="pt-1">
                     <button
                       type="button"
-                      onClick={handleCancelPayment}
+                      onClick={handlePromptCancelPayment}
                       className="text-sm font-semibold text-blue-600 hover:underline"
                       data-testid="button-cancel-payment"
                     >
@@ -1031,7 +1075,6 @@ export default function RequestCheckout() {
               {/* ── SUB-STEP B: How would you like to pay? (SenderScreen-6) ── */}
               {paymentSubStep === "method_select" && (
                 <div className="space-y-5" data-testid="screen-method-select">
-                  {/* Back button + Progress bar */}
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -1136,7 +1179,7 @@ export default function RequestCheckout() {
                   <div className="text-center">
                     <button
                       type="button"
-                      onClick={handleCancelPayment}
+                      onClick={handlePromptCancelPayment}
                       className="text-sm font-semibold text-blue-600 hover:underline"
                       data-testid="button-cancel-method"
                     >
@@ -1171,7 +1214,7 @@ export default function RequestCheckout() {
                   <div>
                     <button
                       type="button"
-                      onClick={handleCancelPayment}
+                      onClick={handlePromptCancelPayment}
                       className="text-sm font-semibold text-blue-600 hover:underline"
                     >
                       Cancel Payment
@@ -1183,7 +1226,6 @@ export default function RequestCheckout() {
               {/* ── SUB-STEP D: Bank Transfer Instructions (SenderScreen-8) ── */}
               {paymentSubStep === "bank_transfer_details" && (
                 <div className="space-y-4" data-testid="screen-bank-transfer-details">
-                  {/* Back button + Progress bar */}
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -1241,7 +1283,6 @@ export default function RequestCheckout() {
                       </div>
                     </div>
 
-                    {/* Open-by-default manual-matching advisory requested in the video */}
                     <p
                       className="text-xs text-amber-800 bg-amber-50/90 border border-amber-200/80 rounded-xl px-3 py-2 font-medium leading-relaxed"
                       data-testid="payer-account-advisory"
@@ -1307,7 +1348,7 @@ export default function RequestCheckout() {
                   <div className="text-center">
                     <button
                       type="button"
-                      onClick={handleCancelPayment}
+                      onClick={handlePromptCancelPayment}
                       className="text-sm font-semibold text-blue-600 hover:underline"
                       data-testid="button-cancel-transfer"
                     >
@@ -1451,13 +1492,140 @@ export default function RequestCheckout() {
                   <div className="text-center">
                     <button
                       type="button"
-                      onClick={handleCancelPayment}
+                      onClick={handlePromptCancelPayment}
                       className="text-sm font-semibold text-blue-600 hover:underline"
                     >
                       Cancel Payment
                     </button>
                   </div>
                 </form>
+              )}
+
+              {/* ── SUB-STEP F: "Cancel this payment?" confirmation screen (GBP video 05:59–06:15) ── */}
+              {paymentSubStep === "cancel_confirm" && (
+                <div className="space-y-5 text-center" data-testid="screen-cancel-confirm">
+                  <div className="flex justify-center">
+                    <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-600">
+                      <X className="w-6 h-6" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h2 className="text-xl font-extrabold text-slate-900">Cancel this payment?</h2>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      {requesterFirstName} will be told you cancelled. No money will be taken from you.
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 divide-y divide-slate-200/80 text-xs text-left">
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-slate-500">Amount</span>
+                      <span className="font-bold text-slate-900" data-testid="cancel-summary-amount">
+                        {formattedCurrencyAmount}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-slate-500">Requested by</span>
+                      <span className="font-bold text-slate-900">{request.requesterName}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-slate-500">Reference</span>
+                      <span className="font-bold text-slate-900">{request.requestNumber}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-left">
+                    <p className="text-[11px] font-bold tracking-wider text-slate-500 uppercase">Reason (Optional)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {CANCEL_REASONS.map((reason) => {
+                        const selected = selectedCancelReason === reason;
+                        return (
+                          <button
+                            key={reason}
+                            type="button"
+                            onClick={() => setSelectedCancelReason(selected ? null : reason)}
+                            className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                              selected
+                                ? "border-blue-600 bg-blue-50 text-blue-700 font-semibold"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                            }`}
+                            data-testid={`button-cancel-reason-${reason.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                          >
+                            {reason}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5 pt-1">
+                    <Button
+                      type="button"
+                      className="w-full h-11 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm"
+                      onClick={handleConfirmCancelPayment}
+                      data-testid="button-yes-cancel-payment"
+                    >
+                      Yes, cancel payment
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentSubStep(previousPaymentSubStep)}
+                      className="w-full py-2 text-sm font-bold text-slate-800 hover:underline"
+                      data-testid="button-keep-paying"
+                    >
+                      Keep paying
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── SUB-STEP G: "Payment cancelled" result screen (GBP video 06:16–06:25) ── */}
+              {paymentSubStep === "cancel_done" && (
+                <div className="space-y-5 text-center" data-testid="screen-cancel-done">
+                  <div className="flex justify-center">
+                    <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-600">
+                      <X className="w-6 h-6" />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 border border-red-200 text-[10px] font-bold tracking-wider text-red-700 uppercase">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                      Status · Cancelled
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h2 className="text-xl font-extrabold text-slate-900">Payment cancelled</h2>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      We've let {requesterFirstName} know. No money was taken from you.
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 divide-y divide-slate-200/80 text-xs text-left">
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-slate-500">Amount</span>
+                      <span className="font-bold text-slate-900">{formattedCurrencyAmount}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-slate-500">Requested by</span>
+                      <span className="font-bold text-slate-900">{request.requesterName}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-slate-500">Reference</span>
+                      <span className="font-bold text-slate-900">{request.requestNumber}</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm"
+                    onClick={handleCancelDoneReturn}
+                    data-testid="button-cancel-done"
+                  >
+                    Done
+                  </Button>
+                </div>
               )}
             </CardContent>
 
@@ -1471,7 +1639,7 @@ export default function RequestCheckout() {
     );
   }
 
-  // ─── 4. FIRST SCREEN — PAYMENT SUMMARY (SenderScreen-1, before identification) ──
+  // ─── 4. FIRST SCREEN — PAYMENT SUMMARY (SenderScreen-1 & GBP video 04:38 / 09:01) ──
 
   if (!started) {
     return (
@@ -1483,7 +1651,7 @@ export default function RequestCheckout() {
     );
   }
 
-  // ─── 5. EMAIL VERIFICATION & CONDITIONAL MINI-KYC (SenderScreen-2, 3, 4) ────
+  // ─── 5. EMAIL VERIFICATION & CONDITIONAL MINI-KYC (SenderScreen-2, 3, 4 & GBP video 04:58 / 09:09) ──
 
   return (
     <Shell>
@@ -1493,7 +1661,7 @@ export default function RequestCheckout() {
           <div className="bg-white text-slate-900 px-6 pt-6 pb-3 space-y-3 text-center" data-testid="checkout-summary">
             <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
 
-            {/* Green confirmation toast banner when 6-digit code has been sent (SenderScreen-3 & 4) */}
+            {/* Green confirmation toast banner when 6-digit code has been sent (SenderScreen-3 & 4 & GBP video 09:38) */}
             {verifyStage === "code_sent" && showCodeBanner && (
               <div
                 className="mx-auto max-w-md rounded-xl border border-emerald-600/50 bg-white px-4 py-3.5 shadow-sm flex items-center justify-between gap-3 text-left"
@@ -1525,16 +1693,16 @@ export default function RequestCheckout() {
 
             <div>
               <p className="text-sm font-semibold text-slate-700">Payment Request From</p>
-              <p className="text-xl font-extrabold text-slate-900 uppercase leading-snug" data-testid="checkout-requester-name">
+              <p className="text-xl font-extrabold text-slate-900 leading-snug" data-testid="checkout-requester-name">
                 {request.requesterName}
               </p>
               {request.requestNumber && <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>}
             </div>
 
             <div>
-              <p className="text-xs text-slate-500">You pay</p>
+              <p className="text-xs text-slate-500">{request.absorbFee === false ? "They receive" : "You pay"}</p>
               <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
-                {request.currency} {formatMoney(request.amount)}
+                {formatDisplayCurrencyAmount(request.currency, request.amount)}
               </p>
             </div>
           </div>
@@ -1549,8 +1717,10 @@ export default function RequestCheckout() {
               </div>
             )}
 
-            {/* ── STAGE 1: Email entry ONLY (no New to Mito fields upfront, no password) ── */}
-            {verifyStage === "email_only" && (
+            {/* ── STAGE 1: Verify Your Email To Continue (Send code) ──
+                - Existing user or blank email: shows ONLY Email + Send code (GBP video 04:58 & NGN video 01:02).
+                - New user email (e.g. bisoyeakin+1@gmail.com): also reveals "New to Mito?" fields (GBP video 09:09). */}
+            {verifyStage === "email_entry" && (
               <form
                 onSubmit={handleSendCodeSubmit}
                 className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 space-y-4"
@@ -1578,11 +1748,27 @@ export default function RequestCheckout() {
                   />
                 </div>
 
+                {emailKnownStatus === false && (
+                  <NewToMitoFields
+                    regAccountType={regAccountType}
+                    setRegAccountType={setRegAccountType}
+                    regFirstName={regFirstName}
+                    setRegFirstName={setRegFirstName}
+                    regLastName={regLastName}
+                    setRegLastName={setRegLastName}
+                    regGender={regGender}
+                    setRegGender={setRegGender}
+                    bizName={bizName}
+                    setBizName={setBizName}
+                  />
+                )}
+
                 {errorMessage && <p className="text-xs text-destructive" data-testid="error-auth">{errorMessage}</p>}
 
                 <Button
                   type="submit"
-                  className="w-full h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm"
+                  variant="outline"
+                  className="w-full h-12 rounded-full border-blue-600 bg-white text-blue-600 hover:bg-blue-600 hover:text-white font-semibold text-sm transition-colors"
                   disabled={busy}
                   data-testid="button-check-email"
                 >
@@ -1592,7 +1778,7 @@ export default function RequestCheckout() {
               </form>
             )}
 
-            {/* ── STAGE 2: 6-Digit Confirmation Code + Conditional "New to Mito?" (SenderScreen-3 & 4) ── */}
+            {/* ── STAGE 2: 6-Digit Confirmation Code + Conditional "New to Mito?" (SenderScreen-3 & 4 & GBP video 05:06 / 09:38) ── */}
             {verifyStage === "code_sent" && (
               <form
                 onSubmit={handleVerifyCodeAndPay}
@@ -1612,7 +1798,7 @@ export default function RequestCheckout() {
                     <button
                       type="button"
                       onClick={() => {
-                        setVerifyStage("email_only");
+                        setVerifyStage("email_entry");
                         setPinCode("");
                         setErrorMessage("");
                       }}
@@ -1650,8 +1836,8 @@ export default function RequestCheckout() {
                   />
                 </div>
 
-                {/* Only show "New to Mito?" mini-KYC fields if this email has NOT been registered/verified before */}
-                {!isKnownEmailSender && (
+                {/* Only show "New to Mito?" mini-KYC fields if this email is a new sender */}
+                {emailKnownStatus === false && (
                   <NewToMitoFields
                     regAccountType={regAccountType}
                     setRegAccountType={setRegAccountType}
@@ -1670,7 +1856,8 @@ export default function RequestCheckout() {
 
                 <Button
                   type="submit"
-                  className="w-full h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm"
+                  variant="outline"
+                  className="w-full h-12 rounded-full border-blue-600 bg-white text-blue-600 hover:bg-blue-600 hover:text-white font-semibold text-sm transition-colors"
                   disabled={busy || !pinSent}
                   data-testid="button-verify-pin-pay"
                 >
@@ -1689,64 +1876,6 @@ export default function RequestCheckout() {
                     {pinCooldown > 0 ? `Resend code in ${pinCooldown}s` : "Resend code"}
                   </button>
                 </div>
-              </form>
-            )}
-
-            {/* ── STAGE 3: Email Link (/pay/e/:token) for a brand-new sender — NO 6-digit OTP needed ── */}
-            {verifyStage === "email_link_profile" && (
-              <form
-                onSubmit={handleEmailLinkProfileContinue}
-                className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 space-y-4"
-                data-testid="email-link-direct-form"
-              >
-                <div className="space-y-1">
-                  <p className="text-lg font-bold text-slate-900">Complete Your Details To Continue</p>
-                  <p className="text-sm text-slate-500 leading-relaxed">
-                    Your email was verified from your payment request link. Confirm your details below to proceed to payment.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="emailLinkAddress" className="text-xs font-medium text-slate-600">Email</Label>
-                  <Input
-                    id="emailLinkAddress"
-                    type="email"
-                    placeholder="Confirm your email"
-                    value={payerEmail}
-                    onChange={(e) => setPayerEmail(e.target.value)}
-                    readOnly={Boolean(request.demoPayerEmail)}
-                    className={request.demoPayerEmail ? "bg-amber-50/60 text-slate-700 border-slate-200 h-11" : "bg-white h-11"}
-                    data-testid="input-payer-email"
-                    required
-                  />
-                </div>
-
-                {!request.isKnownSender && (
-                  <NewToMitoFields
-                    regAccountType={regAccountType}
-                    setRegAccountType={setRegAccountType}
-                    regFirstName={regFirstName}
-                    setRegFirstName={setRegFirstName}
-                    regLastName={regLastName}
-                    setRegLastName={setRegLastName}
-                    regGender={regGender}
-                    setRegGender={setRegGender}
-                    bizName={bizName}
-                    setBizName={setBizName}
-                  />
-                )}
-
-                {errorMessage && <p className="text-xs text-destructive" data-testid="error-auth">{errorMessage}</p>}
-
-                <Button
-                  type="submit"
-                  className="w-full h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm"
-                  disabled={busy}
-                  data-testid="button-email-link-continue"
-                >
-                  {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  Continue to payment
-                </Button>
               </form>
             )}
 
@@ -1954,6 +2083,17 @@ function formatMoney(v: string | number | null | undefined): string {
   return n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/**
+ * Formats currency amount matching both recordings:
+ * - For GBP: `£15.00` (symbol prefix as in the GBP recording)
+ * - For NGN: `NGN 10,000.00` (ISO code prefix as in the NGN recording)
+ */
+function formatDisplayCurrencyAmount(currency: string, amount: string | number | null | undefined): string {
+  const formatted = formatMoney(amount);
+  if (currency === "GBP") return `£${formatted}`;
+  return `${currency} ${formatted}`;
+}
+
 function PaymentBreakdown({ request }: { request: PublicRequestView }) {
   const total = parseFloat(request.amount);
   const fee = parseFloat(request.feeAmount ?? "0") || 0;
@@ -1963,8 +2103,9 @@ function PaymentBreakdown({ request }: { request: PublicRequestView }) {
   const rate = request.fxRate ?? null;
   const rateNum = (n: number) =>
     n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  const rateText =
-    rate && rate > 0
+  const rateText = !crossCurrency
+    ? "No conversion"
+    : rate && rate > 0
       ? rate >= 1
         ? `1 ${request.currency} = ${rateNum(rate)} ${payoutCurrency}`
         : `${rateNum(1 / rate)} ${request.currency} = 1 ${payoutCurrency}`
@@ -1977,6 +2118,7 @@ function PaymentBreakdown({ request }: { request: PublicRequestView }) {
       ? `${payoutSymbol}${formatMoney(actualSent)}`
       : "Not available";
   const line = "flex items-start justify-between gap-4 text-[15px]";
+  const isGbp = request.currency === "GBP";
 
   return (
     <div className="space-y-3" data-testid="payment-breakdown">
@@ -1985,41 +2127,39 @@ function PaymentBreakdown({ request }: { request: PublicRequestView }) {
 
         <div className={line}>
           <div>
-            <p className="font-semibold text-blue-600">You pay</p>
-            <p className="text-xs text-slate-500">Locked</p>
+            <p className={`font-semibold ${isGbp ? "text-slate-900" : "text-blue-600"}`}>You pay</p>
+            <p className="text-xs text-slate-500">{isGbp && request.absorbFee === false ? "Indicative" : "Locked"}</p>
           </div>
-          <span className="font-semibold tabular-nums text-blue-600" data-testid="breakdown-you-pay">
-            {request.currency} {formatMoney(total)}
+          <span className={`font-semibold tabular-nums ${isGbp ? "text-slate-900" : "text-blue-600"}`} data-testid="breakdown-you-pay">
+            {formatDisplayCurrencyAmount(request.currency, total)}
           </span>
         </div>
 
         <div className={line}>
           <span className="text-slate-700">Transaction fee ({request.currency})</span>
           <span className="font-semibold tabular-nums text-red-600" data-testid="breakdown-fee">
-            {request.currency} {formatMoney(fee)}
+            {formatDisplayCurrencyAmount(request.currency, fee)}
           </span>
         </div>
 
         <div className={line}>
           <span className="text-slate-700">Actual sent</span>
           <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-actual-sent">
-            {request.currency} {formatMoney(actualSent)}
+            {formatDisplayCurrencyAmount(request.currency, actualSent)}
           </span>
         </div>
 
-        {crossCurrency && (
-          <div className={line}>
-            <span className="text-slate-700">Exchange rate</span>
-            <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-rate">{rateText}</span>
-          </div>
-        )}
+        <div className={line}>
+          <span className="text-slate-700">Exchange rate</span>
+          <span className="font-semibold tabular-nums text-slate-900" data-testid="breakdown-rate">{rateText}</span>
+        </div>
 
         <div className={line}>
           <div>
             <p className="font-semibold text-blue-600">They receive in bank</p>
-            {crossCurrency && request.fxRateIsIndicative !== false && (
-              <p className="text-xs text-slate-500">Indicative</p>
-            )}
+            <p className="text-xs text-slate-500">
+              {crossCurrency && request.fxRateIsIndicative !== false ? "Indicative" : "Locked"}
+            </p>
           </div>
           <span className="font-semibold tabular-nums text-blue-600" data-testid="breakdown-receive">{receiveValue}</span>
         </div>
@@ -2031,7 +2171,9 @@ function PaymentBreakdown({ request }: { request: PublicRequestView }) {
         )}
 
         <p className="rounded-lg bg-orange-50 px-3.5 py-3 text-sm text-slate-700">
-          This is the amount you send. The fee and what they receive are calculated from it.
+          {isGbp && request.absorbFee === false
+            ? "This is the amount that lands in their bank. What you pay is calculated from it."
+            : "This is the amount you send. The fee and what they receive are calculated from it."}
         </p>
       </div>
     </div>
@@ -2045,32 +2187,29 @@ function MitoSummaryCard({ request, busy, onPay }: { request: PublicRequestView;
         <p className="text-xs font-bold tracking-[0.2em] text-blue-600 uppercase">Mito Payment</p>
         <div>
           <p className="text-sm font-semibold text-slate-700">Payment Request From</p>
-          <p className="text-xl font-extrabold text-slate-900 uppercase leading-snug" data-testid="checkout-requester-name">
+          <p className="text-xl font-extrabold text-slate-900 leading-snug" data-testid="checkout-requester-name">
             {request.requesterName}
           </p>
           <p className="text-xs text-slate-500 mt-1">Ref {request.requestNumber}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">You pay</p>
+          <p className="text-xs text-slate-500">{request.absorbFee === false ? "They receive" : "You pay"}</p>
           <p className="text-5xl font-bold tracking-tight text-blue-600 mt-1" data-testid="checkout-amount">
-            {request.currency} {formatMoney(request.amount)}
+            {formatDisplayCurrencyAmount(request.currency, request.amount)}
           </p>
         </div>
       </div>
       <CardContent className="p-6 pt-3 space-y-4">
         <PaymentBreakdown request={request} />
         <Button
-          className="w-full h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm"
+          variant="outline"
+          className="w-full h-12 rounded-full border-blue-600 bg-white text-blue-600 hover:bg-blue-600 hover:text-white font-semibold transition-colors"
           onClick={onPay}
           disabled={busy}
           data-testid="button-start-pay"
         >
           {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading…</> : "Pay now"}
         </Button>
-        <p className="flex items-start gap-1.5 text-[11px] text-amber-900 bg-amber-50 border border-amber-200/80 rounded-lg p-2 font-medium">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
-          Anti-Scam Notice: Rhemito will never ask for your password or SMS codes. Only pay requests you expect.
-        </p>
       </CardContent>
       <div className="bg-blue-600 py-3.5 flex items-center justify-center gap-2 text-white" data-testid="checkout-footer">
         <img src={logo} alt="" className="w-5 h-5 object-contain brightness-0 invert" />
