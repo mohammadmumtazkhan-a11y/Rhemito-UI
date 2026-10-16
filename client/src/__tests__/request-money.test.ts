@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Unit tests — Request Money core: money maths, corridor validation, webhook
  * signatures and real QR generation/decoding.
@@ -126,6 +127,14 @@ describe("webhook signatures", () => {
   });
 });
 
+import {
+  getPayerSavedAccounts,
+  savePayerBankAccountForEmail,
+  markSenderEmailKnown,
+  isKnownSenderEmail,
+  partiallyMaskSenderAccount,
+} from "../../../server/requestService";
+
 describe("QR code generation (real, standards-compliant)", () => {
   it("encodes exactly the canonical checkout URL and no personal data, and decodes back", async () => {
     const url = "http://localhost:5000/pay/abc123def456abc123def456abc123de";
@@ -139,3 +148,40 @@ describe("QR code generation (real, standards-compliant)", () => {
     expect(decoded!.data.split("/").length).toBe(5); // http://host/pay/token
   });
 });
+
+describe("Sender / Payer checkout helpers", () => {
+  it("partially masks sender account numbers provided by the requester so the sender knows which account to pay from", () => {
+    expect(partiallyMaskSenderAccount("3661883153")).toBe("36****3153");
+    expect(partiallyMaskSenderAccount("12345678")).toBe("12**5678");
+    expect(partiallyMaskSenderAccount("****8558")).toBe("****8558");
+  });
+
+  it("returns seeded saved bank accounts partially masked and allows saving a new account", () => {
+    const seeded = getPayerSavedAccounts("payer@rhemito.com");
+    expect(seeded.length).toBeGreaterThan(0);
+    expect(seeded[0].bankName).toBe("Paga Mobile Money");
+    expect(seeded[0].accountNumber).toBe("36****3153");
+
+    const customEmail = `sender-${Date.now()}@example.com`;
+    const added = savePayerBankAccountForEmail(customEmail, {
+      bankName: "Zenith Bank",
+      accountNumber: "2089123456",
+      accountName: "Ropo Akin",
+    });
+    expect(added.bankName).toBe("Zenith Bank");
+    expect(added.accountNumber).toBe("2089123456");
+
+    const list = getPayerSavedAccounts(customEmail);
+    expect(list[0].accountNumber).toBe("2089123456");
+    expect(list[0].accountName).toBe("Ropo Akin");
+  });
+
+  it("tracks whether a sender email is already known so 'New to Rhemito?' is only shown to new senders", async () => {
+    const freshEmail = `brandnew-${Date.now()}@example.com`;
+    expect(await isKnownSenderEmail(freshEmail)).toBe(false);
+    markSenderEmailKnown(freshEmail);
+    expect(await isKnownSenderEmail(freshEmail)).toBe(true);
+  });
+});
+
+

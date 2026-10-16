@@ -215,25 +215,28 @@ test.describe('Request Money E2E', () => {
     await page.getByTestId('button-create-link').click();
     await expect(page.getByTestId('banner-link-created')).toBeVisible({ timeout: 15000 });
 
-    // The public checkout charges the payer the total incl. fee — identify as a
-    // registered payer, open the 10-minute session, then check Total Payable
+    // The public checkout charges the payer the total incl. fee — identify via
+    // 6-digit email code (no password prompt), open the session, then check Total to pay
     const link = await page.getByTestId('input-payment-link').inputValue();
     const token = link.split('/pay/')[1];
     const payer = await registerAndActivate(page.context().request, 'GB');
     await page.goto(`/pay/${token}`);
-    // First screen: Mito Payment summary with the real breakdown, before any sign-in
-    await expect(page.getByTestId('checkout-amount')).toContainText('GBP 257.50');
-    await expect(page.getByTestId('breakdown-fee')).toContainText('GBP 7.50');
-    await expect(page.getByTestId('breakdown-actual-sent')).toContainText('GBP 250.00');
-    // Copyable link: no pre-selected payer — identify with the payer's own email first
+    // First screen (SenderScreen-1): Mito Payment summary with the real breakdown
+    await expect(page.getByTestId('checkout-amount')).toContainText('£257.50');
+    await expect(page.getByTestId('breakdown-fee')).toContainText('£7.50');
+    await expect(page.getByTestId('breakdown-actual-sent')).toContainText('£250.00');
+    // Second screen (SenderScreen-2): Email only + Send code (no password prompt)
     await page.getByTestId('button-start-pay').click();
     await page.getByTestId('input-payer-email').fill(payer.email);
     await page.getByTestId('button-check-email').click();
-    await expect(page.getByTestId('input-payer-password')).toBeVisible({ timeout: 10000 });
-    await page.getByTestId('input-payer-password').fill('Passw0rd!x');
-    await page.getByTestId('button-signin-pay').click();
-    await expect(page.getByTestId('checkout-amount')).toContainText('GBP 257.50');
-    await expect(page.getByText(/3% Rhemito fee of 7\.50 GBP/)).toBeVisible();
+    // Third screen (SenderScreen-3): Confirmation code (known registered user skips New to Mito?)
+    await expect(page.getByTestId('banner-code-sent')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-fill-dev-pin').click();
+    await page.getByTestId('button-verify-pin-pay').click();
+    // Desktop opens Continue on your phone (SenderScreen-5) -> Continue on this browser instead -> How would you like to pay? (SenderScreen-6)
+    await expect(page.getByTestId('button-continue-browser')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-continue-browser').click();
+    await expect(page.getByTestId('method-total-to-pay')).toContainText(/257\.50/);
   });
 
   test('Payer pays on mobile-width checkout after identification; funding only via webhook; link dies after payout', async ({ page, request }) => {
@@ -241,43 +244,38 @@ test.describe('Request Money E2E', () => {
     const created = await createRequestViaApi(request, user);
     const token = created.checkoutUrl.split('/pay/')[1];
 
-    // The payer identifies with a registered account (session shared with the page)
+    // The payer identifies with a registered account (no password prompt required)
     const payer = await registerAndActivate(page.context().request, 'GB');
 
-    // Mobile viewport — the link opens the checkout directly, no QR prompts
+    // Mobile viewport — skips the desktop QR handoff screen and opens method selection directly
     await page.setViewportSize({ width: 375, height: 720 });
     await page.goto(`/pay/${token}`);
 
-    // Copyable link: no pre-selected payer — identify with the payer's own
-    // email, then sign in to open the 10-minute server-controlled session
-    await page.getByTestId('button-start-pay').click();
-    await page.getByTestId('input-payer-email').fill(payer.email);
-    await page.getByTestId('button-check-email').click();
-    await expect(page.getByTestId('input-payer-password')).toBeVisible({ timeout: 10000 });
-    await page.getByTestId('input-payer-password').fill('Passw0rd!x');
-    await page.getByTestId('button-signin-pay').click();
-
-    await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('checkout-amount')).toBeVisible();
-    await expect(page.getByText('Anti-Scam Notice')).toBeVisible();
-    await expect(page.getByText('No Rhemito fee is charged to you')).toBeVisible();
-    // Mito Payment layout: requester, breakdown card, locked amount, masked bank, Pay now
     await expect(page.getByText('Mito Payment')).toBeVisible();
     await expect(page.getByTestId('checkout-requester-name')).toBeVisible();
     await expect(page.getByTestId('payment-breakdown')).toBeVisible();
-    await expect(page.getByTestId('payment-breakdown').getByText('Locked')).toBeVisible();
-    await expect(page.getByTestId('breakdown-you-pay')).toContainText('GBP 120.00');
-    await expect(page.getByTestId('breakdown-fee')).toContainText('GBP 3.60');
-    await expect(page.getByTestId('breakdown-actual-sent')).toContainText('GBP 116.40');
+    await expect(page.getByTestId('payment-breakdown').getByText('Locked').first()).toBeVisible();
+    await expect(page.getByTestId('breakdown-you-pay')).toContainText('£120.00');
+    await expect(page.getByTestId('breakdown-fee')).toContainText('£3.60');
+    await expect(page.getByTestId('breakdown-actual-sent')).toContainText('£116.40');
     await expect(page.getByTestId('checkout-footer')).toContainText('rhemito');
     await expect(page.getByTestId('breakdown-receive')).toBeVisible();
     await expect(page.getByTestId('breakdown-bank')).toContainText('Paid into');
-    await expect(page.getByTestId('button-pay-now')).toBeVisible();
-    expect(await page.locator('text=/scan/i').count()).toBe(0);
 
-    // Pay by Bank → development provider authorisation → settlement through the signed webhook boundary
-    await page.getByTestId('button-method-pay_by_bank').click();
+    // Copyable link: identify with email + 6-digit code
+    await page.getByTestId('button-start-pay').click();
+    await page.getByTestId('input-payer-email').fill(payer.email);
+    await page.getByTestId('button-check-email').click();
+    await expect(page.getByTestId('input-pin-code')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-fill-dev-pin').click();
+    await page.getByTestId('button-verify-pin-pay').click();
 
+    // Mobile skips QR handoff and lands directly on "How would you like to pay?" (SenderScreen-6)
+    await expect(page.getByTestId('screen-method-select')).toBeVisible({ timeout: 10000 });
+    expect(await page.locator('text=/scan this with your camera/i').count()).toBe(0);
+
+    // Select Pay by Card → Continue → Authorise Payment → settles via webhook
+    await page.getByTestId('button-method-card').click();
     await page.getByTestId('button-pay-now').click();
     await expect(page.getByTestId('dev-provider-notice')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('button-authorize').click();
@@ -488,87 +486,171 @@ test.describe('Request Money E2E', () => {
     await expect(page.getByTestId('banner-link-created')).toBeVisible({ timeout: 15000 });
   });
 
-  test('Password fields expose a show/hide visibility toggle (eye icon)', async ({ page, request }) => {
+  test('Known sender email skips "New to Mito?" fields and never asks for a password', async ({ page, request }) => {
     const user = await registerAndActivate(request);
     const created = await createRequestViaApi(request, user);
     const token = created.checkoutUrl.split('/pay/')[1];
     const payer = await registerAndActivate(page.context().request, 'GB');
 
     await page.goto(`/pay/${token}`);
-    // Copyable link: identify with the payer's own email, then the sign-in password
+    // SenderScreen-1 -> Pay now -> SenderScreen-2: only Email + Send code initially
     await page.getByTestId('button-start-pay').click();
+    await expect(page.getByTestId('ngn-verify-email')).toBeVisible();
+    await expect(page.getByTestId('new-to-mito-fields')).toHaveCount(0);
+    await expect(page.getByTestId('input-payer-password')).toHaveCount(0);
+
     await page.getByTestId('input-payer-email').fill(payer.email);
     await page.getByTestId('button-check-email').click();
 
-    // Sign-in password: masked by default, revealed by the eye, re-masked on click
-    const passwordInput = page.getByTestId('input-payer-password');
-    await expect(passwordInput).toBeVisible({ timeout: 10000 });
-    await passwordInput.fill('Passw0rd!x');
-    await expect(passwordInput).toHaveAttribute('type', 'password');
-    await page.getByRole('button', { name: 'Show password' }).click();
-    await expect(passwordInput).toHaveAttribute('type', 'text');
-    await expect(passwordInput).toHaveValue('Passw0rd!x');
-    await page.getByRole('button', { name: 'Hide password' }).click();
-    await expect(passwordInput).toHaveAttribute('type', 'password');
+    // SenderScreen-3: 6-digit Confirmation code shown, no password field, and "New to Mito?" hidden for known sender
+    await expect(page.getByTestId('banner-code-sent')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('input-pin-code')).toBeVisible();
+    await expect(page.getByTestId('new-to-mito-fields')).toHaveCount(0);
+    await expect(page.getByTestId('input-payer-password')).toHaveCount(0);
   });
 
-  test('Email link checkout keeps the signed-in quick-proceed card (contrast to copyable links)', async ({ page, request }) => {
+  test('Direct email link (/pay/e/:emailToken) skips 6-digit email OTP verification', async ({ page, request }) => {
     const user = await registerAndActivate(request);
     const created = await createRequestViaApi(request, user);
     const emailToken = (created.emailCheckoutUrl ?? created.request.emailCheckoutUrl).split('/pay/e/')[1];
 
-    // A signed-in payer opens the personally addressed email link.
-    const payer = await registerAndActivate(page.context().request, 'GB');
     await page.goto(`/pay/e/${emailToken}`);
-    // First screen is the payment summary; Pay now moves on to identification.
+    // First screen is the payment summary (SenderScreen-1)
     await expect(page.getByTestId('payment-breakdown')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('button-start-pay').click();
 
-    // The quick-proceed step-up card is still offered on email links — only
-    // copyable "share with anyone" links drop the pre-selected payer identity.
-    const quickProceed = page.getByTestId('button-continue-authenticated');
-    await expect(quickProceed).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Paying as').first()).toBeVisible();
-    await expect(page.getByText(payer.email).first()).toBeVisible();
-
-    // Step-up confirms the password and opens the payment session.
-    await quickProceed.click();
-    await page.getByTestId('input-confirm-payer-password').fill('Passw0rd!x');
-    await quickProceed.click();
-    await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
+    // Because the requester already supplied senderName + senderEmail on the request,
+    // clicking Pay now on the emailed link proceeds straight to SenderScreen-5 without asking for a 6-digit OTP
+    await expect(page.getByTestId('screen-continue-on-phone')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('input-pin-code')).toHaveCount(0);
   });
 
-  test('NGN link: summary first, then the Verify Your Email card with new-payer details and Send code', async ({ page, request }) => {
+  test('NGN link: full SenderScreen-1 through SenderScreen-8 + requester-provided bank account notice + Add bank account flow', async ({ page, request }) => {
     const requester = await registerAndActivate(request, 'NG');
-    const created = await createRequestViaApi(request, requester);
+    const created = await createRequestViaApi(request, requester, {
+      payerBankName: 'Paga Mobile Money',
+      payerAccountNumber: '3661883153',
+    });
     const token = created.checkoutUrl.split('/pay/')[1];
 
-    // Anonymous visitor opens the link: Mito Payment summary + full breakdown
+    // SenderScreen-1: Mito Payment summary + full breakdown + requester-provided bank account notice before payment
     await page.goto(`/pay/${token}`);
     await expect(page.getByText('Mito Payment')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('checkout-amount')).toContainText('NGN');
     await expect(page.getByTestId('breakdown-bank')).toContainText('Paid into');
     await expect(page.getByTestId('checkout-footer')).toContainText('rhemito');
+    await expect(page.getByTestId('requester-provided-account-notice')).toBeVisible();
+    await expect(page.getByTestId('requester-provided-account-masked')).toContainText('Paga Mobile Money · 36****3153');
+    await expect(page.getByTestId('requester-provided-account-message')).toContainText(
+      'You should pay from the same account as provided to us by the requester (Paga Mobile Money · 36****3153); otherwise, the requester may have to manually pair the payment with the correct sender.'
+    );
 
-    // Pay now → Verify Your Email To Continue, inside the same Mito card
+    // SenderScreen-2: Verify Your Email To Continue (Email + Send code ONLY upfront)
     await page.getByTestId('button-start-pay').click();
     await expect(page.getByTestId('ngn-verify-email')).toBeVisible();
     await expect(page.getByText('Verify Your Email To Continue')).toBeVisible();
-    await expect(page.getByText('We will email a 6-digit code that expires in 30 minutes.')).toBeVisible();
-    await expect(page.getByTestId('checkout-amount')).toContainText('NGN');
+    await expect(page.getByTestId('requester-provided-account-notice')).toBeVisible();
+    await expect(page.getByTestId('new-to-mito-fields')).toHaveCount(0);
 
-    await page.getByTestId('input-payer-email').fill(`new-${Date.now()}@example.com`);
-    await page.getByTestId('button-ngn-account-business').click();
-    await expect(page.getByTestId('input-ngn-first-name')).toHaveCount(0);
-    await page.getByTestId('button-ngn-account-individual').click();
-    await page.getByTestId('input-ngn-first-name').fill('Firo');
-    await page.getByTestId('input-ngn-last-name').fill('Akin');
-    await page.getByTestId('select-ngn-gender').click();
-    await page.getByRole('option').first().click();
+    const newPayerEmail = `new-${Date.now()}@example.com`;
+    await page.getByTestId('input-payer-email').fill(newPayerEmail);
     await page.getByTestId('button-check-email').click();
 
-    // Unknown email → a code is sent; the PIN entry follows
-    await expect(page.getByTestId('input-pin-code')).toBeVisible({ timeout: 10000 });
+    // SenderScreen-3 & 4: Check your email banner + Confirmation code + "New to Rhemito?" fields (since email is new)
+    await expect(page.getByTestId('banner-code-sent')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('input-pin-code')).toBeVisible();
+    await expect(page.getByTestId('new-to-mito-fields')).toBeVisible();
+
+    await page.getByTestId('button-ngn-account-business').click();
+    await expect(page.getByTestId('input-reg-business-name')).toBeVisible();
+    await page.getByTestId('button-ngn-account-individual').click();
+    await page.getByTestId('input-ngn-first-name').fill('Ropo');
+    await page.getByTestId('input-ngn-last-name').fill('Akin');
+    await page.getByTestId('select-ngn-gender').click();
+    await page.getByRole('option', { name: 'Male', exact: true }).click();
+    await page.getByTestId('button-fill-dev-pin').click();
+    await page.getByTestId('button-verify-pin-pay').click();
+
+    // SenderScreen-5: Continue on your phone -> Continue on this browser instead
+    await expect(page.getByTestId('screen-continue-on-phone')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('img-handoff-qr')).toBeVisible();
+    await expect(page.getByTestId('requester-provided-account-notice')).toBeVisible();
+    await page.getByTestId('button-continue-browser').click();
+
+    // SenderScreen-6: How would you like to pay? (Bank transfer, Pay by Card, Interswitch / Hosted page)
+    await expect(page.getByTestId('screen-method-select')).toBeVisible();
+    await expect(page.getByTestId('requester-provided-account-notice')).toBeVisible();
+    await expect(page.getByTestId('button-method-bank_transfer')).toBeVisible();
+    await expect(page.getByTestId('button-method-card')).toBeVisible();
+    await expect(page.getByTestId('button-method-interswitch')).toBeVisible();
+    await page.getByTestId('button-method-bank_transfer').click();
+    await page.getByTestId('button-pay-now').click();
+
+    // SenderScreen-8: Skips "Which account will you pay from?" and shows Transfer Details with partially masked account & advisory
+    await expect(page.getByTestId('screen-bank-transfer-details')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('payer-source-account-box')).toContainText('36****3153');
+    await expect(page.getByTestId('payer-account-advisory')).toContainText(
+      'You should pay from the same account as provided to us by the requester (Paga Mobile Money · 36****3153); otherwise, the requester may have to manually pair the payment with the correct sender.'
+    );
+    await expect(page.getByTestId('transfer-detail-amount')).toContainText('NGN');
+    await expect(page.getByTestId('transfer-detail-accountName')).toContainText('PWA - MITO-');
+    await expect(page.getByTestId('transfer-detail-bankName')).toBeVisible();
+    await expect(page.getByTestId('transfer-detail-accountNumber')).toBeVisible();
+    await expect(page.getByTestId('transfer-detail-reference')).toBeVisible();
+
+    // SenderScreen-Add-bank-account: Click Change -> Add the account you'll pay from -> Save and continue
+    await page.getByTestId('button-change-payer-account').click();
+    await expect(page.getByTestId('screen-add-bank-account')).toBeVisible();
+    await page.getByTestId('select-payer-bank').click();
+    await page.getByRole('option', { name: 'Zenith Bank' }).click();
+    await page.getByTestId('input-payer-bank-account-number').fill('2089123456');
+    await expect(page.getByTestId('text-resolved-account-name')).toContainText('Ropo Akin', { timeout: 5000 });
+    await page.getByTestId('button-save-payer-bank-account').click();
+
+    // Back on SenderScreen-8 with updated partially masked account -> Click "I've sent the money"
+    await expect(page.getByTestId('screen-bank-transfer-details')).toBeVisible();
+    await expect(page.getByTestId('payer-source-account-box')).toContainText('20****3456');
+    await expect(page.getByTestId('payer-source-account-box')).toContainText('Zenith Bank');
+    await page.getByTestId('button-ive-sent-money').click();
+
+    await expect(page.getByText('Payment Successful!')).toBeVisible({ timeout: 30000 });
+  });
+
+  test('GBP link: unregistered UK sender completes Mini-KYC (Name, DOB, Address) without password prompt', async ({ page, request }) => {
+    const requester = await registerAndActivate(request, 'GB');
+    const created = await createRequestViaApi(request, requester, {
+      senderName: '',
+      senderEmail: '',
+      payerBankName: 'Barclays',
+      payerAccountNumber: '12345678',
+    });
+    const token = created.checkoutUrl.split('/pay/')[1];
+
+    await page.goto(`/pay/${token}`);
+    await expect(page.getByTestId('requester-provided-account-notice')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('requester-provided-account-masked')).toContainText('Barclays · 12**5678');
+
+    await page.getByTestId('button-start-pay').click();
+    const ukPayerEmail = `uk-new-${Date.now()}@example.com`;
+    await page.getByTestId('input-payer-email').fill(ukPayerEmail);
+    await page.getByTestId('button-check-email').click();
+
+    await expect(page.getByTestId('banner-code-sent')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('new-to-mito-fields')).toBeVisible();
+    await expect(page.getByTestId('uk-mini-kyc-fields')).toBeVisible();
+    await expect(page.getByTestId('input-payer-password')).toHaveCount(0);
+
+    await page.getByTestId('input-ngn-first-name').fill('Oliver');
+    await page.getByTestId('input-ngn-last-name').fill('Smith');
+    await page.getByTestId('input-uk-dob').fill('1992-04-15');
+    await page.getByTestId('input-uk-address').fill('10 Downing Street');
+    await page.getByTestId('input-uk-city').fill('London');
+    await page.getByTestId('input-uk-postcode').fill('SW1A 2AA');
+    await page.getByTestId('button-fill-dev-pin').click();
+    await page.getByTestId('button-verify-pin-pay').click();
+
+    await expect(page.getByTestId('screen-continue-on-phone')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('requester-provided-account-notice')).toBeVisible();
   });
 
   test('Cancellation from the dashboard Transactions table takes confirmation before cancelling', async ({ page, request }) => {
@@ -658,23 +740,22 @@ test.describe('Request Money E2E', () => {
     // Once the payment is received, Copy Link must disappear from the table.
     const token = created.checkoutUrl.split('/pay/')[1];
 
-    // Switch the browser session to a fresh payer account and pay the request.
+    // Switch the browser session to a fresh payer account and pay the request via Bank Transfer.
     await pageRequest.post('/api/auth/logout', { data: {} });
     const payer = await registerAndActivate(pageRequest, 'GB');
     await page.goto(`/pay/${token}`);
-    // Copyable link: no pre-selected payer — identify with the payer's own email first
     await page.getByTestId('button-start-pay').click();
     await page.getByTestId('input-payer-email').fill(payer.email);
     await page.getByTestId('button-check-email').click();
-    await expect(page.getByTestId('input-payer-password')).toBeVisible({ timeout: 10000 });
-    await page.getByTestId('input-payer-password').fill('Passw0rd!x');
-    await page.getByTestId('button-signin-pay').click();
-    await expect(page.getByTestId('session-timer')).toBeVisible({ timeout: 10000 });
-    await page.getByTestId('button-method-pay_by_bank').click();
-
+    await expect(page.getByTestId('input-pin-code')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-fill-dev-pin').click();
+    await page.getByTestId('button-verify-pin-pay').click();
+    await expect(page.getByTestId('button-continue-browser')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-continue-browser').click();
+    await page.getByTestId('button-method-bank_transfer').click();
     await page.getByTestId('button-pay-now').click();
-    await expect(page.getByTestId('dev-provider-notice')).toBeVisible({ timeout: 10000 });
-    await page.getByTestId('button-authorize').click();
+    await expect(page.getByTestId('button-ive-sent-money')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('button-ive-sent-money').click();
     await expect(page.getByText('Payment Successful!')).toBeVisible({ timeout: 30000 });
 
     // Back as the requester: the settled row no longer offers Copy Link.
@@ -706,12 +787,14 @@ test.describe('Request Money E2E', () => {
     await payerPage.getByTestId('button-start-pay').click();
     await payerPage.getByTestId('input-payer-email').fill(payer.email);
     await payerPage.getByTestId('button-check-email').click();
-    await payerPage.getByTestId('input-payer-password').fill('Passw0rd!x');
-    await payerPage.getByTestId('button-signin-pay').click();
-    await payerPage.getByTestId('button-method-pay_by_bank').click();
-
+    await expect(payerPage.getByTestId('input-pin-code')).toBeVisible({ timeout: 10000 });
+    await payerPage.getByTestId('button-fill-dev-pin').click();
+    await payerPage.getByTestId('button-verify-pin-pay').click();
+    await expect(payerPage.getByTestId('screen-method-select')).toBeVisible({ timeout: 10000 });
+    await payerPage.getByTestId('button-method-bank_transfer').click();
     await payerPage.getByTestId('button-pay-now').click();
-    await payerPage.getByTestId('button-authorize').click();
+    await expect(payerPage.getByTestId('button-ive-sent-money')).toBeVisible({ timeout: 10000 });
+    await payerPage.getByTestId('button-ive-sent-money').click();
     await expect(payerPage.getByText('Payment Successful!')).toBeVisible({ timeout: 30000 });
     await payerContext.close();
 
