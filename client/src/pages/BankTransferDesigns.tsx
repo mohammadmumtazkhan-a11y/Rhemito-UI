@@ -83,48 +83,14 @@ export default function BankTransferDesigns() {
     setTimeout(() => setCopiedId(null), 1600);
   };
 
-  /* Shared Top Shell inside each payment screen (Send Money Stepper + Status + Banners) */
+  /* Shared Top Shell inside each payment screen (Header + Back Link + Status + Banners) */
   const SharedTopShell = ({ isMobile = false }: { isMobile?: boolean }) => (
     <div className="space-y-4">
-      {/* Send Money Title & Step 4 of 4 */}
+      {/* Send Money Title & Back Link */}
       <div className="flex items-center justify-between">
         <h2 className={`${isMobile ? "text-xl" : "text-2xl"} font-bold text-slate-900 tracking-tight`}>
           Send Money
         </h2>
-        <span className="text-sm font-medium text-slate-500">Step 4 of 4</span>
-      </div>
-
-      {/* 4-Step Progress Bar */}
-      <div className="grid grid-cols-4 gap-2 pt-1 pb-2">
-        {[
-          { label: "Amount", done: true },
-          { label: "Recipient", done: true },
-          { label: "Details", done: true },
-          { label: "Payment", done: false, current: true },
-        ].map((s, idx) => (
-          <div key={s.label} className="flex flex-col items-center gap-1.5">
-            {s.done ? (
-              <div className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-              </div>
-            ) : (
-              <div className="w-7 h-7 rounded-full bg-[#2563EB] text-white text-xs font-bold flex items-center justify-center shadow-xs">
-                {idx + 1}
-              </div>
-            )}
-            <span
-              className={`text-xs ${
-                s.current ? "font-bold text-[#2563EB]" : "font-medium text-slate-500"
-              }`}
-            >
-              {s.label}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Back Link */}
-      <div>
         <button
           type="button"
           onClick={() => setLocation("/send-money")}
