@@ -500,12 +500,22 @@ export function savePayerBankAccountForEmail(
 export async function isKnownSenderEmail(email: string, request?: MoneyRequest): Promise<boolean> {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return false;
-  if (verifiedSenderEmails.has(normalized)) return true;
   if (request?.senderEmail?.toLowerCase() === normalized && !!request.senderName?.trim()) {
     return true;
   }
   const user = await storage.getAuthUserByEmail(normalized);
-  if (user && !autoSeededPlaceholderEmails.has(normalized)) {
+  // If the logged-in requester is testing the payer flow using their own email address
+  // and explicitly left "Sender Name" blank on this request, treat as an unregistered
+  // sender so Mini-KYC ("New to Mito?") is shown.
+  if (request && !request.senderName?.trim() && user && user.id === request.requesterId) {
+    return false;
+  }
+  if (verifiedSenderEmails.has(normalized)) return true;
+  if (
+    user &&
+    !autoSeededPlaceholderEmails.has(normalized) &&
+    !(user.firstName === "Demo" && user.lastName === "Payer")
+  ) {
     return true;
   }
   return false;
@@ -520,30 +530,31 @@ export function markSenderEmailKnown(email: string): void {
 
 /**
  * Prototype-only: register the sender email the requester provided as a demo
- * payer (fixed demo password) so the checkout's registered-user path can be
- * demonstrated with exactly that email. Existing accounts are left untouched,
- * and real production (no dev hooks) never creates these accounts.
+ * payer only when the requester also provided the sender's name (representing a
+ * known sender). If no sender name was supplied, the email remains unregistered
+ * so the checkout prompts for Mini-KYC ("New to Mito?").
  */
 async function ensureDemoPayerForRequest(request: MoneyRequest): Promise<void> {
   if (!demoModeEnabled) return;
   const email = request.senderEmail;
   if (!email) return; // generic link: no payer registered up front
-  if (await storage.getAuthUserByEmail(email)) return;
   const hasRealName = !!request.senderName?.trim();
   if (!hasRealName) {
-    autoSeededPlaceholderEmails.add(email.toLowerCase());
-  } else {
-    verifiedSenderEmails.add(email.toLowerCase());
+    // Do not auto-create an authUser when no sender name was provided — this
+    // ensures unregistered senders see the Mini-KYC ("New to Mito?") flow.
+    return;
   }
+  verifiedSenderEmails.add(email.toLowerCase());
+  if (await storage.getAuthUserByEmail(email)) return;
   const [firstName, ...rest] = (request.senderName ?? "").split(" ");
   await storage.createAuthUser({
     email,
     password: bcrypt.hashSync(DEMO_PAYER_CREDENTIALS.password, 12),
     accountType: request.senderType === "business" ? "business" : "individual",
     country: request.senderCountry,
-    firstName: firstName || "Demo",
+    firstName: firstName || "Verified",
     middleName: null,
-    lastName: rest.join(" ") || "Payer",
+    lastName: rest.join(" ") || "Sender",
     dateOfBirth: null,
     gender: null,
     mobileCode: null,
@@ -555,8 +566,6 @@ async function ensureDemoPayerForRequest(request: MoneyRequest): Promise<void> {
     directorName: null,
     status: "pending",
   });
-  // createAuthUser seeds kycStatus "pending" — activate so the payer passes the
-  // session compliance gate (same as the OTP-verified registration path).
   await storage.activateUser(email);
 }
 
@@ -599,7 +608,7 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
   const html = `
 <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border:2px solid #2563eb;border-radius:16px;overflow:hidden;color:#0f172a;">
   <div style="padding:28px 24px 16px;text-align:center;">
-    <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:0.2em;color:#2563eb;text-transform:uppercase;">Mito Payment</p>
+    <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:0.2em;color:#2563eb;text-transform:uppercase;">Rhemito Payment</p>
     <p style="margin:12px 0 4px;font-size:14px;font-weight:600;color:#334155;">Payment Request From</p>
     <h1 style="margin:0;font-size:22px;font-weight:800;color:#0f172a;">${request.requesterName}</h1>
     <p style="margin:4px 0 0;font-size:12px;color:#64748b;">Ref ${request.requestNumber}</p>
@@ -609,7 +618,8 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
   <div style="padding:0 24px 24px;">
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:20px;font-size:13px;color:#334155;">
       <p style="margin:0 0 8px;">Hello <strong>${request.senderName ?? "there"}</strong>,</p>
-      <p style="margin:0 0 12px;"><strong>${request.requesterName}</strong> has requested <strong>${amountText}</strong> through Rhemito.</p>
+      <p style="margin:0 0 12px;"><strong>${request.requesterName}</strong> has requested <strong>${amountText}</strong> through <strong>Rhemito</strong>.</p>
+      <p style="margin:0 0 4px;"><strong>Sent by:</strong> Rhemito</p>
       <p style="margin:0 0 4px;"><strong>Purpose:</strong> ${purposeText}</p>
       <p style="margin:0 0 4px;"><strong>Reference:</strong> ${request.requestNumber}</p>
       <p style="margin:0;"><strong>Expires on:</strong> ${expiryText}</p>
@@ -921,13 +931,12 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
     legalEntity: serverConfig.legalEntity,
     isEmailLink,
     recipientEmailMasked: isEmailLink ? (request.recipientEmailMasked || (request.senderEmail ? maskEmail(request.senderEmail) : undefined)) : undefined,
-    // Prototype-only demo aid: the sender email the requester provided is the
-    // registered demo payer shown on the identification screen. Hidden in real
-    // production (no dev hooks) so the payer email is never disclosed pre-auth.
-    demoPayerEmail: demoModeEnabled ? (request.senderEmail ?? undefined) : undefined,
+    // Only expose the recipient's email when coming directly from the emailed link (/pay/e/:emailToken).
+    // On a shared/copied link (/pay/:token), we do not know who opened the link, so they must enter their email and verify via OTP/PIN.
+    demoPayerEmail: demoModeEnabled && isEmailLink ? (request.senderEmail ?? undefined) : undefined,
     senderName: request.senderName ?? null,
     senderType: request.senderType ?? "individual",
-    isKnownSender,
+    isKnownSender: isEmailLink ? isKnownSender : false,
     payerSourceBankName: request.payerSourceBankName ?? null,
     payerSourceAccountMasked: request.payerSourceAccountMasked ?? null,
     payerSourceAccountNumber: requestPayerFullAccountById.get(request.id) ?? request.payerSourceAccountMasked ?? null,

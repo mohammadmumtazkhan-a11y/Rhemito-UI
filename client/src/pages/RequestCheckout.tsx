@@ -164,11 +164,15 @@ export default function RequestCheckout() {
   // false = new user (show "New to Mito?").
   const [emailKnownStatus, setEmailKnownStatus] = useState<boolean | null>(null);
 
-  // New-to-Mito Mini-KYC State
+  // New-to-Mito Mini-KYC State (NGN: Name + Gender; GBP/UK: Name + DOB + Address)
   const [regAccountType, setRegAccountType] = useState<"individual" | "business">("individual");
   const [regFirstName, setRegFirstName] = useState("");
   const [regLastName, setRegLastName] = useState("");
   const [regGender, setRegGender] = useState("");
+  const [regDob, setRegDob] = useState("");
+  const [regAddress, setRegAddress] = useState("");
+  const [regCity, setRegCity] = useState("");
+  const [regPostcode, setRegPostcode] = useState("");
   const [bizName, setBizName] = useState("");
 
   // Session State
@@ -221,12 +225,13 @@ export default function RequestCheckout() {
     retry: false,
   });
 
-  // Pre-fill email & known-sender state when request loads
+  // Only pre-fill email when the user arrived from the emailed link (/pay/e/:emailToken)
+  // AND the request actually has the recipient's email. When the user pastes or clicks
+  // a shared link (/pay/:token), we do not know their email — they must enter it and verify with OTP/PIN.
   useEffect(() => {
     if (!request) return;
-    const prefilledEmail = request.demoPayerEmail || (isEmailLink ? authUser?.email : undefined);
-    if (prefilledEmail && !payerEmail) {
-      setPayerEmail(prefilledEmail);
+    if (isEmailLink && request.demoPayerEmail && !payerEmail) {
+      setPayerEmail(request.demoPayerEmail);
       setEmailKnownStatus(Boolean(request.isKnownSender));
     }
     if (request.senderName && !payerDisplayName) {
@@ -245,19 +250,19 @@ export default function RequestCheckout() {
       setSavedAccounts([fallbackAcc]);
       setSelectedPayerBankAccount((prev) => prev ?? fallbackAcc);
     }
-  }, [request, authUser, isEmailLink]);
+  }, [request, isEmailLink]);
 
   // Live check whether the entered email is already registered/known vs brand-new:
-  // - Empty or invalid email -> emailKnownStatus = null (hide "New to Mito?" upfront as requested in Receive money..mp4)
-  // - Existing user email -> emailKnownStatus = true (hide "New to Mito?" as shown in GBP video 04:58)
-  // - Unregistered/new email (e.g. bisoyeakin+1@gmail.com) -> emailKnownStatus = false (show "New to Mito?" as shown in GBP video 09:09)
+  // - Empty or invalid email -> emailKnownStatus = null (hide "New to Mito?" upfront)
+  // - Existing user email -> emailKnownStatus = true (hide "New to Mito?")
+  // - Unregistered/new email -> emailKnownStatus = false (show "New to Mito?" Mini-KYC fields)
   useEffect(() => {
     const trimmed = payerEmail.trim().toLowerCase();
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed)) {
       setEmailKnownStatus(null);
       return;
     }
-    if (request?.demoPayerEmail && trimmed === request.demoPayerEmail.toLowerCase()) {
+    if (isEmailLink && request?.demoPayerEmail && trimmed === request.demoPayerEmail.toLowerCase()) {
       setEmailKnownStatus(Boolean(request.isKnownSender));
       return;
     }
@@ -454,23 +459,52 @@ export default function RequestCheckout() {
     }
   };
 
+  const isNgnRequest = request.currency === "NGN";
+  const hasVerifiedEmailFromLink = Boolean(isEmailLink && request.demoPayerEmail);
+
+  const validateMiniKycFields = (): string | null => {
+    if (regAccountType === "business" && !bizName.trim()) {
+      return "Please enter your business name.";
+    }
+    if (!regFirstName.trim() || !regLastName.trim()) {
+      return regAccountType === "business"
+        ? "Please enter contact first name and last name."
+        : "Please enter your first name and last name.";
+    }
+    if (isNgnRequest) {
+      if (regAccountType === "individual" && !regGender) {
+        return "Please select your gender.";
+      }
+    } else {
+      if (!regDob.trim()) {
+        return "Please enter your date of birth.";
+      }
+      if (!regAddress.trim()) {
+        return "Please enter your address.";
+      }
+    }
+    return null;
+  };
+
   /**
    * Clicking "Pay now" on the initial summary card (SenderScreen-1):
-   * - If opened via `/pay/e/:emailToken` (user coming from email): NEVER asks for OTP/PIN.
-   *   - Known/existing users proceed directly to `Continue on your phone`.
-   *   - Brand-new users with no name on the request see only the "New to Mito?" fields + "Continue to pay" (no OTP/PIN).
-   * - Otherwise (`/pay/:token` shared link) opens "Verify Your Email To Continue" (`Send code`).
+   * - If opened via `/pay/e/:emailToken` AND we know the sender's email from the emailed link (`hasVerifiedEmailFromLink`):
+   *   NEVER asks for OTP/PIN.
+   *   - Known/registered users proceed directly to `Continue on your phone`.
+   *   - Unregistered/new users see only the "New to Mito?" Mini-KYC fields + "Continue to pay" (no OTP/PIN).
+   * - Otherwise (`/pay/:token` shared/pasted link, or when we don't know the sender's email):
+   *   Opens "Verify Your Email To Continue" (`Send code` -> 6-digit OTP/PIN).
    */
   const handlePayNowClick = async () => {
     setErrorMessage("");
-    if (isEmailLink) {
+    if (hasVerifiedEmailFromLink) {
       const emailToUse = (payerEmail || request.demoPayerEmail || "").trim().toLowerCase();
       if (emailToUse) {
         setPayerEmail(emailToUse);
         setBusy(true);
         try {
-          let known = Boolean(request.isKnownSender) || emailKnownStatus === true;
-          if (!known && emailKnownStatus === null) {
+          let known = Boolean(request.isKnownSender);
+          if (emailToUse !== (request.demoPayerEmail || "").trim().toLowerCase()) {
             const check = await checkEmailRegistered(emailToUse);
             known = Boolean(check.registered);
           }
@@ -492,7 +526,7 @@ export default function RequestCheckout() {
   };
 
   /**
-   * Direct email-link continuation for a new user on `/pay/e/:emailToken` (no OTP/PIN required).
+   * Direct email-link continuation for an unregistered user on `/pay/e/:emailToken` (no OTP/PIN required).
    */
   const handleEmailDirectContinueSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -502,17 +536,9 @@ export default function RequestCheckout() {
       return;
     }
     if (emailKnownStatus === false) {
-      if (regAccountType === "individual") {
-        if (!regFirstName.trim() || !regLastName.trim()) {
-          setErrorMessage("Please enter your first name and last name.");
-          return;
-        }
-        if (!regGender) {
-          setErrorMessage("Please select your gender.");
-          return;
-        }
-      } else if (!bizName.trim()) {
-        setErrorMessage("Please enter your business name.");
+      const kycErr = validateMiniKycFields();
+      if (kycErr) {
+        setErrorMessage(kycErr);
         return;
       }
     }
@@ -525,7 +551,11 @@ export default function RequestCheckout() {
         firstName: regFirstName.trim() || undefined,
         lastName: regLastName.trim() || undefined,
         businessName: bizName.trim() || undefined,
-        gender: regGender || undefined,
+        gender: isNgnRequest ? regGender || undefined : undefined,
+        dateOfBirth: !isNgnRequest ? regDob.trim() || undefined : undefined,
+        address: !isNgnRequest ? regAddress.trim() || undefined : undefined,
+        city: !isNgnRequest ? regCity.trim() || undefined : undefined,
+        postcode: !isNgnRequest ? regPostcode.trim() || undefined : undefined,
       });
       await handleStartPayerFlow(res.savedAccounts, res.payerName);
     } catch (err: any) {
@@ -600,20 +630,10 @@ export default function RequestCheckout() {
       return;
     }
     if (emailKnownStatus === false) {
-      if (regAccountType === "individual") {
-        if (!regFirstName.trim() || !regLastName.trim()) {
-          setErrorMessage("Please enter your first name and last name.");
-          return;
-        }
-        if (!regGender) {
-          setErrorMessage("Please select your gender.");
-          return;
-        }
-      } else {
-        if (!bizName.trim()) {
-          setErrorMessage("Please enter your business name.");
-          return;
-        }
+      const kycErr = validateMiniKycFields();
+      if (kycErr) {
+        setErrorMessage(kycErr);
+        return;
       }
     }
 
@@ -627,7 +647,11 @@ export default function RequestCheckout() {
         firstName: regFirstName.trim() || undefined,
         lastName: regLastName.trim() || undefined,
         businessName: bizName.trim() || undefined,
-        gender: regGender || undefined,
+        gender: isNgnRequest ? regGender || undefined : undefined,
+        dateOfBirth: !isNgnRequest ? regDob.trim() || undefined : undefined,
+        address: !isNgnRequest ? regAddress.trim() || undefined : undefined,
+        city: !isNgnRequest ? regCity.trim() || undefined : undefined,
+        postcode: !isNgnRequest ? regPostcode.trim() || undefined : undefined,
       });
       await handleStartPayerFlow(verified.savedAccounts, verified.payerName);
     } catch (err: any) {
@@ -1772,20 +1796,22 @@ export default function RequestCheckout() {
             )}
 
             {/* ── STAGE 1: Verify Your Email To Continue ──
-                - If opened via `/pay/e/:emailToken` (`isEmailLink === true`): NEVER asks for OTP/PIN (`Continue to pay`).
-                - If opened via `/pay/:token` (`isEmailLink === false`): sends 6-digit code via email (`Send code`). */}
+                - If opened via `/pay/e/:emailToken` AND we know the recipient's email (`hasVerifiedEmailFromLink === true`):
+                  NEVER asks for OTP/PIN (`Continue to pay`).
+                - If opened via `/pay/:token` shared/pasted link (or when we don't know the sender's email):
+                  sends 6-digit code via email (`Send code`). */}
             {verifyStage === "email_entry" && (
               <form
-                onSubmit={isEmailLink ? handleEmailDirectContinueSubmit : handleSendCodeSubmit}
+                onSubmit={hasVerifiedEmailFromLink ? handleEmailDirectContinueSubmit : handleSendCodeSubmit}
                 className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 space-y-4"
                 data-testid="ngn-verify-email"
               >
                 <div className="space-y-1">
                   <p className="text-lg font-bold text-slate-900">
-                    {isEmailLink ? "Confirm Your Details To Continue" : "Verify Your Email To Continue"}
+                    {hasVerifiedEmailFromLink ? "Confirm Your Details To Continue" : "Verify Your Email To Continue"}
                   </p>
                   <p className="text-sm text-slate-500 leading-relaxed">
-                    {isEmailLink
+                    {hasVerifiedEmailFromLink
                       ? "Your email was verified via your payment link. Complete your details below to continue to payment."
                       : "Confirm the email we should use for your receipt. We will email a 6-digit code that expires in 30 minutes."}
                   </p>
@@ -1799,16 +1825,17 @@ export default function RequestCheckout() {
                     placeholder="your.email@example.com"
                     value={payerEmail}
                     onChange={(e) => setPayerEmail(e.target.value)}
-                    readOnly={isEmailLink && Boolean(payerEmail)}
-                    className={isEmailLink && payerEmail ? "bg-amber-50/60 text-slate-700 border-slate-200 h-11" : "bg-white h-11"}
+                    readOnly={hasVerifiedEmailFromLink && Boolean(payerEmail)}
+                    className={hasVerifiedEmailFromLink && payerEmail ? "bg-amber-50/60 text-slate-700 border-slate-200 h-11" : "bg-white h-11"}
                     data-testid="input-payer-email"
                     required
-                    autoFocus={!isEmailLink}
+                    autoFocus={!hasVerifiedEmailFromLink}
                   />
                 </div>
 
-                {(emailKnownStatus === false || isEmailLink) && (
+                {hasVerifiedEmailFromLink && (
                   <NewToMitoFields
+                    isNgn={isNgnRequest}
                     regAccountType={regAccountType}
                     setRegAccountType={setRegAccountType}
                     regFirstName={regFirstName}
@@ -1817,6 +1844,14 @@ export default function RequestCheckout() {
                     setRegLastName={setRegLastName}
                     regGender={regGender}
                     setRegGender={setRegGender}
+                    regDob={regDob}
+                    setRegDob={setRegDob}
+                    regAddress={regAddress}
+                    setRegAddress={setRegAddress}
+                    regCity={regCity}
+                    setRegCity={setRegCity}
+                    regPostcode={regPostcode}
+                    setRegPostcode={setRegPostcode}
                     bizName={bizName}
                     setBizName={setBizName}
                   />
@@ -1832,7 +1867,7 @@ export default function RequestCheckout() {
                   data-testid="button-check-email"
                 >
                   {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  {isEmailLink ? "Continue to pay" : "Send code"}
+                  {hasVerifiedEmailFromLink ? "Continue to pay" : "Send code"}
                 </Button>
               </form>
             )}
@@ -1898,6 +1933,7 @@ export default function RequestCheckout() {
                 {/* Only show "New to Mito?" mini-KYC fields if this email is a new sender */}
                 {emailKnownStatus === false && (
                   <NewToMitoFields
+                    isNgn={isNgnRequest}
                     regAccountType={regAccountType}
                     setRegAccountType={setRegAccountType}
                     regFirstName={regFirstName}
@@ -1906,6 +1942,14 @@ export default function RequestCheckout() {
                     setRegLastName={setRegLastName}
                     regGender={regGender}
                     setRegGender={setRegGender}
+                    regDob={regDob}
+                    setRegDob={setRegDob}
+                    regAddress={regAddress}
+                    setRegAddress={setRegAddress}
+                    regCity={regCity}
+                    setRegCity={setRegCity}
+                    regPostcode={regPostcode}
+                    setRegPostcode={setRegPostcode}
                     bizName={bizName}
                     setBizName={setBizName}
                   />
@@ -1959,6 +2003,7 @@ export default function RequestCheckout() {
 // ─── Subcomponents & Layout Helpers ──────────────────────────────────────────
 
 function NewToMitoFields(props: {
+  isNgn: boolean;
   regAccountType: "individual" | "business";
   setRegAccountType: (v: "individual" | "business") => void;
   regFirstName: string;
@@ -1967,10 +2012,19 @@ function NewToMitoFields(props: {
   setRegLastName: (v: string) => void;
   regGender: string;
   setRegGender: (v: string) => void;
+  regDob: string;
+  setRegDob: (v: string) => void;
+  regAddress: string;
+  setRegAddress: (v: string) => void;
+  regCity: string;
+  setRegCity: (v: string) => void;
+  regPostcode: string;
+  setRegPostcode: (v: string) => void;
   bizName: string;
   setBizName: (v: string) => void;
 }) {
   const {
+    isNgn,
     regAccountType,
     setRegAccountType,
     regFirstName,
@@ -1979,6 +2033,14 @@ function NewToMitoFields(props: {
     setRegLastName,
     regGender,
     setRegGender,
+    regDob,
+    setRegDob,
+    regAddress,
+    setRegAddress,
+    regCity,
+    setRegCity,
+    regPostcode,
+    setRegPostcode,
     bizName,
     setBizName,
   } = props;
@@ -2006,30 +2068,49 @@ function NewToMitoFields(props: {
         </div>
       </div>
 
-      {regAccountType === "individual" ? (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="ngnFirstName" className="text-xs font-medium text-slate-600">First name</Label>
-              <Input
-                id="ngnFirstName"
-                value={regFirstName}
-                onChange={(e) => setRegFirstName(e.target.value)}
-                className="bg-white h-10"
-                data-testid="input-ngn-first-name"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ngnLastName" className="text-xs font-medium text-slate-600">Last name</Label>
-              <Input
-                id="ngnLastName"
-                value={regLastName}
-                onChange={(e) => setRegLastName(e.target.value)}
-                className="bg-white h-10"
-                data-testid="input-ngn-last-name"
-              />
-            </div>
-          </div>
+      {regAccountType === "business" && (
+        <div className="space-y-1.5">
+          <Label htmlFor="ngnBusinessName" className="text-xs font-medium text-slate-600">Business name</Label>
+          <Input
+            id="ngnBusinessName"
+            placeholder="Registered company name"
+            value={bizName}
+            onChange={(e) => setBizName(e.target.value)}
+            className="bg-white h-10"
+            data-testid="input-reg-business-name"
+          />
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="ngnFirstName" className="text-xs font-medium text-slate-600">
+            {regAccountType === "business" ? "Contact first name" : "First name"}
+          </Label>
+          <Input
+            id="ngnFirstName"
+            value={regFirstName}
+            onChange={(e) => setRegFirstName(e.target.value)}
+            className="bg-white h-10"
+            data-testid="input-ngn-first-name"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ngnLastName" className="text-xs font-medium text-slate-600">
+            {regAccountType === "business" ? "Contact last name" : "Last name"}
+          </Label>
+          <Input
+            id="ngnLastName"
+            value={regLastName}
+            onChange={(e) => setRegLastName(e.target.value)}
+            className="bg-white h-10"
+            data-testid="input-ngn-last-name"
+          />
+        </div>
+      </div>
+
+      {isNgn ? (
+        regAccountType === "individual" && (
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-600">Gender</Label>
             <Select value={regGender} onValueChange={setRegGender}>
@@ -2043,39 +2124,52 @@ function NewToMitoFields(props: {
               </SelectContent>
             </Select>
           </div>
-        </>
+        )
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3" data-testid="uk-mini-kyc-fields">
           <div className="space-y-1.5">
-            <Label htmlFor="ngnBusinessName" className="text-xs font-medium text-slate-600">Business name</Label>
+            <Label htmlFor="ukDob" className="text-xs font-medium text-slate-600">Date of birth</Label>
             <Input
-              id="ngnBusinessName"
-              placeholder="Registered company name"
-              value={bizName}
-              onChange={(e) => setBizName(e.target.value)}
+              id="ukDob"
+              type="date"
+              value={regDob}
+              onChange={(e) => setRegDob(e.target.value)}
               className="bg-white h-10"
-              data-testid="input-reg-business-name"
+              data-testid="input-uk-dob"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ukAddress" className="text-xs font-medium text-slate-600">Address</Label>
+            <Input
+              id="ukAddress"
+              placeholder="House number and street name"
+              value={regAddress}
+              onChange={(e) => setRegAddress(e.target.value)}
+              className="bg-white h-10"
+              data-testid="input-uk-address"
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="ngnBizFirstName" className="text-xs font-medium text-slate-600">Contact first name</Label>
+              <Label htmlFor="ukCity" className="text-xs font-medium text-slate-600">City / Town</Label>
               <Input
-                id="ngnBizFirstName"
-                value={regFirstName}
-                onChange={(e) => setRegFirstName(e.target.value)}
+                id="ukCity"
+                placeholder="e.g. London"
+                value={regCity}
+                onChange={(e) => setRegCity(e.target.value)}
                 className="bg-white h-10"
-                data-testid="input-ngn-first-name"
+                data-testid="input-uk-city"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="ngnBizLastName" className="text-xs font-medium text-slate-600">Contact last name</Label>
+              <Label htmlFor="ukPostcode" className="text-xs font-medium text-slate-600">Postcode</Label>
               <Input
-                id="ngnBizLastName"
-                value={regLastName}
-                onChange={(e) => setRegLastName(e.target.value)}
+                id="ukPostcode"
+                placeholder="e.g. SW1A 1AA"
+                value={regPostcode}
+                onChange={(e) => setRegPostcode(e.target.value)}
                 className="bg-white h-10"
-                data-testid="input-ngn-last-name"
+                data-testid="input-uk-postcode"
               />
             </div>
           </div>

@@ -360,6 +360,10 @@ export async function verifyPayerVerificationPin(
     lastName?: string;
     businessName?: string;
     gender?: string;
+    dateOfBirth?: string;
+    address?: string;
+    city?: string;
+    postcode?: string;
   },
 ): Promise<{
   verified?: boolean;
@@ -386,6 +390,10 @@ export async function continueFromEmailLink(
     lastName?: string;
     businessName?: string;
     gender?: string;
+    dateOfBirth?: string;
+    address?: string;
+    city?: string;
+    postcode?: string;
   },
 ): Promise<{
   verified: boolean;

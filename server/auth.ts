@@ -62,9 +62,10 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const user = await storage.getAuthUserByEmail(parsed.data.email);
+      const isPlaceholder = Boolean(user && user.firstName === "Demo" && user.lastName === "Payer");
       return res.json({
-        registered: !!user,
-        status: user?.status || null,
+        registered: Boolean(user && !isPlaceholder),
+        status: user && !isPlaceholder ? user.status : null,
       });
     } catch (error) {
       console.error("Check email error:", error);

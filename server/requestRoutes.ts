@@ -451,6 +451,10 @@ export function registerRequestMoneyRoutes(app: Express): void {
       lastName?: string;
       businessName?: string;
       gender?: string;
+      dateOfBirth?: string;
+      address?: string;
+      city?: string;
+      postcode?: string;
     },
   ) => {
     const normalized = email.trim().toLowerCase();
@@ -466,11 +470,11 @@ export function registerRequestMoneyRoutes(app: Express): void {
         email: normalized,
         password: bcrypt.hashSync(DEMO_PAYER_CREDENTIALS.password, 12),
         accountType,
-        country: request?.senderCountry || "NG",
+        country: request?.senderCountry || (request?.payInCurrency === "GBP" ? "GB" : "NG"),
         firstName: firstName || reqFirst || "Verified",
         middleName: null,
         lastName: lastName || reqRest.join(" ") || "Sender",
-        dateOfBirth: null,
+        dateOfBirth: profile?.dateOfBirth || null,
         gender: profile?.gender || null,
         mobileCode: null,
         mobileNumber: null,
@@ -481,12 +485,13 @@ export function registerRequestMoneyRoutes(app: Express): void {
         directorName: null,
         status: "pending",
       });
-    } else if (firstName || lastName || businessName) {
+    } else if (firstName || lastName || businessName || profile?.dateOfBirth || profile?.gender) {
       // Update placeholder or new sender details when provided
       user.accountType = accountType;
       if (firstName) user.firstName = firstName;
       if (lastName) user.lastName = lastName;
       if (profile?.gender) user.gender = profile.gender;
+      if (profile?.dateOfBirth) user.dateOfBirth = profile.dateOfBirth;
       if (accountType === "business" && businessName) {
         user.businessName = businessName;
       }
@@ -507,14 +512,16 @@ export function registerRequestMoneyRoutes(app: Express): void {
         payerUserId: updated.id,
         payerEmail: normalized,
         payerName,
+        ...(profile?.dateOfBirth ? { senderDob: profile.dateOfBirth } : {}),
       });
     }
 
     return { user: updated, payerName };
   };
 
-  // An unregistered payer must prove control of the entered email before an
-  // account can be created. Opening either link never verifies the address.
+  // When a payer pastes or clicks a shared link (/pay/:token), we do not know their
+  // email — they must verify ownership of the entered email via a 6-digit OTP/PIN.
+  // In no case do we ask for a password or login.
   const handleSendPayerPin = async (req: Request, res: Response, isEmailLink: boolean) => {
     try {
       if (!enforceRateLimit(req, res, "paymentIntent")) return;
@@ -531,7 +538,7 @@ export function registerRequestMoneyRoutes(app: Express): void {
         return res.status(409).json({ error: { code: "INVALID_STATE", message: "This request cannot accept a new payment." } });
       }
       const email = parsed.data.email.toLowerCase();
-      const allowRegistered = Boolean(req.body?.allowRegistered);
+      const allowRegistered = req.body?.allowRegistered !== false;
       if (!allowRegistered && (await storage.getAuthUserByEmail(email))) {
         return res.status(409).json({ error: { code: "EMAIL_REGISTERED", message: "This email already has a Rhemito account. Please sign in." } });
       }
@@ -571,7 +578,7 @@ export function registerRequestMoneyRoutes(app: Express): void {
       const otpHtml = `
 <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border:2px solid #2563eb;border-radius:16px;overflow:hidden;color:#0f172a;">
   <div style="padding:28px 24px 16px;text-align:center;">
-    <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:0.2em;color:#2563eb;text-transform:uppercase;">Mito Payment</p>
+    <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:0.2em;color:#2563eb;text-transform:uppercase;">Rhemito Payment</p>
     <p style="margin:12px 0 4px;font-size:14px;font-weight:600;color:#334155;">Payment Request From</p>
     <h1 style="margin:0;font-size:22px;font-weight:800;color:#0f172a;">${request.requesterName}</h1>
     <p style="margin:4px 0 0;font-size:12px;color:#64748b;">Ref ${request.requestNumber} · ${displayAmount}</p>
@@ -650,6 +657,10 @@ export function registerRequestMoneyRoutes(app: Express): void {
           lastName: req.body?.lastName,
           businessName: req.body?.businessName,
           gender: req.body?.gender,
+          dateOfBirth: req.body?.dateOfBirth,
+          address: req.body?.address,
+          city: req.body?.city,
+          postcode: req.body?.postcode,
         });
         return res.json({
           data: {
@@ -689,6 +700,10 @@ export function registerRequestMoneyRoutes(app: Express): void {
         lastName: req.body?.lastName,
         businessName: req.body?.businessName,
         gender: req.body?.gender,
+        dateOfBirth: req.body?.dateOfBirth,
+        address: req.body?.address,
+        city: req.body?.city,
+        postcode: req.body?.postcode,
       });
       return res.json({
         data: {
