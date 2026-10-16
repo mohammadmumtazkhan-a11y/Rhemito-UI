@@ -297,9 +297,9 @@ export async function createMoneyRequest(params: {
     senderDob: payload.senderDob ?? null,
     purpose: payload.purpose,
     senderId: payload.senderId ?? null,
-    payerSourceBankName: payload.payerAccountNumber ? (payload.payerBankName ?? null) : null,
-    payerSourceAccountMasked: payload.payerAccountNumber ? maskAccountNumber(payload.payerAccountNumber) : null,
-    payerSourceOrigin: payload.payerAccountNumber ? (payload.senderId ? "saved_sender" : "requester") : null,
+    payerSourceBankName: (payload.payerAccountNumber || payload.payerBankName) ? (payload.payerBankName ?? null) : null,
+    payerSourceAccountMasked: payload.payerAccountNumber ? partiallyMaskSenderAccount(payload.payerAccountNumber) : null,
+    payerSourceOrigin: (payload.payerAccountNumber || payload.payerBankName) ? (payload.senderId ? "saved_sender" : "requester") : null,
     reference: payload.reference ?? null,
     status: "active",
     token,
@@ -341,11 +341,12 @@ export async function createMoneyRequest(params: {
     throw err;
   }
   if (payload.payerAccountNumber) {
-    requestPayerFullAccountById.set(request.id, payload.payerAccountNumber);
+    const maskedForSender = partiallyMaskSenderAccount(payload.payerAccountNumber);
+    requestPayerFullAccountById.set(request.id, maskedForSender);
     if (request.senderEmail && payload.payerBankName) {
       savePayerBankAccountForEmail(request.senderEmail, {
         bankName: payload.payerBankName,
-        accountNumber: payload.payerAccountNumber,
+        accountNumber: maskedForSender,
         accountName: request.senderName || request.senderEmail,
       });
     }
@@ -370,6 +371,22 @@ export interface PayerSavedBankAccount {
   accountName: string;
 }
 
+/**
+ * Partially masks a sender bank account number provided by the requester
+ * so the sender can recognise which account to pay from without exposing
+ * the full raw number (e.g. "3661883153" -> "36****3153", "12345678" -> "12**5678").
+ */
+export function partiallyMaskSenderAccount(accountNumber: string): string {
+  const trimmed = accountNumber.trim();
+  if (!trimmed) return "";
+  if (trimmed.includes("*")) return trimmed;
+  if (trimmed.length >= 7) {
+    const middleStars = "*".repeat(Math.max(2, trimmed.length - 6));
+    return `${trimmed.slice(0, 2)}${middleStars}${trimmed.slice(-4)}`;
+  }
+  return maskAccountNumber(trimmed);
+}
+
 const requestPayerFullAccountById = new Map<string, string>();
 const autoSeededPlaceholderEmails = new Set<string>();
 const verifiedSenderEmails = new Set<string>([
@@ -389,7 +406,7 @@ const payerSavedAccountsByEmail = new Map<string, PayerSavedBankAccount[]>([
       {
         id: "acc_paga_3153",
         bankName: "Paga Mobile Money",
-        accountNumber: "3661883153",
+        accountNumber: "36****3153",
         accountName: "Firopo Akintayo Akin-Agunbiade",
       },
     ],
@@ -400,7 +417,7 @@ const payerSavedAccountsByEmail = new Map<string, PayerSavedBankAccount[]>([
       {
         id: "acc_paga_3153",
         bankName: "Paga Mobile Money",
-        accountNumber: "3661883153",
+        accountNumber: "36****3153",
         accountName: "Firopo Akintayo Akin-Agunbiade",
       },
     ],
@@ -411,7 +428,7 @@ const payerSavedAccountsByEmail = new Map<string, PayerSavedBankAccount[]>([
       {
         id: "acc_john_6789",
         bankName: "Access Bank Nigeria Plc",
-        accountNumber: "0123456789",
+        accountNumber: "01****6789",
         accountName: "John Oluwaseun Adeyemi",
       },
     ],
@@ -422,7 +439,7 @@ const payerSavedAccountsByEmail = new Map<string, PayerSavedBankAccount[]>([
       {
         id: "acc_david_7890",
         bankName: "Guaranty Trust Bank (GTBank)",
-        accountNumber: "0234567890",
+        accountNumber: "02****7890",
         accountName: "David Chukwu Okonkwo",
       },
     ],
@@ -433,7 +450,7 @@ const payerSavedAccountsByEmail = new Map<string, PayerSavedBankAccount[]>([
       {
         id: "acc_sarah_5678",
         bankName: "Barclays",
-        accountNumber: "12345678",
+        accountNumber: "12**5678",
         accountName: "Sarah Williams",
       },
     ],
@@ -444,7 +461,7 @@ const payerSavedAccountsByEmail = new Map<string, PayerSavedBankAccount[]>([
       {
         id: "acc_emma_4321",
         bankName: "HSBC UK",
-        accountNumber: "87654321",
+        accountNumber: "87**4321",
         accountName: "Emma Grace Thompson",
       },
     ],
@@ -453,11 +470,12 @@ const payerSavedAccountsByEmail = new Map<string, PayerSavedBankAccount[]>([
 
 export function getPayerSavedAccounts(email?: string | null, request?: MoneyRequest): PayerSavedBankAccount[] {
   const list: PayerSavedBankAccount[] = [];
-  if (request?.payerSourceBankName && (requestPayerFullAccountById.get(request.id) || request.payerSourceAccountMasked)) {
-    const accNum = requestPayerFullAccountById.get(request.id) || request.payerSourceAccountMasked || "";
+  if (request && (request.payerSourceBankName || request.payerSourceAccountMasked || requestPayerFullAccountById.get(request.id))) {
+    const rawOrMasked = requestPayerFullAccountById.get(request.id) || request.payerSourceAccountMasked || "";
+    const accNum = rawOrMasked ? partiallyMaskSenderAccount(rawOrMasked) : "****";
     list.push({
       id: `req_acc_${request.id}`,
-      bankName: request.payerSourceBankName,
+      bankName: request.payerSourceBankName || "Your specified bank",
       accountNumber: accNum,
       accountName: request.senderName || request.payerName || "Verified Sender",
     });
@@ -605,6 +623,21 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
     deliveryId,
   });
 
+  const maskedSenderAcc = request.payerSourceAccountMasked
+    ? partiallyMaskSenderAccount(request.payerSourceAccountMasked)
+    : null;
+  const senderBankDisplay = [request.payerSourceBankName, maskedSenderAcc].filter(Boolean).join(" · ");
+  const senderAccountEmailBannerHtml = senderBankDisplay
+    ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:14px 16px;margin-bottom:20px;font-size:12px;color:#92400e;line-height:1.5;">
+        <p style="margin:0 0 4px;font-weight:700;color:#78350f;">Bank account provided by ${request.requesterName}: <span style="font-family:monospace;font-size:13px;">${senderBankDisplay}</span></p>
+        <p style="margin:0;">You should pay from the same bank account as provided to us by the requester (${senderBankDisplay}); otherwise, the requester may have to manually pair the payment with the correct sender.</p>
+      </div>`
+    : "";
+  const senderAccountEmailBannerText = senderBankDisplay
+    ? `Bank account provided by ${request.requesterName}: ${senderBankDisplay}\n` +
+      `Important: You should pay from the same bank account as provided to us by the requester (${senderBankDisplay}); otherwise, the requester may have to manually pair the payment with the correct sender.\n\n`
+    : "";
+
   const html = `
 <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border:2px solid #2563eb;border-radius:16px;overflow:hidden;color:#0f172a;">
   <div style="padding:28px 24px 16px;text-align:center;">
@@ -624,6 +657,7 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
       <p style="margin:0 0 4px;"><strong>Reference:</strong> ${request.requestNumber}</p>
       <p style="margin:0;"><strong>Expires on:</strong> ${expiryText}</p>
     </div>
+    ${senderAccountEmailBannerHtml}
     <div style="text-align:center;margin:24px 0;">
       <a href="${emailCheckoutUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:9999px;">
         Pay now
@@ -652,6 +686,7 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
       `Purpose: ${purposeText}\n` +
       `Reference: ${request.requestNumber}\n` +
       `This request expires on ${expiryText}.\n\n` +
+      senderAccountEmailBannerText +
       `Review and pay securely (no OTP/PIN needed via this email link):\n${emailCheckoutUrl}\n\n` +
       `⚠ Anti-fraud warning: Rhemito will never ask for your password, full card number or one-time codes by ` +
       `email or phone. If anything looks wrong, do not proceed with payment and contact Rhemito support.\n\n` +
@@ -938,8 +973,13 @@ export function toPublicRequestJSON(request: MoneyRequest, isEmailLink = false, 
     senderType: request.senderType ?? "individual",
     isKnownSender: isEmailLink ? isKnownSender : false,
     payerSourceBankName: request.payerSourceBankName ?? null,
-    payerSourceAccountMasked: request.payerSourceAccountMasked ?? null,
-    payerSourceAccountNumber: requestPayerFullAccountById.get(request.id) ?? request.payerSourceAccountMasked ?? null,
+    payerSourceAccountMasked: request.payerSourceAccountMasked
+      ? partiallyMaskSenderAccount(request.payerSourceAccountMasked)
+      : null,
+    payerSourceAccountNumber:
+      (requestPayerFullAccountById.get(request.id) || request.payerSourceAccountMasked)
+        ? partiallyMaskSenderAccount(requestPayerFullAccountById.get(request.id) || request.payerSourceAccountMasked || "")
+        : null,
     payerSavedAccounts: savedAccounts,
     collectionAccount: {
       accountName: `PWA - MITO-${request.requesterName.toUpperCase()}`,

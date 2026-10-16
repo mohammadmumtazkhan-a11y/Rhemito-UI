@@ -238,14 +238,20 @@ export default function RequestCheckout() {
       setPayerDisplayName(request.senderName);
     }
     if (request.payerSavedAccounts && request.payerSavedAccounts.length > 0) {
-      setSavedAccounts(request.payerSavedAccounts);
-      setSelectedPayerBankAccount((prev) => prev ?? request.payerSavedAccounts![0]);
-    } else if (request.payerSourceBankName && (request.payerSourceAccountNumber || request.payerSourceAccountMasked)) {
+      const maskedList = request.payerSavedAccounts.map((a) => ({
+        ...a,
+        accountNumber: maskSenderAccountForDisplay(a.accountNumber),
+      }));
+      setSavedAccounts(maskedList);
+      setSelectedPayerBankAccount((prev) => prev ?? maskedList[0]);
+    } else if (request.payerSourceBankName || request.payerSourceAccountNumber || request.payerSourceAccountMasked) {
       const fallbackAcc: PayerSavedBankAccount = {
         id: "req_source_acc",
-        bankName: request.payerSourceBankName,
-        accountNumber: request.payerSourceAccountNumber || request.payerSourceAccountMasked || "3661883153",
-        accountName: request.senderName || payerDisplayName || "Firopo Akintayo Akin-Agunbiade",
+        bankName: request.payerSourceBankName || "Your specified bank",
+        accountNumber: maskSenderAccountForDisplay(
+          request.payerSourceAccountMasked || request.payerSourceAccountNumber || "",
+        ),
+        accountName: request.senderName || payerDisplayName || "Verified Sender",
       };
       setSavedAccounts([fallbackAcc]);
       setSelectedPayerBankAccount((prev) => prev ?? fallbackAcc);
@@ -404,15 +410,21 @@ export default function RequestCheckout() {
 
   const applySavedAccounts = (accounts?: PayerSavedBankAccount[], fallbackName?: string) => {
     if (accounts && accounts.length > 0) {
-      setSavedAccounts(accounts);
-      setSelectedPayerBankAccount((prev) => prev ?? accounts[0]);
+      const maskedList = accounts.map((a) => ({
+        ...a,
+        accountNumber: maskSenderAccountForDisplay(a.accountNumber),
+      }));
+      setSavedAccounts(maskedList);
+      setSelectedPayerBankAccount((prev) => prev ?? maskedList[0]);
       return;
     }
-    if (request.payerSourceBankName && (request.payerSourceAccountNumber || request.payerSourceAccountMasked)) {
+    if (request.payerSourceBankName || request.payerSourceAccountNumber || request.payerSourceAccountMasked) {
       const acc: PayerSavedBankAccount = {
         id: "req_acc",
-        bankName: request.payerSourceBankName,
-        accountNumber: request.payerSourceAccountNumber || request.payerSourceAccountMasked || "",
+        bankName: request.payerSourceBankName || "Your specified bank",
+        accountNumber: maskSenderAccountForDisplay(
+          request.payerSourceAccountMasked || request.payerSourceAccountNumber || "",
+        ),
         accountName: fallbackName || request.senderName || "Verified Sender",
       };
       setSavedAccounts([acc]);
@@ -991,6 +1003,8 @@ export default function RequestCheckout() {
             </div>
           </div>
 
+          <RequesterProvidedAccountNotice request={request} />
+
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1" data-testid="dev-provider-notice">
             <p className="font-semibold flex items-center gap-1">
               <Info className="w-4 h-4 text-amber-700 shrink-0" />
@@ -1057,6 +1071,15 @@ export default function RequestCheckout() {
     const collectionAccountNumber = request.collectionAccount?.accountNumber || "4580016814";
     const collectionReference = request.collectionAccount?.paymentReference || paymentReference || "24588534";
     const checkoutQrUrl = typeof window !== "undefined" ? window.location.href : "";
+    const hasRequesterProvidedSenderAccount = Boolean(
+      request.payerSourceAccountMasked || request.payerSourceAccountNumber || request.payerSourceBankName,
+    );
+    const requesterProvidedMaskedNumber = maskSenderAccountForDisplay(
+      request.payerSourceAccountMasked || request.payerSourceAccountNumber || "",
+    );
+    const requesterProvidedSummary = [request.payerSourceBankName, requesterProvidedMaskedNumber]
+      .filter(Boolean)
+      .join(" · ");
 
     return (
       <Shell>
@@ -1099,6 +1122,8 @@ export default function RequestCheckout() {
                       Scan this with your camera to finish paying — it's the quickest way to confirm a bank transfer or open your banking app.
                     </p>
                   </div>
+
+                  <RequesterProvidedAccountNotice request={request} />
 
                   {/* QR Code with centered blue 'r' badge */}
                   <div className="flex justify-center py-1">
@@ -1234,6 +1259,8 @@ export default function RequestCheckout() {
                     })}
                   </div>
 
+                  <RequesterProvidedAccountNotice request={request} />
+
                   {/* Total to pay */}
                   <div className="rounded-2xl border border-slate-200 px-4 py-3.5 flex items-center justify-between bg-white">
                     <span className="text-sm text-slate-500 font-medium">Total to pay</span>
@@ -1319,7 +1346,7 @@ export default function RequestCheckout() {
                     </div>
                   </div>
 
-                  {/* Top Payer Source Account Box — open by default with updated manual-matching advisory */}
+                  {/* Top Payer Source Account Box — open by default with partially masked account & manual-pairing advisory */}
                   <div
                     className="rounded-2xl border-2 border-blue-600 bg-blue-50/40 p-4 space-y-2.5"
                     data-testid="payer-source-account-box"
@@ -1332,15 +1359,21 @@ export default function RequestCheckout() {
                         <p className="font-semibold text-slate-900 text-[13px]">
                           1. Pay by Bank Transfer from your account{" "}
                           {selectedPayerBankAccount ? (
-                            <span className="font-extrabold">
-                              {selectedPayerBankAccount.accountNumber} · {selectedPayerBankAccount.accountName}
+                            <span className="font-extrabold" data-testid="text-masked-payer-account">
+                              {maskSenderAccountForDisplay(selectedPayerBankAccount.accountNumber)} · {selectedPayerBankAccount.accountName}
+                            </span>
+                          ) : hasRequesterProvidedSenderAccount ? (
+                            <span className="font-extrabold" data-testid="text-masked-payer-account">
+                              {requesterProvidedSummary}
                             </span>
                           ) : (
                             <span className="font-extrabold">{payerDisplayName || payerEmail}</span>
                           )}
                         </p>
                         <p className="text-slate-500 mt-0.5">
-                          {selectedPayerBankAccount ? selectedPayerBankAccount.bankName : "Your bank account"}
+                          {selectedPayerBankAccount
+                            ? selectedPayerBankAccount.bankName
+                            : request.payerSourceBankName || "Your bank account"}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -1365,7 +1398,9 @@ export default function RequestCheckout() {
                       className="text-xs text-amber-800 bg-amber-50/90 border border-amber-200/80 rounded-xl px-3 py-2 font-medium leading-relaxed"
                       data-testid="payer-account-advisory"
                     >
-                      Please send only from this account. If you send from a separate account, we may not be able to match it instantly and your recipient may have to match it manually.
+                      {hasRequesterProvidedSenderAccount
+                        ? `You should pay from the same account as provided to us by the requester (${requesterProvidedSummary}); otherwise, the requester may have to manually pair the payment with the correct sender.`
+                        : "Please send only from this account. If you send from a separate account, we may not be able to match it instantly and your recipient may have to match it manually."}
                     </p>
                   </div>
 
@@ -1786,6 +1821,7 @@ export default function RequestCheckout() {
           </div>
 
           <CardContent className="p-6 pt-3 space-y-4">
+            <RequesterProvidedAccountNotice request={request} />
             {complianceNotice && (
               <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
                 <p className="font-semibold flex items-center gap-1.5 text-amber-800">
@@ -2354,6 +2390,7 @@ function MitoSummaryCard({ request, busy, onPay }: { request: PublicRequestView;
       </div>
       <CardContent className="p-6 pt-3 space-y-4">
         <PaymentBreakdown request={request} />
+        <RequesterProvidedAccountNotice request={request} />
         <Button
           variant="outline"
           className="w-full h-12 rounded-full border-blue-600 bg-white text-blue-600 hover:bg-blue-600 hover:text-white font-semibold transition-colors"
@@ -2371,3 +2408,54 @@ function MitoSummaryCard({ request, busy, onPay }: { request: PublicRequestView;
     </Card>
   );
 }
+
+/**
+ * Partially masks a sender bank account number so the sender can recognise
+ * which account to pay from without exposing the full number (e.g. "36****3153" or "****3153").
+ */
+function maskSenderAccountForDisplay(accountNumber?: string | null): string {
+  const trimmed = (accountNumber ?? "").trim();
+  if (!trimmed) return "";
+  if (trimmed.includes("*")) return trimmed;
+  if (trimmed.length >= 7) {
+    const middleStars = "*".repeat(Math.max(2, trimmed.length - 6));
+    return `${trimmed.slice(0, 2)}${middleStars}${trimmed.slice(-4)}`;
+  }
+  return `****${trimmed.slice(-4)}`;
+}
+
+/**
+ * Pre-payment notice shown whenever the requester has provided the sender's bank account.
+ * Displays the requester-provided bank account partially masked and advises the sender
+ * to pay from that same account so the requester does not have to manually pair the payment.
+ */
+function RequesterProvidedAccountNotice({ request }: { request: PublicRequestView }) {
+  const maskedAcc = maskSenderAccountForDisplay(
+    request.payerSourceAccountMasked || request.payerSourceAccountNumber || "",
+  );
+  const bankName = (request.payerSourceBankName ?? "").trim();
+  if (!maskedAcc && !bankName) return null;
+
+  const accountDisplay = [bankName, maskedAcc].filter(Boolean).join(" · ");
+
+  return (
+    <div
+      className="rounded-2xl border border-amber-300 bg-amber-50/90 p-4 text-left space-y-1.5"
+      data-testid="requester-provided-account-notice"
+    >
+      <div className="flex items-start gap-2.5">
+        <Building2 className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-xs font-bold text-amber-950" data-testid="requester-provided-account-masked">
+            Bank account provided by {request.requesterName}:{" "}
+            <span className="font-mono font-extrabold text-amber-900">{accountDisplay}</span>
+          </p>
+          <p className="text-xs text-amber-900 leading-relaxed" data-testid="requester-provided-account-message">
+            You should pay from the same account as provided to us by the requester ({accountDisplay}); otherwise, the requester may have to manually pair the payment with the correct sender.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+

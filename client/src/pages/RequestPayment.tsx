@@ -585,7 +585,7 @@ export default function RequestPayment() {
         senderName: formData.payerName.trim() || undefined,
         senderEmail: formData.senderEmail.trim() || undefined,
         senderId: formData.senderId || undefined,
-        payerBankName: formData.payerAccountNumber.trim() ? formData.payerBankName.trim() || undefined : undefined,
+        payerBankName: formData.payerBankName.trim() || undefined,
         payerAccountNumber: formData.payerAccountNumber.trim() || undefined,
         purpose: formData.reason as never,
         reference,
