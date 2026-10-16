@@ -30,6 +30,7 @@ import {
   requestNewPaymentLink,
   processPayinWebhook,
   processPayoutWebhook,
+  processMailjetWebhookEvents,
   startRequestSweep,
   RequestError,
   isKnownSenderEmail,
@@ -37,9 +38,10 @@ import {
   getPayerSavedAccounts,
   savePayerBankAccountForEmail,
 } from "./requestService";
+import { devEmailProvider, listRecentMailjetWebhookEvents } from "./providers";
 import { getFxRate } from "./fxService";
 import { FxError } from "./fxService";
-import { toMinorUnits, fromMinorUnits, maskAccountNumber } from "@shared/money";
+import { toMinorUnits, fromMinorUnits, maskAccountNumber, senderPaysMinorOf } from "@shared/money";
 import {
   addPayoutAccountSchema,
   createMoneyRequestSchema,
@@ -551,6 +553,60 @@ export function registerRequestMoneyRoutes(app: Express): void {
           || (existingUser ? [existingUser.firstName, existingUser.lastName].filter(Boolean).join(" ") : null)
         : null;
 
+      const amountValue = fromMinorUnits(
+        senderPaysMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee),
+        request.payInCurrency,
+      );
+      const displayAmount =
+        request.payInCurrency === "GBP" ? `£${amountValue}` : `${request.payInCurrency} ${amountValue}`;
+
+      // Send the 6-digit confirmation code via Mailjet (when accessed via shared link /pay/:token)
+      const otpCustomId = `otp:${request.id}:${Date.now()}`;
+      const otpPayload = JSON.stringify({
+        type: "payer_verification_code",
+        requestId: request.id,
+        requestNumber: request.requestNumber,
+        email,
+      });
+      const otpHtml = `
+<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border:2px solid #2563eb;border-radius:16px;overflow:hidden;color:#0f172a;">
+  <div style="padding:28px 24px 16px;text-align:center;">
+    <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:0.2em;color:#2563eb;text-transform:uppercase;">Mito Payment</p>
+    <p style="margin:12px 0 4px;font-size:14px;font-weight:600;color:#334155;">Payment Request From</p>
+    <h1 style="margin:0;font-size:22px;font-weight:800;color:#0f172a;">${request.requesterName}</h1>
+    <p style="margin:4px 0 0;font-size:12px;color:#64748b;">Ref ${request.requestNumber} · ${displayAmount}</p>
+  </div>
+  <div style="padding:0 24px 24px;text-align:center;">
+    <p style="margin:0 0 12px;font-size:14px;color:#334155;">
+      Enter this 6-digit confirmation code to verify your email and continue with your payment:
+    </p>
+    <div style="margin:16px auto;max-width:240px;background:#eff6ff;border:2px solid #2563eb;border-radius:12px;padding:16px 24px;font-size:32px;font-weight:800;letter-spacing:0.25em;color:#1d4ed8;font-family:monospace;">
+      ${code}
+    </div>
+    <p style="margin:12px 0 0;font-size:12px;color:#64748b;">
+      This code expires in 30 minutes.
+    </p>
+  </div>
+  <div style="background:#2563eb;padding:12px;text-align:center;color:#ffffff;font-weight:700;font-size:13px;">
+    rhemito
+  </div>
+</div>`;
+
+      await devEmailProvider.send({
+        to: email,
+        toName: knownSenderName ?? undefined,
+        subject: `${code} is your Rhemito payment confirmation code (${request.requestNumber})`,
+        text:
+          `Hello ${knownSenderName ?? "there"},\n\n` +
+          `Use this 6-digit confirmation code to verify your email for payment request ${request.requestNumber} (${displayAmount}) from ${request.requesterName}:\n\n` +
+          `${code}\n\n` +
+          `This code expires in 30 minutes.\n\n` +
+          `— Rhemito`,
+        html: otpHtml,
+        customId: otpCustomId,
+        eventPayload: otpPayload,
+      });
+
       return res.json({ data: {
         sent: true,
         isKnownSender,
@@ -787,6 +843,63 @@ export function registerRequestMoneyRoutes(app: Express): void {
     processPayoutWebhook(raw, String(req.headers["x-rhemito-signature"] ?? ""))
       .then((result) => res.json(result))
       .catch((err) => handleError(res, err));
+  });
+
+  // Mailjet Event API Webhook receiver (https://dev.mailjet.com/docs/email-api/webhooks/webhooks-overview)
+  // Receives real-time HTTP POST event notifications (sent, open, click, bounce, spam, blocked, unsub)
+  // and returns 200 OK so Mailjet does not retry every 30s.
+  app.post("/api/webhooks/mailjet", async (req, res) => {
+    try {
+      const { webhookUser, webhookPass } = serverConfig.mailjet;
+      if (webhookUser && webhookPass) {
+        const authHeader = String(req.headers.authorization ?? "");
+        const expected = `Basic ${Buffer.from(`${webhookUser}:${webhookPass}`).toString("base64")}`;
+        if (authHeader !== expected) {
+          return res.status(401).json({ error: "Unauthorized webhook request" });
+        }
+      }
+      const result = await processMailjetWebhookEvents(req.body);
+      return res.status(200).json({ status: "ok", ...result });
+    } catch (err) {
+      return handleError(res, err);
+    }
+  });
+
+  app.get("/api/webhooks/mailjet/events", (_req, res) => {
+    return res.status(200).json({ data: listRecentMailjetWebhookEvents() });
+  });
+
+  app.post("/api/webhooks/mailjet/simulate", async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as {
+        event?: string;
+        email?: string;
+        requestId?: string;
+        deliveryId?: string;
+        MessageID?: string | number;
+      };
+      const simulated = {
+        event: body.event ?? "open",
+        time: Math.floor(Date.now() / 1000),
+        MessageID: body.MessageID ?? `sim_mj_${Date.now()}`,
+        email: body.email ?? "sender@example.com",
+        CustomID:
+          body.requestId && body.deliveryId
+            ? `request:${body.requestId}:delivery:${body.deliveryId}`
+            : body.requestId
+              ? `request:${body.requestId}`
+              : undefined,
+        Payload: JSON.stringify({
+          requestId: body.requestId,
+          deliveryId: body.deliveryId,
+          simulated: true,
+        }),
+      };
+      const result = await processMailjetWebhookEvents(simulated);
+      return res.status(200).json({ status: "ok", ...result });
+    } catch (err) {
+      return handleError(res, err);
+    }
   });
 
   // ─── Development-only hooks (404 in production) ────────────────────────────

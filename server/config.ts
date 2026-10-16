@@ -12,9 +12,27 @@
  * prototype); a hardened production deployment sets RHEMITO_DEMO_MODE=off to
  * disable all of them at once.
  */
+try {
+  process.loadEnvFile();
+} catch {
+  /* no .env file */
+}
+
 export const demoModeEnabled: boolean = process.env.RHEMITO_DEMO_MODE !== "off";
 
 export const serverConfig = {
+  /**
+   * Mailjet transactional email & Event API webhook configuration.
+   */
+  mailjet: {
+    apiKey: process.env.MAILJET_API_KEY ?? "",
+    secretKey: process.env.MAILJET_SECRET_KEY ?? "",
+    fromEmail: process.env.MAILJET_FROM_EMAIL ?? "mohammadmumtazkhan@gmail.com",
+    fromName: process.env.MAILJET_FROM_NAME ?? "Rhemito",
+    webhookUser: process.env.MAILJET_WEBHOOK_USER ?? "",
+    webhookPass: process.env.MAILJET_WEBHOOK_PASS ?? "",
+  },
+
   /**
    * Trusted public base URL used to build payment links, QR codes and emails.
    * NEVER built from request Origin/Host headers (header injection risk).

@@ -456,28 +456,82 @@ export default function RequestCheckout() {
 
   /**
    * Clicking "Pay now" on the initial summary card (SenderScreen-1):
-   * - If opened via `/pay/e/:emailToken` and the sender is already known, proceeds directly without OTP.
-   * - Otherwise opens "Verify Your Email To Continue" (`verifyStage = "email_entry"`).
+   * - If opened via `/pay/e/:emailToken` (user coming from email): NEVER asks for OTP/PIN.
+   *   - Known/existing users proceed directly to `Continue on your phone`.
+   *   - Brand-new users with no name on the request see only the "New to Mito?" fields + "Continue to pay" (no OTP/PIN).
+   * - Otherwise (`/pay/:token` shared link) opens "Verify Your Email To Continue" (`Send code`).
    */
   const handlePayNowClick = async () => {
     setErrorMessage("");
     if (isEmailLink) {
       const emailToUse = (payerEmail || request.demoPayerEmail || "").trim().toLowerCase();
-      if (emailToUse) setPayerEmail(emailToUse);
-      if (request.isKnownSender && emailToUse) {
+      if (emailToUse) {
+        setPayerEmail(emailToUse);
         setBusy(true);
         try {
-          const res = await continueFromEmailLink(token!, { email: emailToUse });
-          await handleStartPayerFlow(res.savedAccounts, res.payerName);
-          return;
+          let known = Boolean(request.isKnownSender) || emailKnownStatus === true;
+          if (!known && emailKnownStatus === null) {
+            const check = await checkEmailRegistered(emailToUse);
+            known = Boolean(check.registered);
+          }
+          if (known) {
+            const res = await continueFromEmailLink(token!, { email: emailToUse });
+            await handleStartPayerFlow(res.savedAccounts, res.payerName);
+            return;
+          }
+          setEmailKnownStatus(false);
         } catch (err: any) {
           setErrorMessage(err?.message || "Could not start payment session.");
+        } finally {
           setBusy(false);
         }
       }
     }
     setVerifyStage("email_entry");
     setStarted(true);
+  };
+
+  /**
+   * Direct email-link continuation for a new user on `/pay/e/:emailToken` (no OTP/PIN required).
+   */
+  const handleEmailDirectContinueSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = (payerEmail || request.demoPayerEmail || "").trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      setErrorMessage("Please enter a valid email address.");
+      return;
+    }
+    if (emailKnownStatus === false) {
+      if (regAccountType === "individual") {
+        if (!regFirstName.trim() || !regLastName.trim()) {
+          setErrorMessage("Please enter your first name and last name.");
+          return;
+        }
+        if (!regGender) {
+          setErrorMessage("Please select your gender.");
+          return;
+        }
+      } else if (!bizName.trim()) {
+        setErrorMessage("Please enter your business name.");
+        return;
+      }
+    }
+    setBusy(true);
+    setErrorMessage("");
+    try {
+      const res = await continueFromEmailLink(token!, {
+        email,
+        accountType: regAccountType,
+        firstName: regFirstName.trim() || undefined,
+        lastName: regLastName.trim() || undefined,
+        businessName: bizName.trim() || undefined,
+        gender: regGender || undefined,
+      });
+      await handleStartPayerFlow(res.savedAccounts, res.payerName);
+    } catch (err: any) {
+      setErrorMessage(err?.message || "Could not start payment session.");
+      setBusy(false);
+    }
   };
 
   /**
@@ -1717,19 +1771,23 @@ export default function RequestCheckout() {
               </div>
             )}
 
-            {/* ── STAGE 1: Verify Your Email To Continue (Send code) ──
-                - Existing user or blank email: shows ONLY Email + Send code (GBP video 04:58 & NGN video 01:02).
-                - New user email (e.g. bisoyeakin+1@gmail.com): also reveals "New to Mito?" fields (GBP video 09:09). */}
+            {/* ── STAGE 1: Verify Your Email To Continue ──
+                - If opened via `/pay/e/:emailToken` (`isEmailLink === true`): NEVER asks for OTP/PIN (`Continue to pay`).
+                - If opened via `/pay/:token` (`isEmailLink === false`): sends 6-digit code via email (`Send code`). */}
             {verifyStage === "email_entry" && (
               <form
-                onSubmit={handleSendCodeSubmit}
+                onSubmit={isEmailLink ? handleEmailDirectContinueSubmit : handleSendCodeSubmit}
                 className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 space-y-4"
                 data-testid="ngn-verify-email"
               >
                 <div className="space-y-1">
-                  <p className="text-lg font-bold text-slate-900">Verify Your Email To Continue</p>
+                  <p className="text-lg font-bold text-slate-900">
+                    {isEmailLink ? "Confirm Your Details To Continue" : "Verify Your Email To Continue"}
+                  </p>
                   <p className="text-sm text-slate-500 leading-relaxed">
-                    Confirm the email we should use for your receipt. We will email a 6-digit code that expires in 30 minutes.
+                    {isEmailLink
+                      ? "Your email was verified via your payment link. Complete your details below to continue to payment."
+                      : "Confirm the email we should use for your receipt. We will email a 6-digit code that expires in 30 minutes."}
                   </p>
                 </div>
 
@@ -1741,14 +1799,15 @@ export default function RequestCheckout() {
                     placeholder="your.email@example.com"
                     value={payerEmail}
                     onChange={(e) => setPayerEmail(e.target.value)}
-                    className="bg-white h-11"
+                    readOnly={isEmailLink && Boolean(payerEmail)}
+                    className={isEmailLink && payerEmail ? "bg-amber-50/60 text-slate-700 border-slate-200 h-11" : "bg-white h-11"}
                     data-testid="input-payer-email"
                     required
-                    autoFocus
+                    autoFocus={!isEmailLink}
                   />
                 </div>
 
-                {emailKnownStatus === false && (
+                {(emailKnownStatus === false || isEmailLink) && (
                   <NewToMitoFields
                     regAccountType={regAccountType}
                     setRegAccountType={setRegAccountType}
@@ -1773,7 +1832,7 @@ export default function RequestCheckout() {
                   data-testid="button-check-email"
                 >
                   {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  Send code
+                  {isEmailLink ? "Continue to pay" : "Send code"}
                 </Button>
               </form>
             )}

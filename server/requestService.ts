@@ -21,7 +21,9 @@ import {
   devEmailProvider,
   verifyWebhookSignature,
   signWebhookPayload,
+  recordMailjetWebhookEvent,
   type PayinWebhookEvent,
+  type MailjetWebhookEvent,
 } from "./providers";
 import { postFundingEntries, postPayoutEntry, payoutTotalMinor } from "./walletService";
 import { dispatchNotification } from "./notificationService";
@@ -573,31 +575,85 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
 
   const corridor = findCorridor(request.corridorId);
   const emailCheckoutUrl = buildEmailCheckoutUrl(request.emailToken || request.token);
+  const expiryText = formatHumanDate(dateInTz(request.expiresAt, EXPIRY_TIMEZONE));
+  const purposeText = request.purpose.replace(/_/g, " ");
   // The sender is told the total they pay — requested amount plus fee when the
   // requester does not absorb it.
-  const amountText = `${fromMinorUnits(
+  const amountValue = fromMinorUnits(
     senderPaysMinorOf(request.payInAmountMinor, request.feeMinor, request.absorbFee),
     request.payInCurrency,
-  )} ${request.payInCurrency}`;
+  );
+  const amountText = `${amountValue} ${request.payInCurrency}`;
+  const displayAmount =
+    request.payInCurrency === "GBP" ? `£${amountValue}` : `${request.payInCurrency} ${amountValue}`;
+
+  const deliveryId = randomUUID();
+  const customId = `delivery:${deliveryId}`;
+  const eventPayload = JSON.stringify({
+    type: "payment_request_link",
+    requestId: request.id,
+    requestNumber: request.requestNumber,
+    deliveryId,
+  });
+
+  const html = `
+<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;border:2px solid #2563eb;border-radius:16px;overflow:hidden;color:#0f172a;">
+  <div style="padding:28px 24px 16px;text-align:center;">
+    <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:0.2em;color:#2563eb;text-transform:uppercase;">Mito Payment</p>
+    <p style="margin:12px 0 4px;font-size:14px;font-weight:600;color:#334155;">Payment Request From</p>
+    <h1 style="margin:0;font-size:22px;font-weight:800;color:#0f172a;">${request.requesterName}</h1>
+    <p style="margin:4px 0 0;font-size:12px;color:#64748b;">Ref ${request.requestNumber}</p>
+    <p style="margin:18px 0 4px;font-size:12px;color:#64748b;">You pay</p>
+    <p style="margin:0;font-size:38px;font-weight:800;color:#2563eb;">${displayAmount}</p>
+  </div>
+  <div style="padding:0 24px 24px;">
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:20px;font-size:13px;color:#334155;">
+      <p style="margin:0 0 8px;">Hello <strong>${request.senderName ?? "there"}</strong>,</p>
+      <p style="margin:0 0 12px;"><strong>${request.requesterName}</strong> has requested <strong>${amountText}</strong> through Rhemito.</p>
+      <p style="margin:0 0 4px;"><strong>Purpose:</strong> ${purposeText}</p>
+      <p style="margin:0 0 4px;"><strong>Reference:</strong> ${request.requestNumber}</p>
+      <p style="margin:0;"><strong>Expires on:</strong> ${expiryText}</p>
+    </div>
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${emailCheckoutUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 32px;border-radius:9999px;">
+        Pay now
+      </a>
+    </div>
+    <p style="margin:0 0 12px;font-size:12px;color:#64748b;text-align:center;">
+      Or copy and paste this direct link into your browser:<br/>
+      <a href="${emailCheckoutUrl}" style="color:#2563eb;word-break:break-all;">${emailCheckoutUrl}</a>
+    </p>
+    <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;line-height:1.5;">
+      ⚠ Anti-fraud warning: Rhemito will never ask for your password or full card number by email or phone. Because this link was sent directly to your email, you will not need to enter an OTP/PIN when opening it.
+    </p>
+  </div>
+  <div style="background:#2563eb;padding:12px;text-align:center;color:#ffffff;font-weight:700;font-size:13px;">
+    rhemito
+  </div>
+</div>`;
 
   const message = {
     to: recipientEmail,
+    toName: request.senderName ?? undefined,
     subject: `${request.requesterName} requests ${amountText} via Rhemito`,
     text:
       `Hello ${request.senderName ?? "there"},\n\n` +
       `${request.requesterName} has requested ${amountText} through Rhemito.\n\n` +
-      `Purpose: ${request.purpose.replace(/_/g, " ")}\n` +
+      `Purpose: ${purposeText}\n` +
       `Reference: ${request.requestNumber}\n` +
-      `This request expires on ${formatHumanDate(dateInTz(request.expiresAt, EXPIRY_TIMEZONE))}.\n\n` +
-      `Review and pay securely:\n${emailCheckoutUrl}\n\n` +
+      `This request expires on ${expiryText}.\n\n` +
+      `Review and pay securely (no OTP/PIN needed via this email link):\n${emailCheckoutUrl}\n\n` +
       `⚠ Anti-fraud warning: Rhemito will never ask for your password, full card number or one-time codes by ` +
       `email or phone. If anything looks wrong, do not proceed with payment and contact Rhemito support.\n\n` +
       `Need help? Contact Rhemito support: ${serverConfig.legalEntity.supportUrl}\n\n` +
       `— Rhemito (${serverConfig.legalEntity.displayName})`,
+    html,
+    customId,
+    eventPayload,
   };
 
   const delivery = {
-    id: randomUUID(),
+    id: deliveryId,
     requestId: request.id,
     toEmail: recipientEmail,
     subject: message.subject,
@@ -620,6 +676,101 @@ async function queueRequestEmail(request: MoneyRequest, kind: "initial" | "resen
     console.error("[requestService] email send failed:", err);
     await storage.updateEmailDelivery(stored.id, { state: "failed", attempts: "1", lastAttemptAt: new Date() });
   }
+}
+
+/**
+ * Processes real-time Mailjet Event API webhook callbacks (`sent`, `open`, `click`,
+ * `bounce`, `spam`, `blocked`, `unsub`) per https://dev.mailjet.com/docs/email-api/webhooks/webhooks-overview.
+ * Mailjet sends either a single JSON event object or an array of event objects and
+ * expects a `200 OK` HTTP response.
+ */
+export async function processMailjetWebhookEvents(
+  rawPayload: unknown,
+): Promise<{ accepted: true; processed: number; events: MailjetWebhookEvent[] }> {
+  const list: unknown[] = Array.isArray(rawPayload)
+    ? rawPayload
+    : rawPayload && typeof rawPayload === "object"
+      ? [rawPayload]
+      : [];
+
+  const processedEvents: MailjetWebhookEvent[] = [];
+
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Record<string, unknown>;
+    const eventType = String(raw.event ?? "sent").toLowerCase() as MailjetWebhookEvent["event"];
+    const evt: MailjetWebhookEvent = {
+      event: eventType,
+      time: typeof raw.time === "number" ? raw.time : Math.floor(Date.now() / 1000),
+      MessageID: (raw.MessageID as number | string) ?? `mj_${Date.now()}`,
+      Message_GUID: typeof raw.Message_GUID === "string" ? raw.Message_GUID : undefined,
+      email: typeof raw.email === "string" ? raw.email : "",
+      mj_campaign_id: typeof raw.mj_campaign_id === "number" ? raw.mj_campaign_id : undefined,
+      mj_contact_id: typeof raw.mj_contact_id === "number" ? raw.mj_contact_id : undefined,
+      customcampaign: typeof raw.customcampaign === "string" ? raw.customcampaign : undefined,
+      CustomID: typeof raw.CustomID === "string" ? raw.CustomID : undefined,
+      Payload: typeof raw.Payload === "string" ? raw.Payload : undefined,
+      ip: typeof raw.ip === "string" ? raw.ip : undefined,
+      geo: typeof raw.geo === "string" ? raw.geo : undefined,
+      agent: typeof raw.agent === "string" ? raw.agent : undefined,
+      url: typeof raw.url === "string" ? raw.url : undefined,
+      error_related_to: typeof raw.error_related_to === "string" ? raw.error_related_to : undefined,
+      error: typeof raw.error === "string" ? raw.error : undefined,
+      hard_bounce: typeof raw.hard_bounce === "boolean" ? raw.hard_bounce : undefined,
+      comment: typeof raw.comment === "string" ? raw.comment : undefined,
+    };
+
+    recordMailjetWebhookEvent(evt);
+    processedEvents.push(evt);
+
+    // Correlate CustomID (`delivery:<deliveryId>` or `request:<requestId>`) or Payload JSON
+    let requestId: string | undefined;
+    let deliveryId: string | undefined;
+    if (evt.CustomID) {
+      if (evt.CustomID.startsWith("delivery:")) {
+        deliveryId = evt.CustomID.slice("delivery:".length);
+      } else if (evt.CustomID.startsWith("request:")) {
+        const parts = evt.CustomID.split(":");
+        requestId = parts[1];
+        if (parts[2] === "delivery") deliveryId = parts[3];
+      }
+    }
+    if ((!requestId || !deliveryId) && evt.Payload) {
+      try {
+        const parsed = JSON.parse(evt.Payload) as { requestId?: string; deliveryId?: string };
+        requestId = requestId ?? parsed.requestId;
+        deliveryId = deliveryId ?? parsed.deliveryId;
+      } catch {
+        /* ignore non-JSON payload */
+      }
+    }
+
+    if (deliveryId) {
+      const mappedState =
+        eventType === "open"
+          ? "opened"
+          : eventType === "click"
+            ? "clicked"
+            : eventType === "bounce"
+              ? "bounced"
+              : eventType === "spam" || eventType === "blocked"
+                ? "failed"
+                : "sent";
+      await storage.updateEmailDelivery(deliveryId, {
+        state: mappedState,
+        lastAttemptAt: new Date(evt.time * 1000),
+      });
+    }
+
+    if (requestId && (eventType === "open" || eventType === "click")) {
+      const reqRecord = await storage.getMoneyRequestById(requestId);
+      if (reqRecord) {
+        markViewed(reqRecord);
+      }
+    }
+  }
+
+  return { accepted: true, processed: processedEvents.length, events: processedEvents };
 }
 
 async function sendLifecycleEmail(
