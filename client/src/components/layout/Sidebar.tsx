@@ -4,30 +4,22 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   LayoutDashboard,
-  ArrowLeftRight,
+  BarChart2,
   FileText,
   Users,
-  Shield,
-  HelpCircle,
+  ShieldCheck,
+  LifeBuoy,
   Settings,
   LogOut,
   X,
   Building2,
   Gift,
-  Inbox,
-  Send,
-  Sparkles,
-  UsersRound
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 
 interface NavItemData {
   icon: any;
@@ -35,30 +27,56 @@ interface NavItemData {
   href: string;
   enabled: boolean;
   tooltip?: string;
-  gradient?: string;
 }
 
-const overviewItem: NavItemData = { icon: LayoutDashboard, label: "Overview", href: "/", enabled: true, gradient: "from-blue-500 to-indigo-600" };
+const overviewItem: NavItemData = {
+  icon: LayoutDashboard,
+  label: "Overview",
+  href: "/",
+  enabled: true,
+};
 
-const transactionsItem: NavItemData = { icon: ArrowLeftRight, label: "Transactions", href: "/transactions", enabled: true, gradient: "from-blue-500 to-indigo-600" };
+const transactionsItem: NavItemData = {
+  icon: BarChart2,
+  label: "Transactions",
+  href: "/transactions",
+  enabled: true,
+};
 
-// Invoices — generate on the go or upload, then track every invoice in one place
-const invoicesItem: NavItemData = { icon: FileText, label: "Invoices", href: "/invoices", enabled: true, gradient: "from-blue-500 to-indigo-600" };
+const invoicesItem: NavItemData = {
+  icon: FileText,
+  label: "Invoices",
+  href: "/invoices",
+  enabled: true,
+};
 
-// Consolidated people directory — senders and recipients live on one page.
-const sendersRecipientsItem: NavItemData = { icon: Users, label: "Senders & Recipients", href: "/senders-recipients", enabled: true, gradient: "from-blue-500 to-indigo-600" };
+const sendersRecipientsItem: NavItemData = {
+  icon: Users,
+  label: "Senders & Recipients",
+  href: "/senders-recipients",
+  enabled: true,
+};
 
-// Settlement bank account — standalone top-level entry
-const collectionsAccountsItem: NavItemData = { icon: Building2, label: "Settlement bank account", href: "/payout-accounts", enabled: true, tooltip: "You receive money here", gradient: "from-blue-500 to-indigo-600" };
+const collectionsAccountsItem: NavItemData = {
+  icon: Building2,
+  label: "Settlement bank account",
+  href: "/payout-accounts",
+  enabled: true,
+  tooltip: "You receive money here",
+};
 
 const otherNavItems: NavItemData[] = [
-  { icon: Shield, label: "Compliance", href: "/compliance", enabled: true },
-  { icon: HelpCircle, label: "Support", href: "/support", enabled: true },
+  { icon: ShieldCheck, label: "Compliance", href: "/compliance", enabled: true },
+  { icon: LifeBuoy, label: "Support", href: "/support", enabled: true },
   { icon: Settings, label: "Settings", href: "/settings", enabled: true },
 ];
 
-// Special highlighted item
-const bonusItem: NavItemData = { icon: Gift, label: "Bonus & Discounts", href: "/bonus-discounts", enabled: true, gradient: "from-amber-400 to-orange-500" };
+const bonusItem: NavItemData = {
+  icon: Gift,
+  label: "Bonus & Discounts",
+  href: "/bonus-discounts",
+  enabled: true,
+};
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -67,12 +85,19 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
 }
 
-export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
+export function Sidebar({
+  isOpen = false,
+  onClose,
+  collapsed = false,
+  onToggleCollapse,
+}: SidebarProps) {
   const [location, setLocation] = useLocation();
   // "Rewards waiting!" only when there is bonus to use or a fresh offer (AC-5.1.12)
   const rewards = useRewards();
   const rewardsWaiting = Boolean(
-    rewards.data && (rewards.data.wallet.balances.some((b) => b.available > 0) || rewards.data.latestOffer),
+    rewards.data &&
+      (rewards.data.wallet.balances.some((b) => b.available > 0) ||
+        rewards.data.latestOffer)
   );
   const { toast } = useToast();
 
@@ -82,169 +107,167 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     } catch {
       // session may already be gone
     }
-    toast({ title: "Logged out", description: "You have been signed out successfully." });
+    toast({
+      title: "Logged out",
+      description: "You have been signed out successfully.",
+    });
     setLocation("/sign-in-sign-up");
   };
 
-  const NavItem = ({ item, className }: { item: NavItemData, className?: string }) => {
-    const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+  const NavItem = ({
+    item,
+    className,
+  }: {
+    item: NavItemData;
+    className?: string;
+  }) => {
+    const isActive =
+      location === item.href ||
+      (item.href !== "/" && location.startsWith(item.href));
 
     const content = (
       <div
         className={cn(
-          "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+          "flex items-center gap-3.5 px-4 py-2.5 rounded-lg text-[13px] transition-all duration-150",
           !item.enabled && "opacity-50 cursor-not-allowed",
           item.enabled && "cursor-pointer",
+          collapsed && "justify-center px-2",
           isActive
-            ? "bg-gradient-to-r from-primary/10 to-indigo-500/10 text-primary shadow-sm border border-primary/20"
-            : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/80 hover:shadow-sm",
+            ? "bg-blue-50/90 text-blue-700 font-semibold"
+            : "text-blue-600 hover:bg-blue-50/50 hover:text-blue-700 font-normal",
           className
         )}
-        data-testid={`link-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+        data-testid={`link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
       >
         {item.href === "/payout-accounts" && (
           <span className="sr-only" data-testid="link-collections-accounts" />
         )}
-        <div className={cn(
-          "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200",
-          isActive
-            ? `bg-gradient-to-br ${item.gradient || 'from-primary to-indigo-600'} shadow-md`
-            : "bg-gray-100 group-hover:bg-gray-200"
-        )}>
-          <item.icon className={cn("w-4 h-4 shrink-0", isActive ? "text-white" : "text-gray-500")} />
-        </div>
-        <span className={cn("font-medium", isActive && "font-semibold")}>{item.label}</span>
+        <item.icon
+          className={cn(
+            "w-[18px] h-[18px] shrink-0",
+            isActive ? "text-blue-700" : "text-blue-600"
+          )}
+        />
+        {!collapsed && <span className="truncate">{item.label}</span>}
       </div>
     );
 
-    const wrappedContent = item.tooltip ? (
-      <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
-        <TooltipContent side="right" className="bg-gray-900 text-white border-0">
-          <p>{item.tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    ) : (
-      content
-    );
+    const wrappedContent =
+      item.tooltip || collapsed ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{content}</TooltipTrigger>
+          <TooltipContent
+            side="right"
+            className="bg-slate-900 text-white border-0"
+          >
+            <p>{item.tooltip || item.label}</p>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        content
+      );
 
     if (!item.enabled) return wrappedContent;
 
     return (
       <Link key={item.href} href={item.href} onClick={onClose}>
-        <motion.div whileHover={{ x: 4 }} className="group">
-          {wrappedContent}
-        </motion.div>
+        <div className="group">{wrappedContent}</div>
       </Link>
     );
   };
 
-  const sidebarContent = (
-    <>
-      {/* Header with Logo */}
-      <div className="p-6 flex items-center gap-3">
-        <Link href="/" onClick={onClose} data-testid="link-logo-home">
-          <div className="w-10 h-10 flex items-center justify-center cursor-pointer transition-transform duration-200 hover:scale-105">
-            <img
-              src="/logo.png"
-              alt="Rhemito Logo"
-              className="w-10 h-10 object-contain"
-            />
-          </div>
-        </Link>
-        <button
-          onClick={onClose}
-          className="ml-auto w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors lg:hidden"
-          data-testid="button-collapse-sidebar"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Navigation */}
+  const renderNavList = (isMobileDrawer: boolean) => {
+    const isCollapsed = !isMobileDrawer && collapsed;
+    return (
       <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto">
         <NavItem item={overviewItem} />
         <NavItem item={transactionsItem} />
-        <NavItem item={invoicesItem} />
 
-        {/* Consolidated people directory — main item, not a sub-option */}
-        <NavItem item={sendersRecipientsItem} />
-
-        {/* Settlement bank account — main item, not a sub-option */}
-        <NavItem item={collectionsAccountsItem} />
-
-        {/* Divider */}
-        <div className="py-2">
-          <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
-        </div>
-
-        {otherNavItems.slice(0, 2).map((item) => (
-          <NavItem key={item.href} item={item} />
-        ))}
-
-        {/* Premium Bonus & Discounts Item */}
+        {/* Bonus & Discounts (Reward$ position in reference layout) */}
         <Link href={bonusItem.href} onClick={onClose}>
-          <motion.div
-            whileHover={{ x: 4, scale: 1.02 }}
-            className="group relative"
+          <div
+            className={cn(
+              "flex items-center gap-3.5 px-4 py-2.5 rounded-lg text-[13px] transition-all duration-150 cursor-pointer",
+              isCollapsed && "justify-center px-2",
+              location === bonusItem.href
+                ? "bg-blue-50/90 text-blue-700 font-semibold"
+                : "text-blue-600 hover:bg-blue-50/50 hover:text-blue-700 font-normal"
+            )}
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 via-orange-400/20 to-pink-400/20 rounded-xl blur-sm group-hover:blur-md transition-all duration-300" />
-            <div className={cn(
-              "relative flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
-              "bg-gradient-to-r from-amber-50 via-orange-50 to-pink-50",
-              "border border-amber-200/50 hover:border-amber-300",
-              "text-amber-800 hover:text-amber-900",
-              "shadow-sm hover:shadow-md hover:shadow-amber-100/50",
-              location === bonusItem.href && "ring-2 ring-amber-400/50"
-            )}>
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-pink-500 flex items-center justify-center shadow-lg shadow-orange-300/50 group-hover:shadow-orange-400/50 transition-all duration-300">
-                <Gift className="w-5 h-5 text-white" />
+            <Gift className="w-[18px] h-[18px] text-blue-600 shrink-0" />
+            {!isCollapsed && (
+              <div className="flex-1 min-w-0">
+                <span className="block truncate">Bonus & Discounts</span>
+                {rewardsWaiting && (
+                  <span className="text-[10px] font-medium text-blue-600/80">
+                    Rewards waiting!
+                  </span>
+                )}
               </div>
-              <div className="flex-1">
-                <span className="block">Bonus & Discounts</span>
-                {rewardsWaiting && <span className="text-[10px] font-medium text-amber-600/80">Rewards waiting!</span>}
-              </div>
-              {rewardsWaiting && <div className="flex items-center gap-1" data-testid="rewards-waiting-badge">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-gradient-to-r from-amber-500 to-orange-500"></span>
-                </span>
-                <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+            )}
+            {rewardsWaiting && !isCollapsed && (
+              <div
+                className="flex items-center gap-1"
+                data-testid="rewards-waiting-badge"
+              >
+                <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-2xs">
                   NEW
                 </span>
-              </div>}
-            </div>
-          </motion.div>
+              </div>
+            )}
+          </div>
         </Link>
 
-        {otherNavItems.slice(2).map((item) => (
+        <NavItem item={invoicesItem} />
+        <NavItem item={sendersRecipientsItem} />
+        <NavItem item={collectionsAccountsItem} />
+
+        {otherNavItems.map((item) => (
           <NavItem key={item.href} item={item} />
         ))}
 
-      </nav>
-
-      {/* Footer with Logout */}
-      <div className="px-3 py-4 border-t border-gray-100 bg-gradient-to-t from-gray-50/50 to-transparent">
-        <motion.button
-          whileHover={{ x: 4 }}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 w-full transition-all duration-200 group"
+        {/* Logout item in the navigation list matching reference layout */}
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-3.5 px-4 py-2.5 rounded-lg text-[13px] font-normal text-blue-600 hover:text-red-600 hover:bg-red-50/60 w-full transition-all duration-150 cursor-pointer",
+            isCollapsed && "justify-center px-2"
+          )}
           data-testid="button-logout"
           onClick={handleLogout}
         >
-          <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-gradient-to-br group-hover:from-red-400 group-hover:to-rose-500 flex items-center justify-center transition-all duration-200">
-            <LogOut className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
-          </div>
-          Logout
-        </motion.button>
-      </div>
-    </>
-  );
+          <LogOut className="w-[18px] h-[18px] shrink-0" />
+          {!isCollapsed && <span>Logout</span>}
+        </button>
+      </nav>
+    );
+  };
 
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex bg-white/95 backdrop-blur-sm border-r border-gray-100 h-screen flex-col fixed left-0 top-0 z-50 transition-all duration-300 w-56 shadow-xl shadow-gray-200/50">
-        {sidebarContent}
+      <aside
+        className={cn(
+          "hidden lg:flex bg-white border-r border-slate-200/80 h-[calc(100vh-4rem)] flex-col fixed left-0 top-16 z-30 transition-all duration-300",
+          collapsed ? "w-20" : "w-60"
+        )}
+      >
+        {/* Reference circular collapse toggle button on the right border */}
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="absolute -right-3.5 top-7 w-7 h-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center justify-center transition-colors cursor-pointer z-40"
+          >
+            {collapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </button>
+        )}
+        {renderNavList(false)}
       </aside>
 
       {/* Mobile sidebar overlay */}
@@ -265,7 +288,26 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
               className="fixed left-0 top-0 w-72 bg-white h-screen flex flex-col z-50 lg:hidden shadow-2xl"
             >
-              {sidebarContent}
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <img
+                    src="/logo.png"
+                    alt="Rhemito Logo"
+                    className="w-8 h-8 object-contain"
+                  />
+                  <span className="font-display font-bold text-lg text-slate-900">
+                    Rhemito
+                  </span>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
+                  data-testid="button-collapse-sidebar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {renderNavList(true)}
             </motion.aside>
           </>
         )}
@@ -273,3 +315,4 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     </>
   );
 }
+

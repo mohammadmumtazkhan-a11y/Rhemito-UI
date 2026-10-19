@@ -127,37 +127,30 @@ function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled:
         tx.status === "awaiting_payment" && "border-l-2 border-l-amber-400 bg-amber-50/15"
       )}
     >
-      <TableCell className="font-semibold text-blue-600 text-sm py-4 pl-4 sm:pl-6">
-        <div className="font-mono text-[13px] tracking-tight">{tx.id}</div>
-        <div className="text-xs font-bold text-gray-900 mt-0.5 sm:hidden">{tx.amount}</div>
-      </TableCell>
-      <TableCell className="text-sm font-medium text-gray-900 py-4">
+      <TableCell className="text-[13px] font-medium text-slate-700 py-4 pl-4 sm:pl-6">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-blue-100/70 text-blue-700 font-semibold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-            {tx.recipient.slice(0, 2).toUpperCase()}
-          </div>
-          <div>
-            <div className="font-medium text-slate-900">{tx.recipient}</div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-medium text-gray-500">
-              <span className={cn("w-1.5 h-1.5 rounded-full", TYPE_BADGES.send_money.dot)} />
-              {TYPE_BADGES.send_money.label}
-            </div>
-          </div>
+          <span className="w-5 h-5 rounded-full border border-blue-500 text-blue-600 flex items-center justify-center shrink-0">
+            <ArrowUpRight className="w-3 h-3" aria-hidden />
+          </span>
+          <span className="tracking-tight">{tx.id}</span>
+        </div>
+        <div className="text-xs font-bold text-gray-900 mt-0.5 sm:hidden pl-7">{tx.amount}</div>
+      </TableCell>
+      <TableCell className="text-slate-500 text-[13px] hidden sm:table-cell py-4">
+        <span>{tx.date}</span>
+      </TableCell>
+      <TableCell className="text-[13px] font-medium text-slate-700 py-4">
+        <div>{tx.recipient}</div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+          <span className={cn("w-1.5 h-1.5 rounded-full", TYPE_BADGES.send_money.dot)} />
+          {TYPE_BADGES.send_money.label}
         </div>
       </TableCell>
-      <TableCell className="text-gray-500 text-sm hidden md:table-cell py-4">
-        <span className="inline-flex items-center text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
-          {tx.service}
-        </span>
+      <TableCell className="text-slate-500 text-[13px] hidden md:table-cell py-4">
+        <span>{tx.service}</span>
       </TableCell>
-      <TableCell className="text-gray-500 text-sm hidden sm:table-cell py-4">
-        <span className="text-xs text-slate-500 font-medium">{tx.date}</span>
-      </TableCell>
-      <TableCell className="text-right font-bold text-gray-900 text-sm py-4 hidden sm:table-cell">
-        <div className="flex items-center justify-end gap-1">
-          <ArrowUpRight className="w-3.5 h-3.5 text-blue-500" aria-hidden />
-          <span className="font-semibold text-slate-900">{tx.amount}</span>
-        </div>
+      <TableCell className="text-slate-600 text-[13px] font-normal py-4 hidden sm:table-cell">
+        <span>{tx.amount}</span>
       </TableCell>
       <TableCell className="text-center py-4">
         {scheduled ? (
@@ -231,7 +224,7 @@ function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled:
           <Button
             size="sm"
             variant="outline"
-            className="h-8 px-4 text-xs font-medium rounded-lg border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all active:scale-95"
+            className="h-8 px-5 text-xs font-medium rounded-full border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all active:scale-95"
             data-testid={`button-cancel-${tx.id}`}
           >
             Cancel
@@ -246,7 +239,7 @@ function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled:
                 {isTerminal && (
                   <Button
                     size="sm"
-                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all active:scale-95"
+                    className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-full sm:w-auto px-6 text-xs font-medium rounded-full shadow-2xs transition-all active:scale-95"
                     data-testid={`button-resend-${tx.id}`}
                   >
                     Resend
@@ -266,7 +259,7 @@ function SendMoneyRow({ tx, scheduled, onCancel }: { tx: SendMoneyTx; scheduled:
                         size="sm"
                         variant="outline"
                         className={cn(
-                          "h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg",
+                          "h-8 w-full sm:w-auto px-5 text-xs font-medium rounded-full",
                           "text-red-500 border border-red-200 bg-white",
                           "hover:bg-red-50 hover:border-red-300 hover:text-red-600",
                           "active:bg-red-100 active:border-red-400",
@@ -358,38 +351,31 @@ function UnifiedRow({
       data-testid={`row-${row.type}-${row.ref}`}
       className="hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0"
     >
-      <TableCell className="font-semibold text-blue-600 text-sm py-4 pl-4 sm:pl-6">
-        <div className="font-mono text-[13px] tracking-tight">{row.ref}</div>
-        <div className="text-xs font-bold text-gray-900 mt-0.5 sm:hidden">{row.amountLabel}</div>
-      </TableCell>
-      <TableCell className="text-sm font-medium text-gray-900 py-4">
+      <TableCell className="text-[13px] font-medium text-slate-700 py-4 pl-4 sm:pl-6">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-teal/10 text-teal font-semibold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-            {row.name.slice(0, 2).toUpperCase()}
-          </div>
-          <div>
-            <div className="font-medium text-slate-900">{row.name}</div>
-            {row.email ? <div className="text-xs text-slate-400 mt-0.5">{row.email}</div> : null}
-            <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
-              <span className={cn("w-1.5 h-1.5 rounded-full", badge.dot)} />
-              {badge.label}
-            </div>
-          </div>
+          <span className="w-5 h-5 rounded-full border border-blue-500 text-blue-600 flex items-center justify-center shrink-0">
+            <ArrowDownLeft className="w-3 h-3" aria-hidden />
+          </span>
+          <span className="tracking-tight">{row.ref}</span>
+        </div>
+        <div className="text-xs font-bold text-gray-900 mt-0.5 sm:hidden pl-7">{row.amountLabel}</div>
+      </TableCell>
+      <TableCell className="text-slate-500 text-[13px] hidden sm:table-cell py-4">
+        <span>{row.dateLabel}</span>
+      </TableCell>
+      <TableCell className="text-[13px] font-medium text-slate-700 py-4">
+        <div>{row.name}</div>
+        {row.email ? <div className="text-xs text-slate-400 mt-0.5">{row.email}</div> : null}
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+          <span className={cn("w-1.5 h-1.5 rounded-full", badge.dot)} />
+          {badge.label}
         </div>
       </TableCell>
-      <TableCell className="text-gray-500 text-sm hidden md:table-cell py-4">
-        <span className="inline-flex items-center text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
-          {row.service}
-        </span>
+      <TableCell className="text-slate-500 text-[13px] hidden md:table-cell py-4">
+        <span>{row.service}</span>
       </TableCell>
-      <TableCell className="text-gray-500 text-sm hidden sm:table-cell py-4">
-        <span className="text-xs text-slate-500 font-medium">{row.dateLabel}</span>
-      </TableCell>
-      <TableCell className="text-right font-bold text-gray-900 text-sm py-4 hidden sm:table-cell">
-        <div className="flex items-center justify-end gap-1">
-          <ArrowDownLeft className="w-3.5 h-3.5 text-teal-600" aria-hidden />
-          <span className="font-semibold text-slate-900">{row.amountLabel}</span>
-        </div>
+      <TableCell className="text-slate-600 text-[13px] font-normal py-4 hidden sm:table-cell">
+        <span>{row.amountLabel}</span>
         {row.subNote ? <div className="text-xs font-normal text-slate-400 mt-0.5">{row.subNote}</div> : null}
       </TableCell>
       <TableCell className="text-center py-4">
@@ -404,7 +390,7 @@ function UnifiedRow({
         <div className="flex items-center justify-center gap-1.5 flex-wrap">
           <Button
             size="sm"
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-8 w-full sm:w-auto px-4 text-xs font-medium rounded-lg shadow-sm hover:shadow-md transition-all active:scale-95"
+            className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-full sm:w-auto px-6 text-xs font-medium rounded-full shadow-2xs transition-all active:scale-95"
             data-testid={`button-view-${row.ref}`}
             onClick={() => (req ? onRequestDetails(req) : onView(row.viewHref))}
           >
@@ -424,7 +410,7 @@ function UnifiedRow({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 px-3 text-xs font-medium rounded-lg border-gray-200 hover:border-blue-300 hover:text-blue-600 active:scale-95"
+              className="h-8 px-3 text-xs font-medium rounded-full border-gray-200 hover:border-blue-300 hover:text-blue-600 active:scale-95"
               data-testid={`button-create-new-${row.ref}`}
               onClick={() => onView("/send-invoice")}
             >
@@ -966,190 +952,182 @@ export default function Dashboard() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="space-y-4 md:space-y-6"
+        className="space-y-5 md:space-y-6"
       >
+        {/* Top Welcome & Meta Row */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <motion.h1
-              variants={itemVariants}
-              className="text-xl md:text-2xl font-bold font-display text-slate-900 tracking-tight flex items-center gap-2"
-            >
-              <span data-testid="dashboard-welcome">Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}</span>
-              <span className="inline-block origin-[70%_70%] text-xl md:text-2xl">👋</span>
-            </motion.h1>
-            <motion.p variants={itemVariants} className="text-xs md:text-sm text-slate-500 mt-0.5">
-              Overview of your money transfers, instant links, and accounts.
-            </motion.p>
-          </div>
+          <motion.h1
+            variants={itemVariants}
+            className="text-xl md:text-[22px] font-normal text-slate-800 tracking-tight"
+          >
+            <span data-testid="dashboard-welcome">
+              Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}
+            </span>
+          </motion.h1>
 
-          {bonusBalance.available > 0 && (
-            <motion.div variants={itemVariants} className="self-start md:self-auto max-w-full">
-              <BonusCreditPill balance={bonusBalance} unused={rewards.data?.wallet.unused} onCreateTransaction={() => setLocation("/send-money")} />
-            </motion.div>
-          )}
+          <motion.div
+            variants={itemVariants}
+            className="flex flex-wrap items-center gap-4 md:gap-5"
+          >
+            {bonusBalance.available > 0 && (
+              <BonusCreditPill
+                balance={bonusBalance}
+                unused={rewards.data?.wallet.unused}
+                onCreateTransaction={() => setLocation("/send-money")}
+              />
+            )}
+            <div className="flex items-center gap-4 text-xs text-slate-500">
+              <span>powered by mito.money</span>
+              <a
+                href="#privacy"
+                onClick={(e) => e.preventDefault()}
+                className="font-medium text-slate-600 hover:text-blue-600 transition-colors"
+              >
+                Privacy Policy
+              </a>
+              <a
+                href="#terms"
+                onClick={(e) => e.preventDefault()}
+                className="font-medium text-slate-600 hover:text-blue-600 transition-colors"
+              >
+                Terms
+              </a>
+            </div>
+          </motion.div>
         </div>
 
-        <OfferBanner latestOffer={rewards.data?.latestOffer ?? null} onView={viewReferOffer} />
+        <OfferBanner
+          latestOffer={rewards.data?.latestOffer ?? null}
+          onView={viewReferOffer}
+        />
 
-        {/* Account Summary at the top of Overview (Sent, Wallet Balance, Collection Account) */}
+        {/* Account Summary Section — 3 Pastel Cards matching reference screenshot */}
         <motion.div variants={itemVariants} data-testid="section-account-summary">
-          <Card className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300">
-            <CardHeader className="pb-3 px-5 pt-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100/80 shadow-xs">
-                    <CreditCard className="w-4 h-4" />
-                  </div>
-                  <CardTitle className="text-base font-bold text-slate-800 tracking-tight">Account Summary</CardTitle>
-                </div>
-                <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-                  #210145
+          <h2 className="text-lg md:text-xl font-bold text-slate-800 tracking-tight mb-3">
+            Account Summary
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Total Sent Card */}
+            <div className="rounded-2xl bg-[#E8F0FE] px-5 py-5 flex flex-col justify-between min-h-[104px]">
+              <span className="text-xs font-medium text-slate-500">
+                Total Sent
+              </span>
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight">
+                  750,895.75 GBP
                 </span>
+                <Select defaultValue="GBP">
+                  <SelectTrigger className="h-8 w-[84px] rounded-full text-xs bg-white border-0 shadow-2xs font-medium text-slate-600 px-3">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-3 px-5 pb-4 pt-0">
-              {/* Sent Section */}
-              <div className="flex flex-col justify-center p-3 rounded-xl bg-slate-50/70 border border-slate-100 hover:border-slate-200 transition-colors">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                    <ArrowUpRight className="w-3.5 h-3.5 text-teal-600" />
-                    <span>Sent</span>
-                  </div>
-                  <Select defaultValue="GBP">
-                    <SelectTrigger className="h-6 w-[70px] text-[11px] bg-white border-slate-200 shadow-2xs font-medium">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GBP">GBP</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs text-slate-400 font-medium">£</span>
-                  <span className="text-base md:text-lg font-bold text-slate-900 tracking-tight">750,895.75</span>
-                </div>
-              </div>
+            </div>
 
-              {/* Wallet Section */}
-              <div className="flex flex-col justify-center p-3 rounded-xl bg-blue-50/40 border border-blue-100/60 hover:border-blue-200/80 transition-colors">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
-                    <Wallet className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Wallet Balance</span>
-                  </div>
-                  <Select defaultValue="GBP">
-                    <SelectTrigger className="h-6 w-[70px] text-[11px] bg-white border-blue-200/80 shadow-2xs font-medium">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GBP">GBP</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs text-blue-400 font-medium">£</span>
-                  <span className="text-base md:text-lg font-bold text-blue-700 tracking-tight">253,007.92</span>
-                </div>
+            {/* Wallet Balance Card */}
+            <div className="rounded-2xl bg-[#DFEEFB] px-5 py-5 flex flex-col justify-between min-h-[104px]">
+              <span className="text-xs font-medium text-slate-500">
+                Wallet Balance
+              </span>
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight">
+                  253,007.92 GBP
+                </span>
+                <Select defaultValue="GBP">
+                  <SelectTrigger className="h-8 w-[84px] rounded-full text-xs bg-white border-0 shadow-2xs font-medium text-slate-600 px-3">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
 
-              {/* Collection Account Section */}
-              <div className="flex flex-col justify-center p-3 rounded-xl bg-purple-50/40 border border-purple-100/60 hover:border-purple-200/80 transition-colors">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-700">
-                    <Building2 className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Collection Account</span>
-                  </div>
-                  <Select defaultValue="GBP">
-                    <SelectTrigger className="h-6 w-[70px] text-[11px] bg-white border-purple-200/80 shadow-2xs font-medium">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GBP">GBP</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs text-purple-400 font-medium">£</span>
-                  <span className="text-base md:text-lg font-bold text-purple-800 tracking-tight">4,357,384.08</span>
-                </div>
+            {/* Collection / Payment Account Card */}
+            <div className="rounded-2xl bg-[#DFEFE0] px-5 py-5 flex flex-col justify-between min-h-[104px]">
+              <span className="text-xs font-medium text-slate-500">
+                Collection Account
+              </span>
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight">
+                  4,357,384.08 GBP
+                </span>
+                <Select defaultValue="GBP">
+                  <SelectTrigger className="h-8 w-[84px] rounded-full text-xs bg-white border-0 shadow-2xs font-medium text-slate-600 px-3">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Quick Services Horizontal Pill Bar matching reference screenshot */}
+        <motion.div variants={itemVariants}>
+          <Card className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+            <CardContent className="px-5 py-4">
+              <h3 className="text-sm font-bold text-slate-700 mb-3">
+                Quick Services
+              </h3>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setLocation("/send-money")}
+                  data-testid="button-send-money"
+                  className="h-9 px-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-2xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Send Money
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/request-payment")}
+                  data-testid="button-request-payment"
+                  className="h-9 px-7 rounded-full border border-blue-500 bg-white hover:bg-blue-50 text-blue-600 text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+                >
+                  Receive Money
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/bonus-discounts")}
+                  data-testid="button-bonus-discounts"
+                  className="h-9 px-7 rounded-full border border-blue-400 bg-blue-50/80 hover:bg-blue-100/80 text-blue-600 text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+                >
+                  Reward$
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/send-invoice")}
+                  data-testid="button-send-invoice"
+                  className="h-9 px-7 rounded-full border border-blue-500 bg-white hover:bg-blue-50 text-blue-600 text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+                >
+                  Send Invoice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/group-pay/create")}
+                  data-testid="button-funding-campaigns"
+                  className="h-9 px-7 rounded-full border border-blue-500 bg-white hover:bg-blue-50 text-blue-600 text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+                >
+                  Funding Campaigns
+                </button>
               </div>
             </CardContent>
           </Card>
         </motion.div>
 
-        {/* Quick Services & Refer & Earn underneath Account Summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
-          <motion.div variants={itemVariants}>
-            <Card className="h-full rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300 relative overflow-hidden flex flex-col">
-              {/* Subtle background mesh gradient */}
-              <div className="absolute top-0 right-0 w-[240px] h-[240px] bg-blue-50/60 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-[180px] h-[180px] bg-teal/5 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
-
-              <CardHeader className="pb-4 px-5 pt-5 relative z-10">
-                <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100/80 shadow-xs">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <span className="tracking-tight">Quick Services</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col gap-3 px-5 pb-5 pt-0 relative z-10">
-                {/* Primary action — takes the spare height so the card always looks balanced */}
-                <motion.div className="flex flex-1" whileHover={{ y: -1 }} whileTap={{ scale: 0.99 }}>
-                  <button
-                    type="button"
-                    onClick={() => setLocation("/send-money")}
-                    data-testid="button-send-money"
-                    className="group relative flex min-h-[120px] w-full flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-600 to-indigo-600 p-4 text-left text-white shadow-sm transition-shadow hover:shadow-lg hover:shadow-blue-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                  >
-                    <div className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-white/10" />
-                    <div className="pointer-events-none absolute -bottom-12 right-10 h-28 w-28 rounded-full bg-white/5" />
-                    <div className="relative flex items-start justify-between">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/20 bg-white/15">
-                        <Send className="h-5 w-5" />
-                      </div>
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 transition-transform group-hover:translate-x-0.5">
-                        <ArrowRight className="h-4 w-4" />
-                      </div>
-                    </div>
-                    <div className="relative mt-4">
-                      <p className="font-display text-xl font-bold leading-tight">Send Money</p>
-                      <p className="mt-0.5 text-[13px] text-blue-100">Transfer globally with live rates</p>
-                    </div>
-                  </button>
-                </motion.div>
-
-                {/* Secondary actions — one consistent list */}
-                <div className="flex flex-col gap-2">
-                  {[
-                    { id: "button-request-payment", href: "/request-payment", title: "Receive Money", sub: "Request instant payment link", icon: Receipt, chip: "bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white", hover: "hover:border-teal-300" },
-                    { id: "button-send-invoice", href: "/send-invoice", title: "Send Invoice", sub: "Bill a customer and get paid", icon: FileText, chip: "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white", hover: "hover:border-indigo-300" },
-                    { id: "button-funding-campaigns", href: "/group-pay/create", title: "Funding Campaigns", sub: "Raise money together", icon: Users, chip: "bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white", hover: "hover:border-purple-300" },
-                  ].map((a) => (
-                    <motion.div key={a.id} whileHover={{ y: -1 }} whileTap={{ scale: 0.99 }}>
-                      <button
-                        type="button"
-                        onClick={() => setLocation(a.href)}
-                        data-testid={a.id}
-                        className={`group flex min-h-[60px] w-full items-center gap-3 rounded-xl border border-slate-200/80 bg-white px-3.5 text-left shadow-2xs transition-all hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${a.hover}`}
-                      >
-                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${a.chip}`}>
-                          <a.icon className="h-[18px] w-[18px]" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-slate-900">{a.title}</p>
-                          <p className="truncate text-xs text-slate-500">{a.sub}</p>
-                        </div>
-                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                      </button>
-                    </motion.div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div variants={itemVariants} className="flex flex-col gap-3 [&>*:last-child]:flex-1">
+        {/* Refer & Earn + Bonus Blocked Notice preserved underneath Quick Services */}
+        {(rewards.data?.wallet.bonus_blocked ||
+          rewards.data?.offer ||
+          rewards.isLoading ||
+          rewards.isError) && (
+          <motion.div variants={itemVariants} className="flex flex-col gap-3">
             {rewards.data?.wallet.bonus_blocked && <BonusBlockedNotice />}
             <ReferEarnCard
               offer={rewards.data?.offer ?? null}
@@ -1161,47 +1139,61 @@ export default function Dashboard() {
               highlighted={referHighlighted}
             />
           </motion.div>
-        </div>
+        )}
 
-        <motion.div variants={itemVariants} ref={transactionsSectionRef} data-testid="section-transactions">
-          <Card className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.03)] overflow-hidden">
+        {/* Recent Transactions Card matching reference screenshot */}
+        <motion.div
+          variants={itemVariants}
+          ref={transactionsSectionRef}
+          data-testid="section-transactions"
+        >
+          <Card className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
             <CardContent className="p-0">
               <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 md:px-6 pt-5 pb-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/60 to-white">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 md:px-6 pt-5 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <h2 className="font-display font-bold text-base md:text-lg text-slate-900 tracking-tight">Transactions</h2>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/70">
-                      {visibleRows.length} total
-                    </span>
+                    <h2 className="font-display font-bold text-base md:text-lg text-slate-800 tracking-tight">
+                      Recent Transactions
+                    </h2>
                   </div>
-                  <div className="relative w-full sm:w-80">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <Input
-                      value={search}
-                      onChange={(e) => {
-                        setSearch(e.target.value);
-                        setPage(1);
-                      }}
-                      placeholder="Search by ref, name, email or service…"
-                      className="pl-9 pr-8 h-9 text-xs rounded-xl bg-white border-slate-200 shadow-2xs focus-visible:ring-blue-500"
-                      data-testid="input-search-transactions"
-                    />
-                    {search && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearch("");
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-full sm:w-72">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      <Input
+                        value={search}
+                        onChange={(e) => {
+                          setSearch(e.target.value);
                           setPage(1);
                         }}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md"
-                        aria-label="Clear search"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                        placeholder="Search by ref, name, email or service…"
+                        className="pl-9 pr-8 h-8 text-xs rounded-full bg-slate-50/70 border-slate-200 shadow-none focus-visible:ring-blue-500"
+                        data-testid="input-search-transactions"
+                      />
+                      {search && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearch("");
+                            setPage(1);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md"
+                          aria-label="Clear search"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLocation("/transactions")}
+                      className="text-xs font-semibold text-slate-500 hover:text-blue-600 shrink-0 transition-colors cursor-pointer"
+                    >
+                      See All
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 px-4 sm:px-6 py-3 border-b border-slate-100 bg-slate-50/40 overflow-x-auto no-scrollbar scroll-smooth">
+
+                <div className="flex items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-slate-100 overflow-x-auto no-scrollbar scroll-smooth">
                   {TYPE_FILTERS.map((filter) => (
                     <button
                       key={filter.value}
@@ -1212,33 +1204,46 @@ export default function Dashboard() {
                       }}
                       data-testid={`chip-type-${filter.value.replace(/_/g, "-")}`}
                       className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all active:scale-95 shrink-0 whitespace-nowrap",
+                        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all active:scale-95 shrink-0 whitespace-nowrap",
                         typeFilter === filter.value
-                          ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600 shadow-2xs"
+                          ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
                       )}
                     >
                       {filter.label}
-                      <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", typeFilter === filter.value ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500")}>
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-px text-[10px] font-semibold",
+                          typeFilter === filter.value
+                            ? "bg-white/20 text-white"
+                            : "bg-slate-100 text-slate-500"
+                        )}
+                      >
                         {typeCounts[filter.value]}
                       </span>
                     </button>
                   ))}
                 </div>
+
                 <div className="overflow-x-auto" data-testid="table-transactions">
                   {isMobile ? (
                     <div className="p-3 space-y-2">
                       {visibleRows.length === 0 && !anyQueryLoading ? (
-                        <div className="py-12 text-center text-sm text-slate-400" data-testid="empty-transactions">
+                        <div
+                          className="py-12 text-center text-sm text-slate-400"
+                          data-testid="empty-transactions"
+                        >
                           <div className="flex flex-col items-center justify-center gap-2">
                             <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
                               <Search className="w-5 h-5" />
                             </div>
-                            <span className="font-medium text-slate-600">No transactions match your search or filters.</span>
+                            <span className="font-medium text-slate-600">
+                              No transactions match your search or filters.
+                            </span>
                             {(search || typeFilter !== "all") && (
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
+                              <Button
+                                variant="outline"
+                                size="sm"
                                 className="h-8 text-xs mt-1 rounded-lg"
                                 onClick={() => {
                                   setSearch("");
@@ -1254,7 +1259,12 @@ export default function Dashboard() {
                       ) : (
                         pageRows.map((row) =>
                           row.kind === "send_money" ? (
-                            <MobileSendMoneyCard key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} />
+                            <MobileSendMoneyCard
+                              key={row.tx.id}
+                              tx={row.tx}
+                              scheduled={row.scheduled}
+                              onCancel={handleCancelClick}
+                            />
                           ) : (
                             <MobileUnifiedCard
                               key={row.row.key}
@@ -1281,29 +1291,49 @@ export default function Dashboard() {
                   ) : (
                     <Table>
                       <TableHeader>
-                        <TableRow className="hover:bg-transparent bg-slate-50/80 border-b border-slate-100">
-                          <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-[90px] sm:w-[130px] py-3.5 pl-4 sm:pl-6">Ref No.</TableHead>
-                          <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider py-3.5">Recipient / Sender</TableHead>
-                          <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell py-3.5">Service</TableHead>
-                          <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell py-3.5">Date</TableHead>
-                          <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-right py-3.5 hidden sm:table-cell">Amount</TableHead>
-                          <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-center py-3.5">Status</TableHead>
-                          <TableHead className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-center py-3.5">Actions</TableHead>
+                        <TableRow className="hover:bg-transparent border-b border-slate-100">
+                          <TableHead className="text-xs font-bold text-slate-600 py-3.5 pl-4 sm:pl-6">
+                            Order No
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 hidden sm:table-cell py-3.5">
+                            Date / Time GMT
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 py-3.5">
+                            Name
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 hidden md:table-cell py-3.5">
+                            Service Type
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 py-3.5 hidden sm:table-cell">
+                            Amount
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 text-center py-3.5">
+                            Status
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 text-center py-3.5 pr-4 sm:pr-6">
+                            Actions
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {visibleRows.length === 0 && !anyQueryLoading ? (
                           <TableRow>
-                            <TableCell colSpan={7} className="py-14 text-center text-sm text-slate-400" data-testid="empty-transactions">
+                            <TableCell
+                              colSpan={7}
+                              className="py-14 text-center text-sm text-slate-400"
+                              data-testid="empty-transactions"
+                            >
                               <div className="flex flex-col items-center justify-center gap-2">
                                 <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
                                   <Search className="w-5 h-5" />
                                 </div>
-                                <span className="font-medium text-slate-600">No transactions match your search or filters.</span>
+                                <span className="font-medium text-slate-600">
+                                  No transactions match your search or filters.
+                                </span>
                                 {(search || typeFilter !== "all") && (
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm" 
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
                                     className="h-8 text-xs mt-1 rounded-lg"
                                     onClick={() => {
                                       setSearch("");
@@ -1320,7 +1350,12 @@ export default function Dashboard() {
                         ) : (
                           pageRows.map((row) =>
                             row.kind === "send_money" ? (
-                              <SendMoneyRow key={row.tx.id} tx={row.tx} scheduled={row.scheduled} onCancel={handleCancelClick} />
+                              <SendMoneyRow
+                                key={row.tx.id}
+                                tx={row.tx}
+                                scheduled={row.scheduled}
+                                onCancel={handleCancelClick}
+                              />
                             ) : (
                               <UnifiedRow
                                 key={row.row.key}
@@ -1348,45 +1383,68 @@ export default function Dashboard() {
                     </Table>
                   )}
                 </div>
-                  {visibleRows.length > 0 && (
-                    <div
-                      className="flex flex-col sm:flex-row items-center justify-between gap-2 px-5 md:px-6 py-3.5 border-t border-slate-100 bg-slate-50/30"
-                      data-testid="transactions-pagination"
-                    >
-                      <p className="text-xs text-slate-500 font-medium">
-                        Showing {Math.min(visibleRows.length, (safePage - 1) * TRANSACTIONS_PAGE_SIZE + 1)}–{Math.min(safePage * TRANSACTIONS_PAGE_SIZE, visibleRows.length)} of {visibleRows.length} transactions • Page {safePage} of {totalPages}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={safePage <= 1}
-                          onClick={() => setPage((p) => Math.max(1, p - 1))}
-                          className="h-8 px-3 text-xs rounded-lg border-slate-200 hover:bg-white active:scale-95"
-                          data-testid="button-prev-page"
-                        >
-                          <ChevronLeft className="w-4 h-4 mr-1" />
-                          Previous
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={safePage >= totalPages}
-                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                          className="h-8 px-3 text-xs rounded-lg border-slate-200 hover:bg-white active:scale-95"
-                          data-testid="button-next-page"
-                        >
-                          Next
-                          <ChevronRight className="w-4 h-4 ml-1" />
-                        </Button>
-                      </div>
+
+                {visibleRows.length > 0 && (
+                  <div
+                    className="flex flex-col sm:flex-row items-center justify-between gap-2 px-5 md:px-6 py-3.5 border-t border-slate-100 bg-slate-50/30"
+                    data-testid="transactions-pagination"
+                  >
+                    <p className="text-xs text-slate-500 font-medium">
+                      Showing{" "}
+                      {Math.min(
+                        visibleRows.length,
+                        (safePage - 1) * TRANSACTIONS_PAGE_SIZE + 1
+                      )}
+                      –
+                      {Math.min(
+                        safePage * TRANSACTIONS_PAGE_SIZE,
+                        visibleRows.length
+                      )}{" "}
+                      of {visibleRows.length} transactions • Page {safePage} of{" "}
+                      {totalPages}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={safePage <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        className="h-8 px-3 text-xs rounded-full border-slate-200 hover:bg-white active:scale-95"
+                        data-testid="button-prev-page"
+                      >
+                        <ChevronLeft className="w-4 h-4 mr-1" />
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={safePage >= totalPages}
+                        onClick={() =>
+                          setPage((p) => Math.min(totalPages, p + 1))
+                        }
+                        className="h-8 px-3 text-xs rounded-full border-slate-200 hover:bg-white active:scale-95"
+                        data-testid="button-next-page"
+                      >
+                        Next
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
                     </div>
-                  )}
-                </div>
-              </CardContent>
+                  </div>
+                )}
+              </div>
+            </CardContent>
           </Card>
         </motion.div>
+
+        {/* Regulatory Footer Note matching reference screenshot */}
+        <footer className="pt-2 pb-4 text-[11px] leading-relaxed text-slate-400">
+          Mito.money is a trademark owned by Funtech Global Communications Ltd.
+          Devonshire House, Manor way, Borehamwood, Herts. WD6 1QQ, United
+          Kingdom. A registered Payment institution in the UK with registration
+          details FRN: 815146 MLR NO: 12803115
+        </footer>
       </motion.div>
     </DashboardLayout>
   );
 }
+
