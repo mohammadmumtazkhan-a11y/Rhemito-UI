@@ -12,11 +12,22 @@ import {
   otpVerifySchema,
   resetPasswordSchema,
   PROTOTYPE_MASTER_PASSWORD,
+  DEMO_PAYER_CREDENTIALS,
 } from "@shared/schema";
 import { log } from "./index";
 import { onCustomerVerified } from "./rewardsService";
 import { syncCustomer as syncPromoCustomer } from "./promo";
 import { rememberDevice } from "./deviceId";
+
+function isPlaceholderUser(
+  user: { id: string; email: string; firstName: string | null; lastName: string | null } | undefined,
+): boolean {
+  if (!user) return false;
+  if (user.id === "user_demo_payer" || user.email.toLowerCase() === DEMO_PAYER_CREDENTIALS.email.toLowerCase()) {
+    return false;
+  }
+  return user.firstName === "Demo" && user.lastName === "Payer";
+}
 
 const RESET_PIN_TTL_MS = 10 * 60 * 1000;
 const RESET_PIN_RESEND_COOLDOWN_MS = 60_000;
@@ -62,7 +73,7 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const user = await storage.getAuthUserByEmail(parsed.data.email);
-      const isPlaceholder = Boolean(user && user.firstName === "Demo" && user.lastName === "Payer");
+      const isPlaceholder = isPlaceholderUser(user);
       return res.json({
         registered: Boolean(user && !isPlaceholder),
         status: user && !isPlaceholder ? user.status : null,
