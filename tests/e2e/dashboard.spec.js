@@ -9,12 +9,14 @@ test.describe('Rhemito Dashboard', () => {
         // Verify page title
         await expect(page).toHaveTitle(/Rhemito/i);
 
-        // Verify Quick Services widget is visible
+        // Verify Account Summary and Quick Services widgets are visible
+        await expect(page.getByTestId('section-account-summary')).toBeVisible();
         await expect(page.getByText('Quick Services')).toBeVisible();
 
         // Verify Quick Service buttons are present
         await expect(page.getByTestId('button-send-money')).toBeVisible();
         await expect(page.getByTestId('button-request-payment')).toBeVisible();
+        await expect(page.getByTestId('button-bonus-discounts')).toBeVisible();
 
         // Verify unified Transactions table with its type filter chips
         await expect(page.getByTestId('table-transactions')).toBeVisible();
