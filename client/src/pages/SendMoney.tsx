@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
-import { BONUS_COPY, UseBonusCredit, balanceFor, creditToApply, formatMoney, type BonusChoice } from "@/features/bonus";
+import { BONUS_COPY, UseBonusCredit, balanceFor, creditToApply, eligibleBonusBalance, formatMoney, type BonusChoice } from "@/features/bonus";
 import { PromoCodeField, usePromoCode, PROMO_COPY, formatPromoMoney } from "@/features/promo";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
 import {
@@ -117,7 +117,7 @@ export default function SendMoney() {
     const rewards = useRewards();
     // One bonus balance, in the currency of this transfer; no minimum to use it (BONUS-RHEMITO 7.5)
     const bonusWallet = balanceFor(rewards.data?.wallet, SEND_CURRENCY);
-    const bonusBalance = bonusWallet.available;
+    const bonusBalance = eligibleBonusBalance(bonusWallet, parseFloat(amount || "0"), rewards.data?.offer?.floor);
     const [bonusChoice, setBonusChoiceState] = useState<BonusChoice>("none");
     const useBonus = bonusChoice !== "none" && bonusBalance > 0;
     const bonusType: 'pay_less' | 'send_more' = bonusChoice === "send_more" ? "send_more" : "pay_less";
@@ -532,6 +532,8 @@ export default function SendMoney() {
                                         choice={bonusChoice}
                                         onChoice={setBonusChoice}
                                         blocked={rewards.data?.wallet.bonus_blocked}
+                                    referralFloor={rewards.data?.offer?.floor}
+                                        referralFloor={rewards.data?.offer?.floor}
                                     />
 
                                     <div className="space-y-1 pt-2 lg:hidden">
@@ -1110,6 +1112,8 @@ export default function SendMoney() {
                                         choice={bonusChoice}
                                         onChoice={setBonusChoice}
                                         blocked={rewards.data?.wallet.bonus_blocked}
+                                    referralFloor={rewards.data?.offer?.floor}
+                                        referralFloor={rewards.data?.offer?.floor}
                                     />
 
                                     {/* Promo Code Section (features/promo) */}

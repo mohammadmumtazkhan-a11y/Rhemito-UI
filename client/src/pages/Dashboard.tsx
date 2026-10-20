@@ -971,6 +971,7 @@ export default function Dashboard() {
               <BonusCreditPill
                 balance={bonusBalance}
                 unused={rewards.data?.wallet.unused}
+                referralFloor={rewards.data?.offer?.floor}
                 onCreateTransaction={() => setLocation("/send-money")}
               />
             )}

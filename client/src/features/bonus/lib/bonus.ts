@@ -14,6 +14,7 @@ export interface SourceTotals {
   expired: number;
   removed: number;
   available: number;
+  floor?: number;
 }
 
 export interface BonusBalance {
@@ -48,6 +49,7 @@ export interface BonusCredit extends SourceFields {
   earned_on: string;
   expires_on: string | null;
   status: CreditStatus;
+  floor?: number;
 }
 
 export interface BonusWallet {
@@ -64,6 +66,8 @@ export interface BonusOffer {
   summary: string;
   end_date?: string | null;
   end_date_display?: string | null;
+  min_transaction_threshold?: number;
+  floor?: number;
 }
 
 // ─── Money & dates ───────────────────────────────────────────────────────────
@@ -127,6 +131,20 @@ export function balanceFor(wallet: Pick<BonusWallet, "balances"> | undefined, cu
 // ─── Using bonus on a transfer ───────────────────────────────────────────────
 
 /** Bonus applicable to a transfer: never more than the whole balance (all sources) or the send amount. */
+/** Available bonus credit eligible for `sendAmount` based on each source's backend floor (`min_transaction_threshold`). */
+export function eligibleBonusBalance(wallet: BonusBalance, sendAmount: number, referralFloor?: number | null): number {
+  const bySource = wallet.by_source ?? [];
+  if (!bySource.length) return wallet.available;
+  let total = 0;
+  let anyFloor = false;
+  for (const s of bySource) {
+    const floor = s.credit_source === "REFERRAL" ? (s.floor || referralFloor || 0) : (s.floor || 0);
+    if (floor > 0) anyFloor = true;
+    if (sendAmount >= floor) total += s.available || 0;
+  }
+  return anyFloor ? round(total, wallet.currency) : wallet.available;
+}
+
 export function creditToApply(available: number, sendAmount: number, currency = "GBP"): number {
   if (!(available > 0) || !(sendAmount > 0)) return 0;
   return round(Math.min(available, sendAmount), currency);
