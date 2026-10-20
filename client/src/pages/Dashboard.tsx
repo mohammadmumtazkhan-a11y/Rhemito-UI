@@ -960,9 +960,7 @@ export default function Dashboard() {
             variants={itemVariants}
             className="text-xl md:text-[22px] font-normal text-slate-800 tracking-tight"
           >
-            <span data-testid="dashboard-welcome">
-              Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}
-            </span>
+            <span data-testid="dashboard-welcome">Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}</span>
           </motion.h1>
 
           <motion.div
