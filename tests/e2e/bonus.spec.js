@@ -16,11 +16,11 @@ const bySource = [
     { credit_source: 'SCHEME', label: 'Bonus offers', earned: 5, used: 2, expired: 0, removed: 0, available: 3 },
 ];
 
-function summary({ blocked = false, debt = 0 } = {}) {
+function summary({ blocked = false, debt = 0, offer = null } = {}) {
     return {
         customer: { id: 'user_123', referralCode: 'JOHN2880', currency: 'GBP' },
         currency: 'GBP',
-        offer: null,
+        offer,
         wallet: {
             bonus_blocked: blocked,
             balances: [{ currency: 'GBP', available: 7, earned: 15, used: 8, expired: 0, used_transfer_count: 2, referral_credit_count: 1, other_credit_count: 1, outstanding_debt: debt, by_source: bySource }],
@@ -50,12 +50,14 @@ async function mock(page, { offers = [], bonusDown = false, ...opts } = {}) {
 }
 
 test.describe('Dashboard', () => {
-    test('one pill for the whole balance, with an expiry warning', async ({ page }) => {
-        await mock(page);
+    test('separate pills for referral bonus and bonus scheme credits, with minimum transfer floor and expiry warning', async ({ page }) => {
+        await mock(page, { offer: { floor: 50, text: 'Invite friends and get £10.00 bonus credit.', referral_link: 'http://localhost:5000/ref/JOHN2880' } });
         await page.goto('/');
-        const pill = page.getByTestId('bonus-earned-pill');
-        await expect(pill).toContainText('You have £7.00 bonus credit');
-        await expect(pill).not.toContainText('Referral Bonus');
+        const refPill = page.getByTestId('referral-bonus-earned-pill');
+        await expect(refPill).toContainText('You have £4.00 Referral Bonus credit');
+        await expect(refPill).toContainText('(min. transfer £50.00)');
+        const schemePill = page.getByTestId('bonus-earned-pill');
+        await expect(schemePill).toContainText('You have £3.00 bonus credit');
         await expect(page.getByTestId('bonus-pill-expiring')).toContainText('£3.00 expires in 5 days');
     });
 
