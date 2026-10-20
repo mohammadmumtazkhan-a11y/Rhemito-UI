@@ -93,7 +93,7 @@ export function BonusCreditPill({
   const schemeDays = schemeSoon ? Math.max(0, daysUntil(schemeSoon.expires_on) ?? 0) : null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto max-w-full">
+    <div className="flex flex-col items-start gap-2 self-start md:self-auto max-w-full">
       {referralAvailable > 0 && (
         <motion.div
           whileHover={{ scale: 1.01, y: -1 }}

@@ -955,43 +955,46 @@ export default function Dashboard() {
         className="space-y-5 md:space-y-6"
       >
         {/* Top Welcome & Meta Row */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <motion.h1
-            variants={itemVariants}
-            className="text-xl md:text-[22px] font-normal text-slate-800 tracking-tight"
-          >
-            <span data-testid="dashboard-welcome">Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}</span>
-          </motion.h1>
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4 flex-1 min-w-0">
+            <motion.h1
+              variants={itemVariants}
+              className="text-xl md:text-[22px] font-normal text-slate-800 tracking-tight shrink-0"
+            >
+              <span data-testid="dashboard-welcome">Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}</span>
+            </motion.h1>
+
+            {bonusBalance.available > 0 && (
+              <motion.div variants={itemVariants} className="min-w-0">
+                <BonusCreditPill
+                  balance={bonusBalance}
+                  unused={rewards.data?.wallet.unused}
+                  referralFloor={rewards.data?.offer?.floor}
+                  onCreateTransaction={() => setLocation("/send-money")}
+                />
+              </motion.div>
+            )}
+          </div>
 
           <motion.div
             variants={itemVariants}
-            className="flex flex-wrap items-center gap-4 md:gap-5"
+            className="flex items-center gap-4 text-xs text-slate-500 shrink-0 self-end md:self-start md:pt-1.5 whitespace-nowrap"
           >
-            {bonusBalance.available > 0 && (
-              <BonusCreditPill
-                balance={bonusBalance}
-                unused={rewards.data?.wallet.unused}
-                referralFloor={rewards.data?.offer?.floor}
-                onCreateTransaction={() => setLocation("/send-money")}
-              />
-            )}
-            <div className="flex items-center gap-4 text-xs text-slate-500">
-              <span>powered by mito.money</span>
-              <a
-                href="#privacy"
-                onClick={(e) => e.preventDefault()}
-                className="font-medium text-slate-600 hover:text-blue-600 transition-colors"
-              >
-                Privacy Policy
-              </a>
-              <a
-                href="#terms"
-                onClick={(e) => e.preventDefault()}
-                className="font-medium text-slate-600 hover:text-blue-600 transition-colors"
-              >
-                Terms
-              </a>
-            </div>
+            <span>powered by mito.money</span>
+            <a
+              href="#privacy"
+              onClick={(e) => e.preventDefault()}
+              className="font-medium text-slate-600 hover:text-blue-600 transition-colors"
+            >
+              Privacy Policy
+            </a>
+            <a
+              href="#terms"
+              onClick={(e) => e.preventDefault()}
+              className="font-medium text-slate-600 hover:text-blue-600 transition-colors"
+            >
+              Terms
+            </a>
           </motion.div>
         </div>
 
