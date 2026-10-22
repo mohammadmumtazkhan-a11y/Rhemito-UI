@@ -669,16 +669,6 @@ export default function SendMoney() {
                                         Have a promotional discount code? Enter it below to see your discount reflected immediately in your transfer summary.
                                     </p>
                                     <PromoCodeField promo={promo} bare />
-                                    <div className="flex justify-end pt-2">
-                                        <Button
-                                            type="button"
-                                            onClick={() => setShowPromoModal(false)}
-                                            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-5"
-                                            data-testid="step1-promo-modal-done"
-                                        >
-                                            Done
-                                        </Button>
-                                    </div>
                                 </div>
                             </div>
                         )}

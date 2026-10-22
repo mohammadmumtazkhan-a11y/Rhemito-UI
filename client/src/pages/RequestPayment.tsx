@@ -1135,9 +1135,6 @@ export default function RequestPayment() {
                               Have a promo code? Enter it below to earn a bonus on the amount you receive. The bonus is paid into your bank on top of that amount once this request is paid out.
                             </p>
                             <PromoCodeField promo={promo} bare />
-                            <div className="flex justify-end pt-2">
-                              <Button type="button" onClick={() => setShowPromoModal(false)} className="rounded-xl px-5" data-testid="request-promo-modal-done">Done</Button>
-                            </div>
                           </div>
                         </div>
                       )}

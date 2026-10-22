@@ -17,6 +17,7 @@ export function PromoCodeField({ promo, bare = false }: PromoCodeFieldProps) {
   if (!promo.enabled) return null;
   const checking = promo.state === "checking";
   const ok = promo.state === "applied";
+  const hasCode = Boolean(promo.code.trim());
   const showMessage = promo.message && promo.state !== "idle" && promo.state !== "checking";
 
   const body = (
@@ -29,7 +30,7 @@ export function PromoCodeField({ promo, bare = false }: PromoCodeFieldProps) {
           value={promo.code}
           maxLength={20}
           onChange={(e) => promo.setCode(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (!ok && promo.code) void promo.apply(); } }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (!ok && hasCode) void promo.apply(); } }}
           className="uppercase font-mono h-12 sm:h-10"
           disabled={checking || ok}
           aria-describedby={showMessage ? "promo-code-message" : undefined}
@@ -40,7 +41,14 @@ export function PromoCodeField({ promo, bare = false }: PromoCodeFieldProps) {
             {PROMO_COPY.remove}
           </Button>
         ) : (
-          <Button type="button" variant="outline" className="h-12 sm:h-10 min-w-[88px]" onClick={() => void promo.apply()} disabled={checking || !promo.code} data-testid="promo-apply">
+          <Button
+            type="button"
+            variant={hasCode ? "default" : "outline"}
+            className={`h-12 sm:h-10 min-w-[88px] ${hasCode ? "bg-blue-600 hover:bg-blue-700 text-white border-transparent" : ""}`}
+            onClick={() => void promo.apply()}
+            disabled={checking || !hasCode}
+            data-testid="promo-apply"
+          >
             {checking ? PROMO_COPY.checking : PROMO_COPY.apply}
           </Button>
         )}
