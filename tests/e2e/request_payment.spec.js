@@ -183,6 +183,13 @@ test.describe('Request Money E2E', () => {
     const days = (new Date(stored.expiresAt).getTime() - Date.now()) / 86400000;
     expect(days).toBeGreaterThan(28);
     expect(days).toBeLessThan(32);
+
+    // Once the email is sent from the success page, the Payer email input and Send email button are hidden
+    await page.getByTestId('input-payer-email-after').fill(`ada-${unique()}@example.com`);
+    await expect(page.getByTestId('button-resend-email')).toBeVisible();
+    await page.getByTestId('button-resend-email').click();
+    await expect(page.getByTestId('input-payer-email-after')).toHaveCount(0);
+    await expect(page.getByTestId('button-resend-email')).toHaveCount(0);
   });
 
   test('Receive exact amount mode passes the 3% fee to the payer end-to-end', async ({ page, request }) => {

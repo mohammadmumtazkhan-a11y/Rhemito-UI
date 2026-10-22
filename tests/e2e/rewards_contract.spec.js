@@ -182,7 +182,10 @@ test.describe('Rewards contract — promo code field', () => {
     test('[PROMO-01] applying a code shows "Promo (CODE)" and lowers the total by exactly the approved fee discount', async ({ page }) => {
         const { validations } = await promoPage(page, { payReply: json({ data: { id: 'tx1', reference: 'RH-C2', status: 'completed', paidAt: new Date().toISOString() } }) });
         const before = await num(page.getByTestId('summary-total'));
+        await expect(page.getByTestId('promo-apply')).toBeDisabled();
         await page.getByTestId('promo-code-input').fill('save05');
+        await expect(page.getByTestId('promo-apply')).toBeEnabled();
+        await expect(page.getByTestId('promo-apply')).toHaveClass(/bg-blue-600/);
         await page.getByTestId('promo-apply').click();
         await expect(page.getByTestId('promo-message')).toContainText('£1.00 off your fee');
         await expect(page.getByTestId('summary-promo')).toContainText('Promo (SAVE05)');
