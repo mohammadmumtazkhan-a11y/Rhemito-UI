@@ -11,6 +11,7 @@
 import { randomUUID, randomBytes, createHash } from "crypto";
 import { storage } from "./storage";
 import { dispatchNotification } from "./notificationService";
+import { devEmailProvider } from "./providers";
 import type {
   Invoice,
   InvoiceDocument,
@@ -116,6 +117,7 @@ interface ClientEmailContent {
     fileName: string;
     mimeType: string;
     size: number;
+    dataBase64?: string;
   } | null;
 }
 
@@ -138,7 +140,7 @@ function invoiceSentEmail(inv: Invoice, link: string, doc: InvoiceDocument | nul
       attachmentLine +
       `— Rhemito`,
     attachment: doc
-      ? { fileName: doc.fileName, mimeType: doc.mimeType, size: Number(doc.size) }
+      ? { fileName: doc.fileName, mimeType: doc.mimeType, size: Number(doc.size), dataBase64: doc.data }
       : null,
   };
 }
@@ -197,8 +199,38 @@ async function queueClientEmail(
     `[CLIENT EMAIL STUB] To: ${inv.clientEmail} | Subject: ${content.subject} | Body:\n${content.body}${attachmentLine}`,
   );
 
+  const emailId = randomUUID();
+  try {
+    await devEmailProvider.send({
+      to: inv.clientEmail,
+      toName: clientDisplayName(inv) || undefined,
+      subject: content.subject,
+      text: content.body,
+      customId: `invoice:${inv.id}:${content.type}:${emailId}`,
+      eventPayload: JSON.stringify({
+        type: `invoice_${content.type}`,
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        emailId,
+      }),
+      ...(content.attachment?.dataBase64
+        ? {
+            attachments: [
+              {
+                contentType: content.attachment.mimeType,
+                filename: content.attachment.fileName,
+                base64Content: content.attachment.dataBase64,
+              },
+            ],
+          }
+        : {}),
+    });
+  } catch (err) {
+    console.error("[invoiceService] email send failed:", err);
+  }
+
   const email: ClientEmail = {
-    id: randomUUID(),
+    id: emailId,
     invoiceId: inv.id,
     toEmail: inv.clientEmail,
     type: content.type,
@@ -869,9 +901,39 @@ export async function resendInvoiceNotification(params: {
     `[CLIENT EMAIL STUB — RESEND] To: ${inv.clientEmail} | Subject: ${content.subject} | Body:\n${content.body}${attachmentLine}`,
   );
 
+  const emailId = randomUUID();
+  try {
+    await devEmailProvider.send({
+      to: inv.clientEmail,
+      toName: clientDisplayName(inv) || undefined,
+      subject: content.subject,
+      text: content.body,
+      customId: `invoice:${inv.id}:${content.type}:resend:${emailId}`,
+      eventPayload: JSON.stringify({
+        type: `invoice_${content.type}_resend`,
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        emailId,
+      }),
+      ...(content.attachment?.dataBase64
+        ? {
+            attachments: [
+              {
+                contentType: content.attachment.mimeType,
+                filename: content.attachment.fileName,
+                base64Content: content.attachment.dataBase64,
+              },
+            ],
+          }
+        : {}),
+    });
+  } catch (err) {
+    console.error("[invoiceService] resend email failed:", err);
+  }
+
   const resendKey = `${invoiceId}:invoice_sent:resend:${now.getTime()}`;
   const email: ClientEmail = {
-    id: randomUUID(),
+    id: emailId,
     invoiceId,
     toEmail: inv.clientEmail,
     type: content.type,

@@ -12,6 +12,7 @@ import { randomInt } from "crypto";
 import { storage } from "./storage";
 import { demoModeEnabled, serverConfig } from "./config";
 import { rateLimit, clientIpOf } from "./rateLimit";
+import { devEmailProvider } from "./providers";
 import { sendInvoiceSchema, cancelInvoiceSchema, requestNewLinkSchema, payInvoiceSchema, emailCheckSchema } from "@shared/schema";
 import { clientDisplayName } from "@shared/invoice-logic";
 import {
@@ -362,6 +363,20 @@ export function registerInvoiceRoutes(app: Express): void {
         failedAttempts: 0,
         lastSentAt: Date.now(),
       };
+
+      await devEmailProvider.send({
+        to: email,
+        subject: `${code} is your Rhemito invoice payment PIN (${inv.invoiceNumber})`,
+        text:
+          `Hello,\n\n` +
+          `Use this 6-digit PIN to verify your email for invoice ${inv.invoiceNumber} (${inv.currency} ${inv.amount}) from ${inv.senderName}:\n\n` +
+          `${code}\n\n` +
+          `This PIN expires in 10 minutes.\n\n` +
+          `— Rhemito`,
+        customId: `invoice_otp:${inv.id}:${Date.now()}`,
+        eventPayload: JSON.stringify({ type: "invoice_verification_code", invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, email }),
+      });
+
       return res.json({
         data: {
           sent: true,

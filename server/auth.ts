@@ -176,6 +176,24 @@ export function registerAuthRoutes(app: Express) {
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
       await storage.createOtp(userData.email, otpCode, expiresAt);
 
+      const recipientName =
+        userData.accountType === "business" && userData.businessName
+          ? userData.businessName
+          : [userData.firstName, userData.middleName, userData.lastName].filter(Boolean).join(" ") || undefined;
+      await devEmailProvider.send({
+        to: userData.email,
+        toName: recipientName,
+        subject: `${otpCode} is your Rhemito verification code`,
+        text:
+          `Hello ${recipientName ?? "there"},\n\n` +
+          `Welcome to Rhemito! Use this 6-digit verification code to verify your email address:\n\n` +
+          `${otpCode}\n\n` +
+          `This code expires in 60 minutes.\n\n` +
+          `— Rhemito`,
+        customId: `reg_otp:${user.id}:${Date.now()}`,
+        eventPayload: JSON.stringify({ type: "registration_otp", userId: user.id, email: userData.email }),
+      });
+
       // Log OTP to console for prototype
       log(`📧 OTP for ${userData.email}: ${otpCode} (expires in 60 minutes)`, "auth");
 
@@ -256,6 +274,26 @@ export function registerAuthRoutes(app: Express) {
 
       // PROTOTYPE: OTP is always 123456, just log it
       const otpCode = generateOtp();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      await storage.createOtp(parsed.data.email, otpCode, expiresAt);
+
+      const recipientName =
+        user.accountType === "business" && user.businessName
+          ? user.businessName
+          : [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ") || undefined;
+      await devEmailProvider.send({
+        to: user.email,
+        toName: recipientName,
+        subject: `${otpCode} is your Rhemito verification code`,
+        text:
+          `Hello ${recipientName ?? "there"},\n\n` +
+          `Use this 6-digit verification code to verify your Rhemito email address:\n\n` +
+          `${otpCode}\n\n` +
+          `This code expires in 60 minutes.\n\n` +
+          `— Rhemito`,
+        customId: `reg_otp_resend:${user.id}:${Date.now()}`,
+        eventPayload: JSON.stringify({ type: "registration_otp_resend", userId: user.id, email: user.email }),
+      });
       log(`📧 OTP for ${parsed.data.email}: ${otpCode}`, "auth");
 
       return res.json({
@@ -433,6 +471,20 @@ export function registerAuthRoutes(app: Express) {
         failedAttempts: 0,
         lastSentAt: Date.now(),
       };
+
+      await devEmailProvider.send({
+        to: email,
+        subject: `${code} is your Rhemito campaign contribution PIN`,
+        text:
+          `Hello,\n\n` +
+          `Use this 6-digit PIN to verify your email and contribute to '${campaign.name}' (${campaign.creatorName}):\n\n` +
+          `${code}\n\n` +
+          `This PIN expires in 10 minutes.\n\n` +
+          `— Rhemito`,
+        customId: `campaign_otp:${campaign.id}:${Date.now()}`,
+        eventPayload: JSON.stringify({ type: "campaign_verification_code", campaignId: campaign.id, email }),
+      });
+
       return res.json({
         data: {
           sent: true,

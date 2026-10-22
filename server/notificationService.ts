@@ -8,6 +8,8 @@
  */
 
 import { randomUUID } from "crypto";
+import { storage } from "./storage";
+import { devEmailProvider } from "./providers";
 import type {
   Notification,
   NotificationPreferences,
@@ -455,6 +457,26 @@ function dispatchEmail(
   console.log(
     `[EMAIL STUB] To: userId=${userId} | Subject: ${content.title} | Body: ${content.body}`
   );
+  void (async () => {
+    try {
+      const user = await storage.getAuthUserById(userId);
+      if (!user?.email) return;
+      const toName =
+        user.accountType === "business" && user.businessName
+          ? user.businessName
+          : [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ") || undefined;
+      await devEmailProvider.send({
+        to: user.email,
+        toName,
+        subject: content.title,
+        text: `${content.body}\n\n— Rhemito`,
+        customId: `notif:${userId}:${Date.now()}`,
+        eventPayload: JSON.stringify({ type: "notification_email", userId, title: content.title }),
+      });
+    } catch (err) {
+      console.error("[notificationService] email send failed:", err);
+    }
+  })();
 }
 
 function dispatchWebPush(

@@ -132,6 +132,12 @@ export function buildSignedDevWebhook(event: PayinWebhookEvent): { rawBody: Buff
 
 // ─── Email provider (Mailjet Send API v3.1 + Event Webhook tracking) ──────────
 
+export interface EmailAttachment {
+  contentType: string;
+  filename: string;
+  base64Content: string;
+}
+
 export interface EmailMessage {
   to: string;
   toName?: string;
@@ -140,6 +146,7 @@ export interface EmailMessage {
   html?: string;
   customId?: string;
   eventPayload?: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface EmailProvider {
@@ -258,6 +265,15 @@ export const devEmailProvider: EmailProvider = {
                 HTMLPart: htmlPart,
                 ...(message.customId ? { CustomID: message.customId.slice(0, 64) } : {}),
                 ...(message.eventPayload ? { EventPayload: message.eventPayload } : {}),
+                ...(message.attachments && message.attachments.length > 0
+                  ? {
+                      Attachments: message.attachments.map((att) => ({
+                        ContentType: att.contentType,
+                        Filename: att.filename,
+                        Base64Content: att.base64Content,
+                      })),
+                    }
+                  : {}),
               },
             ],
           }),
