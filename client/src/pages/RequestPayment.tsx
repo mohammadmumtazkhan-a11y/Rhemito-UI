@@ -172,6 +172,7 @@ export default function RequestPayment() {
   const [showPayerDetails, setShowPayerDetails] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const [createdRequestNumber, setCreatedRequestNumber] = useState("");
   const [restoredAmount, setRestoredAmount] = useState(false);
@@ -610,17 +611,20 @@ export default function RequestPayment() {
     }
   };
 
-  const sendEmailFor = async (id: string) => {
+  const sendEmailFor = async (id: string): Promise<boolean> => {
     setIsSendingEmail(true);
     try {
       await resendEmail(id, { email: formData.senderEmail.trim(), name: formData.payerName.trim() || undefined });
+      setEmailSent(true);
       toast({ title: "Email sent", description: `The payment request was emailed to ${formData.senderEmail.trim()}.` });
+      return true;
     } catch (err) {
       toast({
         title: "Email not sent",
         description: `${describeError(err)} Your payment link is still ready to copy.`,
         variant: "destructive",
       });
+      return false;
     } finally {
       setIsSendingEmail(false);
     }
@@ -634,6 +638,7 @@ export default function RequestPayment() {
   };
 
   const handleSendEmail = async () => {
+    if (emailSent) return;
     if (!hasEmail || emailError) {
       toast({ title: "Check the payer email", description: emailError || "Enter the payer's email to send the request.", variant: "destructive" });
       return;
@@ -641,11 +646,10 @@ export default function RequestPayment() {
     const alreadyCreated = !!createdRequestId;
     const id = await createLink();
     if (!id) return;
+    await sendEmailFor(id);
     if (!alreadyCreated) {
       setIsSuccess(true);
-      toast({ title: "Payment link created", description: "Now sending the email." });
     }
-    await sendEmailFor(id);
   };
 
   const handleNext = () => {
@@ -755,6 +759,7 @@ export default function RequestPayment() {
     setSelectedPayoutAccount(null);
     setCurrentStep(1);
     setIsSuccess(false);
+    setEmailSent(false);
     setPaymentLink("");
     setEmailPaymentLink("");
     setCreatedRequestId("");
@@ -899,33 +904,35 @@ export default function RequestPayment() {
                 )}
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="payerEmailAfter" className="text-sm font-semibold">
-                  Payer email <FieldTag />
-                </Label>
-                <Input
-                  id="payerEmailAfter"
-                  type="email"
-                  autoComplete="off"
-                  placeholder="Enter Payer's email to send email request"
-                  value={formData.senderEmail}
-                  onChange={(e) => handlePayerEmailChange(e.target.value)}
-                  aria-invalid={!!emailError}
-                  data-testid="input-payer-email-after"
-                />
-                {emailError && <p className="text-xs text-destructive" role="alert" data-testid="error-payer-email-after">{emailError}</p>}
-                {hasEmail && (
-                  <Button
-                    onClick={handleSendEmail}
-                    disabled={!!emailError || isSendingEmail}
-                    className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
-                    data-testid="button-resend-email"
-                  >
-                    {isSendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                    {isSendingEmail ? "Sending…" : "Send email"}
-                  </Button>
-                )}
-              </div>
+              {!emailSent && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="payerEmailAfter" className="text-sm font-semibold">
+                    Payer email <FieldTag />
+                  </Label>
+                  <Input
+                    id="payerEmailAfter"
+                    type="email"
+                    autoComplete="off"
+                    placeholder="Enter Payer's email to send email request"
+                    value={formData.senderEmail}
+                    onChange={(e) => handlePayerEmailChange(e.target.value)}
+                    aria-invalid={!!emailError}
+                    data-testid="input-payer-email-after"
+                  />
+                  {emailError && <p className="text-xs text-destructive" role="alert" data-testid="error-payer-email-after">{emailError}</p>}
+                  {hasEmail && (
+                    <Button
+                      onClick={handleSendEmail}
+                      disabled={!!emailError || isSendingEmail}
+                      className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
+                      data-testid="button-resend-email"
+                    >
+                      {isSendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                      {isSendingEmail ? "Sending…" : "Send email"}
+                    </Button>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-col-reverse gap-3 border-t border-border/60 pt-4 sm:flex-row">
                 <Button variant="outline" className="flex-1" onClick={() => setLocation("/")} data-testid="button-back-to-dashboard">
