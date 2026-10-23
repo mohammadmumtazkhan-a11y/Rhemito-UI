@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 interface DashboardLayoutProps {
   children: ReactNode;
+  hideLegalStrip?: boolean;
 }
 
 /**
@@ -14,7 +15,7 @@ interface DashboardLayoutProps {
  * white canvas, sidebar + main, LegalStrip on the right, gutters 20px / 50px.
  * Do not wrap pages in maxW + center.
  */
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout({ children, hideLegalStrip = false }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -22,12 +23,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     <div className="relative min-h-screen w-full max-w-full overflow-x-hidden bg-white">
       <MaintenanceBanner />
       <Header onMenuClick={() => setSidebarOpen(true)} />
-      <div
-        className={cn(
-          "flex min-h-screen w-full flex-col lg:flex-row lg:gap-10",
-          "pt-0 lg:pt-16"
-        )}
-      >
+      <div className="flex min-h-[calc(100vh-4rem)] w-full flex-col lg:flex-row lg:gap-10">
         <Sidebar
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
@@ -37,11 +33,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <main
           className={cn(
             "relative z-[99] flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-white",
-            "px-5 pb-20 pt-[50px] xl:px-[50px]",
+            "px-5 pb-20 pt-5 lg:pt-6 xl:px-[50px]",
             sidebarCollapsed ? "lg:ml-20" : "lg:ml-60"
           )}
         >
-          <LegalStrip />
+          {!hideLegalStrip && <LegalStrip />}
           <div className="min-w-0 w-full max-w-full flex-1">{children}</div>
         </main>
       </div>

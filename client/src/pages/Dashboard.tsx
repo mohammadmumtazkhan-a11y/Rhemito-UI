@@ -37,6 +37,7 @@ import { OfferBanner } from "@/components/rewards/OfferBanner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { LegalStrip } from "@/components/layout/LegalStrip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -922,7 +923,7 @@ export default function Dashboard() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout hideLegalStrip>
       <CancelTransactionModal
         open={cancelTarget !== null}
         transaction={cancelTarget}
@@ -954,25 +955,34 @@ export default function Dashboard() {
         animate="visible"
         className="space-y-5 md:space-y-6"
       >
-        {/* Welcome row — LegalStrip lives in DashboardLayout (approved MITO-BLUE) */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center md:gap-4">
-          <motion.h1
-            variants={itemVariants}
-            className="shrink-0 text-xl font-normal tracking-tight text-slate-800 md:text-[22px]"
-          >
-            <span data-testid="dashboard-welcome">Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}</span>
-          </motion.h1>
+        {/* Top Welcome, Bonus Credit Pills & Legal Strip Row */}
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4 flex-1 min-w-0">
+            <motion.h1
+              variants={itemVariants}
+              className="shrink-0 text-xl font-normal tracking-tight text-slate-800 md:text-[22px]"
+            >
+              <span data-testid="dashboard-welcome">Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}</span>
+            </motion.h1>
 
-          {bonusBalance.available > 0 && (
-            <motion.div variants={itemVariants} className="min-w-0">
-              <BonusCreditPill
-                balance={bonusBalance}
-                unused={rewards.data?.wallet.unused}
-                referralFloor={rewards.data?.offer?.floor}
-                onCreateTransaction={() => setLocation("/send-money")}
-              />
-            </motion.div>
-          )}
+            {bonusBalance.available > 0 && (
+              <motion.div variants={itemVariants} className="min-w-0">
+                <BonusCreditPill
+                  balance={bonusBalance}
+                  unused={rewards.data?.wallet.unused}
+                  referralFloor={rewards.data?.offer?.floor}
+                  onCreateTransaction={() => setLocation("/send-money")}
+                />
+              </motion.div>
+            )}
+          </div>
+
+          <motion.div
+            variants={itemVariants}
+            className="shrink-0 self-end md:self-start md:pt-1.5"
+          >
+            <LegalStrip className="mb-0 w-auto" />
+          </motion.div>
         </div>
 
         <OfferBanner
