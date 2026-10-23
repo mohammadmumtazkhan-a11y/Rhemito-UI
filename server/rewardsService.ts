@@ -40,6 +40,32 @@ export function currencyForCountry(country: string | null | undefined): string {
   return COUNTRY_CURRENCY[String(country ?? "").toUpperCase()] ?? "GBP";
 }
 
+/** Country (ISO alpha-2) → all send currencies applicable to the location the customer registered from. */
+export const COUNTRY_SEND_CURRENCIES: Record<string, string[]> = {
+  GB: ["GBP", "USD", "EUR"],
+  UK: ["GBP", "USD", "EUR"],
+  DE: ["EUR", "GBP", "USD"],
+  FR: ["EUR", "GBP", "USD"],
+  US: ["USD", "GBP", "EUR"],
+  CA: ["CAD", "USD", "GBP"],
+  NG: ["NGN", "GBP", "USD"],
+  GH: ["GHS", "GBP", "USD"],
+  KE: ["KES", "GBP", "USD"],
+  ZA: ["ZAR", "GBP", "USD"],
+  IN: ["INR", "GBP", "USD"],
+  CN: ["CNY", "USD", "GBP"],
+  AE: ["AED", "USD", "GBP"],
+  AU: ["AUD", "USD", "GBP"],
+  JP: ["JPY", "USD", "GBP"],
+};
+
+export function sendCurrenciesForCountry(country: string | null | undefined): string[] {
+  const code = String(country ?? "").toUpperCase();
+  const primary = currencyForCountry(country);
+  const list = COUNTRY_SEND_CURRENCIES[code] ?? [primary, "GBP", "USD", "EUR"];
+  return [primary, ...list.filter((c) => c !== primary)];
+}
+
 type Json = Record<string, any>;
 
 /** Call the Mito Admin referral engine. Network failures become 503 REWARDS_UNAVAILABLE. */
@@ -343,7 +369,7 @@ export async function pollOfferNotifications(): Promise<number> {
     for (const n of items) {
       lastOfferNotificationId = Math.max(lastOfferNotificationId, Number(n.id));
       for (const u of users) {
-        if (u.status !== "active" || currencyForCountry(u.country) !== n.currency) continue;
+        if (u.status !== "active" || !sendCurrenciesForCountry(u.country).includes(String(n.currency).toUpperCase())) continue;
         await notify(u.id, "reward_offer", { title: n.title, message: n.message, offerId: n.id });
         delivered++;
       }
@@ -352,6 +378,10 @@ export async function pollOfferNotifications(): Promise<number> {
     // Engine offline: try again on the next tick
   }
   return delivered;
+}
+
+export function isOfferPollerStarted(): boolean {
+  return offerPollerStarted;
 }
 
 export function startOfferPoller(): void {

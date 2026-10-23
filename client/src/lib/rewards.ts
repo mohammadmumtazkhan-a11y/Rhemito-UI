@@ -5,7 +5,10 @@
 
 export interface RewardOffer {
   rule_id: number;
+  name?: string;
   currency: string;
+  receive_currency?: string | null;
+  corridor?: string;
   reward_type: "BOTH" | "REFERRER" | "REFEREE";
   referrer_reward: number;
   referee_reward: number;
@@ -89,13 +92,25 @@ export interface MyReferral {
   credited: number;
 }
 
+export interface OfferAnnouncement {
+  id: number;
+  kind: string;
+  title: string;
+  message: string;
+  currency?: string;
+  createdAt: string;
+}
+
 export interface RewardsSummary {
   customer: { id: string; referralCode: string; currency: string } | null;
   currency: string;
+  sendCurrencies?: string[];
   offer: RewardOffer | null;
+  offers?: RewardOffer[];
   wallet: Wallet;
   referrals: { data: MyReferral[]; summary: { joined: number; earned_count: number; total_earned: Record<string, number> } };
-  latestOffer: { id: number; kind: string; title: string; message: string; createdAt: string } | null;
+  latestOffer: OfferAnnouncement | null;
+  latestOffers?: OfferAnnouncement[];
 }
 
 const SYMBOLS: Record<string, string> = {
@@ -205,7 +220,7 @@ const REF_KEY = "rhemito.referral";
 const REF_TTL_MS = 30 * 86_400_000;
 export const REFERRAL_CODE_RE = /^[A-Z0-9]{6,12}$/;
 
-export interface StoredReferral { code: string; referrerFirstName?: string; savedAt: number; offer?: RewardOffer | null }
+export interface StoredReferral { code: string; referrerFirstName?: string; savedAt: number; offer?: RewardOffer | null; offers?: RewardOffer[]; sendCurrencies?: string[] }
 
 export function saveReferral(ref: Omit<StoredReferral, "savedAt">, now = Date.now()): void {
   try { localStorage.setItem(REF_KEY, JSON.stringify({ ...ref, savedAt: now })); } catch { /* storage unavailable */ }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { X } from "lucide-react";
-import type { RewardsSummary } from "@/lib/rewards";
+import type { OfferAnnouncement, RewardsSummary } from "@/lib/rewards";
 
 const dismissedKey = (id: number) => `rhemito.offerDismissed.${id}`;
 
@@ -11,26 +11,33 @@ function isDismissed(id: number): boolean {
 
 interface OfferBannerProps {
   latestOffer: RewardsSummary["latestOffer"];
+  latestOffers?: OfferAnnouncement[];
   onView: () => void;
 }
 
-/** Dismissible "New offer" banner on the dashboard (AC-6.1.5, spec §1). */
-export function OfferBanner({ latestOffer, onView }: OfferBannerProps) {
+/** Dismissible "New offer" banner(s) on the dashboard across the customer's applicable send currencies (AC-6.1.5, spec §1). */
+export function OfferBanner({ latestOffer, latestOffers, onView }: OfferBannerProps) {
   const reduce = useReducedMotion();
-  const [dismissedId, setDismissedId] = useState<number | null>(null);
-  const visible = Boolean(latestOffer) && dismissedId !== latestOffer!.id && !isDismissed(latestOffer!.id);
+  const [dismissedIds, setDismissedIds] = useState<number[]>([]);
 
-  const dismiss = () => {
-    if (latestOffer) {
-      try { localStorage.setItem(dismissedKey(latestOffer.id), "1"); } catch { /* ignore */ }
-    }
-    if (latestOffer) setDismissedId(latestOffer.id);
+  const items: OfferAnnouncement[] = latestOffers && latestOffers.length > 0
+    ? latestOffers
+    : latestOffer
+      ? [latestOffer]
+      : [];
+
+  const visibleItems = items.filter((item) => !dismissedIds.includes(item.id) && !isDismissed(item.id));
+
+  const dismiss = (id: number) => {
+    try { localStorage.setItem(dismissedKey(id), "1"); } catch { /* ignore */ }
+    setDismissedIds((prev) => [...prev, id]);
   };
 
   return (
     <AnimatePresence>
-      {visible && latestOffer && (
+      {visibleItems.map((offer) => (
         <motion.div
+          key={offer.id}
           role="status"
           data-testid="offer-banner"
           initial={reduce ? false : { opacity: 0, y: -6 }}
@@ -40,10 +47,17 @@ export function OfferBanner({ latestOffer, onView }: OfferBannerProps) {
           className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 py-3.5 pl-4 pr-2"
         >
           <div className="flex flex-1 flex-col gap-1">
-            <span className="text-[13px] font-bold tracking-wide text-blue-700">
-              {latestOffer.kind === "IMPROVED" ? "BETTER OFFER" : "NEW OFFER"}
-            </span>
-            <span className="text-[15px] leading-[22px] text-slate-900">{latestOffer.message}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-bold tracking-wide text-blue-700">
+                {offer.kind === "IMPROVED" ? "BETTER OFFER" : "NEW OFFER"}
+              </span>
+              {offer.currency && (
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-800">
+                  {offer.currency}
+                </span>
+              )}
+            </div>
+            <span className="text-[15px] leading-[22px] text-slate-900">{offer.message}</span>
             <button
               type="button"
               onClick={onView}
@@ -55,13 +69,13 @@ export function OfferBanner({ latestOffer, onView }: OfferBannerProps) {
           <button
             type="button"
             aria-label="Dismiss offer"
-            onClick={dismiss}
+            onClick={() => dismiss(offer.id)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <X className="h-[18px] w-[18px]" />
           </button>
         </motion.div>
-      )}
+      ))}
     </AnimatePresence>
   );
 }

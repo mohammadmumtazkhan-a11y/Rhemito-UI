@@ -987,6 +987,7 @@ export default function Dashboard() {
 
         <OfferBanner
           latestOffer={rewards.data?.latestOffer ?? null}
+          latestOffers={rewards.data?.latestOffers}
           onView={viewReferOffer}
         />
 
@@ -1120,6 +1121,8 @@ export default function Dashboard() {
             {rewards.data?.wallet.bonus_blocked && <BonusBlockedNotice />}
             <ReferEarnCard
               offer={rewards.data?.offer ?? null}
+              offers={rewards.data?.offers}
+              sendCurrencies={rewards.data?.sendCurrencies}
               referrals={rewards.data?.referrals.data ?? []}
               summary={rewards.data?.referrals.summary}
               isLoading={rewards.isLoading}

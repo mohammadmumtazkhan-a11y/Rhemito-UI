@@ -8,7 +8,16 @@ import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
 import { fromMinorUnits } from "@shared/money";
 import { demoModeEnabled, serverConfig } from "./config";
-import { RewardsError, applyBonus, currencyForCountry, mito, syncCustomer, startOfferPoller } from "./rewardsService";
+import {
+  RewardsError,
+  applyBonus,
+  currencyForCountry,
+  sendCurrenciesForCountry,
+  isOfferPollerStarted,
+  mito,
+  syncCustomer,
+  startOfferPoller,
+} from "./rewardsService";
 
 function currentUserId(req: Request): string {
   const userId = req.session?.userId;
@@ -33,14 +42,16 @@ export function registerRewardsRoutes(app: Express): void {
 
   /**
    * Everything the Dashboard and Bonus & Discounts page need in one call:
-   * the live offer (with the customer's link), wallet, referrals and the
-   * latest offer announcement for the banner.
+   * the live offer (with the customer's link), all offers across the send
+   * currencies applicable for the customer's registered location (e.g. GBP, USD, EUR for UK),
+   * wallet, referrals and the latest offer announcements for the banner.
    */
   app.get("/api/rewards/summary", async (req: Request, res: Response) => {
     try {
       const userId = currentUserId(req);
       const customer = await syncCustomer(userId);
       const user = await storage.getAuthUserById(userId);
+      const sendCurrencies = sendCurrenciesForCountry(user?.country);
       const currency = String(req.query.currency ?? currencyForCountry(user?.country)).toUpperCase();
       const id = encodeURIComponent(userId);
       const [offer, wallet, referrals, notices] = await Promise.all([
@@ -49,20 +60,86 @@ export function registerRewardsRoutes(app: Express): void {
         mito(`/api/referral/referrals?referrer_id=${id}`),
         mito(`/api/referral/offer-notifications?currency=${encodeURIComponent(currency)}`),
       ]);
-      const weekAgo = Date.now() - 7 * 86_400_000;
-      const latest = ((notices.data as any[]) ?? []).find((n) => n.kind !== "ENDING" && new Date(n.created_at).getTime() >= weekAgo) ?? null;
-      // Links point at this Rhemito deployment so they work in every environment
+
+      const publicBase = serverConfig.publicBaseUrl.replace(/\/+$/, "");
+      const referralCode = customer?.referral_code ?? offer.offer?.referral_code ?? null;
+      const attachLink = (o: any) => {
+        if (!o) return o;
+        const code = o.referral_code ?? referralCode;
+        if (code) {
+          o.referral_code = code;
+          o.referral_link = `${publicBase}/ref/${code}`;
+        }
+        return o;
+      };
+
       if (offer.offer?.referral_code) {
-        offer.offer.referral_link = `${serverConfig.publicBaseUrl.replace(/\/+$/, "")}/ref/${offer.offer.referral_code}`;
+        offer.offer.referral_link = `${publicBase}/ref/${offer.offer.referral_code}`;
       }
+
+      let currencyOffers: any[] = Array.isArray(offer.currency_offers) && offer.currency_offers.length > 0
+        ? offer.currency_offers.map((o: any) => attachLink({ ...o }))
+        : offer.offer
+          ? [attachLink({ ...offer.offer })]
+          : [];
+
+      let allNotices: any[] = [...((notices.data as any[]) ?? [])];
+
+      // If the upstream engine did not return currency_offers yet, query the other applicable send currencies in live runtime
+      if (!Array.isArray(offer.currency_offers) && isOfferPollerStarted()) {
+        const extraCurrencies = sendCurrencies.filter((c) => c !== currency);
+        const extraResults = await Promise.all(
+          extraCurrencies.map(async (cur) => {
+            try {
+              const [oRes, nRes] = await Promise.all([
+                mito(`/api/referral/offer?currency=${encodeURIComponent(cur)}`),
+                mito(`/api/referral/offer-notifications?currency=${encodeURIComponent(cur)}`),
+              ]);
+              const list = Array.isArray(oRes.offers) && oRes.offers.length > 0
+                ? oRes.offers
+                : oRes.offer
+                  ? [oRes.offer]
+                  : [];
+              return { offers: list.map((x: any) => attachLink({ ...x })), notices: (nRes.data as any[]) ?? [] };
+            } catch {
+              return { offers: [], notices: [] };
+            }
+          }),
+        );
+        for (const r of extraResults) {
+          for (const o of r.offers) {
+            if (!currencyOffers.some((existing) => existing.rule_id === o.rule_id && existing.currency === o.currency)) {
+              currencyOffers.push(o);
+            }
+          }
+          for (const n of r.notices) {
+            if (!allNotices.some((existing) => existing.id === n.id)) {
+              allNotices.push(n);
+            }
+          }
+        }
+      }
+
+      const weekAgo = Date.now() - 7 * 86_400_000;
+      const recentNotices = allNotices
+        .filter((n) => n.kind !== "ENDING" && new Date(n.created_at).getTime() >= weekAgo && (!n.currency || sendCurrencies.includes(String(n.currency).toUpperCase())))
+        .sort((a, b) => Number(b.id) - Number(a.id));
+      const latest = recentNotices[0] ?? null;
+      const primaryOffer = offer.offer ?? currencyOffers[0] ?? null;
+
       res.json({
         data: {
           customer: customer ? { id: customer.id, referralCode: customer.referral_code, currency: customer.send_currency } : null,
           currency,
-          offer: offer.offer ?? null,
+          sendCurrencies,
+          offer: primaryOffer,
+          offers: currencyOffers,
           wallet,
           referrals: { data: referrals.data ?? [], summary: referrals.summary ?? { joined: 0, earned_count: 0, total_earned: {} } },
-          latestOffer: offer.offer && latest ? { id: latest.id, kind: latest.kind, title: latest.title, message: latest.message, createdAt: latest.created_at } : null,
+          latestOffer: primaryOffer && latest ? { id: latest.id, kind: latest.kind, title: latest.title, message: latest.message, currency: latest.currency, createdAt: latest.created_at } : null,
+          latestOffers: primaryOffer
+            ? recentNotices.map((n) => ({ id: n.id, kind: n.kind, title: n.title, message: n.message, currency: n.currency, createdAt: n.created_at }))
+            : [],
         },
       });
     } catch (err) {
@@ -75,11 +152,33 @@ export function registerRewardsRoutes(app: Express): void {
     try {
       const code = String(req.params.code ?? "").trim().toUpperCase();
       const result = await mito(`/api/referral/codes/${encodeURIComponent(code)}`);
+      const sendCurrencies: string[] = Array.isArray(result.send_currencies) && result.send_currencies.length > 0
+        ? result.send_currencies
+        : ["GBP", "USD", "EUR"];
+      let currencyOffers: any[] = Array.isArray(result.currency_offers) && result.currency_offers.length > 0
+        ? result.currency_offers
+        : result.offer
+          ? [result.offer]
+          : [];
+      if (!Array.isArray(result.currency_offers) && isOfferPollerStarted()) {
+        for (const cur of sendCurrencies) {
+          if (currencyOffers.some((o) => o.currency === cur)) continue;
+          try {
+            const extra = await mito(`/api/referral/offer?currency=${encodeURIComponent(cur)}`);
+            const list = Array.isArray(extra.offers) && extra.offers.length > 0 ? extra.offers : extra.offer ? [extra.offer] : [];
+            for (const o of list) currencyOffers.push(o);
+          } catch {
+            // ignore
+          }
+        }
+      }
       res.json({
         data: {
           code: result.code,
           referrerFirstName: result.referrer_first_name,
-          offer: result.offer,
+          offer: result.offer ?? currencyOffers[0] ?? null,
+          offers: currencyOffers,
+          sendCurrencies,
           signedIn: Boolean(req.session?.userId),
         },
       });

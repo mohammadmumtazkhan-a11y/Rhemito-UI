@@ -46,7 +46,7 @@ export default function ReferralLanding() {
           return;
         }
         resetDeviceId();
-        saveReferral({ code, referrerFirstName: body.data?.referrerFirstName, offer: body.data?.offer ?? null });
+        saveReferral({ code, referrerFirstName: body.data?.referrerFirstName, offer: body.data?.offer ?? null, offers: body.data?.offers, sendCurrencies: body.data?.sendCurrencies });
         void fetch("/api/rewards/visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
