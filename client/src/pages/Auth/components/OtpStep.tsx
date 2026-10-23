@@ -1,4 +1,4 @@
-import { clearReferral } from "@/lib/rewards";
+import { clearReferral, formatMoney } from "@/lib/rewards";
 import React, { useState, useEffect, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -49,14 +49,26 @@ export default function OtpStep({ email, onChangeEmail, devOtp }: OtpStepProps) 
       const res = await apiRequest("POST", "/api/auth/verify-otp", { email, code });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setIsVerified(true);
       clearReferral(); // the referral is now recorded on the server
       queryClient.clear();
-      toast({
-        title: "Account Activated!",
-        description: "Your account has been successfully activated. Welcome to Rhemito!",
-      });
+      const bonus = data?.referralBonus as { amount: number; currency: string; floor: number } | null | undefined;
+      if (bonus && Number(bonus.amount) > 0) {
+        const amt = formatMoney(bonus.amount, bonus.currency);
+        const floorText = Number(bonus.floor) > 0
+          ? ` Use it on transfers of ${formatMoney(bonus.floor, bonus.currency)} or more.`
+          : "";
+        toast({
+          title: "Account Activated & Bonus Unlocked!",
+          description: `Welcome to Rhemito! You have earned ${amt} Referral Bonus credit.${floorText}`,
+        });
+      } else {
+        toast({
+          title: "Account Activated!",
+          description: "Your account has been successfully activated. Welcome to Rhemito!",
+        });
+      }
       // Redirect to dashboard after short delay
       setTimeout(() => {
         setLocation("/");

@@ -96,6 +96,15 @@ export function UseBonusCredit({
         {parts.length > 0 && <p className="mb-3 text-[13px] text-slate-500" data-testid="bonus-includes">{BONUS_COPY.includes(parts)}</p>}
         {parts.length === 0 && <div className="mb-2" />}
 
+        {referralAvail > 0 && resolvedReferralFloor > 0 && !referralBelowFloor && (
+          <div className="mb-3 rounded-xl border border-teal-200 bg-teal-50/80 px-3.5 py-2.5 text-xs font-medium text-teal-900" data-testid="bonus-floor-met-notice">
+            <p>
+              You have earned <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit (transfer is{" "}
+              <span className="font-bold">{formatMoney(resolvedReferralFloor, currency)}</span> or more). Select <span className="font-bold">Pay less</span> or{" "}
+              <span className="font-bold">Send more</span> below to use it.
+            </p>
+          </div>
+        )}
         {(referralBelowFloor || schemeBelowFloor) && (
           <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-xs font-medium text-amber-900 space-y-1" data-testid="bonus-floor-notice">
             {referralBelowFloor && (
