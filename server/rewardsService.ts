@@ -106,6 +106,7 @@ async function notify(userId: string, type: NotificationEventType, data: Record<
 
 // Rewarded referrals already announced (the engine is idempotent; this keeps the bell clean)
 const announcedRewards = new Set<string>();
+const announcedRefereeRewards = new Set<string>();
 
 /** Waits (ms) between attempts to record a referral that Mito could not take yet. Env override: comma-separated list. */
 const referralRetryDelays = (): number[] =>
@@ -116,6 +117,7 @@ const referralRetryDelays = (): number[] =>
 const isTemporary = (err: unknown) => err instanceof RewardsError && err.status >= 500;
 
 async function recordReferral(userId: string, referralCode: string): Promise<Json> {
+  if (offerPollerStarted) await syncAdminCrudSnapshot();
   const user = await storage.getAuthUserById(userId);
   const res = await mito("/api/referral/referrals", {
     method: "POST",
@@ -128,6 +130,14 @@ async function recordReferral(userId: string, referralCode: string): Promise<Jso
       reward: referral.reward_type === "REFEREE" ? "" : fmtMoney(referral.referrer_reward, referral.currency),
       floor: fmtMoney(referral.floor, referral.currency),
     });
+    if (Number(referral.referee_credited) > 0) {
+      announcedRefereeRewards.add(referral.id);
+      await notify(userId, "reward_earned", {
+        amount: fmtMoney(referral.referee_credited, referral.currency),
+        message: "Welcome bonus unlocked!",
+        expires: expiryFor(referral),
+      });
+    }
   }
   return referral;
 }
@@ -201,7 +211,8 @@ export async function onTransferEvent(
           expires: validUntil,
         });
       }
-      if (referral.referee_credited > 0) {
+      if (referral.referee_credited > 0 && !announcedRefereeRewards.has(referral.id)) {
+        announcedRefereeRewards.add(referral.id);
         await notify(referral.referee_id, "reward_earned", {
           amount: fmtMoney(referral.referee_credited, referral.currency),
           message: "Welcome bonus unlocked!",
@@ -286,6 +297,40 @@ export async function applyBonus(userId: string, input: { amount: number; curren
 
 let lastOfferNotificationId = 0;
 let offerPollerStarted = false;
+const cachedReferralRules = new Map<number, Json>();
+
+/** Snapshot Mito Admin CRUD rules and auto-restore if a cold container restart reverts an updated rule. */
+export async function syncAdminCrudSnapshot(): Promise<void> {
+  try {
+    const res = await mito("/api/referral-rules?include_archived=1");
+    const rules = (res.data as Json[]) ?? [];
+    const seenIds = new Set<number>();
+    for (const rule of rules) {
+      const id = Number(rule.id);
+      if (!id) continue;
+      seenIds.add(id);
+      const prev = cachedReferralRules.get(id);
+      if (prev && prev.updated_at && rule.updated_at && String(rule.updated_at) < String(prev.updated_at)) {
+        if (prev.is_archived && !rule.is_archived) {
+          await mito(`/api/referral-rules/${id}`, { method: "DELETE" });
+        } else {
+          await mito(`/api/referral-rules/${id}`, { method: "PUT", body: { ...prev, notify: false } });
+        }
+      } else {
+        cachedReferralRules.set(id, rule);
+      }
+    }
+    for (const [id, prev] of cachedReferralRules.entries()) {
+      if (!seenIds.has(id) && !prev.is_archived) {
+        const created = await mito("/api/referral-rules", { method: "POST", body: { ...prev, notify: false } });
+        cachedReferralRules.delete(id);
+        if (created?.data?.id) cachedReferralRules.set(Number(created.data.id), created.data);
+      }
+    }
+  } catch {
+    // Engine offline: try again on the next tick
+  }
+}
 
 /** Fan out new offer notifications from the engine to customers in that currency. */
 export async function pollOfferNotifications(): Promise<number> {
@@ -320,13 +365,19 @@ export function startOfferPoller(): void {
     })
     .catch(() => {})
     .finally(() => {
-      setInterval(() => { void pollOfferNotifications(); }, 60_000).unref();
+      void syncAdminCrudSnapshot();
+      setInterval(() => {
+        void pollOfferNotifications();
+        void syncAdminCrudSnapshot();
+      }, 60_000).unref();
     });
 }
 
 /** Test hook. */
 export function __resetRewardsState(): void {
   announcedRewards.clear();
+  announcedRefereeRewards.clear();
+  cachedReferralRules.clear();
   lastOfferNotificationId = 0;
 }
 

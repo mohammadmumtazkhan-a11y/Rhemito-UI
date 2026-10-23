@@ -244,7 +244,7 @@ export function registerAuthRoutes(app: Express) {
       const pendingCode = pendingReferralCodes.get(email.toLowerCase()) ?? null;
       pendingReferralCodes.delete(email.toLowerCase());
       rememberDevice(user.id, req);
-      await onCustomerVerified(user.id, pendingCode);
+      const referral = await onCustomerVerified(user.id, pendingCode);
       await syncPromoCustomer(user.id, { force: true }).catch(() => {});
 
       const { password: _, ...safeUser } = user;
@@ -252,6 +252,7 @@ export function registerAuthRoutes(app: Express) {
         success: true,
         message: "Account activated successfully!",
         user: { ...safeUser, status: "active" },
+        ...(Number(referral?.referee_credited) > 0 ? { referralBonus: { amount: Number(referral?.referee_credited), currency: String(referral?.currency || "GBP"), floor: Number(referral?.floor || 0) } } : {}),
       });
     } catch (error) {
       console.error("Verify OTP error:", error);

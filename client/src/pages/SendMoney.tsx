@@ -532,7 +532,6 @@ export default function SendMoney() {
                                         choice={bonusChoice}
                                         onChoice={setBonusChoice}
                                         blocked={rewards.data?.wallet.bonus_blocked}
-                                    referralFloor={rewards.data?.offer?.floor}
                                         referralFloor={rewards.data?.offer?.floor}
                                     />
 
@@ -1102,7 +1101,6 @@ export default function SendMoney() {
                                         choice={bonusChoice}
                                         onChoice={setBonusChoice}
                                         blocked={rewards.data?.wallet.bonus_blocked}
-                                    referralFloor={rewards.data?.offer?.floor}
                                         referralFloor={rewards.data?.offer?.floor}
                                     />
 
