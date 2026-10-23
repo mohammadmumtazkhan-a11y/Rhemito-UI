@@ -62,8 +62,16 @@ export const getWallet = (customerId: string, currency?: string, source?: string
   return callMito(`/api/wallet/${enc(customerId)}${qs ? `?${qs}` : ""}`, { method: "GET" });
 };
 export const getOffers = (currency: string) => callMito(`/api/bonus/offers?currency=${enc(currency)}`, { method: "GET" });
-export const applyCredit = (customerId: string, input: { amount: number; currency: string; transferId: string; sendAmount: number }) =>
-  callMito(`/api/wallet/${enc(customerId)}/apply`, { body: { amount: input.amount, currency: input.currency, transfer_id: input.transferId, send_amount: input.sendAmount } });
+export const applyCredit = (customerId: string, input: { amount: number; currency: string; receiveCurrency?: string; transferId: string; sendAmount: number }) =>
+  callMito(`/api/wallet/${enc(customerId)}/apply`, {
+    body: {
+      amount: input.amount,
+      currency: input.currency,
+      ...(input.receiveCurrency ? { receive_currency: input.receiveCurrency } : {}),
+      transfer_id: input.transferId,
+      send_amount: input.sendAmount,
+    },
+  });
 export const releaseCredit = (customerId: string, transferId: string) =>
   callMito(`/api/wallet/${enc(customerId)}/release`, { body: { transfer_id: transferId } });
 export const getFeed = (sinceId: number, limit = 100) => callMito(`/api/bonus/feed?since_id=${sinceId}&limit=${limit}`, { method: "GET" });

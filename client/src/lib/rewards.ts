@@ -33,7 +33,7 @@ export interface WalletBalance {
   other_credit_count: number;
   /** Bonus module (one balance): money still owed from removed bonus, and the split by how it was earned. */
   outstanding_debt?: number;
-  by_source?: Array<{ credit_source: "REFERRAL" | "SCHEME" | "MANUAL"; label?: string; earned: number; used: number; expired: number; removed: number; available: number; floor?: number }>;
+  by_source?: Array<{ credit_source: "REFERRAL" | "SCHEME" | "MANUAL"; label?: string; earned: number; used: number; expired: number; removed: number; available: number; floor?: number; receive_currency?: string | null }>;
 }
 
 /** How a credit was earned — present when Mito runs the bonus module. */
@@ -54,6 +54,7 @@ export interface WalletCredit extends CreditSourceFields {
   earned_on: string;
   expires_on: string | null;
   floor?: number;
+  receive_currency?: string | null;
   status: "UNUSED" | "PARTLY_USED" | "USED" | "EXPIRED" | "REVERSED";
 }
 
