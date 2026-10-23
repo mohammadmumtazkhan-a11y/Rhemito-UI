@@ -16,6 +16,7 @@ function makeId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+export function resetDeviceId(): string { const id = makeId(); memoryId = id; try { localStorage.setItem(STORAGE_KEY, id); } catch { /* ignore */ } return id; }
 /** Returns this browser's device ID, creating it on first use. Never throws. */
 export function getDeviceId(): string {
   try {

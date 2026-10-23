@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useLocation, useRoute } from "wouter";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { resetDeviceId } from "@/lib/deviceId";
 import { REFERRAL_CODE_RE, clearReferral, saveReferral, visitorId } from "@/lib/rewards";
 
 /**
@@ -44,6 +45,7 @@ export default function ReferralLanding() {
           setLocation("/", { replace: true });
           return;
         }
+        resetDeviceId();
         saveReferral({ code, referrerFirstName: body.data?.referrerFirstName, offer: body.data?.offer ?? null });
         void fetch("/api/rewards/visits", {
           method: "POST",

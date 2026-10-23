@@ -1,6 +1,7 @@
 import { useRewards } from "@/hooks/use-rewards";
 import { Link, useLocation } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { resetDeviceId } from "@/lib/deviceId";
 import { useToast } from "@/hooks/use-toast";
 import {
   LayoutDashboard,
@@ -76,6 +77,8 @@ export function Sidebar({
       title: "Logged out",
       description: "You have been signed out successfully.",
     });
+    resetDeviceId();
+    queryClient.clear();
     setLocation("/sign-in-sign-up");
   };
 

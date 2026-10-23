@@ -162,8 +162,8 @@ export function registerAuthRoutes(app: Express) {
         req.session.userId = user.id;
         delete req.session.paymentRequestVerification;
         rememberDevice(user.id, req);
-        void onCustomerVerified(user.id, referralCode || null);
-        void syncPromoCustomer(user.id, { force: true }).catch(() => {});
+        await onCustomerVerified(user.id, referralCode || null);
+        await syncPromoCustomer(user.id, { force: true }).catch(() => {});
         const activated = await storage.getAuthUserById(user.id);
         const { password: _, ...safeUser } = activated ?? user;
         return res.json({ success: true, message: "Registration complete.", user: { ...safeUser, status: "active" } });
@@ -244,8 +244,8 @@ export function registerAuthRoutes(app: Express) {
       const pendingCode = pendingReferralCodes.get(email.toLowerCase()) ?? null;
       pendingReferralCodes.delete(email.toLowerCase());
       rememberDevice(user.id, req);
-      void onCustomerVerified(user.id, pendingCode);
-      void syncPromoCustomer(user.id, { force: true }).catch(() => {});
+      await onCustomerVerified(user.id, pendingCode);
+      await syncPromoCustomer(user.id, { force: true }).catch(() => {});
 
       const { password: _, ...safeUser } = user;
       return res.json({

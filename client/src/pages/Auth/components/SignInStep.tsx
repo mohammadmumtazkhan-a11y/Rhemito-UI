@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { Loader2, ArrowLeft } from "lucide-react";
@@ -23,6 +23,7 @@ export default function SignInStep({ email, onBack, onForgotPassword }: SignInSt
       return res.json();
     },
     onSuccess: (data) => {
+      queryClient.clear();
       toast({
         title: "Welcome back!",
         description: `Signed in as ${data.user.firstName || data.user.email}`,

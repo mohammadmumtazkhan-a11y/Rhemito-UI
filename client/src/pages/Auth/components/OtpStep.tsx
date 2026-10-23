@@ -1,7 +1,7 @@
 import { clearReferral } from "@/lib/rewards";
 import React, { useState, useEffect, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { Loader2, CheckCircle2 } from "lucide-react";
@@ -52,6 +52,7 @@ export default function OtpStep({ email, onChangeEmail, devOtp }: OtpStepProps) 
     onSuccess: () => {
       setIsVerified(true);
       clearReferral(); // the referral is now recorded on the server
+      queryClient.clear();
       toast({
         title: "Account Activated!",
         description: "Your account has been successfully activated. Welcome to Rhemito!",
