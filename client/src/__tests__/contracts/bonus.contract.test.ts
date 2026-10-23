@@ -85,7 +85,7 @@ describe("Balance and the maths of using it", () => {
     expect(amountConverted(7, 2025.5, "NGN")).toBe(14178.5);
     expect(amountConverted(0, 2025.5, "NGN")).toBe(0);
     const page = source("client/src/pages/SendMoney.tsx");
-    expect(page).toMatch(/const totalPay = Math\.max\(0,\s*\(parseFloat\(amount \|\| "0"\) \+ effectiveFee\) - \(useBonus && bonusType === 'pay_less' \? bonusAmount : 0\)\)/);
+    expect(page).toMatch(/const totalPay = Math\.max\(0,\s*\(parseFloat\(amount \|\| "0"\) \+ effectiveFee\) (?:- amountPromoDiscount )?- \(useBonus && bonusType === 'pay_less' \? bonusAmount : 0\)\)/);
     expect(page).toMatch(/const amountSentGBP = youSendAmount \+ \(useBonus && bonusType === 'send_more' \? bonusAmount : 0\)/);
     expect(page).toMatch(/const finalReceiveAmount = \(amountSentGBP \* EXCHANGE_RATE\)\.toFixed\(2\)/);
     expect(page).toMatch(/const bonusAmount = useBonus \? creditToApply\(bonusBalance, parseFloat\(amount \|\| "0"\), SEND_CURRENCY\) : 0/);
@@ -204,7 +204,7 @@ describe("The bonus panel and the choice", () => {
     expect(single.getByTestId("bonus-floor-met-notice").textContent).toContain("You have earned £7.00 Referral Bonus credit (transfer is £50.00 or more).");
     single.unmount();
     const belowFloor = render(React.createElement(UseBonusCredit, { balance: balance({ available: 7, by_source: [grp("REFERRAL", 10, 7)] }), currency: "GBP", sendAmount: 20, receiveCurrency: "NGN", exchangeRate: 2000, choice: "none", onChoice: () => {}, referralFloor: 50 }));
-    expect(belowFloor.getByTestId("bonus-floor-notice").textContent).toContain("Send £50.00 or more to unlock your £7.00 Referral Bonus credit.");
+    expect(belowFloor.getByTestId("bonus-floor-notice").textContent).toContain("Send at least £50.00 in GBP to use your £7.00 Referral Bonus credit.");
     belowFloor.unmount();
     const empty = render(React.createElement(UseBonusCredit, { balance: balance({ available: 0 }), currency: "GBP", sendAmount: 50, receiveCurrency: "NGN", exchangeRate: 2000, choice: "none", onChoice: () => {} }));
     expect(empty.container.innerHTML).toBe("");
