@@ -33,7 +33,10 @@ import type { SendMoneyPaymentMethod, SendMoneyService } from "@shared/sendMoney
 // Mock Data
 const EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN
 const FEE_PERCENTAGE = 0.01; // 1%
-const SEND_CURRENCY = "GBP"; // Send Money is GBP-only for now (known limit L4)
+const CURRENCY_FLAGS: Record<string, string> = {
+    GBP: "gb", USD: "us", EUR: "eu", NGN: "ng", INR: "in", GHS: "gh", KES: "ke", ZAR: "za", CAD: "ca", AED: "ae", AUD: "au", CNY: "cn", JPY: "jp",
+};
+const RECEIVE_CURRENCIES = ["NGN", "INR", "GHS", "KES", "ZAR", "EUR", "USD", "GBP", "CAD", "AED", "AUD", "CNY", "JPY"];
 
 const recentRecipients = [
     { id: 1, name: "Akshita Gupta",   bank: "Barclays",        account: "12345678",  sortCode: "20-45-67", iban: "",                       swift: "",          currency: "GBP", country: "UK",            narration: "",                    initials: "AG", color: "bg-blue-100 text-blue-600" },
@@ -57,6 +60,8 @@ export default function SendMoney() {
     const [currentStep, setCurrentStep] = useState(1);
 
     // Form State
+    const [sendCurrencyState, setSendCurrencyState] = useState<string>("GBP");
+    const SEND_CURRENCY = sendCurrencyState;
     const [amount, setAmount] = useState<string>("500");
     const [receiveAmount, setReceiveAmount] = useState<string>("");
     const [deliveryMethod, setDeliveryMethod] = useState("bank_deposit");
@@ -115,12 +120,32 @@ export default function SendMoney() {
 
     // Referral bonus — live wallet from the rewards API (US-5.2 / US-5.3)
     const rewards = useRewards();
+    const activeOffer =
+        rewards.data?.offers?.find(
+            (o) =>
+                o.currency === SEND_CURRENCY &&
+                (!o.receive_currency || o.receive_currency.toUpperCase() === (recipientDetails.currency || "NGN").toUpperCase()),
+        ) ??
+        rewards.data?.offers?.find((o) => o.currency === SEND_CURRENCY) ??
+        (rewards.data?.offer?.currency === SEND_CURRENCY ? rewards.data?.offer : rewards.data?.offer);
     // One bonus balance, in the currency of this transfer; no minimum to use it (BONUS-RHEMITO 7.5)
     const bonusWallet = balanceFor(rewards.data?.wallet, SEND_CURRENCY);
-    const bonusBalance = eligibleBonusBalance(bonusWallet, parseFloat(amount || "0"), rewards.data?.offer?.floor);
+    const bonusBalance = eligibleBonusBalance(
+        bonusWallet,
+        parseFloat(amount || "0"),
+        activeOffer?.floor,
+        recipientDetails.currency || "NGN",
+        activeOffer?.receive_currency,
+    );
     const [bonusChoice, setBonusChoiceState] = useState<BonusChoice>("none");
     const useBonus = bonusChoice !== "none" && bonusBalance > 0;
     const bonusType: 'pay_less' | 'send_more' = bonusChoice === "send_more" ? "send_more" : "pay_less";
+
+    useEffect(() => {
+        if (bonusChoice !== "none" && bonusBalance <= 0) {
+            setBonusChoiceState("none");
+        }
+    }, [bonusBalance, bonusChoice]);
 
     // Calculations
     const fee = parseFloat(amount || "0") * FEE_PERCENTAGE;
@@ -465,10 +490,21 @@ export default function SendMoney() {
                                             )}
                                         </div>
                                         <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
-                                            <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
-                                                <img src="https://flagcdn.com/w40/gb.png" alt="GBP" className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
-                                                <span className="font-semibold text-base">GBP</span>
+                                            <div className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
+                                                <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[SEND_CURRENCY] ?? "gb"}.png`} alt={SEND_CURRENCY} className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
+                                                <span className="font-semibold text-base">{SEND_CURRENCY}</span>
                                                 <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
+                                                <select
+                                                    aria-label="Send currency"
+                                                    data-testid="send-currency-select"
+                                                    value={SEND_CURRENCY}
+                                                    onChange={(e) => setSendCurrencyState(e.target.value)}
+                                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                                >
+                                                    {(rewards.data?.sendCurrencies?.length ? rewards.data.sendCurrencies : ["GBP", "USD", "EUR"]).map((cur) => (
+                                                        <option key={cur} value={cur}>{cur}</option>
+                                                    ))}
+                                                </select>
                                             </div>
                                             <input
                                                 type="number"
@@ -483,10 +519,21 @@ export default function SendMoney() {
                                     <div className="space-y-2">
                                         <Label className="text-gray-500">They Receive</Label>
                                         <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
-                                            <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
-                                                <img src="https://flagcdn.com/w40/ng.png" alt="NGN" className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
-                                                <span className="font-semibold text-base">NGN</span>
+                                            <div className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
+                                                <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[recipientDetails.currency || "NGN"] ?? "ng"}.png`} alt={recipientDetails.currency || "NGN"} className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
+                                                <span className="font-semibold text-base">{recipientDetails.currency || "NGN"}</span>
                                                 <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
+                                                <select
+                                                    aria-label="Receive currency"
+                                                    data-testid="receive-currency-select"
+                                                    value={recipientDetails.currency || "NGN"}
+                                                    onChange={(e) => setRecipientDetails((prev) => ({ ...prev, currency: e.target.value }))}
+                                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                                >
+                                                    {RECEIVE_CURRENCIES.map((cur) => (
+                                                        <option key={cur} value={cur}>{cur}</option>
+                                                    ))}
+                                                </select>
                                             </div>
                                             <input
                                                 readOnly
@@ -532,7 +579,8 @@ export default function SendMoney() {
                                         choice={bonusChoice}
                                         onChoice={setBonusChoice}
                                         blocked={rewards.data?.wallet.bonus_blocked}
-                                        referralFloor={rewards.data?.offer?.floor}
+                                        referralFloor={activeOffer?.floor}
+                                        referralReceiveCurrency={activeOffer?.receive_currency}
                                     />
 
                                     <div className="space-y-1 pt-2 lg:hidden">
@@ -1101,7 +1149,8 @@ export default function SendMoney() {
                                         choice={bonusChoice}
                                         onChoice={setBonusChoice}
                                         blocked={rewards.data?.wallet.bonus_blocked}
-                                        referralFloor={rewards.data?.offer?.floor}
+                                        referralFloor={activeOffer?.floor}
+                                        referralReceiveCurrency={activeOffer?.receive_currency}
                                     />
 
                                     {/* Promo Code Section (features/promo) */}

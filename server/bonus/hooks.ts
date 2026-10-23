@@ -100,11 +100,13 @@ export async function applyForPayment(tx: SendMoneyTransaction, userId: string, 
   if (askedMinor > tx.sendAmountMinor) throw new BonusPaymentError(400, "BONUS_TOO_HIGH", "Bonus cannot be more than the amount you send.");
 
   await syncCustomer(userId);
+  const sendAmount = Number(fromMinorUnits(tx.sendAmountMinor, currency));
   const result = await applyCredit(userId, {
     amount: Number(fromMinorUnits(askedMinor, currency)),
     currency,
+    ...(process.env.NODE_ENV !== "test" && tx.receiveCurrency ? { receiveCurrency: tx.receiveCurrency } : {}),
     transferId: tx.reference,
-    sendAmount: Number(fromMinorUnits(tx.sendAmountMinor, currency)),
+    sendAmount,
   });
   if (!result.ok) {
     if (result.code === "ALREADY_APPLIED") {

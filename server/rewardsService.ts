@@ -309,11 +309,17 @@ function expiryFor(referral: Json): string {
 }
 
 /** Use bonus credit on a transfer (US-5.2, US-5.3). */
-export async function applyBonus(userId: string, input: { amount: number; currency: string; transferId: string; sendAmount: number }): Promise<Json> {
+export async function applyBonus(userId: string, input: { amount: number; currency: string; receiveCurrency?: string; transferId: string; sendAmount: number }): Promise<Json> {
   await syncCustomer(userId);
   const result = await mito(`/api/wallet/${encodeURIComponent(userId)}/apply`, {
     method: "POST",
-    body: { amount: input.amount, currency: input.currency, transfer_id: input.transferId, send_amount: input.sendAmount },
+    body: {
+      amount: input.amount,
+      currency: input.currency,
+      ...(input.receiveCurrency ? { receive_currency: input.receiveCurrency } : {}),
+      transfer_id: input.transferId,
+      send_amount: input.sendAmount,
+    },
   });
   if (!bonusFeedOn()) await notify(userId, "reward_bonus_used", { amount: fmtMoney(input.amount, input.currency), txnId: input.transferId });
   return result;

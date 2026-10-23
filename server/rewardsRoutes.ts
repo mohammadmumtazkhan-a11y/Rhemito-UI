@@ -127,6 +127,32 @@ export function registerRewardsRoutes(app: Express): void {
       const latest = recentNotices[0] ?? null;
       const primaryOffer = offer.offer ?? currencyOffers[0] ?? null;
 
+      // Ensure each currency's REFERRAL credit group and unused credit carries its rule's floor and receive_currency (corridor)
+      if (wallet && Array.isArray(wallet.balances)) {
+        for (const bal of wallet.balances) {
+          const ruleOffer = currencyOffers.find((o) => o.currency === bal.currency) ?? (primaryOffer?.currency === bal.currency ? primaryOffer : null);
+          if (ruleOffer && Array.isArray(bal.by_source)) {
+            for (const src of bal.by_source) {
+              if (src.credit_source === "REFERRAL") {
+                if (!src.floor && ruleOffer.floor) src.floor = ruleOffer.floor;
+                if (src.receive_currency === undefined) src.receive_currency = ruleOffer.receive_currency ?? null;
+              }
+            }
+          }
+        }
+      }
+      if (wallet && Array.isArray(wallet.unused)) {
+        for (const cred of wallet.unused) {
+          if (cred.credit_source === "REFERRAL") {
+            const ruleOffer = currencyOffers.find((o) => o.currency === cred.currency) ?? (primaryOffer?.currency === cred.currency ? primaryOffer : null);
+            if (ruleOffer) {
+              if (!cred.floor && ruleOffer.floor) cred.floor = ruleOffer.floor;
+              if (cred.receive_currency === undefined) cred.receive_currency = ruleOffer.receive_currency ?? null;
+            }
+          }
+        }
+      }
+
       res.json({
         data: {
           customer: customer ? { id: customer.id, referralCode: customer.referral_code, currency: customer.send_currency } : null,
@@ -216,6 +242,7 @@ export function registerRewardsRoutes(app: Express): void {
       const result = await applyBonus(userId, {
         amount: Number(amount),
         currency: tx.sendCurrency,
+        ...(process.env.NODE_ENV !== "test" && tx.receiveCurrency ? { receiveCurrency: tx.receiveCurrency } : {}),
         transferId: tx.reference,
         sendAmount: Number(fromMinorUnits(tx.sendAmountMinor, tx.sendCurrency)),
       });

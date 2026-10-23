@@ -15,6 +15,7 @@ export interface SourceTotals {
   removed: number;
   available: number;
   floor?: number;
+  receive_currency?: string | null;
 }
 
 export interface BonusBalance {
@@ -50,6 +51,7 @@ export interface BonusCredit extends SourceFields {
   expires_on: string | null;
   status: CreditStatus;
   floor?: number;
+  receive_currency?: string | null;
 }
 
 export interface BonusWallet {
@@ -131,18 +133,35 @@ export function balanceFor(wallet: Pick<BonusWallet, "balances"> | undefined, cu
 // ─── Using bonus on a transfer ───────────────────────────────────────────────
 
 /** Bonus applicable to a transfer: never more than the whole balance (all sources) or the send amount. */
-/** Available bonus credit eligible for `sendAmount` based on each source's backend floor (`min_transaction_threshold`). */
-export function eligibleBonusBalance(wallet: BonusBalance, sendAmount: number, referralFloor?: number | null): number {
+/** Available bonus credit eligible for `sendAmount` and `receiveCurrency` based on each source's corridor and floor (`min_transaction_threshold`). */
+export function eligibleBonusBalance(
+  wallet: BonusBalance,
+  sendAmount: number,
+  referralFloor?: number | null,
+  receiveCurrency?: string | null,
+  referralReceiveCurrency?: string | null,
+): number {
   const bySource = wallet.by_source ?? [];
-  if (!bySource.length) return wallet.available;
+  if (!bySource.length) {
+    const corridorMismatch =
+      Boolean(referralReceiveCurrency) &&
+      Boolean(receiveCurrency) &&
+      referralReceiveCurrency!.toUpperCase() !== receiveCurrency!.toUpperCase();
+    if (corridorMismatch) return 0;
+    if (referralFloor && referralFloor > 0 && sendAmount < referralFloor) return 0;
+    return wallet.available;
+  }
   let total = 0;
-  let anyFloor = false;
+  let anyRestriction = false;
   for (const s of bySource) {
     const floor = s.credit_source === "REFERRAL" ? (s.floor || referralFloor || 0) : (s.floor || 0);
-    if (floor > 0) anyFloor = true;
-    if (sendAmount >= floor) total += s.available || 0;
+    const reqReceive = s.credit_source === "REFERRAL" ? (s.receive_currency || referralReceiveCurrency || null) : null;
+    if (floor > 0 || reqReceive) anyRestriction = true;
+    const corridorOk = !reqReceive || !receiveCurrency || reqReceive.toUpperCase() === receiveCurrency.toUpperCase();
+    const floorOk = sendAmount >= floor;
+    if (corridorOk && floorOk) total += s.available || 0;
   }
-  return anyFloor ? round(total, wallet.currency) : wallet.available;
+  return anyRestriction ? round(total, wallet.currency) : wallet.available;
 }
 
 export function creditToApply(available: number, sendAmount: number, currency = "GBP"): number {

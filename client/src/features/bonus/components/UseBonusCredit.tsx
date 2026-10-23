@@ -17,10 +17,11 @@ interface UseBonusCreditProps {
   blocked?: boolean;
   onContactSupport?: () => void;
   referralFloor?: number | null;
+  referralReceiveCurrency?: string | null;
   schemeFloor?: number | null;
 }
 
-/** Send Money → Payment: "Use your bonus" (7.5). Checks currency and rule floor when present. */
+/** Send Money → Payment: "Use your bonus" (7.5). Checks corridor (send + receive currency) and rule floor when present. */
 export function UseBonusCredit({
   balance,
   unused = [],
@@ -33,10 +34,43 @@ export function UseBonusCredit({
   blocked,
   onContactSupport,
   referralFloor,
+  referralReceiveCurrency,
   schemeFloor,
 }: UseBonusCreditProps) {
   const available = balance.available;
-  if (!(available > 0)) return blocked ? <BonusBlockedNotice onContact={onContactSupport} /> : null;
+  const otherCurrencyReferral = unused.find((c) => c.credit_source === "REFERRAL" && c.remaining > 0 && c.currency !== currency);
+  if (!(available > 0) && !otherCurrencyReferral) return blocked ? <BonusBlockedNotice onContact={onContactSupport} /> : null;
+
+  if (!(available > 0) && otherCurrencyReferral) {
+    const reqCorridor = otherCurrencyReferral.receive_currency
+      ? `${otherCurrencyReferral.currency} → ${otherCurrencyReferral.receive_currency}`
+      : `${otherCurrencyReferral.currency}`;
+    return (
+      <div className="space-y-3">
+        {blocked && <BonusBlockedNotice onContact={onContactSupport} />}
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5" data-testid="bonus-redemption" aria-labelledby="use-bonus-title">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h2 id="use-bonus-title" className="text-base font-bold text-slate-900">{BONUS_COPY.useTitle}</h2>
+            <span className="text-sm font-bold text-teal-700">{BONUS_COPY.available(formatMoney(otherCurrencyReferral.remaining, otherCurrencyReferral.currency))}</span>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-xs font-medium text-amber-900" data-testid="bonus-floor-notice">
+            <p>
+              Your <span className="font-bold">{formatMoney(otherCurrencyReferral.remaining, otherCurrencyReferral.currency)}</span> Referral Bonus credit requires the{" "}
+              <span className="font-bold">{reqCorridor}</span> corridor
+              {otherCurrencyReferral.floor && otherCurrencyReferral.floor > 0 ? (
+                <> and a minimum transfer of <span className="font-bold">{formatMoney(otherCurrencyReferral.floor, otherCurrencyReferral.currency)}</span></>
+              ) : null}
+              . Switch Send Currency to <span className="font-bold">{otherCurrencyReferral.currency}</span>
+              {otherCurrencyReferral.receive_currency ? (
+                <> and Receive Currency to <span className="font-bold">{otherCurrencyReferral.receive_currency}</span></>
+              ) : null}{" "}
+              to redeem it.
+            </p>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   const currencyCredits = unused.filter((c) => c.currency === currency);
   const bySource = balance.by_source ?? [];
@@ -52,6 +86,12 @@ export function UseBonusCredit({
     currencyCredits.find((c) => c.credit_source === "REFERRAL" && (c.floor ?? 0) > 0)?.floor ||
     0;
 
+  const resolvedReferralReceiveCurrency =
+    referralGroup?.receive_currency ||
+    referralReceiveCurrency ||
+    currencyCredits.find((c) => c.credit_source === "REFERRAL" && c.receive_currency)?.receive_currency ||
+    null;
+
   const resolvedSchemeFloor = Math.max(
     0,
     schemeFloor ?? 0,
@@ -59,17 +99,25 @@ export function UseBonusCredit({
     ...currencyCredits.filter((c) => c.credit_source !== "REFERRAL").map((c) => c.floor || 0),
   );
 
-  const hasFloorRules = resolvedReferralFloor > 0 || resolvedSchemeFloor > 0;
+  const referralWrongCorridor =
+    referralAvail > 0 &&
+    Boolean(resolvedReferralReceiveCurrency) &&
+    Boolean(receiveCurrency) &&
+    resolvedReferralReceiveCurrency!.toUpperCase() !== receiveCurrency.toUpperCase();
+
   const referralBelowFloor = referralAvail > 0 && resolvedReferralFloor > 0 && sendAmount < resolvedReferralFloor;
+  const referralIneligible = referralWrongCorridor || referralBelowFloor;
   const schemeBelowFloor = schemeAvail > 0 && resolvedSchemeFloor > 0 && sendAmount < resolvedSchemeFloor;
 
-  const eligibleAvailable = hasFloorRules
-    ? (referralBelowFloor ? 0 : referralAvail) + (schemeBelowFloor ? 0 : schemeAvail) ||
-      (!referralAvail && !schemeAvail && sendAmount >= Math.max(resolvedReferralFloor, resolvedSchemeFloor) ? available : 0)
+  const hasRestrictionRules = resolvedReferralFloor > 0 || resolvedSchemeFloor > 0 || Boolean(resolvedReferralReceiveCurrency);
+
+  const eligibleAvailable = hasRestrictionRules
+    ? (referralIneligible ? 0 : referralAvail) + (schemeBelowFloor ? 0 : schemeAvail) ||
+      (!referralAvail && !schemeAvail && !referralWrongCorridor && sendAmount >= Math.max(resolvedReferralFloor, resolvedSchemeFloor) ? available : 0)
     : available;
 
-  const allBelowFloor = hasFloorRules && eligibleAvailable <= 0;
-  const effectiveAvailable = hasFloorRules ? eligibleAvailable : available;
+  const allBelowFloor = hasRestrictionRules && eligibleAvailable <= 0;
+  const effectiveAvailable = hasRestrictionRules ? eligibleAvailable : available;
 
   const credit = creditToApply(effectiveAvailable > 0 ? effectiveAvailable : available, sendAmount, currency);
   const extra = amountConverted(credit, exchangeRate, receiveCurrency);
@@ -96,21 +144,48 @@ export function UseBonusCredit({
         {parts.length > 0 && <p className="mb-3 text-[13px] text-slate-500" data-testid="bonus-includes">{BONUS_COPY.includes(parts)}</p>}
         {parts.length === 0 && <div className="mb-2" />}
 
-        {referralAvail > 0 && resolvedReferralFloor > 0 && !referralBelowFloor && (
+        {referralAvail > 0 && (resolvedReferralFloor > 0 || Boolean(resolvedReferralReceiveCurrency)) && !referralIneligible && (
           <div className="mb-3 rounded-xl border border-teal-200 bg-teal-50/80 px-3.5 py-2.5 text-xs font-medium text-teal-900" data-testid="bonus-floor-met-notice">
             <p>
-              You have earned <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit (transfer is{" "}
-              <span className="font-bold">{formatMoney(resolvedReferralFloor, currency)}</span> or more). Select <span className="font-bold">Pay less</span> or{" "}
-              <span className="font-bold">Send more</span> below to use it.
+              You have earned <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit
+              {resolvedReferralFloor > 0 ? (
+                <>
+                  {" "}(transfer is <span className="font-bold">{formatMoney(resolvedReferralFloor, currency)}</span> or more)
+                </>
+              ) : null}
+              .
+              {resolvedReferralReceiveCurrency ? (
+                <>
+                  {" "}Corridor <span className="font-bold">{currency} → {resolvedReferralReceiveCurrency}</span> matched.
+                </>
+              ) : null}{" "}
+              Select <span className="font-bold">Pay less</span> or <span className="font-bold">Send more</span> below to use it.
             </p>
           </div>
         )}
-        {(referralBelowFloor || schemeBelowFloor) && (
+        {(referralIneligible || schemeBelowFloor) && (
           <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-xs font-medium text-amber-900 space-y-1" data-testid="bonus-floor-notice">
-            {referralBelowFloor && (
+            {referralWrongCorridor && (
+              <p>
+                Your <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit requires the{" "}
+                <span className="font-bold">{currency} → {resolvedReferralReceiveCurrency}</span> corridor
+                {resolvedReferralFloor > 0 ? (
+                  <> and a minimum transfer of <span className="font-bold">{formatMoney(resolvedReferralFloor, currency)}</span></>
+                ) : null}
+                . Switch destination currency to <span className="font-bold">{resolvedReferralReceiveCurrency}</span>
+                {referralBelowFloor ? (
+                  <> and send at least <span className="font-bold">{formatMoney(resolvedReferralFloor, currency)}</span> in <span className="font-bold">{currency}</span></>
+                ) : null}{" "}
+                to use your <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit.
+              </p>
+            )}
+            {!referralWrongCorridor && referralBelowFloor && (
               <p>
                 Send at least <span className="font-bold">{formatMoney(resolvedReferralFloor, currency)}</span> in <span className="font-bold">{currency}</span> to use your{" "}
                 <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit.
+                {resolvedReferralReceiveCurrency ? (
+                  <> (Valid on the <span className="font-bold">{currency} → {resolvedReferralReceiveCurrency}</span> corridor.)</>
+                ) : null}
               </p>
             )}
             {schemeBelowFloor && (

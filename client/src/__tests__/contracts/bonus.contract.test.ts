@@ -206,6 +206,12 @@ describe("The bonus panel and the choice", () => {
     const belowFloor = render(React.createElement(UseBonusCredit, { balance: balance({ available: 7, by_source: [grp("REFERRAL", 10, 7)] }), currency: "GBP", sendAmount: 20, receiveCurrency: "NGN", exchangeRate: 2000, choice: "none", onChoice: () => {}, referralFloor: 50 }));
     expect(belowFloor.getByTestId("bonus-floor-notice").textContent).toContain("Send at least £50.00 in GBP to use your £7.00 Referral Bonus credit.");
     belowFloor.unmount();
+    const wrongCorridor = render(React.createElement(UseBonusCredit, { balance: balance({ available: 7, by_source: [grp("REFERRAL", 10, 7)] }), currency: "GBP", sendAmount: 60, receiveCurrency: "NGN", exchangeRate: 2000, choice: "none", onChoice: () => {}, referralFloor: 50, referralReceiveCurrency: "INR" }));
+    expect(wrongCorridor.getByTestId("bonus-floor-notice").textContent).toContain("GBP → INR");
+    wrongCorridor.unmount();
+    const rightCorridor = render(React.createElement(UseBonusCredit, { balance: balance({ available: 7, by_source: [grp("REFERRAL", 10, 7)] }), currency: "GBP", sendAmount: 60, receiveCurrency: "INR", exchangeRate: 105, choice: "none", onChoice: () => {}, referralFloor: 50, referralReceiveCurrency: "INR" }));
+    expect(rightCorridor.getByTestId("bonus-floor-met-notice").textContent).toContain("Corridor GBP → INR matched.");
+    rightCorridor.unmount();
     const empty = render(React.createElement(UseBonusCredit, { balance: balance({ available: 0 }), currency: "GBP", sendAmount: 50, receiveCurrency: "NGN", exchangeRate: 2000, choice: "none", onChoice: () => {} }));
     expect(empty.container.innerHTML).toBe("");
     empty.unmount();
