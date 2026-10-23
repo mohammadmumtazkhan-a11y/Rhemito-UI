@@ -32,7 +32,7 @@ export function DashboardLayout({ children, hideLegalStrip = false }: DashboardL
         />
         <main
           className={cn(
-            "relative z-[99] flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-white",
+            "relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-white",
             "px-5 pb-20 pt-5 lg:pt-6 xl:px-[50px]",
             sidebarCollapsed ? "lg:ml-20" : "lg:ml-60"
           )}
