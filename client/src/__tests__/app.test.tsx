@@ -29,8 +29,7 @@ beforeAll(() => {
 describe("App", () => {
   it("renders the Rhemito application shell", () => {
     render(<App />);
-    // The shell's navigation and Bonus & Discounts entry render without any API data
-    // (the old assertion matched the hard-coded "rhemito.com/ref/…" link, now loaded from the API).
-    expect(screen.getAllByText(/bonus & discounts/i).length).toBeGreaterThan(0);
+    // Approved Rhemito sidebar uses Reward$ (not Bonus & Discounts).
+    expect(screen.getAllByText(/Reward\$/i).length).toBeGreaterThan(0);
   });
 });

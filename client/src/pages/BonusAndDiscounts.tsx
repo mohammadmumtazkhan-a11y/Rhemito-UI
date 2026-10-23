@@ -182,10 +182,13 @@ export default function BonusAndDiscounts() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="w-full space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Bonus &amp; Discounts</h1>
+            {/* Approved Rhemito page title (PageTitle / Reward$) — do not use Bonus & Discounts */}
+            <h1 className="text-[28px] font-light tracking-tight text-slate-900 sm:text-[32px] xl:text-[40px]">
+              Reward$
+            </h1>
             <p className="mt-1 text-[15px] text-slate-600">Track your rewards, referrals and savings.</p>
           </div>
           {currencies.length > 1 && (
