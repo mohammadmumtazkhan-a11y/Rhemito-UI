@@ -136,7 +136,7 @@ export default function BonusAndDiscounts() {
 
   const data = rewards.data;
   const currencies = useMemo(() => {
-    const set = new Set<string>([data?.currency ?? "GBP", ...(data?.wallet.balances.map((b) => b.currency) ?? [])]);
+    const set = new Set<string>([data?.currency ?? "GBP", ...(data?.sendCurrencies ?? []), ...(data?.wallet.balances.map((b) => b.currency) ?? [])]);
     return Array.from(set);
   }, [data]);
   const currency = pickedCurrency ?? data?.currency ?? "GBP";

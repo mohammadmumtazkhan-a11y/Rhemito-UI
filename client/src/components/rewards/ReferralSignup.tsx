@@ -10,6 +10,9 @@ export function ReferralInviteStrip({ referral }: { referral: StoredReferral | n
   const reward = formatMoney(offer.referee_reward, offer.currency);
   const floor = formatMoney(offer.floor, offer.currency);
   const name = referral.referrerFirstName || "Your friend";
+  const otherOffers = (referral.offers ?? []).filter(
+    (o) => (o.rule_id !== offer.rule_id || o.currency !== offer.currency) && o.reward_type !== "REFERRER" && o.referee_reward > 0,
+  );
   return (
     <section aria-label="Your welcome bonus" data-testid="referral-invite" className="mb-4 flex flex-col gap-3.5 rounded-2xl border border-slate-200 bg-white p-4">
       <p className="text-[15px] leading-[22px] text-slate-800">
@@ -20,6 +23,16 @@ export function ReferralInviteStrip({ referral }: { referral: StoredReferral | n
         <li className="flex flex-col gap-1.5"><span className="h-1.5 rounded-full bg-slate-200" /><span className="text-xs text-slate-600">Send {floor}+ in {offer.qualification_window_days} days</span></li>
         <li className="flex flex-col gap-1.5"><span className="h-1.5 rounded-full bg-slate-200" /><span className="text-xs text-slate-600">Get {reward}</span></li>
       </ol>
+      {otherOffers.length > 0 && (
+        <div className="border-t border-slate-100 pt-2.5 space-y-1" data-testid="referral-invite-currencies">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Other send currencies</p>
+          {otherOffers.map((o) => (
+            <p key={`${o.rule_id}-${o.currency}`} className="text-xs text-slate-600">
+              <strong className="text-slate-800">{o.currency}:</strong> Get <strong>{formatMoney(o.referee_reward, o.currency)}</strong> bonus credit when you send <strong>{formatMoney(o.floor, o.currency)}+</strong> in {o.qualification_window_days} days.
+            </p>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -85,7 +98,7 @@ export function ReferralCodeField({ referral, onChange }: ReferralCodeFieldProps
         }
         return;
       }
-      const ref: StoredReferral = { code, referrerFirstName: body.data?.referrerFirstName, offer: body.data?.offer ?? null, savedAt: Date.now() };
+      const ref: StoredReferral = { code, referrerFirstName: body.data?.referrerFirstName, offer: body.data?.offer ?? null, offers: body.data?.offers, sendCurrencies: body.data?.sendCurrencies, savedAt: Date.now() };
       saveReferral(ref);
       onChange(ref);
     } finally {

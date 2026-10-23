@@ -11,6 +11,8 @@ import { formatMoney, type RewardOffer, type MyReferral } from "@/lib/rewards";
 
 interface ReferEarnCardProps {
   offer: RewardOffer | null;
+  offers?: RewardOffer[];
+  sendCurrencies?: string[];
   referrals: MyReferral[];
   /** Totals across every referral, so the card stays the same height however many friends join. */
   summary?: { joined: number; earned_count: number; total_earned: Record<string, number> };
@@ -20,18 +22,22 @@ interface ReferEarnCardProps {
   highlighted?: boolean;
 }
 
+function formatBoldAmounts(text: string) {
+  const parts = text.split(/((?:£|\$|€|₦|₹|¥|A\$|C\$|R|KSh |GH₵|AED )\d[\d,]*(?:\.\d{2})?)/g);
+  return parts.map((p, i) => (i % 2 === 1 ? <strong key={i} className="text-slate-900">{p}</strong> : <span key={i}>{p}</span>));
+}
+
 /** Renders the offer sentence with the money amounts in bold. */
 function OfferSentence({ text }: { text: string }) {
-  const parts = text.split(/((?:£|\$|€|₦|₹|¥|A\$|C\$|R|KSh |GH₵|AED )\d[\d,]*(?:\.\d{2})?)/g);
   return (
     <p className="text-[15px] leading-[23px] text-slate-700" data-testid="refer-offer-text">
-      {parts.map((p, i) => (i % 2 === 1 ? <strong key={i} className="text-slate-900">{p}</strong> : <span key={i}>{p}</span>))}
+      {formatBoldAmounts(text)}
     </p>
   );
 }
 
 /** Dashboard Refer & Earn card — approved "Mix" design (spec §2). */
-export function ReferEarnCard({ offer, referrals, summary, isLoading, isError, onRetry, highlighted }: ReferEarnCardProps) {
+export function ReferEarnCard({ offer, offers, sendCurrencies, referrals, summary, isLoading, isError, onRetry, highlighted }: ReferEarnCardProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
@@ -74,6 +80,10 @@ export function ReferEarnCard({ offer, referrals, summary, isLoading, isError, o
   // No active rule for the customer's currency → no card (AC-2.1.5)
   if (!offer) return null;
 
+  const additionalOffers = (offers ?? []).filter((o) => o.rule_id !== offer.rule_id || o.currency !== offer.currency);
+  const allOffers = [offer, ...additionalOffers];
+  const locationCurrencies = sendCurrencies && sendCurrencies.length > 0 ? sendCurrencies : undefined;
+
   const link = offer.referral_link ?? "";
   const joined = summary?.joined ?? referrals.length;
   const waiting = Math.max(0, joined - (summary?.earned_count ?? 0));
@@ -111,8 +121,28 @@ export function ReferEarnCard({ offer, referrals, summary, isLoading, isError, o
         highlighted && "ring-2 ring-primary ring-offset-2",
       )}
     >
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-lg font-bold text-slate-900">Refer &amp; Earn</h2>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-display text-lg font-bold text-slate-900">Refer &amp; Earn</h2>
+          {locationCurrencies && locationCurrencies.length > 1 && (
+            <div className="flex items-center gap-1" data-testid="refer-send-currencies" aria-label="Applicable send currencies">
+              {locationCurrencies.map((cur) => {
+                const hasActiveRule = allOffers.some((o) => o.currency === cur);
+                return (
+                  <span
+                    key={cur}
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                      hasActiveRule ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-slate-100 text-slate-500",
+                    )}
+                  >
+                    {cur}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setHowOpen(true)}
@@ -129,6 +159,21 @@ export function ReferEarnCard({ offer, referrals, summary, isLoading, isError, o
       ) : (
         <>
           <OfferSentence text={offer.text} />
+          {additionalOffers.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2" data-testid="refer-currency-offers">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Also available for your send currencies ({additionalOffers.map((o) => o.currency).join(", ")})
+              </p>
+              {additionalOffers.map((o) => (
+                <div key={`${o.rule_id}-${o.currency}`} className="flex items-start gap-2 text-[13px] leading-[20px] text-slate-700">
+                  <span className="mt-0.5 shrink-0 rounded-md bg-blue-100 px-1.5 py-0.5 text-[11px] font-bold text-blue-800">
+                    {o.currency}
+                  </span>
+                  <p>{formatBoldAmounts(o.text)}</p>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <label htmlFor="referral-link" className="text-[13px] font-semibold text-slate-600">Your referral link</label>
             <input
@@ -193,6 +238,19 @@ export function ReferEarnCard({ offer, referrals, summary, isLoading, isError, o
             <DialogTitle className="font-display">How Refer &amp; Earn works</DialogTitle>
             <DialogDescription>{offer.text}</DialogDescription>
           </DialogHeader>
+          {additionalOffers.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Applicable referral rules by send currency
+              </p>
+              {allOffers.map((o) => (
+                <div key={`dialog-${o.rule_id}-${o.currency}`} className="flex items-start gap-2 text-xs text-slate-700">
+                  <span className="mt-0.5 shrink-0 rounded bg-blue-100 px-1.5 py-0.5 font-bold text-blue-800">{o.currency}</span>
+                  <span>{o.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <ol className="flex flex-col gap-3 text-[15px] text-slate-700">
             <li><strong className="text-slate-900">1.</strong> Share your link. Your friend signs up with it and verifies their email.</li>
             <li><strong className="text-slate-900">2.</strong> They send {formatMoney(offer.floor, offer.currency)} or more within {offer.qualification_window_days} days of joining.</li>

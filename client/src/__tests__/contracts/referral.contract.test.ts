@@ -347,6 +347,11 @@ describe("Refer & Earn card", () => {
     expect(bold).toEqual(["£5.00", "£10.00", "£50.00"]);
     expect(view.getByTestId("refer-offer-text").textContent).toBe(OFFER.text);
     view.unmount();
+    const usdOffer = { ...OFFER, rule_id: 2, currency: "USD", text: "You get $10.00 and your friend gets $20.00 in bonus credit when they send $100.00 or more." };
+    const multiCur = card({ offer: OFFER, offers: [OFFER, usdOffer], sendCurrencies: ["GBP", "USD", "EUR"] });
+    expect(multiCur.getByTestId("refer-send-currencies").textContent).toBe("GBPUSDEUR");
+    expect(multiCur.getByTestId("refer-currency-offers").textContent).toContain("You get $10.00 and your friend gets $20.00");
+    multiCur.unmount();
     const ngn = card({ offer: { ...OFFER, text: "You get ₦2,500.00 when they send ₦25,000.00 or more." } });
     expect(Array.from(ngn.getByTestId("refer-offer-text").querySelectorAll("strong")).map((s) => s.textContent)).toEqual(["₦2,500.00", "₦25,000.00"]);
     ngn.unmount();

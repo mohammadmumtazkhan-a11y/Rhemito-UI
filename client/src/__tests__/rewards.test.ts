@@ -16,7 +16,7 @@ import {
   type MyReferral,
   type WalletCredit,
 } from "@/lib/rewards";
-import { currencyForCountry } from "../../../server/rewardsService";
+import { currencyForCountry, sendCurrenciesForCountry } from "../../../server/rewardsService";
 
 const NOW = new Date("2026-10-03T10:00:00Z");
 
@@ -120,5 +120,8 @@ describe("server: country to send currency", () => {
     expect(currencyForCountry("ng")).toBe("NGN");
     expect(currencyForCountry("DE")).toBe("EUR");
     expect(currencyForCountry(undefined)).toBe("GBP");
+    expect(sendCurrenciesForCountry("GB")).toEqual(["GBP", "USD", "EUR"]);
+    expect(sendCurrenciesForCountry("DE")).toEqual(["EUR", "GBP", "USD"]);
+    expect(sendCurrenciesForCountry("US")).toEqual(["USD", "GBP", "EUR"]);
   });
 });
