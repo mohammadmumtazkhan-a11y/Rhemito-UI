@@ -199,9 +199,13 @@ describe("The bonus panel and the choice", () => {
     expect(view.getByText(`Recipient gets ₦10,000.00 more`)).toBeTruthy();
     view.unmount();
 
-    const single = render(React.createElement(UseBonusCredit, { balance: balance({ available: 7, by_source: [grp("REFERRAL", 10, 7)] }), currency: "GBP", sendAmount: 50, receiveCurrency: "NGN", exchangeRate: 2000, choice: "none", onChoice: () => {} }));
+    const single = render(React.createElement(UseBonusCredit, { balance: balance({ available: 7, by_source: [grp("REFERRAL", 10, 7)] }), currency: "GBP", sendAmount: 50, receiveCurrency: "NGN", exchangeRate: 2000, choice: "none", onChoice: () => {}, referralFloor: 50 }));
     expect(single.queryByTestId("bonus-includes")).toBeNull();
+    expect(single.getByTestId("bonus-floor-met-notice").textContent).toContain("You have earned £7.00 Referral Bonus credit (transfer is £50.00 or more).");
     single.unmount();
+    const belowFloor = render(React.createElement(UseBonusCredit, { balance: balance({ available: 7, by_source: [grp("REFERRAL", 10, 7)] }), currency: "GBP", sendAmount: 20, receiveCurrency: "NGN", exchangeRate: 2000, choice: "none", onChoice: () => {}, referralFloor: 50 }));
+    expect(belowFloor.getByTestId("bonus-floor-notice").textContent).toContain("Send £50.00 or more to unlock your £7.00 Referral Bonus credit.");
+    belowFloor.unmount();
     const empty = render(React.createElement(UseBonusCredit, { balance: balance({ available: 0 }), currency: "GBP", sendAmount: 50, receiveCurrency: "NGN", exchangeRate: 2000, choice: "none", onChoice: () => {} }));
     expect(empty.container.innerHTML).toBe("");
     empty.unmount();
