@@ -84,9 +84,11 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
       return;
     }
 
+    const storedRef = loadReferral();
     register.mutate({
       ...step1Data,
       referralCode: loadReferral()?.code,
+      ...(storedRef?.ruleId ? { referralRuleId: storedRef.ruleId } : {}),
       directorName,
       dateOfBirth,
       gender,

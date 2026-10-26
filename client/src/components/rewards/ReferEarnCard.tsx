@@ -41,6 +41,7 @@ export function ReferEarnCard({ offer, offers, sendCurrencies, referrals, summar
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
+  const [selectedRuleId, setSelectedRuleId] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
@@ -82,14 +83,20 @@ export function ReferEarnCard({ offer, offers, sendCurrencies, referrals, summar
 
   const additionalOffers = (offers ?? []).filter((o) => o.rule_id !== offer.rule_id || o.currency !== offer.currency);
   const allOffers = [offer, ...additionalOffers];
+  const activeOffer = (selectedRuleId !== null ? allOffers.find((o) => o.rule_id === selectedRuleId) : null) ?? offer;
+  const otherOffers = allOffers.filter((o) => o.rule_id !== activeOffer.rule_id || o.currency !== activeOffer.currency);
   const locationCurrencies = sendCurrencies && sendCurrencies.length > 0 ? sendCurrencies : undefined;
+  const hasCorridorRules = allOffers.length > 1 && new Set(allOffers.map((o) => o.currency)).size < allOffers.length;
 
-  const link = offer.referral_link ?? "";
+  const baseLink = (activeOffer.referral_link ?? offer.referral_link ?? "").split("?")[0];
+  const link = (allOffers.length > 1 || selectedRuleId !== null) && baseLink && activeOffer.rule_id
+    ? `${baseLink}?rule=${activeOffer.rule_id}`
+    : (activeOffer.referral_link ?? offer.referral_link ?? "");
   const joined = summary?.joined ?? referrals.length;
   const waiting = Math.max(0, joined - (summary?.earned_count ?? 0));
   const earnedText =
     Object.entries(summary?.total_earned ?? {}).filter(([, v]) => v > 0).map(([c, v]) => formatMoney(v, c)).join(" + ") ||
-    formatMoney(0, offer.currency);
+    formatMoney(0, activeOffer.currency);
 
   const handleCopy = async () => {
     try {
@@ -127,17 +134,59 @@ export function ReferEarnCard({ offer, offers, sendCurrencies, referrals, summar
           {locationCurrencies && locationCurrencies.length > 1 && (
             <div className="flex items-center gap-1" data-testid="refer-send-currencies" aria-label="Applicable send currencies">
               {locationCurrencies.map((cur) => {
-                const hasActiveRule = allOffers.some((o) => o.currency === cur);
+                const ruleForCur = allOffers.find((o) => o.currency === cur);
+                const hasActiveRule = Boolean(ruleForCur);
+                const isSelected = activeOffer.currency === cur && hasActiveRule;
                 return (
-                  <span
+                  <button
                     key={cur}
+                    type="button"
+                    disabled={!hasActiveRule}
+                    onClick={() => {
+                      if (ruleForCur) {
+                        setSelectedRuleId(ruleForCur.rule_id);
+                        setCopied(false);
+                      }
+                    }}
+                    aria-pressed={isSelected}
                     className={cn(
-                      "rounded-full px-2 py-0.5 text-[11px] font-bold",
-                      hasActiveRule ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-slate-100 text-slate-500",
+                      "rounded-full px-2.5 py-0.5 text-[11px] font-bold transition-colors",
+                      isSelected
+                        ? "bg-blue-600 text-white border border-blue-600 shadow-xs cursor-pointer"
+                        : hasActiveRule
+                          ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 cursor-pointer"
+                          : "bg-slate-100 text-slate-500 cursor-default",
                     )}
                   >
                     {cur}
-                  </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {hasCorridorRules && (
+            <div className="flex flex-wrap items-center gap-1" data-testid="refer-corridor-pills" aria-label="Select referral corridor rule">
+              {allOffers.map((o) => {
+                const isSelected = o.rule_id === activeOffer.rule_id;
+                const label = o.receive_currency ? `${o.currency} → ${o.receive_currency}` : o.currency;
+                return (
+                  <button
+                    key={`corridor-${o.rule_id}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedRuleId(o.rule_id);
+                      setCopied(false);
+                    }}
+                    aria-pressed={isSelected}
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
+                      isSelected
+                        ? "bg-blue-600 text-white border border-blue-600 shadow-xs"
+                        : "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100",
+                    )}
+                  >
+                    {label}
+                  </button>
                 );
               })}
             </div>
@@ -152,25 +201,33 @@ export function ReferEarnCard({ offer, offers, sendCurrencies, referrals, summar
         </button>
       </div>
 
-      {offer.cap_reached ? (
+      {activeOffer.cap_reached ? (
         <p className="text-[15px] leading-[23px] text-slate-700" data-testid="refer-cap-reached">
           You&apos;ve reached the maximum referral rewards for this programme. Thank you for spreading the word!
         </p>
       ) : (
         <>
-          <OfferSentence text={offer.text} />
-          {additionalOffers.length > 0 && (
+          <OfferSentence text={activeOffer.text} />
+          {otherOffers.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2" data-testid="refer-currency-offers">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Also available for your send currencies ({additionalOffers.map((o) => o.currency).join(", ")})
+                Also available for your send currencies ({otherOffers.map((o) => o.receive_currency ? `${o.currency} → ${o.receive_currency}` : o.currency).join(", ")}) — tap to switch link
               </p>
-              {additionalOffers.map((o) => (
-                <div key={`${o.rule_id}-${o.currency}`} className="flex items-start gap-2 text-[13px] leading-[20px] text-slate-700">
+              {otherOffers.map((o) => (
+                <button
+                  key={`${o.rule_id}-${o.currency}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedRuleId(o.rule_id);
+                    setCopied(false);
+                  }}
+                  className="flex w-full items-start gap-2 rounded-lg p-1 -m-1 text-left text-[13px] leading-[20px] text-slate-700 hover:bg-slate-100/80 transition-colors cursor-pointer"
+                >
                   <span className="mt-0.5 shrink-0 rounded-md bg-blue-100 px-1.5 py-0.5 text-[11px] font-bold text-blue-800">
-                    {o.currency}
+                    {o.receive_currency ? `${o.currency} → ${o.receive_currency}` : o.currency}
                   </span>
                   <p>{formatBoldAmounts(o.text)}</p>
-                </div>
+                </button>
               ))}
             </div>
           )}

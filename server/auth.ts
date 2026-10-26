@@ -38,8 +38,9 @@ const RESET_PIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 const resetPinSentAt = new Map<string, number>();
 const resetPinFailures = new Map<string, { count: number; windowStart: number }>();
 
-/** Referral codes entered at registration, kept until the email is verified (US-3.1, US-3.2). */
+/** Referral codes and optional rule IDs entered at registration, kept until the email is verified (US-3.1, US-3.2). */
 const pendingReferralCodes = new Map<string, string>();
+const pendingReferralRuleIds = new Map<string, number>();
 const REFERRAL_CODE_RE = /^[A-Z0-9]{6,12}$/;
 
 function enforceAuthRateLimit(req: Request, res: Response, name: keyof typeof serverConfig.rateLimits): boolean {
@@ -125,8 +126,9 @@ export function registerAuthRoutes(app: Express) {
   // ─── Register ───────────────────────────────────────────────────
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const { confirmPassword, paymentRequestToken, isEmailLink, referralCode: rawReferralCode, ...userData } = req.body;
+      const { confirmPassword, paymentRequestToken, isEmailLink, referralCode: rawReferralCode, referralRuleId: rawReferralRuleId, ...userData } = req.body;
       const referralCode = typeof rawReferralCode === "string" ? rawReferralCode.trim().toUpperCase() : "";
+      const referralRuleId = rawReferralRuleId && Number.isInteger(Number(rawReferralRuleId)) && Number(rawReferralRuleId) > 0 ? Number(rawReferralRuleId) : null;
       if (referralCode && !REFERRAL_CODE_RE.test(referralCode)) {
         return res.status(400).json({ message: "Referral codes are 6–12 letters and numbers." });
       }
@@ -162,14 +164,18 @@ export function registerAuthRoutes(app: Express) {
         req.session.userId = user.id;
         delete req.session.paymentRequestVerification;
         rememberDevice(user.id, req);
-        await onCustomerVerified(user.id, referralCode || null);
+        await onCustomerVerified(user.id, referralCode || null, referralRuleId);
         await syncPromoCustomer(user.id, { force: true }).catch(() => {});
         const activated = await storage.getAuthUserById(user.id);
         const { password: _, ...safeUser } = activated ?? user;
         return res.json({ success: true, message: "Registration complete.", user: { ...safeUser, status: "active" } });
       }
 
-      if (referralCode) pendingReferralCodes.set(String(userData.email).toLowerCase(), referralCode);
+      if (referralCode) {
+        pendingReferralCodes.set(String(userData.email).toLowerCase(), referralCode);
+        if (referralRuleId) pendingReferralRuleIds.set(String(userData.email).toLowerCase(), referralRuleId);
+        else pendingReferralRuleIds.delete(String(userData.email).toLowerCase());
+      }
 
       // Generate & store OTP (valid for 1 hour)
       const otpCode = generateOtp();
@@ -242,9 +248,11 @@ export function registerAuthRoutes(app: Express) {
 
       // Referral: the referral is created once the email is verified (AC-3.1.5)
       const pendingCode = pendingReferralCodes.get(email.toLowerCase()) ?? null;
+      const pendingRuleId = pendingReferralRuleIds.get(email.toLowerCase()) ?? null;
       pendingReferralCodes.delete(email.toLowerCase());
+      pendingReferralRuleIds.delete(email.toLowerCase());
       rememberDevice(user.id, req);
-      const referral = await onCustomerVerified(user.id, pendingCode);
+      const referral = await onCustomerVerified(user.id, pendingCode, pendingRuleId);
       await syncPromoCustomer(user.id, { force: true }).catch(() => {});
 
       const { password: _, ...safeUser } = user;

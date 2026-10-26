@@ -177,7 +177,8 @@ export function registerRewardsRoutes(app: Express): void {
   app.get("/api/rewards/codes/:code", async (req: Request, res: Response) => {
     try {
       const code = String(req.params.code ?? "").trim().toUpperCase();
-      const result = await mito(`/api/referral/codes/${encodeURIComponent(code)}`);
+      const ruleId = req.query.rule_id && /^\d+$/.test(String(req.query.rule_id)) ? Number(req.query.rule_id) : undefined;
+      const result = await mito(`/api/referral/codes/${encodeURIComponent(code)}${ruleId ? `?rule_id=${ruleId}` : ""}`);
       const sendCurrencies: string[] = Array.isArray(result.send_currencies) && result.send_currencies.length > 0
         ? result.send_currencies
         : ["GBP", "USD", "EUR"];
@@ -186,7 +187,7 @@ export function registerRewardsRoutes(app: Express): void {
         : result.offer
           ? [result.offer]
           : [];
-      if (!Array.isArray(result.currency_offers) && isOfferPollerStarted()) {
+      if (!ruleId && !Array.isArray(result.currency_offers) && isOfferPollerStarted()) {
         for (const cur of sendCurrencies) {
           if (currencyOffers.some((o) => o.currency === cur)) continue;
           try {
@@ -198,13 +199,15 @@ export function registerRewardsRoutes(app: Express): void {
           }
         }
       }
+      const lockedOffer = ruleId ? (currencyOffers.find((o) => Number(o.rule_id) === ruleId) ?? result.offer ?? null) : null;
       res.json({
         data: {
           code: result.code,
           referrerFirstName: result.referrer_first_name,
-          offer: result.offer ?? currencyOffers[0] ?? null,
-          offers: currencyOffers,
-          sendCurrencies,
+          ...(ruleId ? { ruleId } : {}),
+          offer: lockedOffer ?? result.offer ?? currencyOffers[0] ?? null,
+          offers: lockedOffer ? [lockedOffer] : currencyOffers,
+          sendCurrencies: lockedOffer ? [lockedOffer.currency] : sendCurrencies,
           signedIn: Boolean(req.session?.userId),
         },
       });
@@ -222,7 +225,11 @@ export function registerRewardsRoutes(app: Express): void {
     try {
       const code = String(req.body?.code ?? "").trim().toUpperCase();
       const visitorId = String(req.body?.visitorId ?? "anonymous").slice(0, 64);
-      const result = await mito("/api/referral/visits", { method: "POST", body: { code, visitor_id: visitorId } });
+      const ruleId = req.body?.ruleId && Number.isInteger(Number(req.body.ruleId)) && Number(req.body.ruleId) > 0 ? Number(req.body.ruleId) : undefined;
+      const result = await mito("/api/referral/visits", {
+        method: "POST",
+        body: { code, visitor_id: visitorId, ...(ruleId ? { rule_id: ruleId } : {}) },
+      });
       res.json({ data: { counted: Boolean(result.counted) } });
     } catch (err) {
       handleError(res, err);

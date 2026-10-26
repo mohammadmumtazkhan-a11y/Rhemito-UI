@@ -115,6 +115,7 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
       password,
       confirmPassword,
       referralCode: referral?.code,
+      ...(referral?.ruleId ? { referralRuleId: referral.ruleId } : {}),
     });
   };
 
