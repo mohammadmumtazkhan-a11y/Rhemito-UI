@@ -221,7 +221,7 @@ const REF_KEY = "rhemito.referral";
 const REF_TTL_MS = 30 * 86_400_000;
 export const REFERRAL_CODE_RE = /^[A-Z0-9]{6,12}$/;
 
-export interface StoredReferral { code: string; referrerFirstName?: string; savedAt: number; offer?: RewardOffer | null; offers?: RewardOffer[]; sendCurrencies?: string[] }
+export interface StoredReferral { code: string; ruleId?: number | null; referrerFirstName?: string; savedAt: number; offer?: RewardOffer | null; offers?: RewardOffer[]; sendCurrencies?: string[] }
 
 export function saveReferral(ref: Omit<StoredReferral, "savedAt">, now = Date.now()): void {
   try { localStorage.setItem(REF_KEY, JSON.stringify({ ...ref, savedAt: now })); } catch { /* storage unavailable */ }

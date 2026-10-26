@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useLocation, useRoute } from "wouter";
+import { useLocation, useRoute, useSearch } from "wouter";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { resetDeviceId } from "@/lib/deviceId";
@@ -7,10 +7,11 @@ import { REFERRAL_CODE_RE, clearReferral, saveReferral, visitorId } from "@/lib/
 
 /**
  * /ref/:code — validates the referral link, counts the visit, remembers the
- * code for 30 days and opens sign-up (US-3.1).
+ * code (and optional rule ID selected by the referrer) for 30 days and opens sign-up (US-3.1).
  */
 export default function ReferralLanding() {
   const [, params] = useRoute("/ref/:code");
+  const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const ran = useRef(false);
@@ -19,6 +20,9 @@ export default function ReferralLanding() {
     if (ran.current) return;
     ran.current = true;
     const code = String(params?.code ?? "").trim().toUpperCase();
+    const qs = new URLSearchParams(search || (typeof window !== "undefined" ? window.location.search : ""));
+    const ruleParam = qs.get("rule") ?? qs.get("rule_id");
+    const ruleId = ruleParam && /^\d+$/.test(ruleParam) ? Number(ruleParam) : undefined;
 
     const toSignUp = () => setLocation("/sign-in-sign-up?mode=signup", { replace: true });
 
@@ -31,7 +35,7 @@ export default function ReferralLanding() {
 
     (async () => {
       try {
-        const res = await fetch(`/api/rewards/codes/${encodeURIComponent(code)}`, { credentials: "include" });
+        const res = await fetch(`/api/rewards/codes/${encodeURIComponent(code)}${ruleId ? `?rule_id=${ruleId}` : ""}`, { credentials: "include" });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
           clearReferral();
@@ -46,21 +50,28 @@ export default function ReferralLanding() {
           return;
         }
         resetDeviceId();
-        saveReferral({ code, referrerFirstName: body.data?.referrerFirstName, offer: body.data?.offer ?? null, offers: body.data?.offers, sendCurrencies: body.data?.sendCurrencies });
+        saveReferral({
+          code,
+          ...(ruleId ? { ruleId } : {}),
+          referrerFirstName: body.data?.referrerFirstName,
+          offer: body.data?.offer ?? null,
+          offers: body.data?.offers,
+          sendCurrencies: body.data?.sendCurrencies,
+        });
         void fetch("/api/rewards/visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ code, visitorId: visitorId() }),
+          body: JSON.stringify({ code, visitorId: visitorId(), ...(ruleId ? { ruleId } : {}) }),
         }).catch(() => {});
         toSignUp();
       } catch {
         // Rewards offline: keep the code so the referral can still be recorded at sign-up
-        saveReferral({ code });
+        saveReferral({ code, ...(ruleId ? { ruleId } : {}) });
         toSignUp();
       }
     })();
-  }, [params?.code, setLocation, toast]);
+  }, [params?.code, search, setLocation, toast]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background" role="status" aria-live="polite">

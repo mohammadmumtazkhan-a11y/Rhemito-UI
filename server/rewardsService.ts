@@ -142,12 +142,17 @@ const referralRetryDelays = (): number[] =>
 /** Mito asleep, unreachable or failing is worth another try; a refusal (bad code, etc.) is not. */
 const isTemporary = (err: unknown) => err instanceof RewardsError && err.status >= 500;
 
-async function recordReferral(userId: string, referralCode: string): Promise<Json> {
+async function recordReferral(userId: string, referralCode: string, referralRuleId?: number | null): Promise<Json> {
   if (offerPollerStarted) await syncAdminCrudSnapshot();
   const user = await storage.getAuthUserById(userId);
+  const ruleId = referralRuleId && Number.isInteger(Number(referralRuleId)) && Number(referralRuleId) > 0 ? Number(referralRuleId) : undefined;
   const res = await mito("/api/referral/referrals", {
     method: "POST",
-    body: { code: referralCode, referee: { id: userId, send_currency: currencyForCountry(user?.country) } },
+    body: {
+      code: referralCode,
+      ...(ruleId ? { rule_id: ruleId } : {}),
+      referee: { id: userId, send_currency: currencyForCountry(user?.country) },
+    },
   });
   const referral = res.data as Json;
   if (referral?.status === "REGISTERED") {
@@ -169,7 +174,7 @@ async function recordReferral(userId: string, referralCode: string): Promise<Jso
 }
 
 /** Try again later (the engine may be waking up). Gives up after the last delay and says so in the log. */
-function scheduleReferralRetry(userId: string, referralCode: string, attempt: number): void {
+function scheduleReferralRetry(userId: string, referralCode: string, attempt: number, referralRuleId?: number | null): void {
   const delays = referralRetryDelays();
   if (attempt >= delays.length) {
     console.error(`[rewards] giving up recording the referral for ${userId} (${referralCode}) after ${attempt} retries`);
@@ -178,10 +183,10 @@ function scheduleReferralRetry(userId: string, referralCode: string, attempt: nu
   const timer = setTimeout(async () => {
     try {
       await syncCustomer(userId);
-      await recordReferral(userId, referralCode);
+      await recordReferral(userId, referralCode, referralRuleId);
     } catch (err) {
       console.error("[rewards] referral retry failed:", err instanceof Error ? err.message : err);
-      if (isTemporary(err)) scheduleReferralRetry(userId, referralCode, attempt + 1);
+      if (isTemporary(err)) scheduleReferralRetry(userId, referralCode, attempt + 1, referralRuleId);
     }
   }, delays[attempt]);
   timer.unref?.();
@@ -192,14 +197,14 @@ function scheduleReferralRetry(userId: string, referralCode: string, attempt: nu
  * code was given and tells the Referrer their friend joined (AC-3.1.5, AC-4.5.3).
  * If Mito cannot be reached it is retried in the background, so a sleeping engine does not lose the referral.
  */
-export async function onCustomerVerified(userId: string, referralCode?: string | null): Promise<Json | null> {
+export async function onCustomerVerified(userId: string, referralCode?: string | null, referralRuleId?: number | null): Promise<Json | null> {
   try {
     await syncCustomer(userId);
     if (!referralCode) return null;
-    return await recordReferral(userId, referralCode);
+    return await recordReferral(userId, referralCode, referralRuleId);
   } catch (err) {
     console.error("[rewards] could not record referral:", err instanceof Error ? err.message : err);
-    if (referralCode && isTemporary(err)) scheduleReferralRetry(userId, referralCode, 0);
+    if (referralCode && isTemporary(err)) scheduleReferralRetry(userId, referralCode, 0, referralRuleId);
     return null;
   }
 }

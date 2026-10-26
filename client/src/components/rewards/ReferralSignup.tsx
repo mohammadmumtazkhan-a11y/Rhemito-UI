@@ -20,7 +20,7 @@ export function ReferralInviteStrip({ referral }: { referral: StoredReferral | n
       </p>
       <ol className="grid grid-cols-3 gap-1.5">
         <li className="flex flex-col gap-1.5"><span className="h-1.5 rounded-full bg-primary" /><span className="text-xs font-semibold text-blue-700">Join</span></li>
-        <li className="flex flex-col gap-1.5"><span className="h-1.5 rounded-full bg-slate-200" /><span className="text-xs text-slate-600">Send {floor}+ in {offer.qualification_window_days} days</span></li>
+        <li className="flex flex-col gap-1.5"><span className="h-1.5 rounded-full bg-slate-200" /><span className="text-xs text-slate-600">Send {floor}+{offer.receive_currency ? ` to ${offer.receive_currency}` : ""} in {offer.qualification_window_days} days</span></li>
         <li className="flex flex-col gap-1.5"><span className="h-1.5 rounded-full bg-slate-200" /><span className="text-xs text-slate-600">Get {reward}</span></li>
       </ol>
       {otherOffers.length > 0 && (

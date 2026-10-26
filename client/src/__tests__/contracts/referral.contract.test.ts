@@ -400,6 +400,40 @@ describe("Refer & Earn card", () => {
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "We couldn't copy the link", variant: "destructive" }));
     view.unmount();
   });
+
+  rule("REF-19", "When multiple rules exist, selecting a rule pill on the Refer & Earn card updates the offer and copies a rule-locked link (?rule=<id>) that locks the referee's bonus", {
+    why: "When Mito Admin creates 3 referral rules, the Referrer chooses which rule to share so the Referee gets that exact bonus.",
+    fix: "ReferEarnCard renders interactive currency/corridor pills that switch activeOffer and append ?rule=<rule_id> to the referral link; ReferralLanding and auth/rewardsService forward ruleId to Mito.",
+    where: ["client/src/components/rewards/ReferEarnCard.tsx", "client/src/pages/ReferralLanding.tsx", "server/auth.ts", "server/rewardsService.ts"],
+  }, async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const usdOffer: RewardOffer = { ...OFFER, rule_id: 2, currency: "USD", referee_reward: 20, referrer_reward: 10, floor: 100, text: "Invite friends with your link. You get $10.00 and your friend gets $20.00 in bonus credit when they send $100.00 or more within 30 days of joining." };
+    const eurOffer: RewardOffer = { ...OFFER, rule_id: 3, currency: "EUR", referee_reward: 15, referrer_reward: 8, floor: 80, text: "Invite friends with your link. You get €8.00 and your friend gets €15.00 in bonus credit when they send €80.00 or more within 30 days of joining." };
+    const view = card({ offer: OFFER, offers: [OFFER, usdOffer, eurOffer], sendCurrencies: ["GBP", "USD", "EUR"] });
+
+    // Initially rule 1 (GBP) is active and link includes ?rule=1 when multiple rules exist
+    expect((view.getByLabelText("Your referral link") as HTMLInputElement).value).toBe("localhost:5000/ref/JOHN2880?rule=1");
+
+    // Referrer clicks the USD pill in the header
+    await act(async () => { fireEvent.click(view.getByRole("button", { name: "USD" })); });
+    expect(view.getByTestId("refer-offer-text").textContent).toBe(usdOffer.text);
+    expect((view.getByLabelText("Your referral link") as HTMLInputElement).value).toBe("localhost:5000/ref/JOHN2880?rule=2");
+
+    await act(async () => { fireEvent.click(view.getByRole("button", { name: /Copy link/ })); });
+    expect(writeText).toHaveBeenCalledWith("http://localhost:5000/ref/JOHN2880?rule=2");
+    view.unmount();
+
+    // Verification forwards rule_id when referralRuleId was registered
+    const email = `friendrule${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const reg = await authApi("/api/auth/register", { email, accountType: "individual", country: "GB", firstName: "Zara", lastName: "Ali", password: "Passw0rd!xx", confirmPassword: "Passw0rd!xx", referralCode: "john2880", referralRuleId: 2 });
+    expect(reg.status).toBe(200);
+    const verified = await authApi("/api/auth/verify-otp", { email, code: "123456" });
+    expect(verified.status).toBe(200);
+    const user = await ctx.storage.getAuthUserByEmail(email);
+    await waitFor(() => expect(referralCalls(user!.id)).toHaveLength(1), { timeout: 3000 });
+    expect(referralCalls(user!.id)[0].body).toEqual({ code: "JOHN2880", rule_id: 2, referee: { id: user!.id, send_currency: "GBP" } });
+  });
 });
 
 describe("Who is signed in", () => {
