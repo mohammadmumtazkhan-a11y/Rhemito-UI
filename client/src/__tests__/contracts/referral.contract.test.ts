@@ -337,9 +337,9 @@ describe("Refer & Earn card", () => {
     none.unmount();
   });
 
-  rule("REF-14", "The offer sentence shows every money amount in bold", {
-    why: "Customers scan the card for what they and their friend get; the amounts are the key facts.",
-    fix: "ReferEarnCard.OfferSentence splits the offer text on currency amounts (£ $ € ₦ ₹ ¥ A$ C$ R KSh GH₵ AED) and wraps each in <strong>. The text itself comes from Mito (offer.text).",
+  rule("REF-14", "The offer sentence shows every money amount in bold, and only the selected rule is displayed with a currency hint", {
+    why: "Customers scan the card for what they and their friend get; showing only the selected rule keeps the card clean while the header hint guides them to click currencies.",
+    fix: "ReferEarnCard.OfferSentence splits the offer text on currency amounts (£ $ € ₦ ₹ ¥ A$ C$ R KSh GH₵ AED) and wraps each in <strong>. When multiple currencies apply, refer-currency-hint prompts the user to click a currency to see its rewards.",
     where: ["client/src/components/rewards/ReferEarnCard.tsx"],
   }, () => {
     const view = card();
@@ -350,7 +350,10 @@ describe("Refer & Earn card", () => {
     const usdOffer = { ...OFFER, rule_id: 2, currency: "USD", text: "You get $10.00 and your friend gets $20.00 in bonus credit when they send $100.00 or more." };
     const multiCur = card({ offer: OFFER, offers: [OFFER, usdOffer], sendCurrencies: ["GBP", "USD", "EUR"] });
     expect(multiCur.getByTestId("refer-send-currencies").textContent).toBe("GBPUSDEUR");
-    expect(multiCur.getByTestId("refer-currency-offers").textContent).toContain("You get $10.00 and your friend gets $20.00");
+    expect(multiCur.getByTestId("refer-currency-hint").textContent).toBe("Click a currency to see its rewards");
+    expect(multiCur.queryByTestId("refer-currency-offers")).toBeNull();
+    fireEvent.click(multiCur.getByRole("button", { name: "USD" }));
+    expect(multiCur.getByTestId("refer-offer-text").textContent).toBe(usdOffer.text);
     multiCur.unmount();
     const ngn = card({ offer: { ...OFFER, text: "You get ₦2,500.00 when they send ₦25,000.00 or more." } });
     expect(Array.from(ngn.getByTestId("refer-offer-text").querySelectorAll("strong")).map((s) => s.textContent)).toEqual(["₦2,500.00", "₦25,000.00"]);

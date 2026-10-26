@@ -84,7 +84,6 @@ export function ReferEarnCard({ offer, offers, sendCurrencies, referrals, summar
   const additionalOffers = (offers ?? []).filter((o) => o.rule_id !== offer.rule_id || o.currency !== offer.currency);
   const allOffers = [offer, ...additionalOffers];
   const activeOffer = (selectedRuleId !== null ? allOffers.find((o) => o.rule_id === selectedRuleId) : null) ?? offer;
-  const otherOffers = allOffers.filter((o) => o.rule_id !== activeOffer.rule_id || o.currency !== activeOffer.currency);
   const locationCurrencies = sendCurrencies && sendCurrencies.length > 0 ? sendCurrencies : undefined;
   const hasCorridorRules = allOffers.length > 1 && new Set(allOffers.map((o) => o.currency)).size < allOffers.length;
 
@@ -191,6 +190,11 @@ export function ReferEarnCard({ offer, offers, sendCurrencies, referrals, summar
               })}
             </div>
           )}
+          {((locationCurrencies && locationCurrencies.length > 1) || hasCorridorRules) && (
+            <span className="text-xs font-medium text-slate-500" data-testid="refer-currency-hint">
+              Click a currency to see its rewards
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -208,29 +212,6 @@ export function ReferEarnCard({ offer, offers, sendCurrencies, referrals, summar
       ) : (
         <>
           <OfferSentence text={activeOffer.text} />
-          {otherOffers.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2" data-testid="refer-currency-offers">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Also available for your send currencies ({otherOffers.map((o) => o.receive_currency ? `${o.currency} → ${o.receive_currency}` : o.currency).join(", ")}) — tap to switch link
-              </p>
-              {otherOffers.map((o) => (
-                <button
-                  key={`${o.rule_id}-${o.currency}`}
-                  type="button"
-                  onClick={() => {
-                    setSelectedRuleId(o.rule_id);
-                    setCopied(false);
-                  }}
-                  className="flex w-full items-start gap-2 rounded-lg p-1 -m-1 text-left text-[13px] leading-[20px] text-slate-700 hover:bg-slate-100/80 transition-colors cursor-pointer"
-                >
-                  <span className="mt-0.5 shrink-0 rounded-md bg-blue-100 px-1.5 py-0.5 text-[11px] font-bold text-blue-800">
-                    {o.receive_currency ? `${o.currency} → ${o.receive_currency}` : o.currency}
-                  </span>
-                  <p>{formatBoldAmounts(o.text)}</p>
-                </button>
-              ))}
-            </div>
-          )}
           <div className="flex flex-col gap-1.5">
             <label htmlFor="referral-link" className="text-[13px] font-semibold text-slate-600">Your referral link</label>
             <input
