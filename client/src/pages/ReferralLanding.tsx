@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute, useSearch } from "wouter";
-import { Check, Copy, ExternalLink, Globe, Loader2, ShieldCheck, Smartphone, Sparkles } from "lucide-react";
+import { Check, Copy, ExternalLink, Globe, Loader2, Smartphone, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { resetDeviceId } from "@/lib/deviceId";
 import {
@@ -20,11 +20,10 @@ import {
 /**
  * /ref/:code & /refer/:code — FR-02, FR-03, FR-04, FR-06:
  * Validates the referral link, records the click with a unique unpredictable trackingId,
- * saves the referral context for 30 days, and presents the Cross-Platform Referral Landing Page:
- *   1. Continue on Website (Web Registration with preserved referral context)
- *   2. Download Mobile App:
- *      - Android: Redirects to official Google Play Store (com.funtechcom.rhemito) with URL-encoded Play Install Referrer (`referrer=tracking_id%3D...`)
- *      - iOS: Option A (Register Before Installation -> redirects to Apple App Store after verification) & Option B (Copy Referral Code & open Apple App Store)
+ * saves the referral context for 30 days, and routes by detected client device:
+ *   - Desktop / Laptop (operatingSystem === "Other"): Redirects straight to the email entry page (/sign-in-sign-up?mode=signup)
+ *   - Android: Shows Continue on Website + Android (Google Play Store) download option only
+ *   - iOS: Shows Continue on Website + iOS (Apple App Store) options only
  */
 export default function ReferralLanding() {
   const [matchRef, paramsRef] = useRoute("/ref/:code");
@@ -38,10 +37,7 @@ export default function ReferralLanding() {
   const [loading, setLoading] = useState(true);
   const [referralState, setReferralState] = useState<StoredReferral | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState<"Android" | "iOS">(() => {
-    const detected = detectClientDevice();
-    return detected.operatingSystem === "iOS" ? "iOS" : "Android";
-  });
+  const [deviceOs, setDeviceOs] = useState<"Android" | "iOS" | "Other">(() => detectClientDevice().operatingSystem);
 
   useEffect(() => {
     if (ran.current) return;
@@ -51,8 +47,8 @@ export default function ReferralLanding() {
     const ruleParam = qs.get("rule") ?? qs.get("rule_id");
     const ruleId = ruleParam && /^\d+$/.test(ruleParam) ? Number(ruleParam) : undefined;
     const detected = detectClientDevice();
-    if (detected.operatingSystem === "iOS") setSelectedPlatform("iOS");
-    else if (detected.operatingSystem === "Android") setSelectedPlatform("Android");
+    setDeviceOs(detected.operatingSystem);
+    const isDesktopOrOther = detected.operatingSystem === "Other";
 
     const toSignUp = () => setLocation("/sign-in-sign-up?mode=signup", { replace: true });
 
@@ -90,11 +86,13 @@ export default function ReferralLanding() {
           sendCurrencies: body.data?.sendCurrencies,
           playStoreUrl: buildGooglePlayReferralUrl(null, body.data?.code ?? code),
           appStoreUrl: APPLE_APP_STORE_URL,
+          ...(isDesktopOrOther ? { channel: "WEB" as const, attributionMethod: "DIRECT_LINK", postSignupAppStoreUrl: null } : {}),
         };
         saveReferral(initialStored);
         setReferralState(loadReferral());
 
         // Record click & retrieve unpredictable trackingId (FR-02)
+        let resolvedTrackingId: string | null = null;
         try {
           const visitRes = await fetch("/api/rewards/visits", {
             method: "POST",
@@ -107,12 +105,12 @@ export default function ReferralLanding() {
             }),
           });
           const visitBody = await visitRes.json().catch(() => ({}));
-          const trackingId = visitBody?.data?.trackingId ?? null;
-          const playStoreUrl = visitBody?.data?.playStoreUrl ?? buildGooglePlayReferralUrl(trackingId, code);
+          resolvedTrackingId = visitBody?.data?.trackingId ?? null;
+          const playStoreUrl = visitBody?.data?.playStoreUrl ?? buildGooglePlayReferralUrl(resolvedTrackingId, code);
           const appStoreUrl = visitBody?.data?.appStoreUrl ?? APPLE_APP_STORE_URL;
           const updatedStored: Omit<StoredReferral, "savedAt"> = {
             ...initialStored,
-            trackingId,
+            trackingId: resolvedTrackingId,
             playStoreUrl,
             appStoreUrl,
           };
@@ -121,6 +119,20 @@ export default function ReferralLanding() {
         } catch {
           // Visit endpoint optional failure does not block landing page
         }
+
+        if (isDesktopOrOther) {
+          if (resolvedTrackingId) {
+            void fetch(`/api/v1/referrals/clicks/${encodeURIComponent(resolvedTrackingId)}/handoff`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ storeTarget: "WEB", status: "CLICKED", operatingSystem: "Web" }),
+            }).catch(() => {});
+          }
+          toSignUp();
+          return;
+        }
+
         setLoading(false);
       } catch {
         // Rewards offline: keep the code so the referral can still be recorded at sign-up
@@ -129,8 +141,13 @@ export default function ReferralLanding() {
           ...(ruleId ? { ruleId } : {}),
           playStoreUrl: buildGooglePlayReferralUrl(null, code),
           appStoreUrl: APPLE_APP_STORE_URL,
+          ...(isDesktopOrOther ? { channel: "WEB" as const, attributionMethod: "MANUAL_CODE", postSignupAppStoreUrl: null } : {}),
         });
         setReferralState(loadReferral());
+        if (isDesktopOrOther) {
+          toSignUp();
+          return;
+        }
         setLoading(false);
       }
     })();
@@ -257,7 +274,7 @@ export default function ReferralLanding() {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50/40 px-4 py-8 sm:py-12" data-testid="referral-landing-page">
       <div className="mx-auto max-w-2xl">
         {/* Top Logo Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex items-center">
           <div className="flex items-center space-x-2">
             <svg
               width="26"
@@ -274,15 +291,6 @@ export default function ReferralLanding() {
             </svg>
             <span className="text-2xl font-semibold text-slate-800 tracking-tight">Rhemito</span>
           </div>
-          {referralState.trackingId && (
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800"
-              data-testid="referral-tracking-badge"
-            >
-              <ShieldCheck className="h-3.5 w-3.5 text-teal-600" />
-              Tracked Invite · <code className="font-mono font-semibold">{referralState.trackingId}</code>
-            </span>
-          )}
         </div>
 
         {/* Main Invitation Card (FR-03) */}
@@ -394,63 +402,25 @@ export default function ReferralLanding() {
                 </div>
               </div>
 
-              {/* Option 2: Download Mobile App (FR-04 Android & FR-06 iOS) */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4" data-testid="referral-download-app-section">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Option 2: Download Mobile App (Strictly device-specific: Android only sees Google Play; iOS only sees App Store) */}
+              {deviceOs === "Android" && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4" data-testid="referral-download-app-section">
                   <div className="flex items-start gap-3.5">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
                       <Smartphone className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="text-base font-semibold text-slate-900">Download Mobile App</h3>
+                      <h3 className="text-base font-semibold text-slate-900">Download the Android App</h3>
                       <p className="mt-0.5 text-xs text-slate-600">
-                        Install the official Rhemito mobile app on Android (Google Play) or iPhone (Apple App Store).
+                        Install the official Rhemito mobile app on Google Play.
                       </p>
                     </div>
                   </div>
 
-                  {/* Platform Switcher */}
-                  <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 self-start sm:self-center" role="tablist" aria-label="Select mobile platform">
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={selectedPlatform === "Android"}
-                      data-testid="platform-tab-android"
-                      onClick={() => setSelectedPlatform("Android")}
-                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        selectedPlatform === "Android" ? "bg-indigo-600 text-white" : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Android (Google Play)
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={selectedPlatform === "iOS"}
-                      data-testid="platform-tab-ios"
-                      onClick={() => setSelectedPlatform("iOS")}
-                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        selectedPlatform === "iOS" ? "bg-indigo-600 text-white" : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      iPhone / iOS (App Store)
-                    </button>
-                  </div>
-                </div>
-
-                {/* Android Google Play Attribution Box (FR-04 & FR-05) */}
-                {selectedPlatform === "Android" && (
+                  {/* Android Google Play Attribution Box (FR-04 & FR-05) */}
                   <div className="rounded-xl border border-emerald-200 bg-white p-4 space-y-3" data-testid="android-download-panel">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800">
-                        Google Play Install Referrer Enabled
-                      </span>
-                      <span className="font-mono text-[11px] text-slate-500">Package: com.funtechcom.rhemito</span>
-                    </div>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                      Downloading from Google Play passes your referral tracking token (
-                      <code className="font-mono font-semibold text-slate-800">{referralState.trackingId || referralState.code}</code>) directly to the
-                      Rhemito Android app on first launch.
+                      Downloading from Google Play automatically carries your referral code (<strong className="font-mono font-semibold text-slate-800">{referralState.code}</strong>) into the Rhemito Android app when you open it.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
                       <a
@@ -475,10 +445,24 @@ export default function ReferralLanding() {
                       </button>
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* iOS Apple App Store Handoff Box (FR-06 Option A & Option B) */}
-                {selectedPlatform === "iOS" && (
+              {deviceOs === "iOS" && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4" data-testid="referral-download-app-section">
+                  <div className="flex items-start gap-3.5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                      <Smartphone className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">Download the iPhone App</h3>
+                      <p className="mt-0.5 text-xs text-slate-600">
+                        Install the official Rhemito mobile app from the Apple App Store.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* iOS Apple App Store Handoff Box (FR-06 Option A & Option B) */}
                   <div className="space-y-3" data-testid="ios-download-panel">
                     {/* Option A — Register Before Installation (Recommended) */}
                     <div className="rounded-xl border border-indigo-200 bg-white p-4 space-y-2.5">
@@ -524,8 +508,8 @@ export default function ReferralLanding() {
                       </a>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import {
   REFERRAL_CODE_RE,
   buildGooglePlayReferralUrl,
   clearReferral,
+  detectClientDevice,
   formatMoney,
   saveReferral,
   type StoredReferral,
@@ -24,6 +25,7 @@ export function ReferralInviteStrip({ referral }: { referral: StoredReferral | n
   );
   const playUrl = referral.playStoreUrl || buildGooglePlayReferralUrl(referral.trackingId, referral.code);
   const appStoreUrl = referral.appStoreUrl || APPLE_APP_STORE_URL;
+  const deviceOs = detectClientDevice().operatingSystem;
 
   const notifyStoreHandoff = (storeTarget: "GOOGLE_PLAY" | "APPLE_APP_STORE", operatingSystem: string) => {
     if (!referral.trackingId) return;
@@ -55,44 +57,50 @@ export function ReferralInviteStrip({ referral }: { referral: StoredReferral | n
           ))}
         </div>
       )}
-      <div className="border-t border-slate-100 pt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs" data-testid="referral-invite-app-download">
-        <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
-          <Smartphone className="h-3.5 w-3.5 text-indigo-600" />
-          Prefer the mobile app?
-          {referral.postSignupAppStoreUrl && (
-            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
-              iOS App Store Redirect Active
-            </span>
-          )}
-        </span>
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={playUrl}
-            onClick={() => notifyStoreHandoff("GOOGLE_PLAY", "Android")}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="signup-strip-playstore-link"
-            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Google Play
-          </a>
-          <a
-            href={appStoreUrl}
-            onClick={() => {
-              try { void navigator.clipboard.writeText(referral.code); setCopied(true); } catch { /* ignore */ }
-              notifyStoreHandoff("APPLE_APP_STORE", "iOS");
-            }}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="signup-strip-appstore-link"
-            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-200"
-          >
-            <Copy className="h-3 w-3" />
-            {copied ? `Copied ${referral.code} · App Store` : "Copy Code & App Store"}
-          </a>
+      {(deviceOs === "Android" || deviceOs === "iOS") && (
+        <div className="border-t border-slate-100 pt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs" data-testid="referral-invite-app-download">
+          <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
+            <Smartphone className="h-3.5 w-3.5 text-indigo-600" />
+            Prefer the mobile app?
+            {deviceOs === "iOS" && referral.postSignupAppStoreUrl && (
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                iOS App Store Redirect Active
+              </span>
+            )}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {deviceOs === "Android" && (
+              <a
+                href={playUrl}
+                onClick={() => notifyStoreHandoff("GOOGLE_PLAY", "Android")}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="signup-strip-playstore-link"
+                className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Google Play
+              </a>
+            )}
+            {deviceOs === "iOS" && (
+              <a
+                href={appStoreUrl}
+                onClick={() => {
+                  try { void navigator.clipboard.writeText(referral.code); setCopied(true); } catch { /* ignore */ }
+                  notifyStoreHandoff("APPLE_APP_STORE", "iOS");
+                }}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="signup-strip-appstore-link"
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-200"
+              >
+                <Copy className="h-3 w-3" />
+                {copied ? `Copied ${referral.code} · App Store` : "Copy Code & App Store"}
+              </a>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }

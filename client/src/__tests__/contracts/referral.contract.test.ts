@@ -84,26 +84,56 @@ describe("Capturing the referral code", () => {
     return { view, history };
   }
 
-  rule("REF-01", "A /ref/:code link is validated with Mito, the visit is counted, the code is remembered in the browser, the cross-platform landing page is shown, and Continue on Website opens sign-up", {
-    why: "The referral is only credited if the new customer's code survives from the link click to email verification across Web, Android Play Store, or iOS App Store.",
-    fix: "pages/ReferralLanding.tsx: GET /api/rewards/codes/:code -> saveReferral({ code, referrerFirstName, offer }) (localStorage 'rhemito.referral'), POST /api/rewards/visits with the visitor id, render ReferralLanding with Continue on Website and Download Mobile App, then navigate to /sign-in-sign-up?mode=signup when Continue on Website is clicked. Codes must match REFERRAL_CODE_RE (6-12 letters/digits).",
+  rule("REF-01", "A /ref/:code link is validated with Mito, the visit is counted, the code is remembered in the browser, desktop redirects straight to sign-up, and Android/iOS show only their own platform option", {
+    why: "The referral is only credited if the new customer's code survives from the link click to email verification; desktop users go straight to email entry while Android and iOS users see only their device's app option.",
+    fix: "pages/ReferralLanding.tsx: GET /api/rewards/codes/:code -> saveReferral({ code, referrerFirstName, offer }) (localStorage 'rhemito.referral'), POST /api/rewards/visits with the visitor id; on desktop (operatingSystem === 'Other') redirect straight to /sign-in-sign-up?mode=signup; on Android render only android-download-panel + Continue on Website; on iOS render only ios-download-panel + Continue on Website. Codes must match REFERRAL_CODE_RE (6-16 letters/digits).",
     where: ["client/src/pages/ReferralLanding.tsx", "client/src/lib/rewards.ts", "server/rewardsRoutes.ts"],
     timeout: 10_000,
   }, async () => {
     expect(REFERRAL_CODE_RE.test("JOHN2880")).toBe(true);
     expect(REFERRAL_CODE_RE.test("AB-12")).toBe(false);
     ctx.stub.on("/api/referral/codes/JOHN2880", { status: 200, body: { code: "JOHN2880", referrer_first_name: "John", offer: OFFER } });
-    const { view, history } = await openLanding("john2880", false);
-    await waitFor(() => expect(view.getByTestId("referral-landing-page")).toBeTruthy(), { timeout: 3000 });
-    expect(view.getByTestId("referral-landing-heading").textContent).toBe("Welcome to Rhemito!");
-    expect(view.getByTestId("referral-landing-code").textContent).toBe("JOHN2880");
+
+    // 1. Desktop (default user-agent) redirects straight to /sign-in-sign-up?mode=signup
+    const desktop = await openLanding("john2880", true);
     const stored = JSON.parse(localStorage.getItem("rhemito.referral")!);
-    expect(stored).toMatchObject({ code: "JOHN2880", referrerFirstName: "John" });
+    expect(stored).toMatchObject({ code: "JOHN2880", referrerFirstName: "John", channel: "WEB" });
     await waitFor(() => expect(ctx.stub.to("/api/referral/visits")).toHaveLength(1));
     expect(ctx.stub.to("/api/referral/visits")[0].body).toMatchObject({ code: "JOHN2880" });
-    await act(async () => { fireEvent.click(view.getByTestId("referral-continue-web-btn")); });
-    expect(history[history.length - 1]).toContain("/sign-in-sign-up?mode=signup");
-    view.unmount();
+    expect(desktop.history[desktop.history.length - 1]).toContain("/sign-in-sign-up?mode=signup");
+    desktop.view.unmount();
+
+    // 2. Android user-agent sees only Android panel (no iOS option, no tracking badge)
+    const origUa = navigator.userAgent;
+    Object.defineProperty(navigator, "userAgent", {
+      value: "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+      configurable: true,
+    });
+    try {
+      const android = await openLanding("john2880", false);
+      await waitFor(() => expect(android.view.getByTestId("referral-landing-page")).toBeTruthy(), { timeout: 3000 });
+      expect(android.view.getByTestId("referral-landing-heading").textContent).toBe("Welcome to Rhemito!");
+      expect(android.view.getByTestId("referral-landing-code").textContent).toBe("JOHN2880");
+      expect(android.view.queryByTestId("referral-tracking-badge")).toBeNull();
+      expect(android.view.getByTestId("android-download-panel")).toBeTruthy();
+      expect(android.view.queryByTestId("ios-download-panel")).toBeNull();
+      await act(async () => { fireEvent.click(android.view.getByTestId("referral-continue-web-btn")); });
+      expect(android.history[android.history.length - 1]).toContain("/sign-in-sign-up?mode=signup");
+      android.view.unmount();
+
+      // 3. iOS user-agent sees only iOS panel (no Android option)
+      Object.defineProperty(navigator, "userAgent", {
+        value: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        configurable: true,
+      });
+      const ios = await openLanding("john2880", false);
+      await waitFor(() => expect(ios.view.getByTestId("referral-landing-page")).toBeTruthy(), { timeout: 3000 });
+      expect(ios.view.getByTestId("ios-download-panel")).toBeTruthy();
+      expect(ios.view.queryByTestId("android-download-panel")).toBeNull();
+      ios.view.unmount();
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { value: origUa, configurable: true });
+    }
   });
 
   rule("REF-02", "A malformed or refused referral link does not keep a code: sign-up still opens with a friendly message", {

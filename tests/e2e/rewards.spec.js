@@ -160,22 +160,44 @@ test.describe('Referral sign-up', () => {
         await expect(page.getByText("This referral link isn't valid").first()).toBeVisible();
     });
 
-    test('valid link shows the referral landing page with real app store handoff and continues to sign-up', async ({ page }) => {
+    test('valid link redirects desktop straight to email entry and shows device-specific store options on Android and iOS', async ({ page, browser }) => {
+        // 1. Desktop redirects straight to email entry (/sign-in-sign-up?mode=signup)
         await page.route('**/api/rewards/codes/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { code: 'JOHN2880', referrerFirstName: 'John', offer, signedIn: false } }) }));
         await page.route('**/api/rewards/visits', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { counted: true, trackingId: 'REF123456789ABC', playStoreUrl: 'https://play.google.com/store/apps/details?id=com.funtechcom.rhemito&referrer=tracking_id%3DREF123456789ABC%26referral_code%3DJOHN2880', appStoreUrl: 'https://apps.apple.com/gb/app/rhemito-money-transfer/id1494717263' } }) }));
         await page.goto('/ref/JOHN2880');
-        await expect(page.getByTestId('referral-landing-page')).toBeVisible();
-        await expect(page.getByTestId('referral-landing-heading')).toHaveText('Welcome to Rhemito!');
-        await expect(page.getByTestId('referral-landing-code')).toHaveText('JOHN2880');
-        await expect(page.getByTestId('referral-download-app-section')).toBeVisible();
-        await expect(page.getByTestId('download-android-playstore-btn')).toHaveAttribute('href', /play\.google\.com\/store\/apps\/details\?id=com\.funtechcom\.rhemito/);
-        await page.getByTestId('platform-tab-ios').click();
-        await expect(page.getByTestId('ios-option-a-register-btn')).toBeVisible();
-        await expect(page.getByTestId('ios-option-b-appstore-btn')).toBeVisible();
-        await page.getByTestId('referral-continue-web-btn').click();
         await expect(page).toHaveURL(/sign-in-sign-up/);
         await expect(page.getByTestId('referral-invite')).toContainText('John invited you');
         await expect(page.getByTestId('referral-invite')).toContainText('Send £50.00+ in 30 days');
+
+        // 2. Android sees only Android Google Play option (no iOS option, no tracking badge)
+        const androidCtx = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        });
+        const androidPage = await androidCtx.newPage();
+        await androidPage.route('**/api/rewards/codes/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { code: 'JOHN2880', referrerFirstName: 'John', offer, signedIn: false } }) }));
+        await androidPage.route('**/api/rewards/visits', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { counted: true, trackingId: 'REF123456789ABC', playStoreUrl: 'https://play.google.com/store/apps/details?id=com.funtechcom.rhemito&referrer=tracking_id%3DREF123456789ABC%26referral_code%3DJOHN2880', appStoreUrl: 'https://apps.apple.com/gb/app/rhemito-money-transfer/id1494717263' } }) }));
+        await androidPage.goto('/ref/JOHN2880');
+        await expect(androidPage.getByTestId('referral-landing-page')).toBeVisible();
+        await expect(androidPage.getByTestId('referral-tracking-badge')).toHaveCount(0);
+        await expect(androidPage.getByTestId('android-download-panel')).toBeVisible();
+        await expect(androidPage.getByTestId('ios-download-panel')).toHaveCount(0);
+        await expect(androidPage.getByTestId('download-android-playstore-btn')).toHaveAttribute('href', /play\.google\.com\/store\/apps\/details\?id=com\.funtechcom\.rhemito/);
+        await androidCtx.close();
+
+        // 3. iOS sees only iOS App Store options (no Android option)
+        const iosCtx = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        });
+        const iosPage = await iosCtx.newPage();
+        await iosPage.route('**/api/rewards/codes/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { code: 'JOHN2880', referrerFirstName: 'John', offer, signedIn: false } }) }));
+        await iosPage.route('**/api/rewards/visits', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { counted: true, trackingId: 'REF123456789ABC', playStoreUrl: 'https://play.google.com/store/apps/details?id=com.funtechcom.rhemito&referrer=tracking_id%3DREF123456789ABC%26referral_code%3DJOHN2880', appStoreUrl: 'https://apps.apple.com/gb/app/rhemito-money-transfer/id1494717263' } }) }));
+        await iosPage.goto('/ref/JOHN2880');
+        await expect(iosPage.getByTestId('referral-landing-page')).toBeVisible();
+        await expect(iosPage.getByTestId('ios-download-panel')).toBeVisible();
+        await expect(iosPage.getByTestId('android-download-panel')).toHaveCount(0);
+        await expect(iosPage.getByTestId('ios-option-a-register-btn')).toBeVisible();
+        await expect(iosPage.getByTestId('ios-option-b-appstore-btn')).toBeVisible();
+        await iosCtx.close();
     });
 });
 

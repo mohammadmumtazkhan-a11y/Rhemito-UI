@@ -323,19 +323,16 @@ test.describe('Rewards contract — Refer & Earn card', () => {
 
     /**
      * CONTRACT REF-01: opening /ref/:code validates the code with the server, remembers it in the browser (localStorage
-     * "rhemito.referral") and opens sign-up, so it can be sent when the customer registers.
+     * "rhemito.referral"), redirects desktop straight to sign-up, and shows only the matching mobile OS on Android/iOS.
      * CODE: client/src/pages/ReferralLanding.tsx, client/src/lib/rewards.ts.
      */
     test('[REF-01] a referral link stores the code for sign-up', async ({ page }) => {
         await page.route('**/api/rewards/codes/**', (route) => route.fulfill(json({ data: { code: 'JOHN2880', referrerFirstName: 'John', offer, signedIn: false } })));
         await page.route('**/api/rewards/visits', (route) => route.fulfill(json({ data: { counted: true } })));
         await page.goto('/ref/john2880');
-        await expect(page.getByTestId('referral-landing-page')).toBeVisible();
-        await expect(page.getByTestId('referral-landing-heading')).toHaveText('Welcome to Rhemito!');
-        await expect(page.getByTestId('referral-landing-code')).toHaveText('JOHN2880');
+        await expect(page).toHaveURL(/sign-in-sign-up/);
+        await expect(page.getByTestId('referral-invite')).toContainText('John invited you');
         const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('rhemito.referral') || 'null'));
         expect(stored).toMatchObject({ code: 'JOHN2880', referrerFirstName: 'John' });
-        await page.getByTestId('referral-continue-web-btn').click();
-        await expect(page).toHaveURL(/sign-in-sign-up/);
     });
 });
