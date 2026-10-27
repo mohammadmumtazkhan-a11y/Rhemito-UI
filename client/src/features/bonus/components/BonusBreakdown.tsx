@@ -42,7 +42,7 @@ export function BonusBreakdown({ balance, currency, activeSource, onView }: Bonu
                 <span className="text-[13px] text-slate-500">{BONUS_COPY.earnedLeft(formatMoney(r.earned, currency), formatMoney(r.available, currency))}</span>
                 <svg className="h-1.5 w-full overflow-hidden rounded-full" role="presentation" aria-hidden>
                   <rect width="100%" height="100%" className="fill-slate-100" />
-                  <rect width={`${Math.max(2, Math.round(r.share))}%`} height="100%" className={BAR[r.source]} />
+                  <rect width={`${r.available > 0 && r.earned > 0 ? Math.min(100, Math.max(2, Math.round((r.available / r.earned) * 100))) : 0}%`} height="100%" className={BAR[r.source]} />
                 </svg>
               </li>
             ))}
