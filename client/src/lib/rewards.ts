@@ -202,7 +202,7 @@ export function referralHelpText(r: MyReferral, now: Date = new Date()): string 
       return `Waiting for their first transfer of ${floor} or more${left !== null && left >= 0 ? ` · ${left} day${left === 1 ? "" : "s"} left` : ""}`;
     }
     case "PENDING": return `Transfer in progress – you get ${formatMoney(r.reward, r.currency)} when it completes`;
-    case "REWARDED": return r.credited > 0 ? `${formatMoney(r.credited, r.currency)} added to your bonus credit` : "Your friend received their bonus";
+    case "REWARDED": return r.credited > 0 ? `You earned ${formatMoney(r.credited, r.currency)} — added to your bonus credit (completed first transfer)` : "Your friend received their welcome bonus (completed first transfer)";
     case "EXPIRED": return `They didn't send ${floor} or more in time`;
     case "NOT_ELIGIBLE": return "This referral didn't meet the programme terms";
     case "REVERSED": return "The qualifying transfer was refunded";

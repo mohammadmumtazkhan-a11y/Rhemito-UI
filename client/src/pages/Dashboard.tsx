@@ -1183,6 +1183,7 @@ export default function Dashboard() {
               isError={rewards.isError}
               onRetry={() => rewards.refetch()}
               highlighted={referHighlighted}
+              defaultCollapsed={true}
             />
           </motion.div>
         )}

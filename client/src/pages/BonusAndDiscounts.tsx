@@ -170,9 +170,9 @@ export default function BonusAndDiscounts() {
     const allOffers = data?.offers && data.offers.length > 0 ? data.offers : data?.offer ? [data.offer] : [];
     const matchedOffer = allOffers.find((o) => o.currency === currency) ?? data?.offer;
     const baseLink = (matchedOffer?.referral_link ?? data?.offer?.referral_link ?? "").split("?")[0];
-    const link = allOffers.length > 1 && baseLink && matchedOffer?.rule_id
-      ? `${baseLink}?rule=${matchedOffer.rule_id}`
-      : (matchedOffer?.referral_link ?? data?.offer?.referral_link);
+    const link = baseLink || (matchedOffer?.referral_link ?? data?.offer?.referral_link);
+
+
     if (!link) {
       toast({ title: "No referral offer right now", description: "There is no Refer & Earn offer for your currency at the moment." });
       return;

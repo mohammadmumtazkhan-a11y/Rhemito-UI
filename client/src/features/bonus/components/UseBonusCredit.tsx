@@ -1,3 +1,4 @@
+import { X, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BONUS_COPY } from "../lib/copy";
 import { amountConverted, availableParts, creditToApply, expiringSoon, formatMoney, formatUkDate, type BonusBalance, type BonusCredit } from "../lib/bonus";
@@ -14,6 +15,8 @@ interface UseBonusCreditProps {
   exchangeRate: number;
   choice: BonusChoice;
   onChoice: (choice: BonusChoice) => void;
+  onClose?: () => void;
+  activeTab?: "referral" | "bonus" | "all";
   blocked?: boolean;
   onContactSupport?: () => void;
   referralFloor?: number | null;
@@ -21,7 +24,7 @@ interface UseBonusCreditProps {
   schemeFloor?: number | null;
 }
 
-/** Send Money → Payment: "Use your bonus" (7.5). Checks corridor (send + receive currency) and rule floor when present. */
+/** Send Money: "Use your bonus" (7.5). Checks corridor (send + receive currency) and rule floor when present. */
 export function UseBonusCredit({
   balance,
   unused = [],
@@ -31,6 +34,8 @@ export function UseBonusCredit({
   exchangeRate,
   choice,
   onChoice,
+  onClose,
+  activeTab = "all",
   blocked,
   onContactSupport,
   referralFloor,
@@ -41,6 +46,11 @@ export function UseBonusCredit({
   const otherCurrencyReferral = unused.find((c) => c.credit_source === "REFERRAL" && c.remaining > 0 && c.currency !== currency);
   if (!(available > 0) && !otherCurrencyReferral) return blocked ? <BonusBlockedNotice onContact={onContactSupport} /> : null;
 
+  const handleClose = () => {
+    if (choice !== "none") onChoice("none");
+    onClose?.();
+  };
+
   if (!(available > 0) && otherCurrencyReferral) {
     const reqCorridor = otherCurrencyReferral.receive_currency
       ? `${otherCurrencyReferral.currency} → ${otherCurrencyReferral.receive_currency}`
@@ -50,9 +60,29 @@ export function UseBonusCredit({
         {blocked && <BonusBlockedNotice onContact={onContactSupport} />}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5" data-testid="bonus-redemption" aria-labelledby="use-bonus-title">
           <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 id="use-bonus-title" className="text-base font-bold text-slate-900">{BONUS_COPY.useTitle}</h2>
-            <span className="text-sm font-bold text-teal-700">{BONUS_COPY.available(formatMoney(otherCurrencyReferral.remaining, otherCurrencyReferral.currency))}</span>
+            <h2 id="use-bonus-title" className="text-base font-bold text-slate-900">
+              {activeTab === "referral" ? "Use your Referral Credit" : BONUS_COPY.useTitle}
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-teal-700">{BONUS_COPY.available(formatMoney(otherCurrencyReferral.remaining, otherCurrencyReferral.currency))}</span>
+              <button
+                type="button"
+                onClick={handleClose}
+                aria-label="Close bonus panel"
+                data-testid="close-bonus-panel"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer"
+                title="Don't use bonus / Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
+          {otherCurrencyReferral.expires_on && (
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700" data-testid="bonus-expiry-date">
+              <Calendar className="h-3.5 w-3.5 text-slate-500" />
+              <span>Expires on {formatUkDate(otherCurrencyReferral.expires_on)}</span>
+            </div>
+          )}
           <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-xs font-medium text-amber-900" data-testid="bonus-floor-notice">
             <p>
               Your <span className="font-bold">{formatMoney(otherCurrencyReferral.remaining, otherCurrencyReferral.currency)}</span> Referral Bonus credit requires the{" "}
@@ -72,7 +102,7 @@ export function UseBonusCredit({
     );
   }
 
-  const currencyCredits = unused.filter((c) => c.currency === currency);
+  const currencyCredits = unused.filter((c) => c.currency === currency && c.remaining > 0);
   const bySource = balance.by_source ?? [];
   const referralGroup = bySource.find((s) => s.credit_source === "REFERRAL");
   const schemeGroups = bySource.filter((s) => s.credit_source === "SCHEME" || s.credit_source === "MANUAL");
@@ -128,18 +158,50 @@ export function UseBonusCredit({
     return `${formatMoney(p.available, currency)} from ${p.label === "Referrals" ? "referrals" : p.label === "Bonus offers" ? "bonus offers" : "Rhemito"}${floorSuffix}`;
   });
   const expiring = expiringSoon(currencyCredits)[0];
+  const soonestCreditWithExpiry = [...currencyCredits]
+    .filter((c) => Boolean(c.expires_on))
+    .sort((a, b) => String(a.expires_on).localeCompare(String(b.expires_on)))[0];
+
   const options: { id: BonusChoice; title: string; sub?: string; disabled?: boolean }[] = [
     { id: "pay_less", title: BONUS_COPY.payLess, sub: BONUS_COPY.payLessSub(formatMoney(credit, currency), rest), disabled: allBelowFloor },
     { id: "send_more", title: BONUS_COPY.sendMore, sub: BONUS_COPY.sendMoreSub(formatMoney(extra, receiveCurrency)), disabled: allBelowFloor },
-    { id: "none", title: BONUS_COPY.dontUse },
   ];
+
+  const panelTitle =
+    activeTab === "referral" && referralAvail > 0 && schemeAvail === 0
+      ? "Use your Referral Credit"
+      : BONUS_COPY.useTitle;
+
   return (
     <div className="space-y-3">
       {blocked && <BonusBlockedNotice onContact={onContactSupport} />}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5" data-testid="bonus-redemption" aria-labelledby="use-bonus-title">
-        <div className="mb-1 flex items-center justify-between gap-3">
-          <h2 id="use-bonus-title" className="text-base font-bold text-slate-900">{BONUS_COPY.useTitle}</h2>
-          <span className="text-sm font-bold text-teal-700">{BONUS_COPY.available(formatMoney(available, currency))}</span>
+        <div className="mb-1.5 flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="use-bonus-title" className="text-base font-bold text-slate-900">{panelTitle}</h2>
+            {soonestCreditWithExpiry?.expires_on && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+                data-testid="bonus-expiry-date"
+              >
+                <Calendar className="h-3 w-3 text-slate-500" />
+                <span>Expires on {formatUkDate(soonestCreditWithExpiry.expires_on)}</span>
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-teal-700">{BONUS_COPY.available(formatMoney(available, currency))}</span>
+            <button
+              type="button"
+              onClick={handleClose}
+              aria-label="Close bonus panel"
+              data-testid="close-bonus-panel"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer"
+              title="Don't use bonus / Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         {parts.length > 0 && <p className="mb-3 text-[13px] text-slate-500" data-testid="bonus-includes">{BONUS_COPY.includes(parts)}</p>}
         {parts.length === 0 && <div className="mb-2" />}
@@ -159,7 +221,7 @@ export function UseBonusCredit({
                   {" "}Corridor <span className="font-bold">{currency} → {resolvedReferralReceiveCurrency}</span> matched.
                 </>
               ) : null}{" "}
-              Select <span className="font-bold">Pay less</span> or <span className="font-bold">Send more</span> below to use it.
+              Select <span className="font-bold">Pay less</span> or <span className="font-bold">Send more</span> below to use it, or click <span className="font-bold">×</span> above if you don&apos;t want to use it on this transfer.
             </p>
           </div>
         )}

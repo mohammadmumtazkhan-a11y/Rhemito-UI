@@ -117,6 +117,8 @@ export default function SendMoney() {
     const [showExpiryPopup, setShowExpiryPopup] = useState(false);
     const [expiryCountdown, setExpiryCountdown] = useState(5);
     const [showPromoModal, setShowPromoModal] = useState(false);
+    const [bonusPanelOpen, setBonusPanelOpen] = useState(true);
+    const [activeRewardTab, setActiveRewardTab] = useState<"referral" | "bonus" | "all">("all");
 
     // Referral bonus — live wallet from the rewards API (US-5.2 / US-5.3)
     const rewards = useRewards();
@@ -159,6 +161,11 @@ export default function SendMoney() {
         paymentMethod: paymentMethod || null,
     });
     const promoApplied = promo.applied;
+    useEffect(() => {
+        if (promoApplied && bonusChoice !== "none") {
+            setBonusChoiceState("none");
+        }
+    }, [promoApplied, bonusChoice]);
     const promoDiscount = promo.discount;
     const promoCode = promo.appliedCode ?? "";
     const promoOnAmount = promoApplied && promo.appliesTo === "amount";
@@ -480,15 +487,50 @@ export default function SendMoney() {
                                                 ) : (
                                                     <button
                                                         type="button"
+                                                        disabled={useBonus}
+                                                        title={useBonus ? "You can only use one reward at a time" : undefined}
                                                         onClick={() => setShowPromoModal(true)}
                                                         data-testid="step1-use-promo-btn"
-                                                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 px-3 py-1 rounded-full transition-colors"
+                                                        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${useBonus ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 cursor-pointer"}`}
                                                     >
                                                         <span>🏷️ Use Promo Code</span>
                                                     </button>
                                                 )
                                             )}
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    disabled={promoApplied}
+                                                    title={promoApplied ? "You can only use one reward at a time" : undefined}
+                                                    onClick={() => {
+                                                        setActiveRewardTab("referral");
+                                                        setBonusPanelOpen(true);
+                                                    }}
+                                                    data-testid="step1-use-referral-btn"
+                                                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${promoApplied ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "referral" && bonusPanelOpen ? "bg-teal-600 text-white border border-teal-600 cursor-pointer" : "text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100/80 border border-teal-200/80 cursor-pointer"}`}
+                                                >
+                                                    <span>🎁 Use Referral</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={promoApplied}
+                                                    title={promoApplied ? "You can only use one reward at a time" : undefined}
+                                                    onClick={() => {
+                                                        setActiveRewardTab("bonus");
+                                                        setBonusPanelOpen(true);
+                                                    }}
+                                                    data-testid="step1-use-bonus-btn"
+                                                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${promoApplied ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "bonus" && bonusPanelOpen ? "bg-indigo-600 text-white border border-indigo-600 cursor-pointer" : "text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 cursor-pointer"}`}
+                                                >
+                                                    <span>✨ Use Bonus</span>
+                                                </button>
+                                            </div>
                                         </div>
+                                        {(promoApplied || useBonus) && (
+                                            <p className="text-[11px] font-medium text-slate-500 text-right" data-testid="one-reward-at-a-time-note">
+                                                You can only use one reward at a time.
+                                            </p>
+                                        )}
                                         <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
                                             <div className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
                                                 <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[SEND_CURRENCY] ?? "gb"}.png`} alt={SEND_CURRENCY} className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
@@ -568,20 +610,25 @@ export default function SendMoney() {
                                         </div>
                                     </div>
 
-                                    {/* Bonus is offered as soon as the customer lands, not only at payment */}
-                                    <UseBonusCredit
-                                        balance={bonusWallet}
-                                        unused={rewards.data?.wallet.unused}
-                                        currency={SEND_CURRENCY}
-                                        sendAmount={parseFloat(amount || "0")}
-                                        receiveCurrency={recipientDetails.currency || "NGN"}
-                                        exchangeRate={EXCHANGE_RATE}
-                                        choice={bonusChoice}
-                                        onChoice={setBonusChoice}
-                                        blocked={rewards.data?.wallet.bonus_blocked}
-                                        referralFloor={activeOffer?.floor}
-                                        referralReceiveCurrency={activeOffer?.receive_currency}
-                                    />
+                                    {/* Bonus is offered as soon as the customer lands on Step 1 (one reward at a time) */}
+                                    {bonusPanelOpen && !promoApplied && (
+                                        <UseBonusCredit
+                                            balance={bonusWallet}
+                                            unused={rewards.data?.wallet.unused}
+                                            currency={SEND_CURRENCY}
+                                            sendAmount={parseFloat(amount || "0")}
+                                            receiveCurrency={recipientDetails.currency || "NGN"}
+                                            exchangeRate={EXCHANGE_RATE}
+                                            choice={bonusChoice}
+                                            onChoice={setBonusChoice}
+                                            onClose={() => setBonusPanelOpen(false)}
+                                            activeTab={activeRewardTab}
+                                            blocked={rewards.data?.wallet.bonus_blocked}
+                                            referralFloor={activeOffer?.floor}
+                                            referralReceiveCurrency={activeOffer?.receive_currency}
+                                        />
+                                    )}
+
 
                                     <div className="space-y-1 pt-2 lg:hidden">
                                         <div className="flex items-center justify-between py-2">
@@ -1138,23 +1185,11 @@ export default function SendMoney() {
                                 {/* Left Column: Input Sections */}
                                 <div className="lg:col-span-3 space-y-6">
 
-                                    {/* Bonus Redemption Section (spec §6) */}
-                                    <UseBonusCredit
-                                        balance={bonusWallet}
-                                        unused={rewards.data?.wallet.unused}
-                                        currency={SEND_CURRENCY}
-                                        sendAmount={parseFloat(amount || "0")}
-                                        receiveCurrency={recipientDetails.currency || "NGN"}
-                                        exchangeRate={EXCHANGE_RATE}
-                                        choice={bonusChoice}
-                                        onChoice={setBonusChoice}
-                                        blocked={rewards.data?.wallet.bonus_blocked}
-                                        referralFloor={activeOffer?.floor}
-                                        referralReceiveCurrency={activeOffer?.receive_currency}
-                                    />
+                                    {/* Promo & Bonus are selected on Step 1 and summarized in the right-hand Amount Summary */}
+
 
                                     {/* Promo Code Section (features/promo) */}
-                                    <PromoCodeField promo={promo} />
+
 
                                     {/* Payment Method Selection */}
                                     <Card>

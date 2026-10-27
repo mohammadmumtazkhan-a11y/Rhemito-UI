@@ -226,15 +226,29 @@ export function availableParts(balance: Pick<BonusBalance, "by_source">): Array<
   return parts.length > 1 ? parts : [];
 }
 
-/** "Referral bonus – Sarah S." etc. Prefers Mito's label; falls back to the ledger note. */
+/** Crystal-clear first-person customer-facing description (no Referrer/Referee jargon). */
 export function describeCredit(row: { credit_source_label?: string | null; source_label?: string | null; notes?: string | null; source?: string | null; reason_code?: string | null; referrer_name?: string | null; referrer_email?: string | null }): string {
   const inviter = (row.referrer_name || row.referrer_email || "").trim();
   const replaceGeneric = (s: string) => (inviter ? s.replace(/(invited by\s+)(friend|Customer|your friend)\b/i, `$1${inviter}`) : s);
-  const label = replaceGeneric(row.credit_source_label ?? row.source_label ?? "");
+  const clarifyFirstPerson = (s: string) => {
+    const cleaned = s.replace(/ \(approved by.*\)$/, "");
+    if (/^Referrer reward – referred (.+)$/i.test(cleaned)) {
+      return cleaned.replace(/^Referrer reward – referred (.+)$/i, "Referral bonus – You earned from referring $1");
+    }
+    if (/^Referral bonus – (?!You earned)(.+)$/i.test(cleaned)) {
+      return cleaned.replace(/^Referral bonus – (.+)$/i, "Referral bonus – You earned from referring $1");
+    }
+    if (/^Referee reward – invited by (.+)$/i.test(cleaned)) {
+      return cleaned.replace(/^Referee reward – invited by (.+)$/i, "Welcome bonus – You earned (invited by $1)");
+    }
+    if (/^Welcome bonus – invited by (.+)$/i.test(cleaned)) {
+      return cleaned.replace(/^Welcome bonus – invited by (.+)$/i, "Welcome bonus – You earned (invited by $1)");
+    }
+    return cleaned;
+  };
+  const label = clarifyFirstPerson(replaceGeneric(row.credit_source_label ?? row.source_label ?? ""));
   if (label) return row.reason_code === "BONUS_RETURNED" && !/returned/i.test(label) ? `${label} (returned after a cancelled transfer)` : label;
-  const n = replaceGeneric((row.notes ?? row.source ?? "") || "");
-  if (/^Referrer reward – referred /.test(n)) return n.replace(/^Referrer reward – referred /, "Referral bonus – ");
-  if (/^Referee reward – invited by /.test(n)) return n.replace(/^Referee reward – invited by /, "Welcome bonus – invited by ").replace(/ \(approved by.*\)$/, "");
+  const n = clarifyFirstPerson(replaceGeneric((row.notes ?? row.source ?? "") || ""));
   if (row.reason_code === "BONUS_RETURNED") return "Bonus returned – transfer cancelled";
   return n || "Bonus credit";
 }
