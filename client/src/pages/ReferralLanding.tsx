@@ -371,38 +371,13 @@ export default function ReferralLanding() {
               </button>
             </div>
 
-            {/* Choice 1 & Choice 2 (FR-03: Continue on Website vs Download Mobile App) */}
+            {/* Choice 1 & Choice 2 (FR-03: Download Mobile App first, Continue on Website second) */}
             <div className="space-y-4">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
                 Choose how you want to join Rhemito
               </h2>
 
-              {/* Option 1: Continue on Website (FR-08) */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5 hover:border-indigo-300 transition-colors">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                      <Globe className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">Continue on Website</h3>
-                      <p className="mt-0.5 text-xs text-slate-600">
-                        Create your account in your browser now. Your referral code <strong>{referralState.code}</strong> is automatically applied.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleContinueOnWeb}
-                    data-testid="referral-continue-web-btn"
-                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
-                  >
-                    Continue on Website
-                  </button>
-                </div>
-              </div>
-
-              {/* Option 2: Download Mobile App (Strictly device-specific: Android only sees Google Play; iOS only sees App Store) */}
+              {/* Option 1: Download Mobile App (Strictly device-specific: Android only sees Google Play; iOS only sees App Store) */}
               {deviceOs === "Android" && (
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4" data-testid="referral-download-app-section">
                   <div className="flex items-start gap-3.5">
@@ -510,6 +485,31 @@ export default function ReferralLanding() {
                   </div>
                 </div>
               )}
+
+              {/* Option 2: Continue on Website (FR-08) */}
+              <div className="rounded-xl border border-slate-200 bg-white p-5 hover:border-indigo-300 transition-colors">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                      <Globe className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">Continue on Website</h3>
+                      <p className="mt-0.5 text-xs text-slate-600">
+                        Create your account in your browser now. Your referral code <strong>{referralState.code}</strong> is automatically applied.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleContinueOnWeb}
+                    data-testid="referral-continue-web-btn"
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
+                  >
+                    Continue on Website
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
