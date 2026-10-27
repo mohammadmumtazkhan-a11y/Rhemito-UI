@@ -80,14 +80,15 @@ export default function ReferralLanding() {
           return;
         }
         resetDeviceId();
+        const effectiveRuleId = ruleId ?? (body.data?.ruleId ? Number(body.data.ruleId) : undefined);
         const initialStored: Omit<StoredReferral, "savedAt"> = {
-          code,
-          ...(ruleId ? { ruleId } : {}),
+          code: body.data?.code ?? code,
+          ...(effectiveRuleId ? { ruleId: effectiveRuleId } : {}),
           referrerFirstName: body.data?.referrerFirstName,
           offer: body.data?.offer ?? null,
           offers: body.data?.offers,
           sendCurrencies: body.data?.sendCurrencies,
-          playStoreUrl: buildGooglePlayReferralUrl(null, code),
+          playStoreUrl: buildGooglePlayReferralUrl(null, body.data?.code ?? code),
           appStoreUrl: APPLE_APP_STORE_URL,
         };
         saveReferral(initialStored);
@@ -100,9 +101,9 @@ export default function ReferralLanding() {
             headers: { "Content-Type": "application/json" },
             credentials: "include",
             body: JSON.stringify({
-              code,
+              code: body.data?.code ?? code,
               visitorId: visitorId(),
-              ...(ruleId ? { ruleId } : {}),
+              ...(effectiveRuleId ? { ruleId: effectiveRuleId } : {}),
             }),
           });
           const visitBody = await visitRes.json().catch(() => ({}));
@@ -300,6 +301,38 @@ export default function ReferralLanding() {
           </div>
 
           <div className="p-6 sm:p-8 space-y-6">
+            {/* Marketing Hook Highlight Banner */}
+            {offer && (
+              <div
+                className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50/70 to-indigo-50/50 p-4 sm:p-5 shadow-2xs"
+                data-testid="referral-landing-marketing-hook"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white">
+                    {offer.currency} Referral Offer
+                  </span>
+                  <span className="text-xs font-medium text-slate-600">
+                    Valid for {offer.qualification_window_days} days from registration
+                  </span>
+                </div>
+                {rewardText && floorText ? (
+                  <p className="text-base sm:text-lg font-bold text-slate-900">
+                    Get <span className="text-emerald-700">{rewardText}</span> on your first {offer.currency} transfer above{" "}
+                    <span className="text-indigo-700">{floorText}</span>
+                    {offer.receive_currency ? ` to ${offer.receive_currency}` : ""}!
+                  </p>
+                ) : (
+                  <p className="text-sm font-semibold text-slate-900">{offer.text}</p>
+                )}
+                {offer.reward_type !== "REFEREE" && Number(offer.referrer_reward) > 0 && floorText && (
+                  <p className="mt-1 text-xs font-medium text-slate-600">
+                    Plus, <strong>{referrerName}</strong> earns{" "}
+                    <strong className="text-slate-900">{formatMoney(offer.referrer_reward, offer.currency)}</strong> once your first transfer of {floorText}+ completes.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Referral Code Banner */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
               <div>

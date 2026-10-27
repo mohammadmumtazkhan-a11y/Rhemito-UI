@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -55,12 +55,22 @@ const steps = [
 
 export default function SendMoney() {
     const [, setLocation] = useLocation();
+    const searchParams = useSearch();
+    const parsedSearch = new URLSearchParams(
+        searchParams || (typeof window !== "undefined" ? window.location.search : ""),
+    );
+    const initialRewardParam = parsedSearch.get("reward");
+    const initialCurrencyParam = parsedSearch.get("currency")?.toUpperCase();
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [currentStep, setCurrentStep] = useState(1);
 
     // Form State
-    const [sendCurrencyState, setSendCurrencyState] = useState<string>("GBP");
+    const [sendCurrencyState, setSendCurrencyState] = useState<string>(
+        initialCurrencyParam && ["GBP", "USD", "EUR"].includes(initialCurrencyParam)
+            ? initialCurrencyParam
+            : "GBP",
+    );
     const SEND_CURRENCY = sendCurrencyState;
     const [amount, setAmount] = useState<string>("500");
     const [receiveAmount, setReceiveAmount] = useState<string>("");
@@ -118,7 +128,28 @@ export default function SendMoney() {
     const [expiryCountdown, setExpiryCountdown] = useState(5);
     const [showPromoModal, setShowPromoModal] = useState(false);
     const [bonusPanelOpen, setBonusPanelOpen] = useState(true);
-    const [activeRewardTab, setActiveRewardTab] = useState<"referral" | "bonus" | "all">("all");
+    const [activeRewardTab, setActiveRewardTab] = useState<"referral" | "bonus">(
+        initialRewardParam === "bonus" ? "bonus" : "referral",
+    );
+    const [userPickedRewardTab, setUserPickedRewardTab] = useState(
+        initialRewardParam === "referral" || initialRewardParam === "bonus",
+    );
+
+    useEffect(() => {
+        const qs = new URLSearchParams(
+            searchParams || (typeof window !== "undefined" ? window.location.search : ""),
+        );
+        const rewardParam = qs.get("reward");
+        const curParam = qs.get("currency")?.toUpperCase();
+        if (rewardParam === "referral" || rewardParam === "bonus") {
+            setActiveRewardTab(rewardParam);
+            setUserPickedRewardTab(true);
+            setBonusPanelOpen(true);
+        }
+        if (curParam && ["GBP", "USD", "EUR"].includes(curParam)) {
+            setSendCurrencyState(curParam);
+        }
+    }, [searchParams]);
 
     // Referral bonus — live wallet from the rewards API (US-5.2 / US-5.3)
     const rewards = useRewards();
@@ -132,12 +163,25 @@ export default function SendMoney() {
         (rewards.data?.offer?.currency === SEND_CURRENCY ? rewards.data?.offer : rewards.data?.offer);
     // One bonus balance, in the currency of this transfer; no minimum to use it (BONUS-RHEMITO 7.5)
     const bonusWallet = balanceFor(rewards.data?.wallet, SEND_CURRENCY);
+    useEffect(() => {
+        if (userPickedRewardTab) return;
+        const bySource = bonusWallet.by_source ?? [];
+        if (!bySource.length) return;
+        const refAvail = bySource.find((s) => s.credit_source === "REFERRAL")?.available ?? 0;
+        const schAvail = bySource.filter((s) => s.credit_source === "SCHEME" || s.credit_source === "MANUAL").reduce((sum, s) => sum + (s.available || 0), 0);
+        if (refAvail <= 0 && schAvail > 0 && activeRewardTab !== "bonus") {
+            setActiveRewardTab("bonus");
+        } else if (refAvail > 0 && activeRewardTab !== "referral") {
+            setActiveRewardTab("referral");
+        }
+    }, [bonusWallet, userPickedRewardTab, activeRewardTab]);
     const bonusBalance = eligibleBonusBalance(
         bonusWallet,
         parseFloat(amount || "0"),
         activeOffer?.floor,
         recipientDetails.currency || "NGN",
         activeOffer?.receive_currency,
+        activeRewardTab,
     );
     const [bonusChoice, setBonusChoiceState] = useState<BonusChoice>("none");
     const useBonus = bonusChoice !== "none" && bonusBalance > 0;
@@ -500,27 +544,39 @@ export default function SendMoney() {
                                             <div className="flex flex-wrap items-center gap-1.5">
                                                 <button
                                                     type="button"
-                                                    disabled={promoApplied}
-                                                    title={promoApplied ? "You can only use one reward at a time" : undefined}
+                                                    disabled={promoApplied || (useBonus && activeRewardTab === "bonus")}
+                                                    title={promoApplied || (useBonus && activeRewardTab === "bonus") ? "You can only use one reward at a time" : undefined}
                                                     onClick={() => {
-                                                        setActiveRewardTab("referral");
+                                                        const bySource = bonusWallet.by_source ?? [];
+                                                        const refAvail = bySource.find((s) => s.credit_source === "REFERRAL")?.available ?? 0;
+                                                        const schAvail = bySource.filter((s) => s.credit_source === "SCHEME" || s.credit_source === "MANUAL").reduce((sum, s) => sum + (s.available || 0), 0);
+                                                        const nextTab = bySource.length > 0 && refAvail <= 0 && schAvail > 0 ? "bonus" : "referral";
+                                                        if (activeRewardTab !== nextTab) setBonusChoiceState("none");
+                                                        setUserPickedRewardTab(true);
+                                                        setActiveRewardTab(nextTab);
                                                         setBonusPanelOpen(true);
                                                     }}
                                                     data-testid="step1-use-referral-btn"
-                                                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${promoApplied ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "referral" && bonusPanelOpen ? "bg-teal-600 text-white border border-teal-600 cursor-pointer" : "text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100/80 border border-teal-200/80 cursor-pointer"}`}
+                                                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${promoApplied || (useBonus && activeRewardTab === "bonus") ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "referral" && bonusPanelOpen ? "bg-teal-600 text-white border border-teal-600 cursor-pointer" : "text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100/80 border border-teal-200/80 cursor-pointer"}`}
                                                 >
                                                     <span>🎁 Use Referral</span>
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    disabled={promoApplied}
-                                                    title={promoApplied ? "You can only use one reward at a time" : undefined}
+                                                    disabled={promoApplied || (useBonus && activeRewardTab === "referral")}
+                                                    title={promoApplied || (useBonus && activeRewardTab === "referral") ? "You can only use one reward at a time" : undefined}
                                                     onClick={() => {
-                                                        setActiveRewardTab("bonus");
+                                                        const bySource = bonusWallet.by_source ?? [];
+                                                        const refAvail = bySource.find((s) => s.credit_source === "REFERRAL")?.available ?? 0;
+                                                        const schAvail = bySource.filter((s) => s.credit_source === "SCHEME" || s.credit_source === "MANUAL").reduce((sum, s) => sum + (s.available || 0), 0);
+                                                        const nextTab = bySource.length > 0 && schAvail <= 0 && refAvail > 0 ? "referral" : "bonus";
+                                                        if (activeRewardTab !== nextTab) setBonusChoiceState("none");
+                                                        setUserPickedRewardTab(true);
+                                                        setActiveRewardTab(nextTab);
                                                         setBonusPanelOpen(true);
                                                     }}
                                                     data-testid="step1-use-bonus-btn"
-                                                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${promoApplied ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "bonus" && bonusPanelOpen ? "bg-indigo-600 text-white border border-indigo-600 cursor-pointer" : "text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 cursor-pointer"}`}
+                                                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${promoApplied || (useBonus && activeRewardTab === "referral") ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "bonus" && bonusPanelOpen ? "bg-indigo-600 text-white border border-indigo-600 cursor-pointer" : "text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 cursor-pointer"}`}
                                                 >
                                                     <span>✨ Use Bonus</span>
                                                 </button>

@@ -219,7 +219,27 @@ export const CREDIT_STATUS_LABEL: Record<WalletCredit["status"], string> = {
 
 const REF_KEY = "rhemito.referral";
 const REF_TTL_MS = 30 * 86_400_000;
-export const REFERRAL_CODE_RE = /^[A-Z0-9]{6,12}$/;
+export const REFERRAL_CODE_RE = /^[A-Z0-9]{6,16}$/;
+
+const REFERRAL_CODE_CURRENCIES = ["GBP", "USD", "EUR", "NGN", "INR", "JPY", "CNY", "AUD", "CAD", "ZAR", "KES", "GHS", "AED"];
+
+/**
+ * Derive the currency-specific referral code from a customer's base code and currency
+ * (e.g. JOHN5054 + USD -> JOHN5054USD). Preserves already-suffixed codes cleanly.
+ */
+export function referralCodeForCurrency(baseCode: string | null | undefined, currency: string | null | undefined): string {
+  const raw = String(baseCode || "").trim().toUpperCase();
+  const cur = String(currency || "").trim().toUpperCase();
+  if (!raw) return "";
+  if (!cur) return raw;
+  for (const suffix of REFERRAL_CODE_CURRENCIES) {
+    if (raw.length >= 9 && raw.endsWith(suffix)) {
+      const stripped = raw.slice(0, -suffix.length);
+      return `${stripped}${cur}`;
+    }
+  }
+  return `${raw}${cur}`;
+}
 
 export const GOOGLE_PLAY_PACKAGE_ID = "com.funtechcom.rhemito";
 export const GOOGLE_PLAY_BASE_URL = `https://play.google.com/store/apps/details?id=${GOOGLE_PLAY_PACKAGE_ID}`;

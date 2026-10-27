@@ -8,7 +8,7 @@ interface BonusCreditPillProps {
   unused?: BonusCredit[];
   referralFloor?: number | null;
   schemeFloor?: number | null;
-  onCreateTransaction: () => void;
+  onCreateTransaction: (rewardType?: "referral" | "bonus") => void;
 }
 
 /** Dashboard: separate pills for Referral Bonus credit and Bonus Scheme credit, each showing its backend floor rule. Hidden at 0. */
@@ -68,7 +68,7 @@ export function BonusCreditPill({
           .{" "}
           <button
             type="button"
-            onClick={onCreateTransaction}
+            onClick={() => onCreateTransaction()}
             className="font-semibold underline underline-offset-2 hover:text-purple-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
           >
             {BONUS_COPY.pillCta}
@@ -113,7 +113,8 @@ export function BonusCreditPill({
             .{" "}
             <button
               type="button"
-              onClick={onCreateTransaction}
+              onClick={() => onCreateTransaction("referral")}
+              data-testid="create-txn-referral-btn"
               className="font-semibold underline underline-offset-2 hover:text-indigo-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
             >
               {BONUS_COPY.pillCta}
@@ -152,7 +153,8 @@ export function BonusCreditPill({
             .{" "}
             <button
               type="button"
-              onClick={onCreateTransaction}
+              onClick={() => onCreateTransaction("bonus")}
+              data-testid="create-txn-bonus-btn"
               className="font-semibold underline underline-offset-2 hover:text-purple-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
             >
               {BONUS_COPY.pillCta}

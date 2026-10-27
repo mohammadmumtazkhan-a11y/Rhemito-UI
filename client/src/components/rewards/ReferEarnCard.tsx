@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { formatMoney, type RewardOffer, type MyReferral } from "@/lib/rewards";
+import { formatMoney, referralCodeForCurrency, type RewardOffer, type MyReferral } from "@/lib/rewards";
 
 interface ReferEarnCardProps {
   offer: RewardOffer | null;
@@ -107,9 +107,15 @@ export function ReferEarnCard({
   const locationCurrencies = sendCurrencies && sendCurrencies.length > 0 ? sendCurrencies : undefined;
   const hasCorridorRules = allOffers.length > 1 && new Set(allOffers.map((o) => o.currency)).size < allOffers.length;
 
-  // Universal referral link: works across all eligible currencies/countries without locking to a single rule_id
-  const baseLink = (activeOffer.referral_link ?? offer.referral_link ?? "").split("?")[0];
-  const link = baseLink || (activeOffer.referral_link ?? offer.referral_link ?? "");
+  const isMultiCurrency = allOffers.length > 1;
+  const rawCode = activeOffer.referral_code ?? offer.referral_code ?? "";
+  const effectiveCode = isMultiCurrency && rawCode
+    ? referralCodeForCurrency(rawCode, activeOffer.currency)
+    : rawCode;
+  const rawBaseLink = (activeOffer.referral_link ?? offer.referral_link ?? "").split("?")[0];
+  const link = isMultiCurrency && effectiveCode && rawBaseLink.includes("/ref/")
+    ? `${rawBaseLink.replace(/\/ref\/[^/]+$/, "")}/ref/${effectiveCode}`
+    : rawBaseLink || (activeOffer.referral_link ?? offer.referral_link ?? "");
   const joined = summary?.joined ?? referrals.length;
   const waiting = Math.max(0, joined - (summary?.earned_count ?? 0));
   const earnedText =
@@ -130,8 +136,12 @@ export function ReferEarnCard({
   };
 
   const handleShare = async () => {
+    const shareHook =
+      activeOffer.reward_type !== "REFERRER" && activeOffer.referee_reward > 0
+        ? `Join me on Rhemito with code ${effectiveCode}! Get ${formatMoney(activeOffer.referee_reward, activeOffer.currency)} on your first ${activeOffer.currency} transfer above ${formatMoney(activeOffer.floor, activeOffer.currency)}:`
+        : "Join me on Rhemito and get bonus credit on your first transfer:";
     try {
-      await navigator.share({ title: "Join me on Rhemito", text: "Join me on Rhemito and get bonus credit on your first transfer:", url: link });
+      await navigator.share({ title: "Join me on Rhemito", text: shareHook, url: link });
     } catch {
       // Share sheet closed by the customer — nothing to do
     }
@@ -259,8 +269,60 @@ export function ReferEarnCard({
           ) : (
             <>
               <OfferSentence text={activeOffer.text} />
+              {allOffers.length > 1 && (
+                <div
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5"
+                  data-testid="refer-multi-currency-hooks"
+                >
+                  {allOffers.map((o) => {
+                    const isSelected = o.rule_id === activeOffer.rule_id && o.currency === activeOffer.currency;
+                    const codeForCur = referralCodeForCurrency(o.referral_code ?? offer.referral_code ?? "", o.currency);
+                    return (
+                      <div
+                        key={`hook-${o.rule_id}-${o.currency}`}
+                        onClick={() => {
+                          setSelectedRuleId(o.rule_id);
+                          setCopied(false);
+                        }}
+                        className={cn(
+                          "rounded-lg border px-3 py-2 text-xs transition-all cursor-pointer",
+                          isSelected
+                            ? "border-blue-500 bg-blue-50/90 text-slate-900 shadow-2xs"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-blue-300",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-1.5 font-semibold">
+                          <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold", isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700")}>
+                            {o.currency} Offer
+                          </span>
+                          {codeForCur && (
+                            <span className="font-mono text-[11px] font-bold text-indigo-700">
+                              {codeForCur}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-[11px] leading-snug">
+                          Friend gets <span className="font-bold text-emerald-700">{formatMoney(o.referee_reward, o.currency)}</span> · You get{" "}
+                          <span className="font-bold text-blue-700">{formatMoney(o.referrer_reward, o.currency)}</span> on transfers of{" "}
+                          <span className="font-semibold text-slate-900">{formatMoney(o.floor, o.currency)}+</span>
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="referral-link" className="text-[13px] font-semibold text-slate-600">Your referral link</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="referral-link" className="text-[13px] font-semibold text-slate-600">Your referral link</label>
+                  {effectiveCode && (
+                    <span
+                      className="rounded-md bg-blue-50 px-2 py-0.5 font-mono text-xs font-bold text-blue-700 border border-blue-200"
+                      data-testid="refer-active-code"
+                    >
+                      Code ({activeOffer.currency}): {effectiveCode}
+                    </span>
+                  )}
+                </div>
                 <input
                   id="referral-link"
                   ref={inputRef}

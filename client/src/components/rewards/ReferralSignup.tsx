@@ -110,12 +110,20 @@ export function ReferralCodeField({ referral, onChange }: ReferralCodeFieldProps
   const [checking, setChecking] = useState(false);
 
   if (referral) {
+    const offer = referral.offer;
+    const hasHook = offer && offer.reward_type !== "REFERRER" && Number(offer.referee_reward) > 0;
     return (
       <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2" data-testid="referral-code-applied">
         <Check className="h-[18px] w-[18px] text-teal-700" strokeWidth={2.5} />
         <span className="flex-1 text-sm text-slate-800">
           Referral code <strong>{referral.code}</strong>
           {referral.referrerFirstName && <span className="block text-xs text-teal-700">Code applied – invited by {referral.referrerFirstName}</span>}
+          {hasHook && offer && (
+            <span className="mt-0.5 block text-xs font-semibold text-indigo-700" data-testid="referral-code-hook">
+              You get {formatMoney(offer.referee_reward, offer.currency)} on your first {offer.currency} transfer above {formatMoney(offer.floor, offer.currency)}
+              {offer.reward_type === "BOTH" && offer.referrer_reward > 0 ? ` (${referral.referrerFirstName || "your friend"} gets ${formatMoney(offer.referrer_reward, offer.currency)})` : ""}
+            </span>
+          )}
         </span>
         <button
           type="button"
@@ -158,7 +166,15 @@ export function ReferralCodeField({ referral, onChange }: ReferralCodeFieldProps
         }
         return;
       }
-      const ref: StoredReferral = { code, referrerFirstName: body.data?.referrerFirstName, offer: body.data?.offer ?? null, offers: body.data?.offers, sendCurrencies: body.data?.sendCurrencies, savedAt: Date.now() };
+      const ref: StoredReferral = {
+        code: body.data?.code ?? code,
+        ...(body.data?.ruleId ? { ruleId: Number(body.data.ruleId) } : {}),
+        referrerFirstName: body.data?.referrerFirstName,
+        offer: body.data?.offer ?? null,
+        offers: body.data?.offers,
+        sendCurrencies: body.data?.sendCurrencies,
+        savedAt: Date.now(),
+      };
       saveReferral(ref);
       onChange(ref);
     } finally {
@@ -173,7 +189,7 @@ export function ReferralCodeField({ referral, onChange }: ReferralCodeFieldProps
         <input
           id="referral-code"
           value={value}
-          maxLength={12}
+          maxLength={16}
           autoComplete="off"
           onChange={(e) => { setValue(e.target.value); setError(""); }}
           onBlur={validate}

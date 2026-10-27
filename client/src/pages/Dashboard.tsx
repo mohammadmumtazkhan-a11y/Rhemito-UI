@@ -728,6 +728,9 @@ export default function Dashboard() {
   const rewards = useRewards();
   const rewardsCurrency = rewards.data?.currency ?? "GBP";
   const bonusBalance = balanceFor(rewards.data?.wallet, rewardsCurrency);
+  const availableBalances = (rewards.data?.wallet.balances ?? []).filter((b) => b.available > 0);
+  const displayBonusBalances = availableBalances.length > 0 ? availableBalances : bonusBalance.available > 0 ? [bonusBalance] : [];
+  const totalUnusedText = displayBonusBalances.map((b) => formatMoney(b.available, b.currency)).join(" + ");
   const [referHighlighted, setReferHighlighted] = useState(false);
   const viewReferOffer = () => {
     document.getElementById("refer-earn")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -971,7 +974,7 @@ export default function Dashboard() {
                   balance={bonusBalance}
                   unused={rewards.data?.wallet.unused}
                   referralFloor={rewards.data?.offer?.floor}
-                  onCreateTransaction={() => setLocation("/send-money")}
+                  onCreateTransaction={(rewardType) => setLocation(rewardType ? `/send-money?reward=${rewardType}` : "/send-money")}
                 />
               </motion.div>
             )}
@@ -1117,10 +1120,10 @@ export default function Dashboard() {
           rewards.data?.offer ||
           rewards.isLoading ||
           rewards.isError ||
-          bonusBalance.available > 0) && (
+          displayBonusBalances.length > 0) && (
           <motion.div variants={itemVariants} className="flex flex-col gap-3">
             {rewards.data?.wallet.bonus_blocked && <BonusBlockedNotice />}
-            {bonusBalance.available > 0 && (
+            {displayBonusBalances.length > 0 && (
               <div data-testid="rewards-section-bonus-banners" className="rounded-2xl border border-indigo-100 bg-white/90 px-4 py-3.5 shadow-2xs">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                   <div className="flex flex-wrap items-center gap-2.5">
@@ -1135,7 +1138,7 @@ export default function Dashboard() {
                       <span>
                         Total Earned &amp; Unused:{" "}
                         <strong className="font-bold text-indigo-950">
-                          {formatMoney(bonusBalance.available, bonusBalance.currency)}
+                          {totalUnusedText}
                         </strong>
                       </span>
                     </span>
@@ -1148,12 +1151,28 @@ export default function Dashboard() {
                     Manage in Reward$ →
                   </button>
                 </div>
-                <BonusCreditPill
-                  balance={bonusBalance}
-                  unused={rewards.data?.wallet.unused}
-                  referralFloor={rewards.data?.offer?.floor}
-                  onCreateTransaction={() => setLocation("/send-money")}
-                />
+                <div className="flex flex-col gap-2">
+                  {displayBonusBalances.map((bal) => {
+                    const floorForCur =
+                      rewards.data?.offers?.find((o) => o.currency === bal.currency)?.floor ??
+                      (rewards.data?.offer?.currency === bal.currency ? rewards.data?.offer?.floor : undefined);
+                    return (
+                      <BonusCreditPill
+                        key={`bonus-pill-${bal.currency}`}
+                        balance={bal}
+                        unused={rewards.data?.wallet.unused}
+                        referralFloor={floorForCur}
+                        onCreateTransaction={(rewardType) => {
+                          const params = new URLSearchParams();
+                          if (rewardType) params.set("reward", rewardType);
+                          if (bal.currency && bal.currency !== "GBP") params.set("currency", bal.currency);
+                          const qs = params.toString();
+                          setLocation(qs ? `/send-money?${qs}` : "/send-money");
+                        }}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             )}
             <ReferEarnCard

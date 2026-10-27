@@ -63,9 +63,23 @@ export function registerRewardsRoutes(app: Express): void {
 
       const publicBase = serverConfig.publicBaseUrl.replace(/\/+$/, "");
       const referralCode = customer?.referral_code ?? offer.offer?.referral_code ?? null;
-      const attachLink = (o: any) => {
+      const KNOWN_CODE_CURRENCIES = ["GBP", "USD", "EUR", "NGN", "INR", "JPY", "CNY", "AUD", "CAD", "ZAR", "KES", "GHS", "AED"];
+      const currencyReferralCode = (base: string | null | undefined, cur: string | null | undefined) => {
+        const raw = String(base || "").trim().toUpperCase();
+        const c = String(cur || "").trim().toUpperCase();
+        if (!raw) return "";
+        if (!c) return raw;
+        for (const sfx of KNOWN_CODE_CURRENCIES) {
+          if (raw.length >= 9 && raw.endsWith(sfx)) {
+            return `${raw.slice(0, -sfx.length)}${c}`;
+          }
+        }
+        return `${raw}${c}`;
+      };
+      const attachLink = (o: any, forceCurrencyCode = false) => {
         if (!o) return o;
-        const code = o.referral_code ?? referralCode;
+        const base = o.referral_code ?? referralCode;
+        const code = forceCurrencyCode && base && o.currency ? currencyReferralCode(base, o.currency) : base;
         if (code) {
           o.referral_code = code;
           o.referral_link = `${publicBase}/ref/${code}`;
@@ -117,6 +131,13 @@ export function registerRewardsRoutes(app: Express): void {
               allNotices.push(n);
             }
           }
+        }
+      }
+
+      if (currencyOffers.length > 1) {
+        currencyOffers = currencyOffers.map((o) => attachLink({ ...o }, true));
+        if (offer.offer) {
+          attachLink(offer.offer, true);
         }
       }
 
@@ -199,12 +220,18 @@ export function registerRewardsRoutes(app: Express): void {
           }
         }
       }
-      const lockedOffer = ruleId ? (currencyOffers.find((o) => Number(o.rule_id) === ruleId) ?? result.offer ?? null) : null;
+      const lockedCurrency = result.currency ? String(result.currency).toUpperCase() : null;
+      const lockedOffer = ruleId
+        ? (currencyOffers.find((o) => Number(o.rule_id) === ruleId) ?? result.offer ?? null)
+        : lockedCurrency
+          ? (currencyOffers.find((o) => o.currency === lockedCurrency) ?? result.offer ?? null)
+          : null;
+      const effectiveRuleId = ruleId ?? (lockedCurrency && lockedOffer?.rule_id ? Number(lockedOffer.rule_id) : undefined);
       res.json({
         data: {
           code: result.code,
           referrerFirstName: result.referrer_first_name,
-          ...(ruleId ? { ruleId } : {}),
+          ...(effectiveRuleId ? { ruleId: effectiveRuleId } : {}),
           offer: lockedOffer ?? result.offer ?? currencyOffers[0] ?? null,
           offers: lockedOffer ? [lockedOffer] : currencyOffers,
           sendCurrencies: lockedOffer ? [lockedOffer.currency] : sendCurrencies,

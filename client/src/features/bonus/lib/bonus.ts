@@ -133,16 +133,31 @@ export function balanceFor(wallet: Pick<BonusWallet, "balances"> | undefined, cu
 // ─── Using bonus on a transfer ───────────────────────────────────────────────
 
 /** Bonus applicable to a transfer: never more than the whole balance (all sources) or the send amount. */
-/** Available bonus credit eligible for `sendAmount` and `receiveCurrency` based on each source's corridor and floor (`min_transaction_threshold`). */
+/** Available bonus credit eligible for `sendAmount` and `receiveCurrency` based on the selected reward tab (`referral` vs `bonus`), corridor, and floor (`min_transaction_threshold`). Referral and Bonus credits are never combined in one transaction. */
 export function eligibleBonusBalance(
   wallet: BonusBalance,
   sendAmount: number,
   referralFloor?: number | null,
   receiveCurrency?: string | null,
   referralReceiveCurrency?: string | null,
+  activeTab: "referral" | "bonus" | "all" = "all",
 ): number {
   const bySource = wallet.by_source ?? [];
   if (!bySource.length) {
+    if (activeTab === "referral") {
+      if (wallet.referral_credit_count === 0 && wallet.other_credit_count > 0) return 0;
+      const corridorMismatch =
+        Boolean(referralReceiveCurrency) &&
+        Boolean(receiveCurrency) &&
+        referralReceiveCurrency!.toUpperCase() !== receiveCurrency!.toUpperCase();
+      if (corridorMismatch) return 0;
+      if (referralFloor && referralFloor > 0 && sendAmount < referralFloor) return 0;
+      return wallet.available;
+    }
+    if (activeTab === "bonus") {
+      if (wallet.other_credit_count === 0 && wallet.referral_credit_count > 0) return 0;
+      return wallet.available;
+    }
     const corridorMismatch =
       Boolean(referralReceiveCurrency) &&
       Boolean(receiveCurrency) &&
@@ -151,17 +166,23 @@ export function eligibleBonusBalance(
     if (referralFloor && referralFloor > 0 && sendAmount < referralFloor) return 0;
     return wallet.available;
   }
+
+  const filteredSources =
+    activeTab === "referral"
+      ? bySource.filter((s) => s.credit_source === "REFERRAL")
+      : activeTab === "bonus"
+        ? bySource.filter((s) => s.credit_source === "SCHEME" || s.credit_source === "MANUAL")
+        : bySource;
+
   let total = 0;
-  let anyRestriction = false;
-  for (const s of bySource) {
+  for (const s of filteredSources) {
     const floor = s.credit_source === "REFERRAL" ? (s.floor || referralFloor || 0) : (s.floor || 0);
     const reqReceive = s.credit_source === "REFERRAL" ? (s.receive_currency || referralReceiveCurrency || null) : null;
-    if (floor > 0 || reqReceive) anyRestriction = true;
     const corridorOk = !reqReceive || !receiveCurrency || reqReceive.toUpperCase() === receiveCurrency.toUpperCase();
     const floorOk = sendAmount >= floor;
     if (corridorOk && floorOk) total += s.available || 0;
   }
-  return anyRestriction ? round(total, wallet.currency) : wallet.available;
+  return round(total, wallet.currency);
 }
 
 export function creditToApply(available: number, sendAmount: number, currency = "GBP"): number {

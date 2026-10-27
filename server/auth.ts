@@ -42,7 +42,7 @@ const resetPinFailures = new Map<string, { count: number; windowStart: number }>
 const pendingReferralCodes = new Map<string, string>();
 const pendingReferralRuleIds = new Map<string, number>();
 const pendingReferralMeta = new Map<string, ReferralAttributionMeta>();
-const REFERRAL_CODE_RE = /^[A-Z0-9]{6,12}$/;
+const REFERRAL_CODE_RE = /^[A-Z0-9]{6,16}$/;
 
 function enforceAuthRateLimit(req: Request, res: Response, name: keyof typeof serverConfig.rateLimits): boolean {
   const { limit, windowMs } = serverConfig.rateLimits[name];

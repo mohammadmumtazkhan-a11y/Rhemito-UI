@@ -104,11 +104,28 @@ export function UseBonusCredit({
 
   const currencyCredits = unused.filter((c) => c.currency === currency && c.remaining > 0);
   const bySource = balance.by_source ?? [];
+  const hasBySource = bySource.length > 0;
   const referralGroup = bySource.find((s) => s.credit_source === "REFERRAL");
   const schemeGroups = bySource.filter((s) => s.credit_source === "SCHEME" || s.credit_source === "MANUAL");
 
-  const referralAvail = referralGroup?.available ?? 0;
-  const schemeAvail = schemeGroups.reduce((sum, s) => sum + (s.available || 0), 0);
+  const referralAvail = hasBySource ? (referralGroup?.available ?? 0) : (activeTab === "referral" ? available : 0);
+  const schemeAvail = hasBySource
+    ? schemeGroups.reduce((sum, s) => sum + (s.available || 0), 0)
+    : (activeTab === "bonus" ? available : 0);
+
+  const tabAvailable =
+    activeTab === "referral"
+      ? referralAvail
+      : activeTab === "bonus"
+        ? schemeAvail
+        : available;
+
+  const tabCredits =
+    hasBySource && activeTab === "referral"
+      ? currencyCredits.filter((c) => c.credit_source === "REFERRAL")
+      : hasBySource && activeTab === "bonus"
+        ? currencyCredits.filter((c) => c.credit_source !== "REFERRAL")
+        : currencyCredits;
 
   const resolvedReferralFloor =
     referralGroup?.floor ||
@@ -129,36 +146,59 @@ export function UseBonusCredit({
     ...currencyCredits.filter((c) => c.credit_source !== "REFERRAL").map((c) => c.floor || 0),
   );
 
+  const checkReferralRestrictions = activeTab === "referral" || activeTab === "all";
+  const checkSchemeRestrictions = activeTab === "bonus" || activeTab === "all";
+
   const referralWrongCorridor =
+    checkReferralRestrictions &&
     referralAvail > 0 &&
     Boolean(resolvedReferralReceiveCurrency) &&
     Boolean(receiveCurrency) &&
     resolvedReferralReceiveCurrency!.toUpperCase() !== receiveCurrency.toUpperCase();
 
-  const referralBelowFloor = referralAvail > 0 && resolvedReferralFloor > 0 && sendAmount < resolvedReferralFloor;
+  const referralBelowFloor =
+    checkReferralRestrictions && referralAvail > 0 && resolvedReferralFloor > 0 && sendAmount < resolvedReferralFloor;
   const referralIneligible = referralWrongCorridor || referralBelowFloor;
-  const schemeBelowFloor = schemeAvail > 0 && resolvedSchemeFloor > 0 && sendAmount < resolvedSchemeFloor;
+  const schemeBelowFloor =
+    checkSchemeRestrictions && schemeAvail > 0 && resolvedSchemeFloor > 0 && sendAmount < resolvedSchemeFloor;
 
-  const hasRestrictionRules = resolvedReferralFloor > 0 || resolvedSchemeFloor > 0 || Boolean(resolvedReferralReceiveCurrency);
+  const hasRestrictionRules =
+    (checkReferralRestrictions && (resolvedReferralFloor > 0 || Boolean(resolvedReferralReceiveCurrency))) ||
+    (checkSchemeRestrictions && resolvedSchemeFloor > 0);
 
-  const eligibleAvailable = hasRestrictionRules
-    ? (referralIneligible ? 0 : referralAvail) + (schemeBelowFloor ? 0 : schemeAvail) ||
-      (!referralAvail && !schemeAvail && !referralWrongCorridor && sendAmount >= Math.max(resolvedReferralFloor, resolvedSchemeFloor) ? available : 0)
-    : available;
+  const eligibleAvailable =
+    activeTab === "referral"
+      ? (referralIneligible ? 0 : referralAvail)
+      : activeTab === "bonus"
+        ? (schemeBelowFloor ? 0 : schemeAvail)
+        : hasRestrictionRules
+          ? (referralIneligible ? 0 : referralAvail) + (schemeBelowFloor ? 0 : schemeAvail) ||
+            (!referralAvail && !schemeAvail && !referralWrongCorridor && sendAmount >= Math.max(resolvedReferralFloor, resolvedSchemeFloor) ? available : 0)
+          : available;
 
-  const allBelowFloor = hasRestrictionRules && eligibleAvailable <= 0;
-  const effectiveAvailable = hasRestrictionRules ? eligibleAvailable : available;
+  const noCreditInSelectedTab = tabAvailable <= 0;
+  const allBelowFloor = noCreditInSelectedTab || (hasRestrictionRules && eligibleAvailable <= 0);
+  const effectiveAvailable = hasRestrictionRules ? eligibleAvailable : tabAvailable;
 
-  const credit = creditToApply(effectiveAvailable > 0 ? effectiveAvailable : available, sendAmount, currency);
+  const credit = creditToApply(effectiveAvailable > 0 ? effectiveAvailable : tabAvailable, sendAmount, currency);
   const extra = amountConverted(credit, exchangeRate, receiveCurrency);
-  const rest = credit < available ? `${formatMoney(Math.round((available - credit) * 100) / 100, currency)}` : undefined;
-  const parts = availableParts(balance).map((p) => {
-    const floorVal = p.source === "REFERRAL" ? resolvedReferralFloor : resolvedSchemeFloor;
-    const floorSuffix = floorVal > 0 ? ` (min. ${formatMoney(floorVal, currency)})` : "";
-    return `${formatMoney(p.available, currency)} from ${p.label === "Referrals" ? "referrals" : p.label === "Bonus offers" ? "bonus offers" : "Rhemito"}${floorSuffix}`;
-  });
-  const expiring = expiringSoon(currencyCredits)[0];
-  const soonestCreditWithExpiry = [...currencyCredits]
+  const rest = credit < tabAvailable ? `${formatMoney(Math.round((tabAvailable - credit) * 100) / 100, currency)}` : undefined;
+  const parts =
+    activeTab === "all"
+      ? availableParts(balance).map((p) => {
+          const floorVal = p.source === "REFERRAL" ? resolvedReferralFloor : resolvedSchemeFloor;
+          const floorSuffix = floorVal > 0 ? ` (min. ${formatMoney(floorVal, currency)})` : "";
+          return `${formatMoney(p.available, currency)} from ${p.label === "Referrals" ? "referrals" : p.label === "Bonus offers" ? "bonus offers" : "Rhemito"}${floorSuffix}`;
+        })
+      : [];
+  const singleSourceNote =
+    activeTab === "referral" && referralAvail > 0
+      ? `Referral reward credit${resolvedReferralFloor > 0 ? ` · Min. transfer ${formatMoney(resolvedReferralFloor, currency)}` : ""} · Cannot be combined with Bonus or Promo Code`
+      : activeTab === "bonus" && schemeAvail > 0
+        ? `Bonus offer credit${resolvedSchemeFloor > 0 ? ` · Min. transfer ${formatMoney(resolvedSchemeFloor, currency)}` : ""} · Cannot be combined with Referral or Promo Code`
+        : null;
+  const expiring = expiringSoon(tabCredits)[0];
+  const soonestCreditWithExpiry = [...tabCredits]
     .filter((c) => Boolean(c.expires_on))
     .sort((a, b) => String(a.expires_on).localeCompare(String(b.expires_on)))[0];
 
@@ -168,7 +208,7 @@ export function UseBonusCredit({
   ];
 
   const panelTitle =
-    activeTab === "referral" && referralAvail > 0 && schemeAvail === 0
+    activeTab === "referral"
       ? "Use your Referral Credit"
       : BONUS_COPY.useTitle;
 
@@ -190,7 +230,7 @@ export function UseBonusCredit({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-teal-700">{BONUS_COPY.available(formatMoney(available, currency))}</span>
+            <span className="text-sm font-bold text-teal-700">{BONUS_COPY.available(formatMoney(tabAvailable, currency))}</span>
             <button
               type="button"
               onClick={handleClose}
@@ -204,9 +244,18 @@ export function UseBonusCredit({
           </div>
         </div>
         {parts.length > 0 && <p className="mb-3 text-[13px] text-slate-500" data-testid="bonus-includes">{BONUS_COPY.includes(parts)}</p>}
-        {parts.length === 0 && <div className="mb-2" />}
+        {singleSourceNote && <p className="mb-3 text-[13px] text-slate-500" data-testid="bonus-includes">{singleSourceNote}</p>}
+        {parts.length === 0 && !singleSourceNote && <div className="mb-2" />}
 
-        {referralAvail > 0 && (resolvedReferralFloor > 0 || Boolean(resolvedReferralReceiveCurrency)) && !referralIneligible && (
+        {noCreditInSelectedTab && (
+          <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs font-medium text-slate-700" data-testid="bonus-empty-tab-notice">
+            <p>
+              You do not have any available {activeTab === "referral" ? "Referral" : "Bonus"} credit in <span className="font-bold">{currency}</span>.
+            </p>
+          </div>
+        )}
+
+        {checkReferralRestrictions && referralAvail > 0 && (resolvedReferralFloor > 0 || Boolean(resolvedReferralReceiveCurrency)) && !referralIneligible && (
           <div className="mb-3 rounded-xl border border-teal-200 bg-teal-50/80 px-3.5 py-2.5 text-xs font-medium text-teal-900" data-testid="bonus-floor-met-notice">
             <p>
               You have earned <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit
@@ -225,9 +274,18 @@ export function UseBonusCredit({
             </p>
           </div>
         )}
+        {activeTab === "bonus" && schemeAvail > 0 && resolvedSchemeFloor > 0 && !schemeBelowFloor && (
+          <div className="mb-3 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3.5 py-2.5 text-xs font-medium text-indigo-900" data-testid="bonus-floor-met-notice">
+            <p>
+              You have earned <span className="font-bold">{formatMoney(schemeAvail, currency)}</span> Bonus credit (transfer is{" "}
+              <span className="font-bold">{formatMoney(resolvedSchemeFloor, currency)}</span> or more). Select <span className="font-bold">Pay less</span> or{" "}
+              <span className="font-bold">Send more</span> below to use it, or click <span className="font-bold">×</span> above if you don&apos;t want to use it on this transfer.
+            </p>
+          </div>
+        )}
         {(referralIneligible || schemeBelowFloor) && (
           <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-xs font-medium text-amber-900 space-y-1" data-testid="bonus-floor-notice">
-            {referralWrongCorridor && (
+            {checkReferralRestrictions && referralWrongCorridor && (
               <p>
                 Your <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit requires the{" "}
                 <span className="font-bold">{currency} → {resolvedReferralReceiveCurrency}</span> corridor
@@ -241,7 +299,7 @@ export function UseBonusCredit({
                 to use your <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit.
               </p>
             )}
-            {!referralWrongCorridor && referralBelowFloor && (
+            {checkReferralRestrictions && !referralWrongCorridor && referralBelowFloor && (
               <p>
                 Send at least <span className="font-bold">{formatMoney(resolvedReferralFloor, currency)}</span> in <span className="font-bold">{currency}</span> to use your{" "}
                 <span className="font-bold">{formatMoney(referralAvail, currency)}</span> Referral Bonus credit.
@@ -250,7 +308,7 @@ export function UseBonusCredit({
                 ) : null}
               </p>
             )}
-            {schemeBelowFloor && (
+            {checkSchemeRestrictions && schemeBelowFloor && (
               <p>
                 Send at least <span className="font-bold">{formatMoney(resolvedSchemeFloor, currency)}</span> in <span className="font-bold">{currency}</span> to use your{" "}
                 <span className="font-bold">{formatMoney(schemeAvail, currency)}</span> Bonus credit.
