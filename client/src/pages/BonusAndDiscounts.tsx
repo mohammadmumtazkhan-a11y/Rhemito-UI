@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
-import { Check, Circle, Copy, Loader2 } from "lucide-react";
+import { ArrowLeft, Check, Circle, Copy, Loader2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -190,6 +190,23 @@ export default function BonusAndDiscounts() {
       <div className="w-full space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (tab !== "overview") {
+                  setSource("ALL");
+                  setFilter("all");
+                  changeTab("overview");
+                } else {
+                  setLocation("/");
+                }
+              }}
+              className="mb-1.5 -ml-2 h-8 px-2 text-sm text-slate-600 hover:text-slate-900"
+              data-testid="button-rewards-back"
+            >
+              <ArrowLeft className="w-4 h-4 mr-1.5" />
+              {tab !== "overview" ? "Back to Overview" : "Back"}
+            </Button>
             {/* Approved Rhemito page title (PageTitle / Reward$) — do not use Bonus & Discounts */}
             <h1 className="text-[28px] font-light tracking-tight text-slate-900 sm:text-[32px] xl:text-[40px]">
               Reward$
@@ -315,6 +332,31 @@ export default function BonusAndDiscounts() {
                 {showSourceFilter && (
                   <div className="flex flex-wrap items-center gap-2" data-testid="source-filter">
                     <label htmlFor="bonus-source" className="text-sm font-medium text-slate-600">{BONUS_COPY.sourceFilter}</label>
+                    {source !== "ALL" && (
+                      <div className="order-last flex items-center gap-3 ml-1">
+                        <button
+                          type="button"
+                          onClick={() => setSource("ALL")}
+                          className="text-xs font-semibold text-blue-700 hover:underline cursor-pointer"
+                          data-testid="button-clear-source-filter"
+                        >
+                          {BONUS_COPY.clearFilter}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSource("ALL");
+                            setFilter("all");
+                            changeTab("overview");
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+                          data-testid="button-history-back-overview"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                          Back to Overview
+                        </button>
+                      </div>
+                    )}
                     <Select value={source} onValueChange={(v) => setSource(v as CreditSource | "ALL")}>
                       <SelectTrigger id="bonus-source" className="h-9 w-[170px] rounded-full" aria-label={BONUS_COPY.sourceFilter}>
                         <SelectValue />
