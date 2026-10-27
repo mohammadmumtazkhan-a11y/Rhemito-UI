@@ -981,37 +981,6 @@ export default function Dashboard() {
             variants={itemVariants}
             className="shrink-0 self-end md:self-start md:pt-1.5 flex flex-wrap items-center justify-end gap-2.5"
           >
-            {bonusBalance.available > 0 && (
-              <div
-                data-testid="dashboard-top-bonus-highlight"
-                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200/80 px-3.5 py-1.5 text-xs font-medium text-indigo-900 shadow-2xs"
-              >
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-2xs shrink-0">
-                  <Sparkles className="h-3 w-3 text-purple-600" aria-hidden />
-                </span>
-                <span>
-                  <strong className="font-bold text-indigo-950">
-                    {formatMoney(bonusBalance.available, bonusBalance.currency)}
-                  </strong>{" "}
-                  bonus credit available
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setLocation("/send-money")}
-                  className="font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2 cursor-pointer"
-                >
-                  Use now
-                </button>
-                <span className="text-slate-300" aria-hidden>|</span>
-                <button
-                  type="button"
-                  onClick={() => setLocation("/bonus-discounts")}
-                  className="font-semibold text-purple-700 hover:text-purple-900 cursor-pointer"
-                >
-                  View breakdown
-                </button>
-              </div>
-            )}
             <LegalStrip className="mb-0 w-auto" />
           </motion.div>
         </div>
@@ -1153,10 +1122,24 @@ export default function Dashboard() {
             {rewards.data?.wallet.bonus_blocked && <BonusBlockedNotice />}
             {bonusBalance.available > 0 && (
               <div data-testid="rewards-section-bonus-banners" className="rounded-2xl border border-indigo-100 bg-white/90 px-4 py-3.5 shadow-2xs">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Your Available Bonus &amp; Referral Credits
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Your Available Bonus &amp; Referral Credits
+                    </span>
+                    <span
+                      data-testid="dashboard-total-unused-bonus"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200/80 px-3 py-0.5 text-xs font-medium text-indigo-900"
+                    >
+                      <Sparkles className="h-3 w-3 text-purple-600 shrink-0" aria-hidden />
+                      <span>
+                        Total Earned &amp; Unused:{" "}
+                        <strong className="font-bold text-indigo-950">
+                          {formatMoney(bonusBalance.available, bonusBalance.currency)}
+                        </strong>
+                      </span>
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setLocation("/bonus-discounts")}
