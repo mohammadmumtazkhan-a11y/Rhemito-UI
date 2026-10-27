@@ -112,13 +112,12 @@ describe("Capturing the referral code", () => {
     try {
       const android = await openLanding("john2880", false);
       await waitFor(() => expect(android.view.getByTestId("referral-landing-page")).toBeTruthy(), { timeout: 3000 });
-      expect(android.view.getByTestId("referral-landing-heading").textContent).toBe("Welcome to Rhemito!");
+      expect(android.view.getByTestId("referral-landing-heading").textContent).toContain("Good things start");
       expect(android.view.getByTestId("referral-landing-code").textContent).toBe("JOHN2880");
       expect(android.view.queryByTestId("referral-tracking-badge")).toBeNull();
       expect(android.view.getByTestId("android-download-panel")).toBeTruthy();
+      expect(android.view.getByTestId("download-android-playstore-btn").textContent).toContain("Get Rhemito on Google Play");
       expect(android.view.queryByTestId("ios-download-panel")).toBeNull();
-      await act(async () => { fireEvent.click(android.view.getByTestId("referral-continue-web-btn")); });
-      expect(android.history[android.history.length - 1]).toContain("/sign-in-sign-up?mode=signup");
       android.view.unmount();
 
       // 3. iOS user-agent sees only iOS panel (no Android option)
@@ -129,6 +128,8 @@ describe("Capturing the referral code", () => {
       const ios = await openLanding("john2880", false);
       await waitFor(() => expect(ios.view.getByTestId("referral-landing-page")).toBeTruthy(), { timeout: 3000 });
       expect(ios.view.getByTestId("ios-download-panel")).toBeTruthy();
+      expect(ios.view.getByTestId("referral-copy-code-btn")).toBeTruthy();
+      expect(ios.view.getByTestId("ios-option-b-appstore-btn").textContent).toContain("Download on the App Store");
       expect(ios.view.queryByTestId("android-download-panel")).toBeNull();
       ios.view.unmount();
     } finally {

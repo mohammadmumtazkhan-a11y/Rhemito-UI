@@ -195,7 +195,7 @@ test.describe('Referral sign-up', () => {
         await expect(iosPage.getByTestId('referral-landing-page')).toBeVisible();
         await expect(iosPage.getByTestId('ios-download-panel')).toBeVisible();
         await expect(iosPage.getByTestId('android-download-panel')).toHaveCount(0);
-        await expect(iosPage.getByTestId('ios-option-a-register-btn')).toBeVisible();
+        await expect(iosPage.getByTestId('referral-copy-code-btn')).toBeVisible();
         await expect(iosPage.getByTestId('ios-option-b-appstore-btn')).toBeVisible();
         await iosCtx.close();
     });

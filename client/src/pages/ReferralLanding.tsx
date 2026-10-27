@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute, useSearch } from "wouter";
-import { Check, Copy, ExternalLink, Globe, Loader2, Smartphone, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { resetDeviceId } from "@/lib/deviceId";
 import {
@@ -9,7 +9,6 @@ import {
   buildGooglePlayReferralUrl,
   clearReferral,
   detectClientDevice,
-  formatMoney,
   loadReferral,
   saveReferral,
   visitorId,
@@ -17,13 +16,49 @@ import {
   type StoredReferral,
 } from "@/lib/rewards";
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  GBP: "£",
+  USD: "$",
+  EUR: "€",
+  NGN: "₦",
+  INR: "₹",
+  JPY: "¥",
+  CNY: "¥",
+  AUD: "A$",
+  CAD: "C$",
+  ZAR: "R",
+  KES: "KSh",
+  GHS: "GH₵",
+  AED: "AED",
+};
+
+function formatCompactAmount(amount: number, currency: string): { symbol: string; numberText: string; fullText: string } {
+  const n = Number(amount || 0);
+  const symbol = CURRENCY_SYMBOLS[currency] ?? `${currency} `;
+  const isWhole = Number.isInteger(n);
+  const numberText = isWhole
+    ? Math.abs(n).toLocaleString("en-GB", { maximumFractionDigits: 0 })
+    : Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return {
+    symbol,
+    numberText,
+    fullText: `${symbol}${numberText}`,
+  };
+}
+
+function resolvePlatform(search: string): "Android" | "iOS" | "Other" {
+  const qs = new URLSearchParams(search || (typeof window !== "undefined" ? window.location.search : ""));
+  const forced = (qs.get("platform") || "").toLowerCase();
+  if (forced === "android") return "Android";
+  if (forced === "ios") return "iOS";
+  return detectClientDevice().operatingSystem;
+}
+
 /**
- * /ref/:code & /refer/:code — FR-02, FR-03, FR-04, FR-06:
- * Validates the referral link, records the click with a unique unpredictable trackingId,
- * saves the referral context for 30 days, and routes by detected client device:
+ * /ref/:code & /refer/:code — Mobile & Desktop Referral Entry:
  *   - Desktop / Laptop (operatingSystem === "Other"): Redirects straight to the email entry page (/sign-in-sign-up?mode=signup)
- *   - Android: Shows Continue on Website + Android (Google Play Store) download option only
- *   - iOS: Shows Continue on Website + iOS (Apple App Store) options only
+ *   - Android: Renders the Android referral landing page (Automatic Play Install Referrer + Get Rhemito on Google Play)
+ *   - iOS: Renders the iOS referral landing page (Copy referral code + Download on the App Store)
  */
 export default function ReferralLanding() {
   const [matchRef, paramsRef] = useRoute("/ref/:code");
@@ -33,11 +68,18 @@ export default function ReferralLanding() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const ran = useRef(false);
+  const codeSpanRef = useRef<HTMLSpanElement | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [referralState, setReferralState] = useState<StoredReferral | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [deviceOs, setDeviceOs] = useState<"Android" | "iOS" | "Other">(() => detectClientDevice().operatingSystem);
+  const [copyStatus, setCopyStatus] = useState("");
+  const [deviceOs, setDeviceOs] = useState<"Android" | "iOS" | "Other">(() => resolvePlatform(search));
+
+  useEffect(() => {
+    const resolvedOs = resolvePlatform(search);
+    setDeviceOs(resolvedOs);
+  }, [search]);
 
   useEffect(() => {
     if (ran.current) return;
@@ -46,9 +88,9 @@ export default function ReferralLanding() {
     const qs = new URLSearchParams(search || (typeof window !== "undefined" ? window.location.search : ""));
     const ruleParam = qs.get("rule") ?? qs.get("rule_id");
     const ruleId = ruleParam && /^\d+$/.test(ruleParam) ? Number(ruleParam) : undefined;
-    const detected = detectClientDevice();
-    setDeviceOs(detected.operatingSystem);
-    const isDesktopOrOther = detected.operatingSystem === "Other";
+    const resolvedOs = resolvePlatform(search);
+    setDeviceOs(resolvedOs);
+    const isDesktopOrOther = resolvedOs === "Other";
 
     const toSignUp = () => setLocation("/sign-in-sign-up?mode=signup", { replace: true });
 
@@ -177,28 +219,17 @@ export default function ReferralLanding() {
     try {
       await navigator.clipboard.writeText(referralState.code);
       setCopiedCode(true);
-      toast({
-        title: "Referral code copied!",
-        description: `${referralState.code} is copied to your clipboard.`,
-      });
-      setTimeout(() => setCopiedCode(false), 2500);
+      setCopyStatus("Code copied. Paste it during registration.");
     } catch {
-      toast({ title: `Your referral code: ${referralState.code}` });
+      setCopyStatus(`Touch and hold ${referralState.code} to copy it.`);
+      if (codeSpanRef.current && typeof window !== "undefined") {
+        const range = document.createRange();
+        range.selectNodeContents(codeSpanRef.current);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
     }
-  };
-
-  const handleContinueOnWeb = () => {
-    if (referralState) {
-      const updated = {
-        ...referralState,
-        channel: "WEB" as const,
-        attributionMethod: referralState.trackingId ? "DIRECT_LINK" : "MANUAL_CODE",
-        postSignupAppStoreUrl: null,
-      };
-      saveReferral(updated);
-    }
-    void recordHandoff("WEB", "Web");
-    setLocation("/sign-in-sign-up?mode=signup");
   };
 
   const handleAndroidPlayStoreDownload = () => {
@@ -215,28 +246,8 @@ export default function ReferralLanding() {
     window.location.href = playUrl;
   };
 
-  const handleIosRegisterBeforeDownload = () => {
+  const handleIosAppStoreDownload = () => {
     if (!referralState) return;
-    const appStoreUrl = referralState.appStoreUrl || APPLE_APP_STORE_URL;
-    const updated = {
-      ...referralState,
-      channel: "IOS" as const,
-      attributionMethod: "IOS_PRE_REGISTER",
-      postSignupAppStoreUrl: appStoreUrl,
-    };
-    saveReferral(updated);
-    void recordHandoff("APPLE_APP_STORE", "iOS");
-    setLocation("/sign-in-sign-up?mode=signup&channel=IOS");
-  };
-
-  const handleIosCopyAndDownload = async () => {
-    if (!referralState) return;
-    try {
-      await navigator.clipboard.writeText(referralState.code);
-      setCopiedCode(true);
-    } catch {
-      // ignore clipboard error
-    }
     const appStoreUrl = referralState.appStoreUrl || APPLE_APP_STORE_URL;
     const updated = {
       ...referralState,
@@ -245,18 +256,14 @@ export default function ReferralLanding() {
     };
     saveReferral(updated);
     void recordHandoff("APPLE_APP_STORE", "iOS");
-    toast({
-      title: `Referral code ${referralState.code} copied!`,
-      description: "Opening Apple App Store — paste this code when registering in the Rhemito iOS app.",
-    });
     window.location.href = appStoreUrl;
   };
 
   if (loading || !referralState) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50" role="status" aria-live="polite">
-        <div className="flex items-center gap-3 text-[15px] text-slate-600">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+      <div className="flex min-h-screen items-center justify-center bg-[#f0f2f7] max-[460px]:bg-[#fcfcfe]" role="status" aria-live="polite">
+        <div className="flex items-center gap-3 text-[15px] text-[#424a5b]">
+          <Loader2 className="h-5 w-5 animate-spin text-[#6950cf]" />
           Opening your invitation…
         </div>
       </div>
@@ -264,256 +271,282 @@ export default function ReferralLanding() {
   }
 
   const offer: RewardOffer | null = referralState.offer ?? null;
-  const referrerName = referralState.referrerFirstName || "Your friend";
-  const hasRefereeReward = offer && offer.reward_type !== "REFERRER" && Number(offer.referee_reward) > 0;
-  const rewardText = hasRefereeReward && offer ? formatMoney(offer.referee_reward, offer.currency) : null;
-  const floorText = offer ? formatMoney(offer.floor, offer.currency) : null;
+  const referrerName = referralState.referrerFirstName || "John";
+  const referrerInitial = referrerName.trim().charAt(0).toUpperCase() || "R";
+  const currencyCode = offer?.currency || "GBP";
+  const rawRewardAmount =
+    offer && offer.reward_type !== "REFERRER" && Number(offer.referee_reward) > 0
+      ? Number(offer.referee_reward)
+      : Number(offer?.referrer_reward || 20);
+  const rawFloorAmount = Number(offer?.floor ?? 100);
+  const windowDays = Number(offer?.qualification_window_days ?? 30);
+
+  const rewardFormatted = formatCompactAmount(rawRewardAmount, currencyCode);
+  const floorFormatted = formatCompactAmount(rawFloorAmount, currencyCode);
+
   const playUrl = referralState.playStoreUrl || buildGooglePlayReferralUrl(referralState.trackingId, referralState.code);
+  const appStoreUrl = referralState.appStoreUrl || APPLE_APP_STORE_URL;
+  const isIos = deviceOs === "iOS";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50/40 px-4 py-8 sm:py-12" data-testid="referral-landing-page">
-      <div className="mx-auto max-w-2xl">
-        {/* Top Logo Header */}
-        <div className="mb-6 flex items-center">
-          <div className="flex items-center space-x-2">
-            <svg
-              width="26"
-              height="33"
-              viewBox="0 0 26 33"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="w-8 h-8"
-            >
-              <path
-                d="M25.0764 30.3999C25.0471 30.0963 24.9593 29.8023 24.813 29.5351L16.8761 14.4493L24.8398 3.57589C25.5715 2.5726 25.352 1.17091 24.3471 0.439699C23.9495 0.165191 23.5007 0 22.9983 0H2.25129C1.63908 0 1.08296 0.238069 0.658557 0.655904C0.251228 1.06159 0 1.62275 0 2.24222V30.604C0 31.3109 0.348792 32.0008 0.924419 32.4162C1.83664 33.0988 3.22693 32.9434 3.95622 32.0688C3.99769 32.0227 4.03183 31.9741 4.07086 31.9279L10.3296 23.3818L21.3836 32.3312C21.5568 32.4769 21.7543 32.5911 21.9641 32.6786C23.5007 33.332 25.2447 32.0591 25.0739 30.4023L25.0764 30.3999ZM9.49542 16.915L4.5099 23.7218V4.4893H18.6006L11.5857 14.0606L15.7541 21.9825L9.49542 16.915Z"
-                fill="#3D48D1"
-              />
-            </svg>
-            <span className="text-2xl font-semibold text-slate-800 tracking-tight">Rhemito</span>
-          </div>
-        </div>
-
-        {/* Main Invitation Card (FR-03) */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-6 text-white sm:px-8">
-            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white">
-              <Sparkles className="h-3.5 w-3.5" />
-              Official Referral Invitation
+    <div
+      className="min-h-screen bg-[#f0f2f7] max-[460px]:bg-[#fcfcfe] text-[#182235] font-sans antialiased flex flex-col items-center justify-center px-[16px] py-[20px] max-[460px]:p-0"
+      data-testid="referral-landing-page"
+    >
+      <section
+        aria-label={isIos ? "iOS referral page" : "Android referral page"}
+        className="w-full max-w-[390px] max-[460px]:max-w-[430px] shrink-0"
+      >
+        <div
+          className={`relative bg-[#fcfcfe] border border-[#e0e4ed] shadow-[0_18px_65px_rgba(38,51,83,0.035)] overflow-hidden px-[24px] pt-[23px] pb-[18px] max-[460px]:border-0 max-[460px]:shadow-none max-[460px]:rounded-none max-[460px]:pb-[19px] max-[360px]:px-[19px] ${
+            isIos ? "rounded-[29px]" : "rounded-[26px]"
+          }`}
+        >
+          {/* App Bar */}
+          <header className="flex justify-between items-center mb-[24px] max-[460px]:mb-[22px]">
+            <div className="flex items-center gap-[8px] text-[23px] font-bold tracking-[-1.1px] text-[#182235]">
+              <svg viewBox="0 0 32 42" fill="none" aria-hidden="true" className="w-[24px] h-[30px] text-[#6a50d8]">
+                <path
+                  d="M3 38V3h25L17 19l11 19H18l-8-14-7 14Z"
+                  stroke="currentColor"
+                  strokeWidth="3.5"
+                  strokeLinejoin="round"
+                />
+                <path d="m10 26 1-17h10L10 26Z" fill="currentColor" />
+              </svg>
+              <span>Rhemito</span>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" data-testid="referral-landing-heading">
-              Welcome to Rhemito!
-            </h1>
-            <p className="mt-1.5 text-sm text-blue-100 sm:text-base">
-              You&apos;ve been invited to join Rhemito by <strong className="font-semibold text-white">{referrerName}</strong>.
-            </p>
+            <span className="text-[9px] tracking-[1.5px] text-[#a1a6b2] font-semibold">MONEY, CONNECTED.</span>
+          </header>
+
+          {/* Referrer Invite Strip */}
+          <div className="text-[11px] text-[#7a8395] flex items-center gap-[7px] mb-[13px]">
+            <span className="w-[24px] h-[24px] grid place-items-center rounded-full bg-[#ede8fc] text-[#6a4fc2] text-[10px] font-bold">
+              {referrerInitial}
+            </span>
+            <span>
+              <strong className="text-[#424a5b] font-semibold">{referrerName}</strong> invited you to Rhemito
+            </span>
           </div>
 
-          <div className="p-6 sm:p-8 space-y-6">
-            {/* Marketing Hook Highlight Banner */}
-            {offer && (
-              <div
-                className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50/70 to-indigo-50/50 p-4 sm:p-5 shadow-2xs"
-                data-testid="referral-landing-marketing-hook"
+          {/* Dark Hero Offer Card */}
+          <section
+            aria-label="Your referral offer"
+            data-testid="referral-landing-marketing-hook"
+            className={`bg-[#151e31] text-white px-[24px] pt-[23px] pb-[21px] max-[460px]:px-[23px] max-[460px]:pt-[21px] max-[460px]:pb-[20px] relative isolate overflow-hidden ${
+              isIos ? "rounded-[19px]" : "rounded-[20px]"
+            }`}
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_100%_0,rgba(121,99,197,0.28),transparent_65%)]"
+            />
+            <div className="flex items-center gap-[6px] text-[9px] tracking-[1.6px] font-semibold text-[#c2b5ef]">
+              <span className="text-[15px] leading-[12px] text-[#c8b8ff]">✦</span> A LITTLE WELCOME FROM US
+            </div>
+            <h1
+              data-testid="referral-landing-heading"
+              className="text-[22px] max-[360px]:text-[21px] leading-[1.28] font-medium tracking-[-0.7px] mt-[14px] max-[460px]:mt-[12px] mb-[8px] text-[#f1eff8]"
+            >
+              Good things start
+              <br />
+              with an invitation.
+            </h1>
+            <div className="text-[68px] max-[460px]:text-[66px] font-semibold leading-[1.05] tracking-[-4px] relative z-10">
+              <sup className="text-[35px] align-top leading-[1.55] tracking-[-1.5px] mr-[3px]">{rewardFormatted.symbol}</sup>
+              {rewardFormatted.numberText}
+              <span className="text-[10px] tracking-[1px] font-normal text-[#b5b5ca] ml-[9px] inline-block align-middle">
+                {currencyCode}
+              </span>
+            </div>
+            <p className="text-[11px] text-[#abaec4] mt-[8px] mb-0 relative z-10">Bonus credit when you join &amp; send.</p>
+
+            {/* Decorative Wireframe Orb */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute w-[139px] h-[139px] -right-[33px] top-[73px] rounded-full border border-[#a9a3d5]/17 -rotate-[28deg] shadow-[inset_0_0_25px_rgba(187,170,255,0.04)] bg-[linear-gradient(125deg,rgba(166,155,213,0.08),transparent)]"
+            >
+              <span className="absolute inset-0 rounded-full border border-[#bdb6e2]/17 scale-x-[0.44]" />
+              <span className="absolute inset-0 rounded-full border border-[#bdb6e2]/17 scale-y-[0.42]" />
+              <i className="absolute left-1/2 h-full border-l border-[#bdb6e2]/17">
+                <span className="absolute top-1/2 w-[139px] -left-[69px] border-t border-[#bdb6e2]/17" />
+              </i>
+            </div>
+          </section>
+
+          {/* 3-Step Horizontal Timeline */}
+          <ol
+            aria-label="How to earn your bonus"
+            className="grid grid-cols-3 list-none p-0 mt-[22px] mb-[23px] max-[460px]:my-[20px] gap-[9px]"
+          >
+            <li className="relative text-[9px] max-[360px]:text-[8px] text-[#9a9ead] leading-[1.5]">
+              <span aria-hidden="true" className="absolute left-[29px] right-[2px] top-[11px] h-px bg-[#e4e5ed]" />
+              <span
+                className={`w-[23px] h-[23px] grid place-items-center bg-[#f0edf9] text-[#7b65bd] text-[10px] font-semibold mb-[8px] ${
+                  isIos ? "rounded-full" : "rounded-[7px]"
+                }`}
               >
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white">
-                    {offer.currency} Referral Offer
-                  </span>
-                  <span className="text-xs font-medium text-slate-600">
-                    Valid for {offer.qualification_window_days} days from registration
-                  </span>
-                </div>
-                {rewardText && floorText ? (
-                  <p className="text-base sm:text-lg font-bold text-slate-900">
-                    Get <span className="text-emerald-700">{rewardText}</span> on your first {offer.currency} transfer above{" "}
-                    <span className="text-indigo-700">{floorText}</span>
-                    {offer.receive_currency ? ` to ${offer.receive_currency}` : ""}!
+                1
+              </span>
+              <strong className="block text-[11px] max-[360px]:text-[10px] font-semibold text-[#3f475a]">Join Rhemito</strong>
+              Create your account
+            </li>
+            <li className="relative text-[9px] max-[360px]:text-[8px] text-[#9a9ead] leading-[1.5]">
+              <span aria-hidden="true" className="absolute left-[29px] right-[2px] top-[11px] h-px bg-[#e4e5ed]" />
+              <span
+                className={`w-[23px] h-[23px] grid place-items-center bg-[#f0edf9] text-[#7b65bd] text-[10px] font-semibold mb-[8px] ${
+                  isIos ? "rounded-full" : "rounded-[7px]"
+                }`}
+              >
+                2
+              </span>
+              <strong className="block text-[11px] max-[360px]:text-[10px] font-semibold text-[#3f475a]">
+                Send over {floorFormatted.fullText}
+              </strong>
+              Within {windowDays} days
+            </li>
+            <li className="relative text-[9px] max-[360px]:text-[8px] text-[#9a9ead] leading-[1.5]">
+              <span
+                className={`w-[23px] h-[23px] grid place-items-center bg-[#f0edf9] text-[#7b65bd] text-[10px] font-semibold mb-[8px] ${
+                  isIos ? "rounded-full" : "rounded-[7px]"
+                }`}
+              >
+                3
+              </span>
+              <strong className="block text-[11px] max-[360px]:text-[10px] font-semibold text-[#3f475a]">
+                Get {rewardFormatted.fullText} credit
+              </strong>
+              Once you qualify
+            </li>
+          </ol>
+
+          {/* Platform Action Card & Install Button */}
+          <div data-testid="referral-download-app-section">
+            {isIos ? (
+              <div data-testid="ios-download-panel">
+                <section
+                  aria-label="Copy your referral code"
+                  className="border border-[#e4e4ef] bg-[#f6f5fb] rounded-[14px] px-[15px] py-[12px] max-[360px]:p-[13px] mb-[17px] min-h-[84px]"
+                >
+                  <div className="flex justify-between items-center gap-[10px]">
+                    <div>
+                      <span className="text-[9px] text-[#9388ad] block mb-[5px]">FIRST, COPY YOUR REFERRAL CODE</span>
+                      <span
+                        ref={codeSpanRef}
+                        data-testid="referral-landing-code"
+                        className="text-[16px] max-[360px]:text-[14px] tracking-[1px] font-semibold text-[#4c3a78]"
+                      >
+                        {referralState.code}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyCode}
+                      data-testid="referral-copy-code-btn"
+                      aria-label={copiedCode ? "Referral code copied" : "Copy referral code"}
+                      className="flex items-center justify-center gap-[6px] border border-[#dcd4ee] bg-white px-[11px] py-[9px] rounded-[8px] text-[#7054ae] text-[10px] font-semibold min-w-[74px]"
+                    >
+                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="w-[12px] h-[12px]">
+                        <rect x="7" y="7" width="10" height="11" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                        <path
+                          d="M12 7V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        />
+                      </svg>
+                      <span>{copiedCode ? "Copied" : "Copy"}</span>
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-[#8b849d] leading-[1.55] m-0 mt-[9px]">
+                    Paste it in the referral code field when you register in the app.
                   </p>
-                ) : (
-                  <p className="text-sm font-semibold text-slate-900">{offer.text}</p>
-                )}
-                {offer.reward_type !== "REFEREE" && Number(offer.referrer_reward) > 0 && floorText && (
-                  <p className="mt-1 text-xs font-medium text-slate-600">
-                    Plus, <strong>{referrerName}</strong> earns{" "}
-                    <strong className="text-slate-900">{formatMoney(offer.referrer_reward, offer.currency)}</strong> once your first transfer of {floorText}+ completes.
+                  {copyStatus && (
+                    <p className="text-[9px] leading-[1.4] text-[#7351b1] mt-[6px] mb-0" aria-live="polite">
+                      {copyStatus}
+                    </p>
+                  )}
+                </section>
+
+                <a
+                  href={appStoreUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleIosAppStoreDownload();
+                  }}
+                  data-testid="ios-option-b-appstore-btn"
+                  className="flex w-full h-[52px] items-center justify-center gap-[10px] bg-[#182235] hover:bg-[#29364f] text-white border-0 rounded-[12px] no-underline text-[12px] font-semibold transition-colors"
+                >
+                  <svg viewBox="0 0 24 27" fill="currentColor" aria-hidden="true" className="w-[19px] h-[21px] shrink-0">
+                    <path d="M16 0c.3 2-1.6 4.5-3.8 4.6C12 2.6 13.9.3 16 0ZM20.3 18.5c-.5 1.2-.8 1.8-1.5 2.9-1 1.5-2.4 3.4-4.1 3.4-1.5 0-1.8-1-3.8-1s-2.4 1-3.9 1c-1.6 0-3-1.7-4-3.2C.2 17.3-.7 11.3 1.2 8.3c1.4-2.2 3.6-3.5 5.8-3.5 1.7 0 2.8 1 4.2 1s2.3-1 4.3-1c1.8 0 3.6.9 4.8 2.4-4.2 2.3-3.5 8.4 0 11.3Z" />
+                  </svg>
+                  <span>Download on the App Store</span>
+                </a>
+                <p className="text-[9px] text-center text-[#a1a5b2] mt-[9px] mb-[17px] max-[460px]:mb-[14px]">
+                  Copy your code before you leave this page.
+                </p>
+              </div>
+            ) : (
+              <div data-testid="android-download-panel">
+                <section
+                  aria-label="Automatic referral"
+                  className="border border-[#e4e4ef] bg-[#f6f5fb] rounded-[14px] px-[16px] py-[15px] max-[360px]:p-[13px] mb-[17px] min-h-[84px]"
+                >
+                  <p className="flex items-center gap-[9px] text-[11px] font-semibold text-[#4c426d] mt-0 mb-[7px]">
+                    <span className="w-[19px] h-[19px] rounded-full bg-[#e7e2f5] text-[#7155b8] grid place-items-center text-[10px] shrink-0">
+                      ✓
+                    </span>
+                    Your invitation goes with you
                   </p>
-                )}
+                  <p className="text-[10px] text-[#8b849d] leading-[1.55] m-0 pl-[28px]">
+                    Install and register. Your referral code
+                    <br />
+                    is passed automatically — no copying needed.
+                  </p>
+                </section>
+
+                <a
+                  href={playUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleAndroidPlayStoreDownload();
+                  }}
+                  data-testid="download-android-playstore-btn"
+                  className="flex w-full h-[52px] items-center justify-center gap-[10px] bg-[#6950cf] hover:bg-[#5940bd] text-white border-0 rounded-[15px] no-underline text-[12px] font-semibold shadow-[0_5px_12px_rgba(105,80,207,0.08)] transition-colors"
+                >
+                  <svg viewBox="0 0 24 26" fill="none" aria-hidden="true" className="w-[19px] h-[21px] shrink-0">
+                    <path d="m3 2 18 11L3 24V2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                    <path d="m3 2 12 15M3 24 15 9" stroke="currentColor" strokeWidth="1.3" />
+                  </svg>
+                  <span>Get Rhemito on Google Play</span>
+                </a>
+                <p className="text-[9px] text-center text-[#a1a5b2] mt-[9px] mb-[17px] max-[460px]:mb-[14px]">
+                  Your next step: install the app and create an account.
+                </p>
               </div>
             )}
-
-            {/* Referral Code Banner */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">Your referral code</p>
-                <p className="mt-0.5 font-mono text-2xl font-bold tracking-wider text-slate-900" data-testid="referral-landing-code">
-                  {referralState.code}
-                </p>
-                {rewardText && floorText && offer ? (
-                  <p className="mt-1 text-xs text-slate-600">
-                    Get <strong className="text-slate-900">{rewardText}</strong> bonus credit when you send{" "}
-                    <strong className="text-slate-900">{floorText}+</strong>
-                    {offer.receive_currency ? ` to ${offer.receive_currency}` : ""} within {offer.qualification_window_days} days.
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-slate-600">
-                    Your referral code is active and ready to be linked to your new Rhemito account.
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={handleCopyCode}
-                data-testid="referral-copy-code-btn"
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-white px-4 py-2.5 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-50 transition-colors"
-              >
-                {copiedCode ? <Check className="h-4 w-4 text-teal-600" /> : <Copy className="h-4 w-4" />}
-                {copiedCode ? "Code Copied" : "Copy Referral Code"}
-              </button>
-            </div>
-
-            {/* Choice 1 & Choice 2 (FR-03: Download Mobile App first, Continue on Website second) */}
-            <div className="space-y-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-                Choose how you want to join Rhemito
-              </h2>
-
-              {/* Option 1: Download Mobile App (Strictly device-specific: Android only sees Google Play; iOS only sees App Store) */}
-              {deviceOs === "Android" && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4" data-testid="referral-download-app-section">
-                  <div className="flex items-start gap-3.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-                      <Smartphone className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">Download the Android App</h3>
-                      <p className="mt-0.5 text-xs text-slate-600">
-                        Install the official Rhemito mobile app on Google Play.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Android Google Play Attribution Box (FR-04 & FR-05) */}
-                  <div className="rounded-xl border border-emerald-200 bg-white p-4 space-y-3" data-testid="android-download-panel">
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Downloading from Google Play automatically carries your referral code (<strong className="font-mono font-semibold text-slate-800">{referralState.code}</strong>) into the Rhemito Android app when you open it.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
-                      <a
-                        href={playUrl}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleAndroidPlayStoreDownload();
-                        }}
-                        data-testid="download-android-playstore-btn"
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        Download on Google Play Store
-                      </a>
-                      <button
-                        type="button"
-                        onClick={handleCopyCode}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        Copy Code ({referralState.code})
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {deviceOs === "iOS" && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4" data-testid="referral-download-app-section">
-                  <div className="flex items-start gap-3.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                      <Smartphone className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">Download the iPhone App</h3>
-                      <p className="mt-0.5 text-xs text-slate-600">
-                        Install the official Rhemito mobile app from the Apple App Store.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* iOS Apple App Store Handoff Box (FR-06 Option A & Option B) */}
-                  <div className="space-y-3" data-testid="ios-download-panel">
-                    {/* Option A — Register Before Installation (Recommended) */}
-                    <div className="rounded-xl border border-indigo-200 bg-white p-4 space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-indigo-950">Option A — Register Before Installation</span>
-                        <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-800">
-                          Recommended
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        Create your Rhemito account here first so your referral bonus is permanently locked to your profile, then we&apos;ll take you straight to the official Apple App Store to install the app and sign in.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleIosRegisterBeforeDownload}
-                        data-testid="ios-option-a-register-btn"
-                        className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
-                      >
-                        Register First, Then Open Apple App Store
-                      </button>
-                    </div>
-
-                    {/* Option B — Download Without Registration */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-slate-900">Option B — Download Directly from App Store</span>
-                        <span className="font-mono text-[11px] text-slate-500">Manual Code Entry</span>
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        Copy your referral code <strong className="font-mono text-slate-900">{referralState.code}</strong> and proceed directly to the Apple App Store. Enter the code when registering inside the Rhemito iOS app.
-                      </p>
-                      <a
-                        href={referralState.appStoreUrl || APPLE_APP_STORE_URL}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          void handleIosCopyAndDownload();
-                        }}
-                        data-testid="ios-option-b-appstore-btn"
-                        className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg border border-slate-300 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        Copy Code ({referralState.code}) &amp; Open Apple App Store
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Option 2: Continue on Website (FR-08) */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5 hover:border-indigo-300 transition-colors">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                      <Globe className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">Continue on Website</h3>
-                      <p className="mt-0.5 text-xs text-slate-600">
-                        Create your account in your browser now. Your referral code <strong>{referralState.code}</strong> is automatically applied.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleContinueOnWeb}
-                    data-testid="referral-continue-web-btn"
-                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
-                  >
-                    Continue on Website
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
+
+          {/* Expandable Referral Offer Details */}
+          <details className="group border-t border-[#ececf2] pt-[13px] max-[460px]:pt-[11px] text-[9px] text-[#a1a6b5] text-center">
+            <summary className="list-none cursor-pointer inline-flex gap-[7px] items-center text-[#9198aa] [&::-webkit-details-marker]:hidden">
+              Referral offer details
+              <span className="text-[12px] text-[#8b7bb0] group-open:hidden">⌄</span>
+              <span className="hidden text-[12px] text-[#8b7bb0] group-open:inline">⌃</span>
+            </summary>
+            <p className="leading-[1.7] mt-[10px] mb-0 text-[#8890a2]">
+              Join using {referrerName}’s referral code{" "}
+              <span data-testid={isIos ? undefined : "referral-landing-code"}>{referralState.code}</span>. Complete a
+              qualifying transfer over {floorFormatted.fullText}
+              {offer?.receive_currency ? ` to ${offer.receive_currency}` : ""} within {windowDays} days to receive{" "}
+              {rewardFormatted.fullText} in bonus credit. Bonuses are awarded according to the referral rules.
+            </p>
+          </details>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
