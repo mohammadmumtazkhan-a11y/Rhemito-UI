@@ -212,8 +212,11 @@ export async function registerRoutes(
   // POST /api/banks/resolve - Account-name verification endpoint
   app.post("/api/banks/resolve", async (req: Request, res: Response) => {
     try {
-      const { bankCode, accountNumber, country } = req.body;
-      if (!accountNumber || accountNumber.length !== 10 || !/^\d{10}$/.test(accountNumber)) {
+      const { bankCode, accountNumber, country, payerNameHint } = req.body;
+      const cleanAcc = String(accountNumber ?? "").trim();
+      const isNg = !country || String(country).toUpperCase() === "NG" || String(country).toUpperCase() === "NIGERIA";
+      const validLength = isNg ? /^\d{10}$/.test(cleanAcc) : /^\d{6,12}$/.test(cleanAcc);
+      if (!cleanAcc || !validLength) {
         return res.status(400).json({
           verified: false,
           message: "We could not verify this bank account. Check the selected bank and account number and try again.",
@@ -227,8 +230,8 @@ export async function registerRoutes(
       }
 
       // If user is logged in, use their verified profile name or fallback mock name
-      let accountName = "JOHN DOE";
-      if (req.session?.userId) {
+      let accountName = payerNameHint && String(payerNameHint).trim() ? String(payerNameHint).trim().toUpperCase() : "JOHN DOE";
+      if (!payerNameHint && req.session?.userId) {
         const user = await storage.getAuthUserById(req.session.userId);
         if (user) {
           if (user.accountType === "business" && user.businessName) {

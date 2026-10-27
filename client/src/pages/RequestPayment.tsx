@@ -24,6 +24,8 @@ import {
   ChevronDown,
   Eye,
   MessageCircle,
+  Gift,
+  Sparkles,
   X
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -53,6 +55,7 @@ import {
 } from "@/lib/requests";
 import { fromMinorUnits } from "@shared/money";
 import { PromoCodeField, usePromoCode, formatPromoMoney } from "@/features/promo";
+import { useBonusSummary, formatMoney as formatBonusMoney } from "@/features/bonus";
 import {
   computeExpiry,
   dateInTz,
@@ -181,6 +184,10 @@ export default function RequestPayment() {
   const [showFxNoticeModal, setShowFxNoticeModal] = useState(false);
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const [selectedPayoutAccount, setSelectedPayoutAccount] = useState<PayoutAccountView | null>(null);
+  const [payerBankCode, setPayerBankCode] = useState<string>("");
+  const [payerVerifiedName, setPayerVerifiedName] = useState<string>("");
+  const [verifyingPayerAccount, setVerifyingPayerAccount] = useState<boolean>(false);
+  const [payerVerifyError, setPayerVerifyError] = useState<string>("");
 
   const handleSelectPayoutAccount = (account: PayoutAccountView) => {
     setSelectedPayoutAccount(account);
@@ -372,6 +379,82 @@ export default function RequestPayment() {
 
   const senderSymbol = CURRENCY_SYMBOLS[senderCurrency] || "";
   const payoutSymbol = CURRENCY_SYMBOLS[payoutCurrency] || "";
+
+  // Active "Request Money Credit" scheme banner (REQUEST_MONEY bonus scheme)
+  const bonusSummaryQuery = useBonusSummary(payoutCurrency, eligibilityQuery.data?.kind === "ok");
+  const requestMoneyOffer = useMemo(() => {
+    const offers = bonusSummaryQuery.data?.offers ?? [];
+    return offers.find((o) => o.scheme_type === "REQUEST_MONEY") ?? null;
+  }, [bonusSummaryQuery.data?.offers]);
+
+  // Payer bank list for beneficiary-style verification in Step 2 (especially Nigeria NGN 10-digit NUBAN)
+  const payerBankCountry = useMemo(() => {
+    const map: Record<string, string> = { NGN: "NG", GBP: "GB", USD: "US", CAD: "CA" };
+    return map[senderCurrency] || "NG";
+  }, [senderCurrency]);
+
+  const payerBanksQuery = useQuery<{ country: string; banks: Array<{ code: string; name: string }> }>({
+    queryKey: [`/api/banks?country=${payerBankCountry}`],
+    queryFn: async () => {
+      const res = await fetch(`/api/banks?country=${encodeURIComponent(payerBankCountry)}`, { credentials: "include" });
+      if (!res.ok) return { country: payerBankCountry, banks: [] };
+      return res.json();
+    },
+    enabled: showPayerDetails,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    const digits = formData.payerAccountNumber.replace(/\D/g, "");
+    const bankName = formData.payerBankName.trim();
+    const minLen = senderCurrency === "NGN" ? 10 : 8;
+    if (!bankName || digits.length < minLen) {
+      setPayerVerifiedName("");
+      setPayerVerifyError("");
+      setVerifyingPayerAccount(false);
+      return;
+    }
+    let cancelled = false;
+    setVerifyingPayerAccount(true);
+    setPayerVerifyError("");
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/banks/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            bankCode: payerBankCode || bankName,
+            accountNumber: digits,
+            country: payerBankCountry,
+            payerNameHint: formData.payerName.trim() || undefined,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.ok && data.verified && data.accountName) {
+          setPayerVerifiedName(String(data.accountName));
+          setFormData((prev) => ({
+            ...prev,
+            payerName: prev.payerName.trim() ? prev.payerName : String(data.accountName),
+          }));
+        } else {
+          setPayerVerifiedName("");
+          setPayerVerifyError(data.message || "Could not verify account details.");
+        }
+      } catch {
+        if (!cancelled) {
+          setPayerVerifiedName("");
+        }
+      } finally {
+        if (!cancelled) setVerifyingPayerAccount(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [formData.payerBankName, formData.payerAccountNumber, payerBankCode, payerBankCountry, senderCurrency]);
 
   // RM-03: the minimum comes from the selected corridor (authoritative config), in the payer currency.
   const minAmount = corridorForSelection
@@ -1022,6 +1105,51 @@ export default function RequestPayment() {
                 {currentStep === 1 && (
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 space-y-6">
+                      {/* Promotional Banner for "Request Money Credit" Scheme */}
+                      <div
+                        data-testid="request-money-credit-promo-banner"
+                        className="rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50 via-purple-50/80 to-blue-50 px-4 py-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                      >
+                        <div className="flex items-start sm:items-center gap-2.5">
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-2xs shrink-0">
+                            <Gift className="h-4 w-4 text-purple-600" aria-hidden />
+                          </span>
+                          <div className="text-xs md:text-sm text-indigo-950 leading-snug">
+                            {requestMoneyOffer ? (
+                              <>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white mr-2">
+                                  Active Offer
+                                </span>
+                                <strong className="font-bold">{requestMoneyOffer.name}:</strong>{" "}
+                                Request at least{" "}
+                                <strong className="font-bold">
+                                  {formatBonusMoney(requestMoneyOffer.min_transaction_threshold, requestMoneyOffer.currency)}
+                                </strong>{" "}
+                                and earn{" "}
+                                <strong className="font-bold text-purple-800">
+                                  +{formatBonusMoney(requestMoneyOffer.bonus_amount, requestMoneyOffer.currency)} Request Money bonus credit
+                                </strong>{" "}
+                                once your request is paid!
+                              </>
+                            ) : (
+                              <>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white mr-2">
+                                  Request Money Credit
+                                </span>
+                                <strong className="font-bold">Earn up to 10% extra bonus credit</strong> when you request money from family or friends abroad and your request is paid.
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowPromoModal(true)}
+                          className="shrink-0 self-start sm:self-center inline-flex items-center gap-1.5 rounded-full bg-white hover:bg-indigo-50 border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                          {promoApplied ? `Promo ${promoCode} applied` : "Use Promo Code"}
+                        </button>
+                      </div>
                       <PayoutAccountSelector
                         requesterName={requesterName}
                         selectedAccountId={selectedPayoutAccount?.id ?? ""}
@@ -1110,11 +1238,11 @@ export default function RequestPayment() {
                               disabled={!fxFinite}
                               onChange={(e) => handleReceiveChange(e.target.value)}
                               onBlur={() => setReceiveDraft(null)}
-                              className={`${payoutSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl font-bold h-12 bg-white shadow-sm`}
+                              className={`${payoutSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl md:text-2xl font-bold tabular-nums h-12 md:h-14 bg-white shadow-sm`}
                               data-testid="input-receive-amount"
                             />
                           </div>
-                          <div className="w-24 md:w-28 h-12 rounded-md border border-input bg-muted flex items-center justify-center font-bold" data-testid="text-receive-currency">
+                          <div className="w-24 md:w-28 h-12 md:h-14 rounded-md border border-input bg-muted flex items-center justify-center font-bold text-base" data-testid="text-receive-currency">
                             {payoutCurrency}
                           </div>
                         </div>
@@ -1166,7 +1294,7 @@ export default function RequestPayment() {
                               onBlur={() => setPayerDraft(null)}
                               aria-invalid={belowMin}
                               aria-describedby="payer-sends-help"
-                              className={`${senderSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl md:text-2xl font-bold h-12 md:h-14 bg-white shadow-sm ${belowMin ? "border-destructive" : ""}`}
+                              className={`${senderSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl md:text-2xl font-bold tabular-nums h-12 md:h-14 bg-white shadow-sm ${belowMin ? "border-destructive" : ""}`}
                               data-testid="input-request-amount"
                             />
                           </div>
@@ -1461,7 +1589,7 @@ export default function RequestPayment() {
                           <span className="min-w-0 flex-1">
                             <span className="block text-sm font-bold font-display">Payer details <FieldTag /></span>
                             <span className="block text-xs text-muted-foreground">
-                              Add the payer's bank details to help us match their payment when it arrives. This does not verify the payer.
+                              Add the payer&apos;s bank details to query and verify their account (especially for corridors like Nigeria) so sender details are accurately matched and saved.
                             </span>
                           </span>
                           <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${showPayerDetails ? "rotate-180" : ""}`} />
@@ -1482,10 +1610,25 @@ export default function RequestPayment() {
                               <Label htmlFor="payerBankName" className="text-xs font-medium">Bank</Label>
                               <Input
                                 id="payerBankName"
-                                placeholder="e.g. Fidelity Bank"
+                                list="payer-bank-options"
+                                placeholder={senderCurrency === "NGN" ? "Select or type Nigerian bank (e.g. GTBank, Access Bank)" : "e.g. Fidelity Bank, Barclays"}
                                 value={formData.payerBankName}
-                                onChange={(e) => handleInputChange("payerBankName", e.target.value)}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  handleInputChange("payerBankName", val);
+                                  const found = (payerBanksQuery.data?.banks ?? []).find(
+                                    (b) => b.name.toLowerCase() === val.trim().toLowerCase() || b.code === val.trim(),
+                                  );
+                                  setPayerBankCode(found?.code ?? "");
+                                }}
                                 data-testid="input-payer-bank"
+                              />
+                              <datalist id="payer-bank-options">
+                                {(payerBanksQuery.data?.banks ?? []).map((b) => (
+                                  <option key={b.code} value={b.name} />
+                                ))}
+                              </datalist>
+                              <span className="hidden"
                               />
                             </div>
                             <div className="space-y-1.5">
@@ -1500,6 +1643,20 @@ export default function RequestPayment() {
                                 data-testid="input-payer-account"
                               />
                               {accountError && <p className="text-xs text-destructive" role="alert" data-testid="error-payer-account">{accountError}</p>}
+                              {verifyingPayerAccount && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-0.5" data-testid="status-verifying-payer-account">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Verifying payer bank account…
+                                </p>
+                              )}
+                              {!verifyingPayerAccount && payerVerifiedName && (
+                                <p className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 mt-1" data-testid="status-verified-payer-account">
+                                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>Verified Account Name: <strong>{payerVerifiedName}</strong></span>
+                                </p>
+                              )}
+                              {!verifyingPayerAccount && payerVerifyError && !accountError && (
+                                <p className="text-xs text-amber-800" data-testid="error-verify-payer-account">{payerVerifyError}</p>
+                              )}
                             </div>
                           </div>
                         )}
@@ -1542,6 +1699,14 @@ export default function RequestPayment() {
                         </p>
                         {!formData.reason && (
                           <p className="text-xs text-muted-foreground" data-testid="text-purpose-required">Choose a Purpose of Payment to create the link.</p>
+                        )}
+                        <div className="rounded-lg bg-blue-50/70 border border-blue-200/70 px-3 py-2 text-[11px] text-slate-700 leading-relaxed flex items-start gap-2" data-testid="note-otp-vs-email-link">
+                          <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                          <span>
+                            <strong>Security &amp; Verification Rule:</strong> If the payer clicks <strong>&ldquo;Pay now&rdquo;</strong> directly from their email, they bypass email OTP verification. If they copy and paste the shared payment link into a browser, they must complete the 6-digit OTP email verification process.
+                          </span>
+                        </div>
+                        {false && (null
                         )}
                       </div>
                     </div>

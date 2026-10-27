@@ -30,7 +30,7 @@ import {
 } from "@/lib/unifiedTransactions";
 import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
-import { balanceFor } from "@/features/bonus";
+import { balanceFor, formatMoney } from "@/features/bonus";
 import { ReferEarnCard } from "@/components/rewards/ReferEarnCard";
 import { BonusBlockedNotice, BonusCreditPill } from "@/features/bonus";
 import { OfferBanner } from "@/components/rewards/OfferBanner";
@@ -965,7 +965,7 @@ export default function Dashboard() {
               <span data-testid="dashboard-welcome">Welcome{welcomeName(user) ? ` ${welcomeName(user)}` : ""}</span>
             </motion.h1>
 
-            {bonusBalance.available > 0 && (
+            {false && bonusBalance.available > 0 && (
               <motion.div variants={itemVariants} className="min-w-0">
                 <BonusCreditPill
                   balance={bonusBalance}
@@ -979,8 +979,39 @@ export default function Dashboard() {
 
           <motion.div
             variants={itemVariants}
-            className="shrink-0 self-end md:self-start md:pt-1.5"
+            className="shrink-0 self-end md:self-start md:pt-1.5 flex flex-wrap items-center justify-end gap-2.5"
           >
+            {bonusBalance.available > 0 && (
+              <div
+                data-testid="dashboard-top-bonus-highlight"
+                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200/80 px-3.5 py-1.5 text-xs font-medium text-indigo-900 shadow-2xs"
+              >
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-2xs shrink-0">
+                  <Sparkles className="h-3 w-3 text-purple-600" aria-hidden />
+                </span>
+                <span>
+                  <strong className="font-bold text-indigo-950">
+                    {formatMoney(bonusBalance.available, bonusBalance.currency)}
+                  </strong>{" "}
+                  bonus credit available
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/send-money")}
+                  className="font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2 cursor-pointer"
+                >
+                  Use now
+                </button>
+                <span className="text-slate-300" aria-hidden>|</span>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/bonus-discounts")}
+                  className="font-semibold text-purple-700 hover:text-purple-900 cursor-pointer"
+                >
+                  View breakdown
+                </button>
+              </div>
+            )}
             <LegalStrip className="mb-0 w-auto" />
           </motion.div>
         </div>
@@ -1003,8 +1034,8 @@ export default function Dashboard() {
                 Total Sent
               </span>
               <div className="flex items-center justify-between gap-2 mt-2">
-                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight">
-                  750,895.75 GBP
+                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight whitespace-nowrap tabular-nums">
+                  750,895.75
                 </span>
                 <Select defaultValue="GBP">
                   <SelectTrigger className="h-8 w-[84px] rounded-full text-xs bg-white border-0 shadow-2xs font-medium text-slate-600 px-3">
@@ -1023,8 +1054,8 @@ export default function Dashboard() {
                 Wallet Balance
               </span>
               <div className="flex items-center justify-between gap-2 mt-2">
-                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight">
-                  253,007.92 GBP
+                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight whitespace-nowrap tabular-nums">
+                  253,007.92
                 </span>
                 <Select defaultValue="GBP">
                   <SelectTrigger className="h-8 w-[84px] rounded-full text-xs bg-white border-0 shadow-2xs font-medium text-slate-600 px-3">
@@ -1043,8 +1074,8 @@ export default function Dashboard() {
                 Collection Account
               </span>
               <div className="flex items-center justify-between gap-2 mt-2">
-                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight">
-                  4,357,384.08 GBP
+                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight whitespace-nowrap tabular-nums">
+                  4,357,384.08
                 </span>
                 <Select defaultValue="GBP">
                   <SelectTrigger className="h-8 w-[84px] rounded-full text-xs bg-white border-0 shadow-2xs font-medium text-slate-600 px-3">
@@ -1116,9 +1147,32 @@ export default function Dashboard() {
         {(rewards.data?.wallet.bonus_blocked ||
           rewards.data?.offer ||
           rewards.isLoading ||
-          rewards.isError) && (
+          rewards.isError ||
+          bonusBalance.available > 0) && (
           <motion.div variants={itemVariants} className="flex flex-col gap-3">
             {rewards.data?.wallet.bonus_blocked && <BonusBlockedNotice />}
+            {bonusBalance.available > 0 && (
+              <div data-testid="rewards-section-bonus-banners" className="rounded-2xl border border-indigo-100 bg-white/90 px-4 py-3.5 shadow-2xs">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Your Available Bonus &amp; Referral Credits
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setLocation("/bonus-discounts")}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                  >
+                    Manage in Reward$ →
+                  </button>
+                </div>
+                <BonusCreditPill
+                  balance={bonusBalance}
+                  unused={rewards.data?.wallet.unused}
+                  referralFloor={rewards.data?.offer?.floor}
+                  onCreateTransaction={() => setLocation("/send-money")}
+                />
+              </div>
+            )}
             <ReferEarnCard
               offer={rewards.data?.offer ?? null}
               offers={rewards.data?.offers}

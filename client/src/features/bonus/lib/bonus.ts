@@ -227,10 +227,12 @@ export function availableParts(balance: Pick<BonusBalance, "by_source">): Array<
 }
 
 /** "Referral bonus – Sarah S." etc. Prefers Mito's label; falls back to the ledger note. */
-export function describeCredit(row: { credit_source_label?: string | null; source_label?: string | null; notes?: string | null; source?: string | null; reason_code?: string | null }): string {
-  const label = row.credit_source_label ?? row.source_label;
+export function describeCredit(row: { credit_source_label?: string | null; source_label?: string | null; notes?: string | null; source?: string | null; reason_code?: string | null; referrer_name?: string | null; referrer_email?: string | null }): string {
+  const inviter = (row.referrer_name || row.referrer_email || "").trim();
+  const replaceGeneric = (s: string) => (inviter ? s.replace(/(invited by\s+)(friend|Customer|your friend)\b/i, `$1${inviter}`) : s);
+  const label = replaceGeneric(row.credit_source_label ?? row.source_label ?? "");
   if (label) return row.reason_code === "BONUS_RETURNED" && !/returned/i.test(label) ? `${label} (returned after a cancelled transfer)` : label;
-  const n = (row.notes ?? row.source ?? "") || "";
+  const n = replaceGeneric((row.notes ?? row.source ?? "") || "");
   if (/^Referrer reward – referred /.test(n)) return n.replace(/^Referrer reward – referred /, "Referral bonus – ");
   if (/^Referee reward – invited by /.test(n)) return n.replace(/^Referee reward – invited by /, "Welcome bonus – invited by ").replace(/ \(approved by.*\)$/, "");
   if (row.reason_code === "BONUS_RETURNED") return "Bonus returned – transfer cancelled";
