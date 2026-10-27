@@ -1,10 +1,19 @@
 import { useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { REFERRAL_CODE_RE, clearReferral, formatMoney, saveReferral, type StoredReferral } from "@/lib/rewards";
+import {
+  APPLE_APP_STORE_URL,
+  REFERRAL_CODE_RE,
+  buildGooglePlayReferralUrl,
+  clearReferral,
+  formatMoney,
+  saveReferral,
+  type StoredReferral,
+} from "@/lib/rewards";
 
 /** "Olayinka invited you – get £10.00 in 3 steps" strip above the sign-up form (spec §5). */
 export function ReferralInviteStrip({ referral }: { referral: StoredReferral | null }) {
+  const [copied, setCopied] = useState(false);
   const offer = referral?.offer;
   if (!referral || !offer || offer.reward_type === "REFERRER" || !(offer.referee_reward > 0)) return null;
   const reward = formatMoney(offer.referee_reward, offer.currency);
@@ -13,6 +22,19 @@ export function ReferralInviteStrip({ referral }: { referral: StoredReferral | n
   const otherOffers = (referral.offers ?? []).filter(
     (o) => (o.rule_id !== offer.rule_id || o.currency !== offer.currency) && o.reward_type !== "REFERRER" && o.referee_reward > 0,
   );
+  const playUrl = referral.playStoreUrl || buildGooglePlayReferralUrl(referral.trackingId, referral.code);
+  const appStoreUrl = referral.appStoreUrl || APPLE_APP_STORE_URL;
+
+  const notifyStoreHandoff = (storeTarget: "GOOGLE_PLAY" | "APPLE_APP_STORE", operatingSystem: string) => {
+    if (!referral.trackingId) return;
+    void fetch(`/api/v1/referrals/clicks/${encodeURIComponent(referral.trackingId)}/handoff`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ storeTarget, status: "STORE_REDIRECT", operatingSystem }),
+    }).catch(() => {});
+  };
+
   return (
     <section aria-label="Your welcome bonus" data-testid="referral-invite" className="mb-4 flex flex-col gap-3.5 rounded-2xl border border-slate-200 bg-white p-4">
       <p className="text-[15px] leading-[22px] text-slate-800">
@@ -33,6 +55,44 @@ export function ReferralInviteStrip({ referral }: { referral: StoredReferral | n
           ))}
         </div>
       )}
+      <div className="border-t border-slate-100 pt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs" data-testid="referral-invite-app-download">
+        <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
+          <Smartphone className="h-3.5 w-3.5 text-indigo-600" />
+          Prefer the mobile app?
+          {referral.postSignupAppStoreUrl && (
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+              iOS App Store Redirect Active
+            </span>
+          )}
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={playUrl}
+            onClick={() => notifyStoreHandoff("GOOGLE_PLAY", "Android")}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="signup-strip-playstore-link"
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Google Play
+          </a>
+          <a
+            href={appStoreUrl}
+            onClick={() => {
+              try { void navigator.clipboard.writeText(referral.code); setCopied(true); } catch { /* ignore */ }
+              notifyStoreHandoff("APPLE_APP_STORE", "iOS");
+            }}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="signup-strip-appstore-link"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-200"
+          >
+            <Copy className="h-3 w-3" />
+            {copied ? `Copied ${referral.code} · App Store` : "Copy Code & App Store"}
+          </a>
+        </div>
+      </div>
     </section>
   );
 }

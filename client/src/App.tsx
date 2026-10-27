@@ -92,6 +92,7 @@ function Router() {
       <Route path="/bonus-discounts" component={BonusAndDiscounts} />
       <Route path="/rewards" component={BonusAndDiscounts} />
       <Route path="/ref/:code" component={ReferralLanding} />
+      <Route path="/refer/:code" component={ReferralLanding} />
       <Route path="/marketing" component={Marketing} />
       <Route path="/group-pay" component={GroupPayDashboard} />
       <Route path="/group-pay/create" component={CreateCampaign} />

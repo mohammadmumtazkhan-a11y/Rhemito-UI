@@ -221,7 +221,45 @@ const REF_KEY = "rhemito.referral";
 const REF_TTL_MS = 30 * 86_400_000;
 export const REFERRAL_CODE_RE = /^[A-Z0-9]{6,12}$/;
 
-export interface StoredReferral { code: string; ruleId?: number | null; referrerFirstName?: string; savedAt: number; offer?: RewardOffer | null; offers?: RewardOffer[]; sendCurrencies?: string[] }
+export const GOOGLE_PLAY_PACKAGE_ID = "com.funtechcom.rhemito";
+export const GOOGLE_PLAY_BASE_URL = `https://play.google.com/store/apps/details?id=${GOOGLE_PLAY_PACKAGE_ID}`;
+export const APPLE_APP_STORE_URL = "https://apps.apple.com/gb/app/rhemito-money-transfer/id1494717263";
+
+export function buildGooglePlayReferralUrl(trackingId?: string | null, referralCode?: string | null): string {
+  const parts: string[] = [];
+  if (trackingId) parts.push(`tracking_id=${trackingId}`);
+  if (referralCode) parts.push(`referral_code=${referralCode}`);
+  if (!parts.length) return GOOGLE_PLAY_BASE_URL;
+  return `${GOOGLE_PLAY_BASE_URL}&referrer=${encodeURIComponent(parts.join("&"))}`;
+}
+
+export function detectClientDevice(): { deviceType: "mobile" | "tablet" | "desktop"; operatingSystem: "Android" | "iOS" | "Other" } {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+  const isAndroid = /android/i.test(ua);
+  const isIos = /ipad|iphone|ipod|ios/i.test(ua) || (typeof navigator !== "undefined" && /Mac/i.test(navigator.platform || "") && (navigator.maxTouchPoints || 0) > 1);
+  const operatingSystem: "Android" | "iOS" | "Other" = isAndroid ? "Android" : isIos ? "iOS" : "Other";
+  const isTablet = /ipad|tablet/i.test(ua);
+  const isMobile = !isTablet && (/mobi|android|iphone|ipod/i.test(ua) || isIos);
+  const deviceType: "mobile" | "tablet" | "desktop" = isTablet ? "tablet" : isMobile ? "mobile" : "desktop";
+  return { deviceType, operatingSystem };
+}
+
+export interface StoredReferral {
+  code: string;
+  ruleId?: number | null;
+  referrerFirstName?: string;
+  savedAt: number;
+  offer?: RewardOffer | null;
+  offers?: RewardOffer[];
+  sendCurrencies?: string[];
+  trackingId?: string | null;
+  referralContextId?: string | null;
+  channel?: "WEB" | "ANDROID" | "IOS";
+  attributionMethod?: string;
+  playStoreUrl?: string;
+  appStoreUrl?: string;
+  postSignupAppStoreUrl?: string | null;
+}
 
 export function saveReferral(ref: Omit<StoredReferral, "savedAt">, now = Date.now()): void {
   try { localStorage.setItem(REF_KEY, JSON.stringify({ ...ref, savedAt: now })); } catch { /* storage unavailable */ }

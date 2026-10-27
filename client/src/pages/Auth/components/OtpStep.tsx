@@ -1,10 +1,10 @@
-import { clearReferral, formatMoney } from "@/lib/rewards";
+import { clearReferral, formatMoney, loadReferral } from "@/lib/rewards";
 import React, { useState, useEffect, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2, ExternalLink } from "lucide-react";
 
 interface OtpStepProps {
   email: string;
@@ -15,6 +15,7 @@ interface OtpStepProps {
 export default function OtpStep({ email, onChangeEmail, devOtp }: OtpStepProps) {
   const [code, setCode] = useState("");
   const [isVerified, setIsVerified] = useState(false);
+  const [postSignupStoreUrl, setPostSignupStoreUrl] = useState<string | null>(null);
   const [currentDevOtp, setCurrentDevOtp] = useState(devOtp);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -50,6 +51,8 @@ export default function OtpStep({ email, onChangeEmail, devOtp }: OtpStepProps) 
       return res.json();
     },
     onSuccess: (data) => {
+      const pendingStoreRedirect = loadReferral()?.postSignupAppStoreUrl ?? null;
+      setPostSignupStoreUrl(pendingStoreRedirect);
       setIsVerified(true);
       clearReferral(); // the referral is now recorded on the server
       queryClient.clear();
@@ -66,12 +69,18 @@ export default function OtpStep({ email, onChangeEmail, devOtp }: OtpStepProps) 
       } else {
         toast({
           title: "Account Activated!",
-          description: "Your account has been successfully activated. Welcome to Rhemito!",
+          description: pendingStoreRedirect
+            ? "Your referral is permanently linked! Redirecting to the Apple App Store..."
+            : "Your account has been successfully activated. Welcome to Rhemito!",
         });
       }
-      // Redirect to dashboard after short delay
+      // Redirect to Apple App Store (if iOS Option A was chosen) or dashboard after short delay
       setTimeout(() => {
-        setLocation("/");
+        if (pendingStoreRedirect) {
+          window.location.href = pendingStoreRedirect;
+        } else {
+          setLocation("/");
+        }
       }, 2000);
     },
     onError: (error: Error) => {
@@ -160,9 +169,21 @@ export default function OtpStep({ email, onChangeEmail, devOtp }: OtpStepProps) 
 
         <form onSubmit={handleSubmit}>
           {isVerified ? (
-            <div className="w-full bg-green-50 text-green-700 font-medium py-3 px-4 rounded text-sm flex items-center justify-center border border-green-200">
-              <CheckCircle2 className="w-4 h-4 mr-2" />
-              Your account has been successfully activated!
+            <div className="space-y-3">
+              <div className="w-full bg-green-50 text-green-700 font-medium py-3 px-4 rounded text-sm flex items-center justify-center border border-green-200">
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Your account has been successfully activated!
+              </div>
+              {postSignupStoreUrl && (
+                <a
+                  href={postSignupStoreUrl}
+                  data-testid="otp-verified-appstore-btn"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Download Rhemito on Apple App Store Now
+                </a>
+              )}
             </div>
           ) : (
             <>

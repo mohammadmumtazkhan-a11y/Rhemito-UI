@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import AuthLayout from "./components/AuthLayout";
 import EmailStep from "./components/EmailStep";
@@ -9,7 +9,7 @@ import BusinessStep2 from "./components/BusinessStep2";
 import OtpStep from "./components/OtpStep";
 import ForgotPassword from "./components/ForgotPassword";
 import { ReferralInviteStrip } from "@/components/rewards/ReferralSignup";
-import { loadReferral, type StoredReferral } from "@/lib/rewards";
+import { loadReferral, saveReferral, type StoredReferral } from "@/lib/rewards";
 
 type AuthStep = "email" | "signIn" | "signUp" | "businessStep2" | "otp" | "forgotPassword";
 
@@ -44,8 +44,47 @@ export default function SignInSignUp() {
   const [businessStep1Data, setBusinessStep1Data] = useState<BusinessStep1Data | null>(null);
   const [devOtp, setDevOtp] = useState<string | undefined>();
   const [, setLocation] = useLocation();
-  // Referral captured from a /ref link (or typed on the sign-up form)
+  const search = useSearch();
+  // Referral captured from a /ref link, Android Play Install Referrer, or typed on the sign-up form
   const [referral, setReferral] = useState<StoredReferral | null>(() => loadReferral());
+
+  useEffect(() => {
+    const qs = new URLSearchParams(search || (typeof window !== "undefined" ? window.location.search : ""));
+    const trackingId = qs.get("tracking_id") ?? qs.get("trackingId");
+    const referrerRaw = qs.get("referrer");
+    const channelParam = (qs.get("channel") || "ANDROID").toUpperCase();
+    if (!trackingId && !referrerRaw) return;
+    (async () => {
+      try {
+        const res = await fetch("/api/v1/referrals/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ trackingId, referrer: referrerRaw, channel: channelParam }),
+        });
+        const body = await res.json().catch(() => ({}));
+        const data = body?.data ?? body;
+        if (res.ok && data?.valid && data?.referralCode) {
+          const resolved: Omit<StoredReferral, "savedAt"> = {
+            code: data.referralCode,
+            referrerFirstName: data.referrerFirstName,
+            trackingId: data.trackingId ?? trackingId ?? null,
+            referralContextId: data.referralContextId ?? null,
+            channel: (["WEB", "ANDROID", "IOS"].includes(channelParam) ? channelParam : "ANDROID") as "WEB" | "ANDROID" | "IOS",
+            attributionMethod: channelParam === "ANDROID" ? "PLAY_INSTALL_REFERRER" : "UNIVERSAL_LINK",
+            ruleId: data.ruleId ?? undefined,
+            offer: data.offer ?? null,
+            offers: data.offers,
+            sendCurrencies: data.send_currencies,
+          };
+          saveReferral(resolved);
+          setReferral(loadReferral());
+        }
+      } catch {
+        // Fallback: manual referral code entry remains available on SignUpForm
+      }
+    })();
+  }, [search]);
 
   const goTo = (newStep: AuthStep, dir: number = 1) => {
     setDirection(dir);

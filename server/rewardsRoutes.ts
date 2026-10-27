@@ -226,11 +226,198 @@ export function registerRewardsRoutes(app: Express): void {
       const code = String(req.body?.code ?? "").trim().toUpperCase();
       const visitorId = String(req.body?.visitorId ?? "anonymous").slice(0, 64);
       const ruleId = req.body?.ruleId && Number.isInteger(Number(req.body.ruleId)) && Number(req.body.ruleId) > 0 ? Number(req.body.ruleId) : undefined;
+      const deviceType = req.body?.deviceType ? String(req.body.deviceType) : undefined;
+      const operatingSystem = req.body?.operatingSystem ? String(req.body.operatingSystem) : undefined;
+      const sourceChannel = req.body?.sourceChannel ? String(req.body.sourceChannel) : undefined;
+      const storeTarget = req.body?.storeTarget ? String(req.body.storeTarget) : undefined;
+      const uaHeader = typeof req.headers["user-agent"] === "string" ? { "User-Agent": req.headers["user-agent"] } : undefined;
       const result = await mito("/api/referral/visits", {
         method: "POST",
-        body: { code, visitor_id: visitorId, ...(ruleId ? { rule_id: ruleId } : {}) },
+        headers: uaHeader,
+        body: {
+          code,
+          visitor_id: visitorId,
+          ...(ruleId ? { rule_id: ruleId } : {}),
+          ...(deviceType ? { device_type: deviceType } : {}),
+          ...(operatingSystem ? { operating_system: operatingSystem } : {}),
+          ...(sourceChannel ? { source_channel: sourceChannel } : {}),
+          ...(storeTarget ? { store_target: storeTarget } : {}),
+        },
       });
-      res.json({ data: { counted: Boolean(result.counted) } });
+      res.json({
+        data: {
+          counted: Boolean(result.counted),
+          trackingId: result.trackingId ?? result.tracking_id ?? null,
+          deviceType: result.deviceType ?? result.device_type ?? null,
+          operatingSystem: result.operatingSystem ?? result.operating_system ?? null,
+          status: result.status ?? "CLICKED",
+          playStoreUrl: result.playStoreUrl ?? result.play_store_url ?? null,
+          appStoreUrl: result.appStoreUrl ?? result.app_store_url ?? null,
+        },
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /** Verified Android App Links (FR-03 / Section 4). */
+  app.get("/.well-known/assetlinks.json", (_req: Request, res: Response) => {
+    res.json([
+      {
+        relation: ["delegate_permission/common.handle_all_urls"],
+        target: {
+          namespace: "android_app",
+          package_name: process.env.RHEMITO_ANDROID_PACKAGE_ID ?? "com.funtechcom.rhemito",
+          sha256_cert_fingerprints: [
+            process.env.RHEMITO_ANDROID_SHA256_FINGERPRINT ??
+              "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C",
+          ],
+        },
+      },
+    ]);
+  });
+
+  /** Verified Apple Universal Links for iOS (FR-07 / Section 5). */
+  app.get(["/.well-known/apple-app-site-association", "/apple-app-site-association"], (_req: Request, res: Response) => {
+    const appId = process.env.RHEMITO_IOS_APP_ID ?? "TEAMID1234.com.funtechcom.rhemito";
+    res.json({
+      applinks: {
+        apps: [],
+        details: [
+          {
+            appID: appId,
+            paths: ["/ref/*", "/refer/*"],
+          },
+        ],
+      },
+    });
+  });
+
+  /** FR-02 / Section 9.2: Record referral click and generate trackingId. */
+  app.post(["/api/v1/referrals/clicks", "/api/rewards/clicks"], async (req: Request, res: Response) => {
+    try {
+      const code = String(req.body?.referralCode ?? req.body?.code ?? "").trim().toUpperCase();
+      const visitorId = String(req.body?.visitorId ?? req.body?.visitor_id ?? "anonymous").slice(0, 64);
+      const ruleId = req.body?.ruleId && Number.isInteger(Number(req.body.ruleId)) && Number(req.body.ruleId) > 0 ? Number(req.body.ruleId) : undefined;
+      const uaHeader = typeof req.headers["user-agent"] === "string" ? { "User-Agent": req.headers["user-agent"] } : undefined;
+      const result = await mito("/api/referral/clicks", {
+        method: "POST",
+        headers: uaHeader,
+        body: {
+          code,
+          visitor_id: visitorId,
+          ...(ruleId ? { rule_id: ruleId } : {}),
+          device_type: req.body?.deviceType ?? req.body?.device_type,
+          operating_system: req.body?.operatingSystem ?? req.body?.operating_system,
+          source_channel: req.body?.sourceChannel ?? req.body?.source_channel ?? "LINK",
+          store_target: req.body?.storeTarget ?? req.body?.store_target,
+        },
+      });
+      res.status(201).json({ data: result, ...result });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /** Record store redirect / handoff (Android Google Play, iOS Option A/B, or Web). */
+  app.post(["/api/v1/referrals/clicks/:trackingId/handoff", "/api/rewards/clicks/:trackingId/handoff"], async (req: Request, res: Response) => {
+    try {
+      const trackingId = encodeURIComponent(String(req.params.trackingId ?? "").trim().toUpperCase());
+      const result = await mito(`/api/referral/clicks/${trackingId}/handoff`, {
+        method: "POST",
+        body: {
+          store_target: req.body?.storeTarget ?? req.body?.store_target,
+          attribution_status: req.body?.status ?? req.body?.attribution_status,
+          operating_system: req.body?.operatingSystem ?? req.body?.operating_system,
+        },
+      });
+      res.json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /** FR-05 / Section 9.3: Resolve Android Play Install Referrer trackingId or Universal Link context. */
+  app.post(["/api/v1/referrals/resolve", "/api/rewards/resolve"], async (req: Request, res: Response) => {
+    try {
+      const result = await mito("/api/referral/resolve", {
+        method: "POST",
+        body: {
+          trackingId: req.body?.trackingId ?? req.body?.tracking_id,
+          referrer: req.body?.referrer,
+          channel: req.body?.channel ?? "ANDROID",
+        },
+      });
+      res.json({ data: result, ...result });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /** FR-06 / Section 9.4: Validate manual referral code. */
+  app.post(["/api/v1/referrals/validate", "/api/rewards/validate"], async (req: Request, res: Response) => {
+    try {
+      const result = await mito("/api/referral/validate", {
+        method: "POST",
+        body: {
+          referralCode: req.body?.referralCode ?? req.body?.code,
+          currency: req.body?.currency,
+          receive_currency: req.body?.receiveCurrency ?? req.body?.receive_currency,
+        },
+      });
+      res.json({ data: result, ...result });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /** Section 9.1: Get current customer's referral code, URL, and referrals. */
+  app.get("/api/v1/referrals/me", async (req: Request, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      const customer = await syncCustomer(userId);
+      const id = encodeURIComponent(userId);
+      const [offer, referrals] = await Promise.all([
+        mito(`/api/referral/offer?customer_id=${id}`),
+        mito(`/api/referral/referrals?referrer_id=${id}`),
+      ]);
+      const publicBase = serverConfig.publicBaseUrl.replace(/\/+$/, "");
+      const referralCode = customer?.referral_code ?? offer.offer?.referral_code ?? null;
+      res.json({
+        data: {
+          customerId: userId,
+          referralCode,
+          referralUrl: referralCode ? `${publicBase}/refer/${referralCode}` : null,
+          shortReferralUrl: referralCode ? `${publicBase}/ref/${referralCode}` : null,
+          offer: offer.offer ?? null,
+          referrals: referrals.data ?? [],
+          summary: referrals.summary ?? { joined: 0, earned_count: 0, total_earned: {} },
+        },
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /** Section 9.5: Associate referee registration with referrer (for mobile app or direct API callers). */
+  app.post("/api/v1/referrals/registrations", async (req: Request, res: Response) => {
+    try {
+      const result = await mito("/api/v1/referrals/registrations", {
+        method: "POST",
+        body: req.body ?? {},
+      });
+      res.status(201).json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /** Section 9.6: Get referral details by ID. */
+  app.get("/api/v1/referrals/:referralId", async (req: Request, res: Response) => {
+    try {
+      const id = encodeURIComponent(String(req.params.referralId ?? ""));
+      const result = await mito(`/api/v1/referrals/${id}`);
+      res.json(result);
     } catch (err) {
       handleError(res, err);
     }

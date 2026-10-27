@@ -330,8 +330,12 @@ test.describe('Rewards contract — Refer & Earn card', () => {
         await page.route('**/api/rewards/codes/**', (route) => route.fulfill(json({ data: { code: 'JOHN2880', referrerFirstName: 'John', offer, signedIn: false } })));
         await page.route('**/api/rewards/visits', (route) => route.fulfill(json({ data: { counted: true } })));
         await page.goto('/ref/john2880');
-        await expect(page).toHaveURL(/sign-in-sign-up/);
+        await expect(page.getByTestId('referral-landing-page')).toBeVisible();
+        await expect(page.getByTestId('referral-landing-heading')).toHaveText('Welcome to Rhemito!');
+        await expect(page.getByTestId('referral-landing-code')).toHaveText('JOHN2880');
         const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('rhemito.referral') || 'null'));
         expect(stored).toMatchObject({ code: 'JOHN2880', referrerFirstName: 'John' });
+        await page.getByTestId('referral-continue-web-btn').click();
+        await expect(page).toHaveURL(/sign-in-sign-up/);
     });
 });

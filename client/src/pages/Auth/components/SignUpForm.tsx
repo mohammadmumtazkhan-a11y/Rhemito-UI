@@ -116,6 +116,9 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
       confirmPassword,
       referralCode: referral?.code,
       ...(referral?.ruleId ? { referralRuleId: referral.ruleId } : {}),
+      ...(referral?.trackingId ? { referralTrackingId: referral.trackingId } : {}),
+      ...(referral?.channel ? { referralChannel: referral.channel } : {}),
+      ...(referral?.attributionMethod ? { referralAttributionMethod: referral.attributionMethod } : {}),
     });
   };
 

@@ -160,10 +160,19 @@ test.describe('Referral sign-up', () => {
         await expect(page.getByText("This referral link isn't valid").first()).toBeVisible();
     });
 
-    test('valid link shows the invitation on the sign-up page', async ({ page }) => {
+    test('valid link shows the referral landing page with real app store handoff and continues to sign-up', async ({ page }) => {
         await page.route('**/api/rewards/codes/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { code: 'JOHN2880', referrerFirstName: 'John', offer, signedIn: false } }) }));
-        await page.route('**/api/rewards/visits', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { counted: true } }) }));
+        await page.route('**/api/rewards/visits', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { counted: true, trackingId: 'REF123456789ABC', playStoreUrl: 'https://play.google.com/store/apps/details?id=com.funtechcom.rhemito&referrer=tracking_id%3DREF123456789ABC%26referral_code%3DJOHN2880', appStoreUrl: 'https://apps.apple.com/gb/app/rhemito-money-transfer/id1494717263' } }) }));
         await page.goto('/ref/JOHN2880');
+        await expect(page.getByTestId('referral-landing-page')).toBeVisible();
+        await expect(page.getByTestId('referral-landing-heading')).toHaveText('Welcome to Rhemito!');
+        await expect(page.getByTestId('referral-landing-code')).toHaveText('JOHN2880');
+        await expect(page.getByTestId('referral-download-app-section')).toBeVisible();
+        await expect(page.getByTestId('download-android-playstore-btn')).toHaveAttribute('href', /play\.google\.com\/store\/apps\/details\?id=com\.funtechcom\.rhemito/);
+        await page.getByTestId('platform-tab-ios').click();
+        await expect(page.getByTestId('ios-option-a-register-btn')).toBeVisible();
+        await expect(page.getByTestId('ios-option-b-appstore-btn')).toBeVisible();
+        await page.getByTestId('referral-continue-web-btn').click();
         await expect(page).toHaveURL(/sign-in-sign-up/);
         await expect(page.getByTestId('referral-invite')).toContainText('John invited you');
         await expect(page.getByTestId('referral-invite')).toContainText('Send £50.00+ in 30 days');
