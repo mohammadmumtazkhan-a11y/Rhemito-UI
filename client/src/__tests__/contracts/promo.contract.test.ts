@@ -52,7 +52,7 @@ describe("How the discount is applied", () => {
     expect(effectiveFee(3, 1)).toBe(2);
     expect(effectiveFee(1, 5)).toBe(0);
     expect(totalToPay(100, 3, 1)).toBe(102);
-    expect(source("client/src/pages/SendMoney.tsx")).toMatch(/const effectiveFee = Math\.max\(0, fee - \(promoApplied \? promoDiscount : 0\)\)/);
+    expect(source("client/src/pages/SendMoney.tsx")).toMatch(/const effectiveFee = Math\.max\(0, fee - \(promoApplied(?: && !promoOnAmount)? \? promoDiscount : 0\)\)/);
 
     // Mito approves a £10 discount on a £3 fee: only the £3 fee can be discounted
     ctx.stub.on("/api/promocodes/validate", { status: 200, body: { valid: true, appliedDiscount: 10 } });

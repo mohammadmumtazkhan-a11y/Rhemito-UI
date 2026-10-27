@@ -22,14 +22,17 @@ test.describe('Send Money — promo code and payment method', () => {
 
         await page.goto('/send-money');
         await page.getByPlaceholder('0.00').first().fill('500');
+        await page.getByTestId('step1-use-promo-btn').click();
+        await page.getByPlaceholder(/promo|code/i).first().fill('SAVE05');
+        await page.getByRole('button', { name: 'Apply' }).click();
+        await expect(page.getByText('£1.00 off your fee').first()).toBeVisible();
+        await page.getByRole('button', { name: 'Close promo code modal' }).click();
+
         await page.getByRole('button', { name: 'Continue' }).click();
         await page.getByText('Akshita', { exact: true }).first().click();
         await expect(page.getByText('Recipient Details')).toBeVisible();
         await page.getByRole('button', { name: 'Continue' }).click();
-
-        await page.getByPlaceholder(/promo|code/i).first().fill('SAVE05');
-        await page.getByRole('button', { name: 'Apply' }).click();
-        await expect(page.getByText('£1.00 off your fee').first()).toBeVisible();
+        await page.waitForTimeout(500);
         const before = validations;
 
         await page.getByText('Credit/Debit Card').click();

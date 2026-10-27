@@ -50,9 +50,10 @@ async function mock(page, { offers = [], bonusDown = false, ...opts } = {}) {
 }
 
 test.describe('Dashboard', () => {
-    test('separate pills for referral bonus and bonus scheme credits, with minimum transfer floor and expiry warning', async ({ page }) => {
+    test('separate pills for referral bonus and bonus scheme credits, with total unused bonus, minimum transfer floor and expiry warning', async ({ page }) => {
         await mock(page, { offer: { floor: 50, text: 'Invite friends and get £10.00 bonus credit.', referral_link: 'http://localhost:5000/ref/JOHN2880' } });
         await page.goto('/');
+        await expect(page.getByTestId('dashboard-total-unused-bonus')).toContainText('Total Earned & Unused: £7.00');
         const refPill = page.getByTestId('referral-bonus-earned-pill');
         await expect(refPill).toContainText('You have £4.00 Referral Bonus credit');
         await expect(refPill).toContainText('(min. transfer £50.00)');
@@ -85,7 +86,7 @@ test.describe('Bonus & Discounts', () => {
         await page.goto('/bonus-discounts');
         await page.getByRole('button', { name: 'View Referrals' }).click();
         const list = page.getByTestId('bonus-history');
-        await expect(list).toContainText('Referral bonus – Sarah S.');
+        await expect(list).toContainText('Referral bonus – You earned from referring Sarah S.');
         await expect(list).not.toContainText('Loyalty bonus');
         await page.getByRole('tab', { name: 'Overview' }).click();
         await expect(page.getByTestId('bonus-totals')).toContainText('£15.00');
@@ -98,7 +99,7 @@ test.describe('Bonus & Discounts', () => {
         await mock(page);
         await page.goto('/bonus-discounts?tab=history&source=REFERRAL');
         const list = page.getByTestId('bonus-history');
-        await expect(list).toContainText('Referral bonus – Sarah S.');
+        await expect(list).toContainText('Referral bonus – You earned from referring Sarah S.');
         await expect(list).not.toContainText('Loyalty bonus');
     });
 
@@ -132,18 +133,11 @@ test.describe('Bonus & Discounts', () => {
 });
 
 test.describe('Send Money — use your bonus', () => {
-    async function toPayment(page, amount) {
-        await page.goto('/send-money');
-        await page.getByPlaceholder('0.00').first().fill(amount);
-        await page.getByRole('button', { name: 'Continue' }).click();
-        await page.getByText('Akshita', { exact: true }).first().click();
-        await expect(page.getByText('Recipient Details')).toBeVisible();
-        await page.getByRole('button', { name: 'Continue' }).click();
-    }
-
     test('shows what the balance is made of, has no minimum, and labels the summary row', async ({ page }) => {
         await mock(page);
-        await toPayment(page, '5');
+        await page.goto('/send-money');
+        await page.getByPlaceholder('0.00').first().fill('5');
+        await page.getByTestId('step1-use-bonus-btn').click();
         const card = page.getByTestId('bonus-redemption');
         await expect(card).toContainText('£7.00 available', { timeout: 15000 });
         await expect(card).toContainText('Includes £4.00 from referrals and £3.00 from bonus offers');
@@ -151,10 +145,9 @@ test.describe('Send Money — use your bonus', () => {
         // Credit is capped at the send amount; the rest stays in the balance
         await expect(card).toContainText('Save £5.00 now. £2.00 will stay in your bonus credit.');
         await page.getByRole('radio', { name: /Pay less/ }).check();
-        await expect(page.getByTestId('summary-bonus')).toContainText('Bonus credit');
-        await expect(page.getByTestId('summary-bonus')).toContainText('5.00');
+        await expect(page.getByTestId('summary-bonus-step1')).toContainText('5.00');
         await page.getByRole('radio', { name: /Send more/ }).check();
-        await expect(page.getByTestId('summary-bonus')).toContainText('Bonus credit (to recipient)');
+        await expect(page.getByTestId('summary-bonus-step1')).toContainText('+ 5.00 GBP');
     });
 
     test('the choice travels with the payment, and a changed balance stops it', async ({ page }) => {
@@ -164,12 +157,18 @@ test.describe('Send Money — use your bonus', () => {
             expect(sent.bonusCredit).toEqual({ mode: 'pay_less', amount: '7.00' });
             await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { code: 'BONUS_CHANGED', message: 'Your bonus balance has changed. Please review your transfer.' } }) });
         });
-        await toPayment(page, '500');
+        await page.goto('/send-money');
+        await page.getByPlaceholder('0.00').first().fill('500');
+        await page.getByTestId('step1-use-bonus-btn').click();
         await expect(page.getByTestId('bonus-redemption')).toContainText('£7.00 available', { timeout: 15000 });
         await page.getByRole('radio', { name: /Pay less/ }).check();
+        await page.getByRole('button', { name: 'Continue' }).click();
+        await page.getByText('Akshita', { exact: true }).first().click();
+        await expect(page.getByText('Recipient Details')).toBeVisible();
+        await page.getByRole('button', { name: 'Continue' }).click();
         await page.getByText('Credit/Debit Card').click();
         await expect(page.getByText('Your bonus balance has changed. Please review your transfer.').first()).toBeVisible();
-        await expect(page.getByRole('radio', { name: /Don't use bonus/ })).toBeChecked();
+        await expect(page.getByTestId('summary-bonus')).toHaveCount(0);
     });
 });
 
@@ -177,6 +176,7 @@ test.describe('Send money — bonus on landing', () => {
     test('bonus is offered on the Amount step and the choice reaches payment', async ({ page }) => {
         await mock(page);
         await page.goto('/send-money');
+        await page.getByTestId('step1-use-bonus-btn').click();
         const panel = page.getByTestId('bonus-redemption');
         await expect(panel).toBeVisible();
         await expect(panel).toContainText('£7.00 available');

@@ -223,7 +223,7 @@ export function ReferEarnCard({
           )}
           {!collapsed && ((locationCurrencies && locationCurrencies.length > 1) || hasCorridorRules) && (
             <span className="text-xs font-medium text-slate-500" data-testid="refer-currency-hint">
-              Click a currency to preview its rewards (your link works for all currencies)
+              Click a currency to see its rewards
             </span>
           )}
         </div>
@@ -260,7 +260,7 @@ export function ReferEarnCard({
             <>
               <OfferSentence text={activeOffer.text} />
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="referral-link" className="text-[13px] font-semibold text-slate-600">Your universal referral link</label>
+                <label htmlFor="referral-link" className="text-[13px] font-semibold text-slate-600">Your referral link</label>
                 <input
                   id="referral-link"
                   ref={inputRef}

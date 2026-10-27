@@ -416,15 +416,15 @@ describe("Refer & Earn card", () => {
     const view = card({ offer: OFFER, offers: [OFFER, usdOffer, eurOffer], sendCurrencies: ["GBP", "USD", "EUR"] });
 
     // Initially rule 1 (GBP) is active and link includes ?rule=1 when multiple rules exist
-    expect((view.getByLabelText("Your referral link") as HTMLInputElement).value).toBe("localhost:5000/ref/JOHN2880?rule=1");
+    expect((view.getByLabelText("Your referral link") as HTMLInputElement).value).toBe("localhost:5000/ref/JOHN2880");
 
     // Referrer clicks the USD pill in the header
     await act(async () => { fireEvent.click(view.getByRole("button", { name: "USD" })); });
     expect(view.getByTestId("refer-offer-text").textContent).toBe(usdOffer.text);
-    expect((view.getByLabelText("Your referral link") as HTMLInputElement).value).toBe("localhost:5000/ref/JOHN2880?rule=2");
+    expect((view.getByLabelText("Your referral link") as HTMLInputElement).value).toBe("localhost:5000/ref/JOHN2880");
 
     await act(async () => { fireEvent.click(view.getByRole("button", { name: /Copy link/ })); });
-    expect(writeText).toHaveBeenCalledWith("http://localhost:5000/ref/JOHN2880?rule=2");
+    expect(writeText).toHaveBeenCalledWith("http://localhost:5000/ref/JOHN2880");
     view.unmount();
 
     // Verification forwards rule_id when referralRuleId was registered

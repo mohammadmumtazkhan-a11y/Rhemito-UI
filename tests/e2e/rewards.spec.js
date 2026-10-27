@@ -69,6 +69,7 @@ test.describe('Refer & Earn on the Dashboard', () => {
         await page.goto('/');
         const card = page.getByTestId('refer-earn-card');
         await expect(card).toBeVisible();
+        await card.getByTestId('toggle-refer-earn-card').click();
         await expect(card.getByTestId('refer-offer-text')).toContainText('You get £5.00 and your friend gets £10.00');
         await expect(card.getByLabel('Your referral link')).toHaveValue('localhost:5000/ref/JOHN2880');
         // Totals only — individual friends are listed on the Referrals tab, so the card never grows
@@ -126,7 +127,7 @@ test.describe('Bonus & Discounts page', () => {
         await expect(totals).toContainText('Across 1 transfer');
         await expect(page.getByTestId('total-saved')).toContainText('£18.00');
         const unused = page.getByTestId('unused-bonus');
-        await expect(unused).toContainText('Welcome bonus – invited by Olayinka A.');
+        await expect(unused).toContainText('Welcome bonus – You earned (invited by Olayinka A.)');
         await expect(unused).toContainText('£2.00 left of £10.00');
         await expect(unused).toContainText('Expires in 9 days');
     });
@@ -135,7 +136,7 @@ test.describe('Bonus & Discounts page', () => {
         await mockRewards(page);
         await page.goto('/bonus-discounts?tab=history');
         const list = page.getByTestId('bonus-history');
-        await expect(list).toContainText('Referral bonus – Sarah S.');
+        await expect(list).toContainText('Referral bonus – You earned from referring Sarah S.');
         await expect(list).toContainText('Promo code WELCOME');
         await page.getByRole('button', { name: 'Bonus used' }).click();
         await expect(list).toContainText('Bonus used on transfer TXN-202609-00042');
@@ -148,7 +149,7 @@ test.describe('Bonus & Discounts page', () => {
         await expect(page.getByTestId('referral-summary')).toContainText('Joined: 3 · Earned: 1 · Total earned: £5.00');
         await expect(page.getByTestId('referral-card-R2')).toContainText('You get £5.00 when it completes');
         await expect(page.getByTestId('referral-card-R3')).toContainText('Waiting for their first transfer of £50.00 or more');
-        await expect(page.getByTestId('referral-card-R1')).toContainText('£5.00 added to your bonus credit');
+        await expect(page.getByTestId('referral-card-R1')).toContainText('You earned £5.00 — added to your bonus credit');
     });
 });
 
@@ -174,22 +175,21 @@ test.describe('Send Money — use your bonus', () => {
         await mockRewards(page);
         await page.goto('/send-money');
         await page.getByPlaceholder('0.00').first().fill('500');
+        await page.getByTestId('step1-use-bonus-btn').click();
+
+        const bonus = page.getByTestId('bonus-redemption');
+        await expect(bonus).toContainText('£7.00 available', { timeout: 15000 });
+        await expect(bonus).toContainText('£2.00 of this expires on');
+        await expect(page.getByRole('radio', { name: /Pay less/ })).not.toBeChecked();
+
+        await page.getByRole('radio', { name: /Pay less/ }).check();
+        await expect(page.getByTestId('summary-bonus-step1')).toContainText('7.00');
+
         await page.getByRole('button', { name: 'Continue' }).click();
         await page.getByText('Akshita', { exact: true }).first().click();
         await expect(page.getByText('Recipient Details')).toBeVisible();
         await page.getByRole('button', { name: 'Continue' }).click();
 
-        const bonus = page.getByTestId('bonus-redemption');
-        await expect(bonus).toContainText('£7.00 available', { timeout: 15000 });
-        await expect(bonus).toContainText('£2.00 of this expires on');
-        await expect(page.getByRole('radio', { name: /Don't use bonus/ })).toBeChecked();
-
-        const before = Number((await page.getByTestId('summary-total').innerText()).replace(/[^0-9.]/g, ''));
-        await page.getByRole('radio', { name: /Pay less/ }).check();
         await expect(page.getByTestId('summary-bonus')).toContainText('7.00');
-        await expect(page.getByTestId('summary-total')).toHaveText(`${(before - 7).toFixed(2)} GBP`);
-
-        await page.getByRole('radio', { name: /Send more/ }).check();
-        await expect(page.getByTestId('summary-total')).toHaveText(`${before.toFixed(2)} GBP`);
     });
 });

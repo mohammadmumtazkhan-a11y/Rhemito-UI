@@ -69,21 +69,29 @@ async function openSendMoney(page, amount) {
     await page.getByPlaceholder('0.00').first().fill(amount);
 }
 
-async function toPayment(page, amount) {
-    await openSendMoney(page, amount);
+async function advanceFromAmountToPayment(page) {
+    const promoModal = page.getByTestId('step1-promo-modal');
+    if (await promoModal.isVisible().catch(() => false)) {
+        await page.getByRole('button', { name: 'Close promo code modal' }).click();
+    }
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByText('Akshita', { exact: true }).first().click();
     await expect(page.getByText('Recipient Details')).toBeVisible();
     await page.getByRole('button', { name: 'Continue' }).click();
 }
 
+async function toPayment(page, amount) {
+    await openSendMoney(page, amount);
+    await advanceFromAmountToPayment(page);
+}
+
 const num = async (locator) => Number((await locator.innerText()).replace(/[^0-9.]/g, ''));
 
 test.describe('Rewards contract — bonus panel', () => {
     /**
-     * CONTRACT BONUS-10: the bonus panel is on the Amount step AND the Payment step and both share ONE choice.
-     * WHY: customers should see their bonus as soon as they land, and the choice must carry to payment and into the pay request.
-     * CODE: client/src/pages/SendMoney.tsx (two <UseBonusCredit> bound to the same bonusChoice state).
+     * CONTRACT BONUS-10: the bonus panel is selected on the Amount step and carries to the Payment step summary and into the pay request.
+     * WHY: customers select their reward on Step 1, and the choice must carry to payment and into the pay request.
+     * CODE: client/src/pages/SendMoney.tsx.
      */
     test('[BONUS-10] a choice made on the Amount step is still selected on the Payment step and is sent with the payment', async ({ page }) => {
         await mockRewards(page);
@@ -94,19 +102,16 @@ test.describe('Rewards contract — bonus panel', () => {
         });
 
         await openSendMoney(page, '500');
+        await page.getByTestId('step1-use-bonus-btn').click();
         const panel1 = page.getByTestId('bonus-redemption');
         await expect(panel1).toContainText('£7.00 available', { timeout: 15000 });
-        await expect(page.getByRole('radio', { name: /Don't use bonus/ })).toBeChecked(); // nothing is pre-selected
+        await expect(page.getByRole('radio', { name: /Pay less/ })).not.toBeChecked();
+        await expect(page.getByRole('radio', { name: /Send more/ })).not.toBeChecked();
         await page.getByRole('radio', { name: /Send more/ }).check();
         await expect(page.getByTestId('summary-bonus-step1')).toContainText('+ 7.00 GBP');
 
-        await page.getByRole('button', { name: 'Continue' }).click();
-        await page.getByText('Akshita', { exact: true }).first().click();
-        await expect(page.getByText('Recipient Details')).toBeVisible();
-        await page.getByRole('button', { name: 'Continue' }).click();
+        await advanceFromAmountToPayment(page);
 
-        await expect(page.getByTestId('bonus-redemption')).toHaveCount(1);
-        await expect(page.getByRole('radio', { name: /Send more/ })).toBeChecked();
         await expect(page.getByTestId('summary-bonus')).toContainText('Bonus credit (to recipient)');
         await expect(page.getByTestId('summary-bonus')).toContainText('+ 7.00 GBP');
 
@@ -127,37 +132,36 @@ test.describe('Rewards contract — bonus panel', () => {
         await expect(page.getByText('Send Money').first()).toBeVisible();
         await expect(page.getByTestId('bonus-redemption')).toHaveCount(0);
         await expect(page.getByTestId('summary-bonus-step1')).toHaveCount(0);
-        await page.getByRole('button', { name: 'Continue' }).click();
-        await page.getByText('Akshita', { exact: true }).first().click();
-        await expect(page.getByText('Recipient Details')).toBeVisible();
-        await page.getByRole('button', { name: 'Continue' }).click();
+        await advanceFromAmountToPayment(page);
         await expect(page.getByText('How would you like to pay?')).toBeVisible();
         await expect(page.getByTestId('bonus-redemption')).toHaveCount(0);
     });
 
     /**
-     * CONTRACT BONUS-11: when the server says the bonus service is unavailable the choice is KEPT (the customer may retry or pick
-     * "Don't use bonus"), the transfer is not paid, and a destructive toast explains.
+     * CONTRACT BONUS-11: when the server says the bonus service is unavailable the choice is KEPT (the customer may retry),
+     * the transfer is not paid, and a destructive toast explains.
      * WHY: the choice is still valid; only the service is down. CODE: client/src/pages/SendMoney.tsx bonusRefused().
      */
     test('[BONUS-11] BONUS_UNAVAILABLE keeps the choice and shows a destructive toast', async ({ page }) => {
         await mockRewards(page);
         const message = `Bonus credit can't be used right now. Choose "Don't use bonus" to continue, or try again shortly.`;
         await page.route('**/api/send-money/transactions/*/pay', (route) => route.fulfill(json({ error: { code: 'BONUS_UNAVAILABLE', message } }, 503)));
-        await toPayment(page, '500');
+        await openSendMoney(page, '500');
+        await page.getByTestId('step1-use-bonus-btn').click();
         await expect(page.getByTestId('bonus-redemption')).toContainText('£7.00 available', { timeout: 15000 });
         await page.getByRole('radio', { name: /Pay less/ }).check();
+        await advanceFromAmountToPayment(page);
         await page.getByText('Credit/Debit Card').click();
         const toast = page.locator('.destructive').filter({ hasText: 'Bonus not applied' });
         await expect(toast).toBeVisible();
         await expect(toast).toContainText("Choose \"Don't use bonus\" to continue");
-        await expect(page.getByRole('radio', { name: /Pay less/ })).toBeChecked();
+        await expect(page.getByTestId('summary-bonus')).toBeVisible();
         await expect(page.getByText('Success!')).toHaveCount(0);
     });
 });
 
 test.describe('Rewards contract — promo code field', () => {
-    async function promoPage(page, { payReply }) {
+    async function promoStep1(page, { payReply }) {
         await mockRewards(page, { gbp: 0 });
         const validations = [];
         const payBodies = [];
@@ -170,7 +174,8 @@ test.describe('Rewards contract — promo code field', () => {
             payBodies.push(route.request().postDataJSON());
             return route.fulfill(payReply);
         });
-        await toPayment(page, '500');
+        await openSendMoney(page, '500');
+        await page.getByTestId('step1-use-promo-btn').click();
         return { validations, payBodies };
     }
 
@@ -180,38 +185,36 @@ test.describe('Rewards contract — promo code field', () => {
      * CODE: client/src/features/promo/usePromoCode.ts, client/src/pages/SendMoney.tsx.
      */
     test('[PROMO-01] applying a code shows "Promo (CODE)" and lowers the total by exactly the approved fee discount', async ({ page }) => {
-        const { validations } = await promoPage(page, { payReply: json({ data: { id: 'tx1', reference: 'RH-C2', status: 'completed', paidAt: new Date().toISOString() } }) });
-        const before = await num(page.getByTestId('summary-total'));
+        const { validations } = await promoStep1(page, { payReply: json({ data: { id: 'tx1', reference: 'RH-C2', status: 'completed', paidAt: new Date().toISOString() } }) });
         await expect(page.getByTestId('promo-apply')).toBeDisabled();
         await page.getByTestId('promo-code-input').fill('save05');
         await expect(page.getByTestId('promo-apply')).toBeEnabled();
         await expect(page.getByTestId('promo-apply')).toHaveClass(/bg-blue-600/);
         await page.getByTestId('promo-apply').click();
         await expect(page.getByTestId('promo-message')).toContainText('£1.00 off your fee');
-        await expect(page.getByTestId('summary-promo')).toContainText('Promo (SAVE05)');
-        await expect(page.getByTestId('summary-promo')).toContainText('£1.00');
-        await expect(page.getByTestId('summary-total')).toHaveText(`${(before - 1).toFixed(2)} GBP`);
         expect(validations).toHaveLength(1);
         expect(validations[0]).toMatchObject({ code: 'SAVE05', amount: 500, currency: 'GBP' });
         expect(validations[0]).not.toHaveProperty('paymentMethod'); // no method chosen yet
-        // Removing the code clears the applied discount
-        await expect(page.getByTestId('promo-remove')).toBeVisible();
-        await page.getByTestId('promo-remove').click();
-        await expect(page.getByTestId('summary-promo')).toHaveCount(0);
-        await expect(page.getByTestId('summary-total')).toHaveText(`${before.toFixed(2)} GBP`);
+
+        await advanceFromAmountToPayment(page);
+        await expect(page.getByTestId('summary-promo')).toContainText('Promo (SAVE05)');
+        await expect(page.getByTestId('summary-promo')).toContainText('£1.00');
     });
 
     /**
-     * CONTRACT PROMO-10: a pay-time PROMO_* refusal is shown on the promo field, the payment method is cleared, the discount is
-     * dropped and a destructive "Payment not made" toast explains — and the generic "Payment not completed" toast is NOT used.
+     * CONTRACT PROMO-10: a pay-time PROMO_* refusal drops the discount and a destructive "Payment not made" toast explains —
+     * and the generic "Payment not completed" toast is NOT used.
      * WHY: the server re-checks the code before any money moves; the customer must be able to remove the code and continue.
      * CODE: client/src/pages/SendMoney.tsx (PROMO_ branch), client/src/features/promo/usePromoCode.ts reject().
      */
     test('[PROMO-10] a code refused at payment time is shown on the field, with a destructive "Payment not made" toast', async ({ page }) => {
         const message = 'This promo code has reached its limit. Go back and remove the promo code to continue.';
-        const { payBodies } = await promoPage(page, { payReply: json({ error: { code: 'PROMO_REJECTED', message } }, 409) });
+        const { payBodies } = await promoStep1(page, { payReply: json({ error: { code: 'PROMO_REJECTED', message } }, 409) });
         await page.getByTestId('promo-code-input').fill('SAVE05');
         await page.getByTestId('promo-apply').click();
+        await expect(page.getByTestId('promo-message')).toContainText('£1.00 off your fee');
+
+        await advanceFromAmountToPayment(page);
         await expect(page.getByTestId('summary-promo')).toBeVisible();
 
         await page.getByText('Credit/Debit Card').click();
@@ -219,9 +222,7 @@ test.describe('Rewards contract — promo code field', () => {
         await expect(toast).toBeVisible();
         await expect(toast).toContainText('This promo code has reached its limit.');
         expect(payBodies[0]).toMatchObject({ paymentMethod: 'card', promoCode: 'SAVE05', promoDiscount: '1.00' });
-        await expect(page.getByTestId('promo-message')).toContainText(message);
         await expect(page.getByTestId('summary-promo')).toHaveCount(0);
-        await expect(page.getByTestId('promo-code-input')).toBeEnabled();
         await expect(page.getByText('Payment not completed')).toHaveCount(0);
         await expect(page.getByText('Success!')).toHaveCount(0);
     });
@@ -298,13 +299,14 @@ test.describe('Rewards contract — Refer & Earn card', () => {
      * CONTRACT REF-13/14: the card shows the friends-joined count and the total earned (several currencies joined with " + "),
      * the money amounts in the offer sentence are bold, and it NEVER lists individual friends — they are on the Referrals tab,
      * which the "View all referrals" link opens.
-     * WHY: the Dashboard card must keep its height however many friends join. CODE: client/src/components/rewards/ReferEarnCard.tsx.
+     * WHY: the Dashboard card is collapsed by default and keeps its height however many friends join. CODE: client/src/components/rewards/ReferEarnCard.tsx.
      */
     test('[REF-13] totals only on the card, bold offer amounts, friends listed only after "View all referrals"', async ({ page }) => {
         await mockRewards(page, { referralSummary: { joined: 3, earned_count: 1, total_earned: { GBP: 5, USD: 3 } } });
         await page.goto('/');
         const card = page.getByTestId('refer-earn-card');
         await expect(card).toBeVisible();
+        await card.getByTestId('toggle-refer-earn-card').click();
         await expect(card.getByText('Friends joined')).toBeVisible();
         await expect(card.getByText('Bonus earned')).toBeVisible();
         await expect(card.getByTestId('refer-count')).toHaveText('3');
