@@ -175,6 +175,33 @@ async function main() {
     res.status(200).send("OK");
   });
 
+  let retriedListen = false;
+  httpServer.on("error", async (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE" && process.env.NODE_ENV !== "production" && !retriedListen) {
+      retriedListen = true;
+      try {
+        const { execSync } = await import("child_process");
+        if (process.platform === "win32") {
+          execSync(
+            `powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { if ($_.OwningProcess -ne ${process.pid}) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }"`,
+            { stdio: "ignore" }
+          );
+        } else {
+          execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { stdio: "ignore" });
+        }
+        setTimeout(() => {
+          httpServer.listen(port, () => {
+            log(`serving on port ${port}`);
+          });
+        }, 500);
+        return;
+      } catch {
+        // fall through
+      }
+    }
+    throw err;
+  });
+
   httpServer.listen(port, () => {
     log(`serving on port ${port}`);
   });
