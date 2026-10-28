@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
 import { fileURLToPath } from "url";
+import { injectOpenGraphIntoHtml, resolveReferralOpenGraphMeta } from "./referralOpenGraph";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,8 +21,8 @@ export async function setupVite(server: Server, app: Express) {
   };
 
   // Resolve vite config if it's a function (it is now async)
-  const resolvedConfig = typeof viteConfig === 'function'
-    ? await viteConfig({ command: 'serve', mode: 'development' })
+  const resolvedConfig = typeof viteConfig === "function"
+    ? await viteConfig({ command: "serve", mode: "development" })
     : viteConfig;
 
   const vite = await createViteServer({
@@ -57,6 +58,10 @@ export async function setupVite(server: Server, app: Express) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
+      const ogMeta = await resolveReferralOpenGraphMeta(req).catch(() => null);
+      if (ogMeta) {
+        template = injectOpenGraphIntoHtml(template, ogMeta);
+      }
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {

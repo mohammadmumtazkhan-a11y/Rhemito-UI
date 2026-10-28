@@ -18,6 +18,7 @@ import {
   syncCustomer,
   startOfferPoller,
 } from "./rewardsService";
+import { registerReferralOpenGraphRoutes } from "./referralOpenGraph";
 
 function currentUserId(req: Request): string {
   const userId = req.session?.userId;
@@ -39,6 +40,7 @@ function handleError(res: Response, err: unknown): void {
 
 export function registerRewardsRoutes(app: Express): void {
   startOfferPoller();
+  registerReferralOpenGraphRoutes(app);
 
   /**
    * Everything the Dashboard and Bonus & Discounts page need in one call:

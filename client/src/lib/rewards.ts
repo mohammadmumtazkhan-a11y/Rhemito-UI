@@ -317,3 +317,86 @@ export function visitorId(): string {
     return "anonymous";
   }
 }
+
+export interface ReferralShareMessageOptions {
+  offer?: Partial<RewardOffer> | null;
+  code?: string | null;
+  link?: string | null;
+  referrerFirstName?: string | null;
+  /** Whether to append the link at the end of the text (true for clipboard/WhatsApp URL; false when passed separately as `url` to navigator.share). */
+  includeUrl?: boolean;
+}
+
+/**
+ * Builds the share title for Web Share API and social previews.
+ */
+export function buildReferralShareTitle(options: ReferralShareMessageOptions = {}): string {
+  const { offer, referrerFirstName } = options;
+  const sender = referrerFirstName?.trim() || null;
+  const currency = offer?.currency || "GBP";
+  const hasRefereeReward = offer && offer.reward_type !== "REFERRER" && Number(offer.referee_reward ?? 0) > 0;
+  if (hasRefereeReward) {
+    const reward = formatMoney(Number(offer.referee_reward), currency);
+    return sender
+      ? `${sender} invited you to Rhemito — Get ${reward} bonus credit on your first transfer!`
+      : `Join me on Rhemito — Get ${reward} bonus credit on your first transfer!`;
+  }
+  return sender ? `${sender} invited you to Rhemito` : "Join me on Rhemito";
+}
+
+/**
+ * Builds the full British marketing message explaining the welcome offer and
+ * why the friend should register and complete their first qualifying transfer on Rhemito.
+ */
+export function buildReferralShareMessage(options: ReferralShareMessageOptions = {}): string {
+  const { offer, code, link, includeUrl = false } = options;
+  const cleanCode = String(code || offer?.referral_code || "").trim().toUpperCase();
+  const cleanLink = String(link || offer?.referral_link || "").trim();
+  const currency = offer?.currency || "GBP";
+  const hasRefereeReward = Boolean(offer && offer.reward_type !== "REFERRER" && Number(offer.referee_reward ?? 0) > 0);
+  const reward = hasRefereeReward ? formatMoney(Number(offer!.referee_reward), currency) : null;
+  const floor = offer?.floor ? formatMoney(Number(offer.floor), currency) : formatMoney(100, currency);
+  const windowDays = Number(offer?.qualification_window_days || offer?.bonus_validity_days || 90);
+  const corridorTo = offer?.receive_currency ? ` to ${offer.receive_currency}` : "";
+
+  const headline =
+    hasRefereeReward && reward
+      ? cleanCode
+        ? `Join me on Rhemito with code ${cleanCode}! Get ${reward} on your first ${currency} transfer above ${floor}${corridorTo}.`
+        : `Join me on Rhemito! Get ${reward} on your first ${currency} transfer above ${floor}${corridorTo}.`
+      : cleanCode
+        ? `Join me on Rhemito with my invite code ${cleanCode} for fast, low-cost international money transfers!`
+        : "Join me on Rhemito for fast, low-cost international money transfers!";
+
+  const whyLines = [
+    "Why register & send with Rhemito:",
+    "• Great exchange rates & low, transparent fees across global corridors",
+    "• Fast, secure transfers straight to bank accounts, mobile wallets & cash pick-up",
+    hasRefereeReward && reward
+      ? `• ${reward} welcome bonus credit unlocked when you send ${floor}+${corridorTo} within ${windowDays} days`
+      : "• Trusted UK money transfer service with rewards on qualifying transfers",
+  ];
+
+  const stepLines =
+    hasRefereeReward && reward
+      ? [
+          `How to claim your ${reward} bonus in 3 simple steps:`,
+          `1. Register free using my invite link${cleanCode ? ` (code: ${cleanCode})` : ""}`,
+          "2. Verify your account in minutes",
+          `3. Send ${floor} or more${corridorTo} within ${windowDays} days — your ${reward} bonus credit is added automatically!`,
+        ]
+      : [
+          "How to get started in 3 simple steps:",
+          `1. Register free using my invite link${cleanCode ? ` (code: ${cleanCode})` : ""}`,
+          "2. Verify your account in minutes",
+          `3. Enjoy fast, secure transfers${corridorTo} at great rates`,
+        ];
+
+  const blocks = [headline, whyLines.join("\n"), stepLines.join("\n")];
+  if (includeUrl && cleanLink) {
+    blocks.push(`Claim your welcome offer here:\n${cleanLink}`);
+  } else {
+    blocks.push("Claim your welcome offer here:");
+  }
+  return blocks.join("\n\n");
+}
