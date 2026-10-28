@@ -198,6 +198,45 @@ test.describe('Referral sign-up', () => {
         await expect(iosPage.getByTestId('ios-option-b-appstore-btn')).toBeVisible();
         await iosCtx.close();
     });
+
+    test('signed-in existing user personal referral link buttons do not overflow on mobile viewport', async ({ browser }) => {
+        const mobileCtx = await browser.newContext({
+            viewport: { width: 360, height: 780 },
+            userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        });
+        const mobilePage = await mobileCtx.newPage();
+        await mobilePage.route('**/api/rewards/codes/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { code: 'JOHN2880', referrerFirstName: 'John', offer, signedIn: true } }) }));
+        await mobilePage.route('**/api/rewards/existing-user-offers**', (route) => route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                data: {
+                    signedIn: true,
+                    currency: 'GBP',
+                    viewerFirstName: 'Mohammad',
+                    viewerReferralCode: 'MOHAMMAD9097',
+                    viewerReferralLink: 'https://rhemito-ui.onrender.com/ref/MOHAMMAD9097',
+                    referralOffer: offer,
+                    referralOffers: [offer],
+                    bonusOffers: [],
+                },
+            }),
+        }));
+        await mobilePage.goto('/ref/JOHN2880?platform=android');
+        const box = mobilePage.getByTestId('existing-user-own-referral-box');
+        const copyBtn = mobilePage.getByTestId('existing-user-copy-own-link-btn');
+        const shareBtn = mobilePage.getByTestId('existing-user-share-own-invite-btn');
+        await expect(box).toBeVisible();
+        await expect(copyBtn).toBeVisible();
+        await expect(shareBtn).toBeVisible();
+
+        const boxRect = await box.boundingBox();
+        const shareRect = await shareBtn.boundingBox();
+        expect(boxRect).not.toBeNull();
+        expect(shareRect).not.toBeNull();
+        expect(shareRect.x + shareRect.width).toBeLessThanOrEqual(boxRect.x + boxRect.width + 1);
+        await mobileCtx.close();
+    });
 });
 
 test.describe('Send Money — use your bonus', () => {
