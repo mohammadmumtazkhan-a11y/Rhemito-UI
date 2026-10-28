@@ -13,7 +13,13 @@ import {
 } from "@/lib/rewards";
 
 /** "Olayinka invited you – get £10.00 in 3 steps" strip above the sign-up form (spec §5). */
-export function ReferralInviteStrip({ referral }: { referral: StoredReferral | null }) {
+export function ReferralInviteStrip({
+  referral,
+  onAlreadyMember,
+}: {
+  referral: StoredReferral | null;
+  onAlreadyMember?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const offer = referral?.offer;
   if (!referral || !offer || offer.reward_type === "REFERRER" || !(offer.referee_reward > 0)) return null;
@@ -99,6 +105,19 @@ export function ReferralInviteStrip({ referral }: { referral: StoredReferral | n
               </a>
             )}
           </div>
+        </div>
+      )}
+      {onAlreadyMember && (
+        <div className="border-t border-slate-100 pt-2.5 flex items-center justify-between gap-2 text-xs">
+          <span className="text-slate-600">Already joined Rhemito?</span>
+          <button
+            type="button"
+            onClick={onAlreadyMember}
+            data-testid="signup-strip-already-member-btn"
+            className="font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+          >
+            See offers for existing users →
+          </button>
         </div>
       )}
     </section>
