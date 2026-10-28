@@ -102,18 +102,18 @@ test.describe('Rewards contract — bonus panel', () => {
         });
 
         await openSendMoney(page, '500');
-        await page.getByTestId('step1-use-bonus-btn').click();
+        await page.getByTestId('step1-use-referral-btn').click();
         const panel1 = page.getByTestId('bonus-redemption');
         await expect(panel1).toContainText('£7.00 available', { timeout: 15000 });
         await expect(page.getByRole('radio', { name: /Pay less/ })).not.toBeChecked();
         await expect(page.getByRole('radio', { name: /Send more/ })).not.toBeChecked();
         await page.getByRole('radio', { name: /Send more/ }).check();
-        await expect(page.getByTestId('summary-bonus-step1')).toContainText('+ 7.00 GBP');
+        await expect(page.getByTestId('summary-bonus-step1')).toContainText('+ £7.00');
 
         await advanceFromAmountToPayment(page);
 
         await expect(page.getByTestId('summary-bonus')).toContainText('Bonus credit (to recipient)');
-        await expect(page.getByTestId('summary-bonus')).toContainText('+ 7.00 GBP');
+        await expect(page.getByTestId('summary-bonus')).toContainText('+ £7.00');
 
         await page.getByText('Credit/Debit Card').click();
         await expect.poll(() => sent).not.toBeNull();
@@ -147,7 +147,7 @@ test.describe('Rewards contract — bonus panel', () => {
         const message = `Bonus credit can't be used right now. Choose "Don't use bonus" to continue, or try again shortly.`;
         await page.route('**/api/send-money/transactions/*/pay', (route) => route.fulfill(json({ error: { code: 'BONUS_UNAVAILABLE', message } }, 503)));
         await openSendMoney(page, '500');
-        await page.getByTestId('step1-use-bonus-btn').click();
+        await page.getByTestId('step1-use-referral-btn').click();
         await expect(page.getByTestId('bonus-redemption')).toContainText('£7.00 available', { timeout: 15000 });
         await page.getByRole('radio', { name: /Pay less/ }).check();
         await advanceFromAmountToPayment(page);
@@ -306,7 +306,6 @@ test.describe('Rewards contract — Refer & Earn card', () => {
         await page.goto('/');
         const card = page.getByTestId('refer-earn-card');
         await expect(card).toBeVisible();
-        await card.getByTestId('toggle-refer-earn-card').click();
         await expect(card.getByText('Friends joined')).toBeVisible();
         await expect(card.getByText('Bonus earned')).toBeVisible();
         await expect(card.getByTestId('refer-count')).toHaveText('3');
@@ -315,7 +314,7 @@ test.describe('Rewards contract — Refer & Earn card', () => {
         await expect(bold).toHaveText(['£5.00', '£10.00', '£50.00']);
         for (const f of friends) await expect(card.getByText(f.friend)).toHaveCount(0);
 
-        await card.getByRole('link', { name: 'View all referrals' }).click();
+        await card.getByRole('link', { name: /View all referrals/i }).click();
         await expect(page).toHaveURL(/\/bonus-discounts\?tab=referrals/);
         await expect(page.getByTestId('referral-card-R3')).toContainText('Musa I.');
         await expect(page.getByTestId('referral-card-R2')).toContainText('Kemi L.');

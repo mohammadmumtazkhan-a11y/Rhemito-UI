@@ -43,8 +43,14 @@ export function UseBonusCredit({
   schemeFloor,
 }: UseBonusCreditProps) {
   const available = balance.available;
-  const otherCurrencyReferral = unused.find((c) => c.credit_source === "REFERRAL" && c.remaining > 0 && c.currency !== currency);
-  if (!(available > 0) && !otherCurrencyReferral) return blocked ? <BonusBlockedNotice onContact={onContactSupport} /> : null;
+  const otherCurrencyReferral =
+    activeTab !== "bonus"
+      ? unused.find((c) => c.credit_source === "REFERRAL" && c.remaining > 0 && c.currency !== currency)
+      : undefined;
+  if (!(available > 0) && !otherCurrencyReferral) {
+    if (blocked) return <BonusBlockedNotice onContact={onContactSupport} />;
+    if (activeTab === "all") return null;
+  }
 
   const handleClose = () => {
     if (choice !== "none") onChoice("none");
@@ -128,23 +134,30 @@ export function UseBonusCredit({
         : currencyCredits;
 
   const resolvedReferralFloor =
-    referralGroup?.floor ||
-    referralFloor ||
-    currencyCredits.find((c) => c.credit_source === "REFERRAL" && (c.floor ?? 0) > 0)?.floor ||
-    0;
+    referralAvail > 0
+      ? referralGroup?.floor ||
+        referralFloor ||
+        currencyCredits.find((c) => c.credit_source === "REFERRAL" && (c.floor ?? 0) > 0)?.floor ||
+        0
+      : 0;
 
   const resolvedReferralReceiveCurrency =
-    referralGroup?.receive_currency ||
-    referralReceiveCurrency ||
-    currencyCredits.find((c) => c.credit_source === "REFERRAL" && c.receive_currency)?.receive_currency ||
-    null;
+    referralAvail > 0
+      ? referralGroup?.receive_currency ||
+        referralReceiveCurrency ||
+        currencyCredits.find((c) => c.credit_source === "REFERRAL" && c.receive_currency)?.receive_currency ||
+        null
+      : null;
 
-  const resolvedSchemeFloor = Math.max(
-    0,
-    schemeFloor ?? 0,
-    ...schemeGroups.map((s) => s.floor || 0),
-    ...currencyCredits.filter((c) => c.credit_source !== "REFERRAL").map((c) => c.floor || 0),
-  );
+  const resolvedSchemeFloor =
+    schemeAvail > 0
+      ? Math.max(
+          0,
+          schemeFloor ?? 0,
+          ...schemeGroups.map((s) => s.floor || 0),
+          ...currencyCredits.filter((c) => c.credit_source !== "REFERRAL").map((c) => c.floor || 0),
+        )
+      : 0;
 
   const checkReferralRestrictions = activeTab === "referral" || activeTab === "all";
   const checkSchemeRestrictions = activeTab === "bonus" || activeTab === "all";
@@ -248,7 +261,7 @@ export function UseBonusCredit({
         {parts.length === 0 && !singleSourceNote && <div className="mb-2" />}
 
         {noCreditInSelectedTab && (
-          <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs font-medium text-slate-700" data-testid="bonus-empty-tab-notice">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs font-medium text-slate-700" data-testid="bonus-empty-tab-notice">
             <p>
               You do not have any available {activeTab === "referral" ? "Referral" : "Bonus"} credit in <span className="font-bold">{currency}</span>.
             </p>
@@ -317,37 +330,39 @@ export function UseBonusCredit({
           </div>
         )}
 
-        <div role="radiogroup" aria-label="How to use your bonus" className="flex flex-col gap-2">
-          {options.map((o) => {
-            const selected = choice === o.id;
-            return (
-              <label
-                key={o.id}
-                className={cn(
-                  "flex min-h-[56px] items-center gap-3 rounded-xl border px-3.5 transition-colors",
-                  o.disabled ? "cursor-not-allowed opacity-60 bg-slate-50 border-slate-200" : "cursor-pointer hover:bg-slate-50",
-                  selected ? "border-2 border-blue-600 bg-blue-50" : "border-slate-300 bg-white",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="bonus-choice"
-                  value={o.id}
-                  checked={selected}
-                  disabled={o.disabled}
-                  onChange={() => {
-                    if (!o.disabled) onChoice(o.id);
-                  }}
-                  className="h-5 w-5 accent-blue-600"
-                />
-                <span className="flex flex-1 flex-col">
-                  <span className="text-[15px] font-semibold text-slate-900">{o.title}</span>
-                  {o.sub && <span className="text-[13px] text-slate-600">{o.sub}</span>}
-                </span>
-              </label>
-            );
-          })}
-        </div>
+        {!noCreditInSelectedTab && credit > 0 && (
+          <div role="radiogroup" aria-label="How to use your bonus" className="flex flex-col gap-2">
+            {options.map((o) => {
+              const selected = choice === o.id;
+              return (
+                <label
+                  key={o.id}
+                  className={cn(
+                    "flex min-h-[56px] items-center gap-3 rounded-xl border px-3.5 transition-colors",
+                    o.disabled ? "cursor-not-allowed opacity-60 bg-slate-50 border-slate-200" : "cursor-pointer hover:bg-slate-50",
+                    selected ? "border-2 border-blue-600 bg-blue-50" : "border-slate-300 bg-white",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="bonus-choice"
+                    value={o.id}
+                    checked={selected}
+                    disabled={o.disabled}
+                    onChange={() => {
+                      if (!o.disabled) onChoice(o.id);
+                    }}
+                    className="h-5 w-5 accent-blue-600"
+                  />
+                  <span className="flex flex-1 flex-col">
+                    <span className="text-[15px] font-semibold text-slate-900">{o.title}</span>
+                    {o.sub && <span className="text-[13px] text-slate-600">{o.sub}</span>}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
 
         {expiring?.expires_on && (
           <p className="mt-3 text-[13px] text-amber-800">{BONUS_COPY.expiryNote(formatMoney(expiring.remaining, expiring.currency), formatUkDate(expiring.expires_on))}</p>

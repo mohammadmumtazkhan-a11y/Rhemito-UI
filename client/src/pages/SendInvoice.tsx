@@ -703,17 +703,17 @@ export default function SendInvoice() {
       },
       {
         label: "Amount the Client Will Pay",
-        value: `${sym}${fees.clientPays.toFixed(2)} ${formData.currency}`,
+        value: `${sym}${fees.clientPays.toFixed(2)}`,
         testId: "review-client-pays",
       },
       {
         label: "Amount You Will Receive",
-        value: `${sym}${fees.senderReceives.toFixed(2)} ${formData.currency}`,
+        value: `${sym}${fees.senderReceives.toFixed(2)}`,
         testId: "review-you-receive",
       },
       {
         label: "Applicable Fees (3%)",
-        value: `${sym}${fees.fee.toFixed(2)} ${formData.currency}${formData.absorbFee ? " (absorbed by you)" : " (added to client)"}`,
+        value: `${sym}${fees.fee.toFixed(2)}${formData.absorbFee ? " (absorbed by you)" : " (added to client)"}`,
         testId: "review-fees",
       },
     ];
@@ -1449,14 +1449,14 @@ export default function SendInvoice() {
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Items Subtotal:</span>
                           <span className="font-medium text-slate-800">
-                            {sym}{generateTotals.subtotal.toFixed(2)} {formData.currency}
+                            {sym}{generateTotals.subtotal.toFixed(2)}
                           </span>
                         </div>
                         {generateTotals.itemsDiscountTotal > 0 && (
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Items Discount:</span>
                             <span className="font-medium text-teal">
-                              -{sym}{generateTotals.itemsDiscountTotal.toFixed(2)} {formData.currency}
+                              -{sym}{generateTotals.itemsDiscountTotal.toFixed(2)}
                             </span>
                           </div>
                         )}
@@ -1464,7 +1464,7 @@ export default function SendInvoice() {
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Discount:</span>
                             <span className="font-medium text-teal">
-                              -{sym}{generateTotals.discountAmount.toFixed(2)} {formData.currency}
+                              -{sym}{generateTotals.discountAmount.toFixed(2)}
                             </span>
                           </div>
                         )}
@@ -1472,7 +1472,7 @@ export default function SendInvoice() {
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Tax ({generateData.taxRate}%):</span>
                             <span className="font-medium text-slate-800">
-                              +{sym}{generateTotals.taxAmount.toFixed(2)} {formData.currency}
+                              +{sym}{generateTotals.taxAmount.toFixed(2)}
                             </span>
                           </div>
                         )}
@@ -1482,7 +1482,7 @@ export default function SendInvoice() {
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Invoice Amount:</span>
                       <span className="font-medium text-slate-800">
-                        {sym}{fees.invoiceAmount.toFixed(2)} {formData.currency}
+                        {sym}{fees.invoiceAmount.toFixed(2)}
                       </span>
                     </div>
 
@@ -1491,7 +1491,7 @@ export default function SendInvoice() {
                         Fee (3%{formData.absorbFee ? " absorbed by you" : " added to client"}):
                       </span>
                       <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
-                        {formData.absorbFee ? "-" : "+"}{sym}{fees.fee.toFixed(2)} {formData.currency}
+                        {formData.absorbFee ? "-" : "+"}{sym}{fees.fee.toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -1508,7 +1508,7 @@ export default function SendInvoice() {
                   <div className="flex justify-between pt-1 items-baseline">
                     <span className="font-medium text-slate-800">Client Pays:</span>
                     <span className="font-bold text-lg text-teal">
-                      {sym}{fees.clientPays.toFixed(2)} {formData.currency}
+                      {sym}{fees.clientPays.toFixed(2)}
                     </span>
                   </div>
 
@@ -1525,7 +1525,7 @@ export default function SendInvoice() {
                       )}
                     </div>
                     <span className="font-bold text-lg text-primary">
-                      {sym}{fees.senderReceives.toFixed(2)} {formData.currency}
+                      {sym}{fees.senderReceives.toFixed(2)}
                     </span>
                   </div>
                 </div>

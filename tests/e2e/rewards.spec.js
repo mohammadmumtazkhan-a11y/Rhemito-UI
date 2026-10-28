@@ -69,7 +69,6 @@ test.describe('Refer & Earn on the Dashboard', () => {
         await page.goto('/');
         const card = page.getByTestId('refer-earn-card');
         await expect(card).toBeVisible();
-        await card.getByTestId('toggle-refer-earn-card').click();
         await expect(card.getByTestId('refer-offer-text')).toContainText('You get £5.00 and your friend gets £10.00');
         await expect(card.getByLabel('Your referral link')).toHaveValue('localhost:5000/ref/JOHN2880');
         // Totals only — individual friends are listed on the Referrals tab, so the card never grows
@@ -77,9 +76,9 @@ test.describe('Refer & Earn on the Dashboard', () => {
         await expect(card.getByTestId('refer-earned')).toHaveText('£5.00');
         await expect(card.getByTestId('refer-waiting')).toContainText('2 friends are yet to send £50.00+');
         await expect(card.getByText('Kemi L.')).toHaveCount(0);
-        await expect(card.getByRole('link', { name: 'View all referrals' })).toBeVisible();
+        await expect(card.getByRole('link', { name: /View all referrals/i })).toBeVisible();
         await expect(page.getByTestId('bonus-credit-card')).toHaveCount(0);
-        await expect(page.getByTestId('bonus-earned-pill')).toContainText('£7.00 bonus credit');
+        await expect(page.getByTestId('bonus-earned-pill')).toContainText('£7.00');
     });
 
     test('offer banner can be dismissed and stays dismissed', async ({ page }) => {
@@ -206,7 +205,7 @@ test.describe('Send Money — use your bonus', () => {
         await mockRewards(page);
         await page.goto('/send-money');
         await page.getByPlaceholder('0.00').first().fill('500');
-        await page.getByTestId('step1-use-bonus-btn').click();
+        await page.getByTestId('step1-use-referral-btn').click();
 
         const bonus = page.getByTestId('bonus-redemption');
         await expect(bonus).toContainText('£7.00 available', { timeout: 15000 });

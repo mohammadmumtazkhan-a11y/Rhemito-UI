@@ -751,7 +751,7 @@ export default function RequestPayment() {
     if (belowMin) {
       toast({
         title: "Amount below the minimum",
-        description: `The payer must send at least ${senderSymbol}${(minAmount ?? 0).toFixed(2)} ${senderCurrency}.`,
+        description: `The payer must send at least ${senderSymbol}${(minAmount ?? 0).toFixed(2)}.`,
         variant: "destructive",
       });
       return;
@@ -885,21 +885,21 @@ export default function RequestPayment() {
         <div className="text-center">
           <p className="text-xs text-muted-foreground">You pay</p>
           <p className="text-3xl font-extrabold font-display text-primary tabular-nums" data-testid="preview-amount">
-            {senderSymbol}{senderPaysAmount.toFixed(2)} <span className="text-lg">{senderCurrency}</span>
+            {senderSymbol}{senderPaysAmount.toFixed(2)}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 space-y-2 text-sm">
-          <div className="flex justify-between gap-4"><span className="text-muted-foreground">Requested amount</span><span className="font-medium tabular-nums">{senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency}</span></div>
-          <div className="flex justify-between gap-4"><span className="text-muted-foreground">Transaction fee (3%)</span><span className="font-medium tabular-nums">{formData.absorbFee ? "Paid by requester" : `+${senderSymbol}${platformFeeAmount.toFixed(2)} ${senderCurrency}`}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-muted-foreground">Requested amount</span><span className="font-medium tabular-nums whitespace-nowrap">{senderSymbol}{parsedAmount.toFixed(2)}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-muted-foreground">Transaction fee (3%)</span><span className="font-medium tabular-nums whitespace-nowrap">{formData.absorbFee ? "Paid by requester" : `+${senderSymbol}${platformFeeAmount.toFixed(2)}`}</span></div>
           {senderCurrency !== payoutCurrency && fxFinite && (
             <div className="flex justify-between gap-4"><span className="text-muted-foreground">Exchange rate (indicative)</span><span className="font-medium tabular-nums">{fxRate.toFixed(4)} {payoutCurrency} per {senderCurrency}</span></div>
           )}
           <div className="flex justify-between gap-4 border-t border-dashed border-border pt-2 font-semibold text-primary">
             <span>They receive in bank</span>
-            <span className="tabular-nums">
+            <span className="tabular-nums whitespace-nowrap">
               {senderCurrency === payoutCurrency
-                ? `${payoutSymbol}${netBeforeFx.toFixed(2)} ${payoutCurrency}`
-                : fxFinite ? `${payoutSymbol}${receiveInPayout.toFixed(2)} ${payoutCurrency}` : "Live rate at payout"}
+                ? `${payoutSymbol}${netBeforeFx.toFixed(2)}`
+                : fxFinite ? `${payoutSymbol}${receiveInPayout.toFixed(2)}` : "Live rate at payout"}
             </span>
           </div>
           <p className="text-xs text-muted-foreground">Paid into {selectedPayoutAccount?.bankName} {selectedPayoutAccount?.maskedNumber}</p>
@@ -933,7 +933,7 @@ export default function RequestPayment() {
               <div>
                 <h2 className="font-display text-lg font-bold text-slate-900">Payment link</h2>
                 <p className="text-xs text-muted-foreground" data-testid="text-link-summary">
-                  {senderSymbol}{parsedAmount.toFixed(2)} {senderCurrency} · {createdRequestNumber}
+                  {senderSymbol}{parsedAmount.toFixed(2)} · {createdRequestNumber}
                   {computedExpiry ? ` · Expires ${formatHumanDate(computedExpiry.expiryDate)}` : ""}
                 </p>
               </div>
@@ -1141,14 +1141,6 @@ export default function RequestPayment() {
                             )}
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowPromoModal(true)}
-                          className="shrink-0 self-start sm:self-center inline-flex items-center gap-1.5 rounded-full bg-white hover:bg-indigo-50 border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-2xs transition-colors cursor-pointer"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                          {promoApplied ? `Promo ${promoCode} applied` : "Use Promo Code"}
-                        </button>
                       </div>
                       <PayoutAccountSelector
                         requesterName={requesterName}
@@ -1319,13 +1311,13 @@ export default function RequestPayment() {
                           )}
                           {minAmount !== null && (
                             <p className="text-xs text-muted-foreground" data-testid="text-minimum">
-                              Minimum the payer can send: <strong className="text-foreground tabular-nums">{senderSymbol}{minAmount.toFixed(2)} {senderCurrency}</strong>
+                              Minimum the payer can send: <strong className="text-foreground tabular-nums">{senderSymbol}{minAmount.toFixed(2)}</strong>
                             </p>
                           )}
                           {belowMin && minAmount !== null && (
                             <p className="flex items-start gap-1.5 text-xs text-destructive" role="alert" data-testid="error-minimum">
                               <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                              The payer must send at least {senderSymbol}{minAmount.toFixed(2)} {senderCurrency}.
+                              The payer must send at least {senderSymbol}{minAmount.toFixed(2)}.
                             </p>
                           )}
                         </div>
@@ -1348,19 +1340,19 @@ export default function RequestPayment() {
                         <div className="space-y-3 text-sm">
                           <div className="flex justify-between gap-6">
                             <span className="text-muted-foreground">Payer sends</span>
-                            <span className="font-bold text-slate-800 tabular-nums" data-testid="breakdown-sender-pays">
-                              {senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}
+                            <span className="font-bold text-slate-800 tabular-nums whitespace-nowrap" data-testid="breakdown-sender-pays">
+                              {senderSymbol}{senderPaysAmount.toFixed(2)}
                             </span>
                           </div>
                           <div className="flex justify-between gap-6 text-muted-foreground">
                             <span>Fee (3%{formData.absorbFee ? ", taken from what you receive" : ", added for the payer"})</span>
-                            <span className={`font-medium tabular-nums ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
-                              {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
+                            <span className={`font-medium tabular-nums whitespace-nowrap ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
+                              {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)}
                             </span>
                           </div>
                           <div className="flex justify-between gap-6 text-xs text-muted-foreground">
                             <span>Net before FX</span>
-                            <span className="font-semibold text-slate-700 tabular-nums">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
+                            <span className="font-semibold text-slate-700 tabular-nums whitespace-nowrap">{senderSymbol}{netBeforeFx.toFixed(2)}</span>
                           </div>
                           {senderCurrency !== payoutCurrency && (
                             <div className="flex justify-between gap-6 text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900">
@@ -1371,7 +1363,7 @@ export default function RequestPayment() {
                           {promoApplied && promoBonus > 0 && (
                             <div className="flex justify-between gap-6 text-xs bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 text-emerald-900" data-testid="breakdown-promo-bonus">
                               <span className="font-medium">Promo {promoCode} bonus (paid into your bank on top)</span>
-                              <span className="font-semibold tabular-nums">+{payoutSymbol}{promoBonus.toFixed(2)} {payoutCurrency}</span>
+                              <span className="font-semibold tabular-nums whitespace-nowrap">+{payoutSymbol}{promoBonus.toFixed(2)}</span>
                             </div>
                           )}
                         </div>
@@ -1408,8 +1400,8 @@ export default function RequestPayment() {
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 space-y-5">
                       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/50 px-3.5 py-2.5 text-sm" data-testid="request-summary">
-                        <span>You receive <strong className="tabular-nums">{senderCurrency === payoutCurrency ? `${payoutSymbol}${netBeforeFx.toFixed(2)}` : fxFinite ? `${payoutSymbol}${receiveInPayout.toFixed(2)}` : `${senderSymbol}${netBeforeFx.toFixed(2)}`} {senderCurrency === payoutCurrency || fxFinite ? payoutCurrency : senderCurrency}</strong></span>
-                        <span>Payer sends <strong className="tabular-nums">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</strong></span>
+                        <span>You receive <strong className="tabular-nums whitespace-nowrap">{senderCurrency === payoutCurrency ? `${payoutSymbol}${netBeforeFx.toFixed(2)}` : fxFinite ? `${payoutSymbol}${receiveInPayout.toFixed(2)}` : `${senderSymbol}${netBeforeFx.toFixed(2)}`}</strong></span>
+                        <span>Payer sends <strong className="tabular-nums whitespace-nowrap">{senderSymbol}{senderPaysAmount.toFixed(2)}</strong></span>
                         <button type="button" onClick={() => setCurrentStep(1)} className="font-semibold text-primary" data-testid="button-edit-amount">Edit amount</button>
                       </div>
 
@@ -1714,20 +1706,20 @@ export default function RequestPayment() {
                     <div className="lg:col-span-2 lg:self-start lg:sticky lg:top-24">
                       <div className="border border-border rounded-xl p-5 space-y-3 bg-card shadow-sm text-sm" data-testid="request-breakdown">
                         <h3 className="font-semibold text-base text-slate-900 border-b pb-2">Payment breakdown</h3>
-                        <div className="flex justify-between gap-6"><span className="text-muted-foreground">Payer sends</span><span className="font-bold tabular-nums" data-testid="review-sender-pays">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span></div>
-                        <div className="flex justify-between gap-6 text-muted-foreground"><span>Fee (3%)</span><span className="tabular-nums">{formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}</span></div>
+                        <div className="flex justify-between gap-6"><span className="text-muted-foreground">Payer sends</span><span className="font-bold tabular-nums whitespace-nowrap" data-testid="review-sender-pays">{senderSymbol}{senderPaysAmount.toFixed(2)}</span></div>
+                        <div className="flex justify-between gap-6 text-muted-foreground"><span>Fee (3%)</span><span className="tabular-nums whitespace-nowrap">{formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)}</span></div>
                         {promoApplied && promoBonus > 0 && (
                           <div className="flex justify-between gap-6 text-emerald-700" data-testid="review-promo-bonus">
                             <span>Promo {promoCode} bonus (paid into your bank on top)</span>
-                            <span className="tabular-nums">+{payoutSymbol}{promoBonus.toFixed(2)} {payoutCurrency}</span>
+                            <span className="tabular-nums whitespace-nowrap">+{payoutSymbol}{promoBonus.toFixed(2)}</span>
                           </div>
                         )}
                         <div className="flex justify-between gap-6 font-semibold text-primary border-t border-dashed border-border pt-2">
                           <span>You receive in bank</span>
-                          <span className="tabular-nums">
+                          <span className="tabular-nums whitespace-nowrap">
                             {senderCurrency === payoutCurrency
-                              ? `${payoutSymbol}${(netBeforeFx + promoBonus).toFixed(2)} ${payoutCurrency}`
-                              : fxFinite ? `${payoutSymbol}${(receiveInPayout + promoBonus).toFixed(2)} ${payoutCurrency}` : `${senderSymbol}${netBeforeFx.toFixed(2)} ${senderCurrency}`}
+                              ? `${payoutSymbol}${(netBeforeFx + promoBonus).toFixed(2)}`
+                              : fxFinite ? `${payoutSymbol}${(receiveInPayout + promoBonus).toFixed(2)}` : `${senderSymbol}${netBeforeFx.toFixed(2)}`}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground">Paid into {selectedPayoutAccount?.bankName} {selectedPayoutAccount?.maskedNumber}</p>
@@ -1786,17 +1778,17 @@ export default function RequestPayment() {
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 text-xs">
               <div className="flex justify-between gap-6">
                 <span className="text-muted-foreground">Requested Amount (Payer Pays):</span>
-                <span className="font-semibold text-slate-800">{senderSymbol}{senderPaysAmount.toFixed(2)} {senderCurrency}</span>
+                <span className="font-semibold text-slate-800 whitespace-nowrap">{senderSymbol}{senderPaysAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between gap-6">
                 <span className="text-muted-foreground">Fee (3%{formData.absorbFee ? " absorbed by you" : " added to payer"}):</span>
-                <span className={`font-medium ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
-                  {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)} {senderCurrency}
+                <span className={`font-medium whitespace-nowrap ${formData.absorbFee ? "text-red-600" : "text-slate-800"}`}>
+                  {formData.absorbFee ? "-" : "+"}{senderSymbol}{platformFeeAmount.toFixed(2)}
                 </span>
               </div>
               <div className="flex justify-between gap-6">
                 <span className="text-muted-foreground">Net Payout Amount:</span>
-                <span className="font-semibold text-slate-800">{senderSymbol}{netBeforeFx.toFixed(2)} {senderCurrency}</span>
+                <span className="font-semibold text-slate-800 whitespace-nowrap">{senderSymbol}{netBeforeFx.toFixed(2)}</span>
               </div>
               <div className="flex justify-between gap-6 pt-1 border-t border-slate-200/60">
                 <span className="text-muted-foreground">Destination Settlement Bank Account:</span>

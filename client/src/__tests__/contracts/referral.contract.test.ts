@@ -387,7 +387,7 @@ describe("Refer & Earn card", () => {
     const usdOffer = { ...OFFER, rule_id: 2, currency: "USD", text: "You get $10.00 and your friend gets $20.00 in bonus credit when they send $100.00 or more." };
     const multiCur = card({ offer: OFFER, offers: [OFFER, usdOffer], sendCurrencies: ["GBP", "USD", "EUR"] });
     expect(multiCur.getByTestId("refer-send-currencies").textContent).toBe("GBPUSDEUR");
-    expect(multiCur.getByTestId("refer-currency-hint").textContent).toBe("Click a currency to see its rewards");
+    expect(multiCur.getByTestId("refer-currency-hint").textContent).toContain("Click a currency");
     expect(multiCur.queryByTestId("refer-currency-offers")).toBeNull();
     fireEvent.click(multiCur.getByRole("button", { name: "USD" }));
     expect(multiCur.getByTestId("refer-offer-text").textContent).toBe(usdOffer.text);

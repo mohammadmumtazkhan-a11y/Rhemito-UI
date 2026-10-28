@@ -20,7 +20,7 @@ export function DashboardLayout({ children, hideLegalStrip = false }: DashboardL
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="relative min-h-screen w-full max-w-full overflow-x-hidden bg-white">
+    <div className="relative min-h-screen w-full max-w-full overflow-x-hidden bg-white pt-16">
       <MaintenanceBanner />
       <Header onMenuClick={() => setSidebarOpen(true)} />
       <div className="flex min-h-[calc(100vh-4rem)] w-full flex-col lg:flex-row lg:gap-10">

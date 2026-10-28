@@ -19,6 +19,12 @@ import { PayoutAccountSelector } from "@/components/payout/PayoutAccountSelector
 import type { PayoutAccountView } from "@/lib/requests";
 
 const CURRENCIES = ["GBP", "USD", "EUR", "NGN"];
+const CURRENCY_SYMBOLS: Record<string, string> = {
+    GBP: "£",
+    USD: "$",
+    EUR: "€",
+    NGN: "₦",
+};
 
 export default function CreateCampaign() {
     const [, setLocation] = useLocation();
@@ -240,15 +246,15 @@ export default function CreateCampaign() {
                                                     <div className="space-y-2 text-sm">
                                                         <div className="flex justify-between">
                                                             <span className="text-gray-600">You want to receive</span>
-                                                            <span className="font-medium">{formData.currency} {targetFeeBreakdown.netAmount.toFixed(2)}</span>
+                                                            <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency] ?? "£"}{targetFeeBreakdown.netAmount.toFixed(2)}</span>
                                                         </div>
                                                         <div className="flex justify-between text-orange-600">
-                                                            <span>+ Mito Fee ({targetFeeBreakdown.feePercentage}% + {formData.currency}{targetFeeBreakdown.fixedFee.toFixed(2)})</span>
-                                                            <span className="font-medium">{formData.currency} {targetFeeBreakdown.mitoFee.toFixed(2)}</span>
+                                                            <span>+ Mito Fee ({targetFeeBreakdown.feePercentage}% + {CURRENCY_SYMBOLS[formData.currency] ?? "£"}{targetFeeBreakdown.fixedFee.toFixed(2)})</span>
+                                                            <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency] ?? "£"}{targetFeeBreakdown.mitoFee.toFixed(2)}</span>
                                                         </div>
                                                         <div className="border-t border-blue-200 pt-2 flex justify-between font-bold">
                                                             <span className="text-blue-800">Campaign Target</span>
-                                                            <span className="text-blue-600">{formData.currency} {targetFeeBreakdown.grossAmount.toFixed(2)}</span>
+                                                            <span className="text-blue-600">{CURRENCY_SYMBOLS[formData.currency] ?? "£"}{targetFeeBreakdown.grossAmount.toFixed(2)}</span>
                                                         </div>
                                                     </div>
                                                 </motion.div>
@@ -335,15 +341,15 @@ export default function CreateCampaign() {
                                                             <div className="space-y-2 text-sm">
                                                                 <div className="flex justify-between">
                                                                     <span className="text-gray-600">You receive per person</span>
-                                                                    <span className="font-medium">{formData.currency} {fixedFeeBreakdown.netPerContributor.toFixed(2)}</span>
+                                                                    <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency] ?? "£"}{fixedFeeBreakdown.netPerContributor.toFixed(2)}</span>
                                                                 </div>
                                                                 <div className="flex justify-between text-orange-600">
-                                                                    <span>+ Mito Fee ({fixedFeeBreakdown.feePercentage}% + {formData.currency}{fixedFeeBreakdown.fixedFee.toFixed(2)})</span>
-                                                                    <span className="font-medium">{formData.currency} {fixedFeeBreakdown.feePerContributor.toFixed(2)}</span>
+                                                                    <span>+ Mito Fee ({fixedFeeBreakdown.feePercentage}% + {CURRENCY_SYMBOLS[formData.currency] ?? "£"}{fixedFeeBreakdown.fixedFee.toFixed(2)})</span>
+                                                                    <span className="font-medium">{CURRENCY_SYMBOLS[formData.currency] ?? "£"}{fixedFeeBreakdown.feePerContributor.toFixed(2)}</span>
                                                                 </div>
                                                                 <div className="border-t pt-2 flex justify-between font-bold">
                                                                     <span className="text-gray-900">Each contributor pays</span>
-                                                                    <span className="text-green-600">{formData.currency} {fixedFeeBreakdown.grossPerContributor.toFixed(2)}</span>
+                                                                    <span className="text-green-600">{CURRENCY_SYMBOLS[formData.currency] ?? "£"}{fixedFeeBreakdown.grossPerContributor.toFixed(2)}</span>
                                                                 </div>
                                                             </div>
                                                         </motion.div>

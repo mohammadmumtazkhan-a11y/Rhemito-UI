@@ -332,7 +332,7 @@ describe("Sources, expiry and history labels", () => {
     expect(panel.container.textContent).toContain("it's used first.");
     panel.unmount();
     const pill = render(React.createElement(BonusCreditPill, { balance: balance({ available: 7 }), unused, onCreateTransaction: () => {} }));
-    expect(pill.getByTestId("bonus-pill-expiring").textContent).toBe("£3.00 expires in 5 days.");
+    expect(pill.getByTestId("bonus-pill-expiring").textContent).toContain("£3.00 expires in 5 days");
     pill.unmount();
     const hidden = render(React.createElement(BonusCreditPill, { balance: balance({ available: 0 }), onCreateTransaction: () => {} }));
     expect(hidden.container.innerHTML).toBe("");

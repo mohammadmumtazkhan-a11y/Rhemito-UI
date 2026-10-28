@@ -36,6 +36,9 @@ const FEE_PERCENTAGE = 0.01; // 1%
 const CURRENCY_FLAGS: Record<string, string> = {
     GBP: "gb", USD: "us", EUR: "eu", NGN: "ng", INR: "in", GHS: "gh", KES: "ke", ZAR: "za", CAD: "ca", AED: "ae", AUD: "au", CNY: "cn", JPY: "jp",
 };
+const CURRENCY_SYMBOLS: Record<string, string> = {
+    GBP: "£", USD: "$", EUR: "€", NGN: "₦", INR: "₹", GHS: "GH₵", KES: "KSh ", ZAR: "R", CAD: "C$", AED: "AED ", AUD: "A$", CNY: "¥", JPY: "¥",
+};
 const RECEIVE_CURRENCIES = ["NGN", "INR", "GHS", "KES", "ZAR", "EUR", "USD", "GBP", "CAD", "AED", "AUD", "CNY", "JPY"];
 
 const recentRecipients = [
@@ -127,29 +130,12 @@ export default function SendMoney() {
     const [showExpiryPopup, setShowExpiryPopup] = useState(false);
     const [expiryCountdown, setExpiryCountdown] = useState(5);
     const [showPromoModal, setShowPromoModal] = useState(false);
-    const [bonusPanelOpen, setBonusPanelOpen] = useState(true);
+    const [bonusPanelOpen, setBonusPanelOpen] = useState(
+        initialRewardParam === "referral" || initialRewardParam === "bonus",
+    );
     const [activeRewardTab, setActiveRewardTab] = useState<"referral" | "bonus">(
         initialRewardParam === "bonus" ? "bonus" : "referral",
     );
-    const [userPickedRewardTab, setUserPickedRewardTab] = useState(
-        initialRewardParam === "referral" || initialRewardParam === "bonus",
-    );
-
-    useEffect(() => {
-        const qs = new URLSearchParams(
-            searchParams || (typeof window !== "undefined" ? window.location.search : ""),
-        );
-        const rewardParam = qs.get("reward");
-        const curParam = qs.get("currency")?.toUpperCase();
-        if (rewardParam === "referral" || rewardParam === "bonus") {
-            setActiveRewardTab(rewardParam);
-            setUserPickedRewardTab(true);
-            setBonusPanelOpen(true);
-        }
-        if (curParam && ["GBP", "USD", "EUR"].includes(curParam)) {
-            setSendCurrencyState(curParam);
-        }
-    }, [searchParams]);
 
     // Referral bonus — live wallet from the rewards API (US-5.2 / US-5.3)
     const rewards = useRewards();
@@ -163,18 +149,21 @@ export default function SendMoney() {
         (rewards.data?.offer?.currency === SEND_CURRENCY ? rewards.data?.offer : rewards.data?.offer);
     // One bonus balance, in the currency of this transfer; no minimum to use it (BONUS-RHEMITO 7.5)
     const bonusWallet = balanceFor(rewards.data?.wallet, SEND_CURRENCY);
+
     useEffect(() => {
-        if (userPickedRewardTab) return;
-        const bySource = bonusWallet.by_source ?? [];
-        if (!bySource.length) return;
-        const refAvail = bySource.find((s) => s.credit_source === "REFERRAL")?.available ?? 0;
-        const schAvail = bySource.filter((s) => s.credit_source === "SCHEME" || s.credit_source === "MANUAL").reduce((sum, s) => sum + (s.available || 0), 0);
-        if (refAvail <= 0 && schAvail > 0 && activeRewardTab !== "bonus") {
-            setActiveRewardTab("bonus");
-        } else if (refAvail > 0 && activeRewardTab !== "referral") {
-            setActiveRewardTab("referral");
+        const qs = new URLSearchParams(
+            searchParams || (typeof window !== "undefined" ? window.location.search : ""),
+        );
+        const rewardParam = qs.get("reward");
+        const curParam = qs.get("currency")?.toUpperCase();
+        if (rewardParam === "referral" || rewardParam === "bonus") {
+            setActiveRewardTab(rewardParam);
+            setBonusPanelOpen(true);
         }
-    }, [bonusWallet, userPickedRewardTab, activeRewardTab]);
+        if (curParam && ["GBP", "USD", "EUR"].includes(curParam)) {
+            setSendCurrencyState(curParam);
+        }
+    }, [searchParams]);
     const bonusBalance = eligibleBonusBalance(
         bonusWallet,
         parseFloat(amount || "0"),
@@ -244,6 +233,8 @@ export default function SendMoney() {
     const youSendAmount = parseFloat(amount || "0");
     const amountSentGBP = youSendAmount + (useBonus && bonusType === 'send_more' ? bonusAmount : 0);
     const finalReceiveAmount = (amountSentGBP * EXCHANGE_RATE).toFixed(2);
+    const sendSymbol = CURRENCY_SYMBOLS[SEND_CURRENCY] ?? "£";
+    const receiveSymbol = CURRENCY_SYMBOLS[recipientDetails.currency || "NGN"] ?? "₦";
 
 
 
@@ -547,13 +538,8 @@ export default function SendMoney() {
                                                     disabled={promoApplied || (useBonus && activeRewardTab === "bonus")}
                                                     title={promoApplied || (useBonus && activeRewardTab === "bonus") ? "You can only use one reward at a time" : undefined}
                                                     onClick={() => {
-                                                        const bySource = bonusWallet.by_source ?? [];
-                                                        const refAvail = bySource.find((s) => s.credit_source === "REFERRAL")?.available ?? 0;
-                                                        const schAvail = bySource.filter((s) => s.credit_source === "SCHEME" || s.credit_source === "MANUAL").reduce((sum, s) => sum + (s.available || 0), 0);
-                                                        const nextTab = bySource.length > 0 && refAvail <= 0 && schAvail > 0 ? "bonus" : "referral";
-                                                        if (activeRewardTab !== nextTab) setBonusChoiceState("none");
-                                                        setUserPickedRewardTab(true);
-                                                        setActiveRewardTab(nextTab);
+                                                        if (activeRewardTab !== "referral") setBonusChoiceState("none");
+                                                        setActiveRewardTab("referral");
                                                         setBonusPanelOpen(true);
                                                     }}
                                                     data-testid="step1-use-referral-btn"
@@ -566,13 +552,8 @@ export default function SendMoney() {
                                                     disabled={promoApplied || (useBonus && activeRewardTab === "referral")}
                                                     title={promoApplied || (useBonus && activeRewardTab === "referral") ? "You can only use one reward at a time" : undefined}
                                                     onClick={() => {
-                                                        const bySource = bonusWallet.by_source ?? [];
-                                                        const refAvail = bySource.find((s) => s.credit_source === "REFERRAL")?.available ?? 0;
-                                                        const schAvail = bySource.filter((s) => s.credit_source === "SCHEME" || s.credit_source === "MANUAL").reduce((sum, s) => sum + (s.available || 0), 0);
-                                                        const nextTab = bySource.length > 0 && schAvail <= 0 && refAvail > 0 ? "referral" : "bonus";
-                                                        if (activeRewardTab !== nextTab) setBonusChoiceState("none");
-                                                        setUserPickedRewardTab(true);
-                                                        setActiveRewardTab(nextTab);
+                                                        if (activeRewardTab !== "bonus") setBonusChoiceState("none");
+                                                        setActiveRewardTab("bonus");
                                                         setBonusPanelOpen(true);
                                                     }}
                                                     data-testid="step1-use-bonus-btn"
@@ -694,7 +675,7 @@ export default function SendMoney() {
                                                 </div>
                                                 <span>Amount Sent</span>
                                             </div>
-                                            <span className="font-medium">{(parseFloat(amount) - effectiveFee).toFixed(2)} GBP</span>
+                                            <span className="font-medium whitespace-nowrap">{sendSymbol}{(parseFloat(amount) - effectiveFee).toFixed(2)}</span>
                                         </div>
                                         <div className="flex items-center justify-between py-2">
                                             <div className="flex items-center gap-3 text-gray-600">
@@ -703,12 +684,12 @@ export default function SendMoney() {
                                                 </div>
                                                 <span>Fee</span>
                                             </div>
-                                            <span className="font-medium">{fee.toFixed(2)} GBP</span>
+                                            <span className="font-medium whitespace-nowrap">{sendSymbol}{fee.toFixed(2)}</span>
                                         </div>
                                         {promoApplied && (
                                             <div className="flex items-center justify-between py-2 text-green-600 font-medium">
                                                 <span>Promo ({promoCode})</span>
-                                                <span>- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                                <span className="whitespace-nowrap">- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
                                             </div>
                                         )}
                                         <div className="flex items-center justify-between py-2 bg-blue-50 px-4 rounded-lg -mx-4">
@@ -718,7 +699,7 @@ export default function SendMoney() {
                                                 </div>
                                                 <span>Exchange Rate</span>
                                             </div>
-                                            <span className="font-medium text-gray-900">1 GBP = {EXCHANGE_RATE.toFixed(2)} USD</span>
+                                            <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}1 = {receiveSymbol}{EXCHANGE_RATE.toFixed(2)}</span>
                                         </div>
                                     </div>
 
@@ -749,42 +730,42 @@ export default function SendMoney() {
                                             <CardContent className="space-y-4 text-sm pt-6">
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">You Send</span>
-                                                    <span className="font-medium text-gray-900">{parseFloat(amount).toFixed(2)} GBP</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{parseFloat(amount).toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Amount Sent</span>
-                                                    <span className="font-medium text-gray-900">{(parseFloat(amount) - effectiveFee).toFixed(2)} GBP</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{(parseFloat(amount) - effectiveFee).toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Fee</span>
-                                                    <span className="font-medium text-gray-900">{fee.toFixed(2)} GBP</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{fee.toFixed(2)}</span>
                                                 </div>
                                                 {promoApplied && (
                                                     <div className="flex justify-between font-medium text-green-600 bg-green-50 px-2 py-1 -mx-2 rounded" data-testid="summary-promo-step1">
                                                         <span>Promo ({promoCode})</span>
-                                                        <span>- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                                        <span className="whitespace-nowrap">- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
                                                     </div>
                                                 )}
                                                 {useBonus && (
                                                     <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus-step1">
                                                         <span>{bonusType === "pay_less" ? "Bonus discount" : "Bonus credit"}</span>
-                                                        <span>{bonusType === "pay_less" ? "-" : "+"} {bonusAmount.toFixed(2)} {SEND_CURRENCY}</span>
+                                                        <span className="whitespace-nowrap">{bonusType === "pay_less" ? "-" : "+"} {sendSymbol}{bonusAmount.toFixed(2)}</span>
                                                     </div>
                                                 )}
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Exchange Rate</span>
-                                                    <span className="font-medium text-gray-900">1 GBP = {EXCHANGE_RATE.toFixed(2)} USD</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}1 = {receiveSymbol}{EXCHANGE_RATE.toFixed(2)}</span>
                                                 </div>
                                                 {(promoApplied || useBonus) && (
                                                     <div className="flex justify-between pt-2 border-t font-bold text-gray-900">
                                                         <span>Total to Pay</span>
-                                                        <span>{totalPay.toFixed(2)} GBP</span>
+                                                        <span className="whitespace-nowrap">{sendSymbol}{totalPay.toFixed(2)}</span>
                                                     </div>
                                                 )}
 
                                                 <div className="pt-4 mt-4 border-t flex justify-between items-center">
                                                     <span className="text-gray-600 font-medium">They Receive</span>
-                                                    <span className="font-bold text-lg text-blue-600">{receiveAmount} USD</span>
+                                                    <span className="font-bold text-lg text-blue-600 whitespace-nowrap">{receiveSymbol}{receiveAmount}</span>
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -950,29 +931,29 @@ export default function SendMoney() {
                                             <CardContent className="space-y-4 text-sm pt-6">
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">You Send</span>
-                                                    <span className="font-medium text-gray-900">{parseFloat(amount).toFixed(2)} GBP</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{parseFloat(amount).toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Amount Sent</span>
-                                                    <span className="font-medium text-gray-900">{(parseFloat(amount) - effectiveFee).toFixed(2)} GBP</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{(parseFloat(amount) - effectiveFee).toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">They Receive</span>
-                                                    <span className="font-medium text-gray-900">{receiveAmount} USD</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{receiveSymbol}{receiveAmount}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Transaction Fee</span>
-                                                    <span className="font-medium text-gray-900">{fee.toFixed(2)} GBP</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{fee.toFixed(2)}</span>
                                                 </div>
                                                 {promoApplied && (
                                                     <div className="flex justify-between font-medium text-green-600 bg-green-50 px-2 py-1 -mx-2 rounded">
                                                         <span>Promo ({promoCode})</span>
-                                                        <span>- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                                        <span className="whitespace-nowrap">- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
                                                     </div>
                                                 )}
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Exchange Rate</span>
-                                                    <span className="font-medium text-gray-900">1 GBP = {EXCHANGE_RATE.toFixed(2)} USD</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}1 = {receiveSymbol}{EXCHANGE_RATE.toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between pt-2">
                                                     <span className="text-gray-600">Collection Method</span>
@@ -1203,26 +1184,26 @@ export default function SendMoney() {
                                             <CardContent className="space-y-4 text-sm pt-6">
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">You Send</span>
-                                                    <span className="font-medium text-gray-900">{parseFloat(amount).toFixed(2)} GBP</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{parseFloat(amount).toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Fees</span>
-                                                    <span className="font-medium text-gray-900">{fee.toFixed(2)} GBP</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{fee.toFixed(2)}</span>
                                                 </div>
                                                 {promoApplied && (
                                                     <div className="flex justify-between font-medium text-green-600 bg-green-50 px-2 py-1 -mx-2 rounded">
                                                         <span>Promo ({promoCode})</span>
-                                                        <span>- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                                        <span className="whitespace-nowrap">- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
                                                     </div>
                                                 )}
                                                 <div className="border-t pt-2 mt-2 flex justify-between items-center">
                                                     <span className="text-gray-900 font-bold text-base">Total to Pay</span>
-                                                    <span className="font-bold text-lg text-gray-900">{totalPay.toFixed(2)} GBP</span>
+                                                    <span className="font-bold text-lg text-gray-900 whitespace-nowrap">{sendSymbol}{totalPay.toFixed(2)}</span>
                                                 </div>
 
                                                 <div className="pt-4 mt-2 bg-blue-50/50 -mx-6 px-6 py-4 mb-[-24px]">
                                                     <div className="text-sm text-gray-600 mb-1">They Receive</div>
-                                                    <div className="text-xl font-bold text-blue-600">{receiveAmount} NGN</div>
+                                                    <div className="text-xl font-bold text-blue-600 whitespace-nowrap">{receiveSymbol}{receiveAmount}</div>
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -1333,7 +1314,7 @@ export default function SendMoney() {
                                                 {promoApplied && promoDiscount > 0 && (
                                                     <div className="flex justify-between font-medium text-green-700" data-testid="summary-promo">
                                                         <span>{PROMO_COPY.summaryLabel(promoCode)}</span>
-                                                        <span>−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                                        <span className="whitespace-nowrap">−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
                                                     </div>
                                                 )}
 
@@ -1341,7 +1322,7 @@ export default function SendMoney() {
                                                 {useBonus && bonusType === "pay_less" && (
                                                     <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus">
                                                         <span>{BONUS_COPY.summaryPayLess}</span>
-                                                        <span>- {bonusAmount.toFixed(2)} {SEND_CURRENCY}</span>
+                                                        <span className="whitespace-nowrap">- {sendSymbol}{bonusAmount.toFixed(2)}</span>
                                                     </div>
                                                 )}
 
@@ -1349,22 +1330,22 @@ export default function SendMoney() {
                                                 {useBonus && bonusType === "send_more" && (
                                                     <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus">
                                                         <span>{BONUS_COPY.summarySendMore}</span>
-                                                        <span>+ {bonusAmount.toFixed(2)} {SEND_CURRENCY}</span>
+                                                        <span className="whitespace-nowrap">+ {sendSymbol}{bonusAmount.toFixed(2)}</span>
                                                     </div>
                                                 )}
 
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">You Send</span>
-                                                    <span className="font-medium">{youSendAmount.toFixed(2)} GBP</span>
+                                                    <span className="font-medium whitespace-nowrap">{sendSymbol}{youSendAmount.toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Amount Sent</span>
-                                                    <span className="font-medium">{amountSentGBP.toFixed(2)} GBP</span>
+                                                    <span className="font-medium whitespace-nowrap">{sendSymbol}{amountSentGBP.toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">They Receive</span>
-                                                    <span className="font-medium">
-                                                        {finalReceiveAmount} NGN
+                                                    <span className="font-medium whitespace-nowrap">
+                                                        {receiveSymbol}{finalReceiveAmount}
                                                         {useBonus && bonusType === "send_more" && (
                                                             <span className="text-xs text-green-600 ml-2 font-bold">(+Bonus)</span>
                                                         )}
@@ -1372,11 +1353,11 @@ export default function SendMoney() {
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Transaction Fee</span>
-                                                    <span className="font-medium">{effectiveFee.toFixed(2)} GBP</span>
+                                                    <span className="font-medium whitespace-nowrap">{sendSymbol}{effectiveFee.toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Exchange Rate</span>
-                                                    <span className="font-medium">1 GBP = {EXCHANGE_RATE.toFixed(2)} NGN</span>
+                                                    <span className="font-medium whitespace-nowrap">{sendSymbol}1 = {receiveSymbol}{EXCHANGE_RATE.toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between pt-2">
                                                     <span className="text-gray-600">Connection Method</span>
@@ -1388,7 +1369,7 @@ export default function SendMoney() {
                                                 <div className="pt-4 mt-2 border-t">
                                                     <div className="flex justify-between items-center pt-2">
                                                         <span className="text-gray-900 font-bold text-base">Total to Pay</span>
-                                                        <span className="font-bold text-lg text-gray-900" data-testid="summary-total">{Math.max(0, totalPay).toFixed(2)} GBP</span>
+                                                        <span className="font-bold text-lg text-gray-900 whitespace-nowrap" data-testid="summary-total">{sendSymbol}{Math.max(0, totalPay).toFixed(2)}</span>
                                                     </div>
                                                     {(promoApplied || useBonus) && (
                                                         <p className="text-xs text-green-600 font-medium mt-1">

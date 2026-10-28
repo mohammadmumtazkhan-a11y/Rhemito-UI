@@ -1,5 +1,4 @@
-import { Gift, Users } from "lucide-react";
-import { motion } from "framer-motion";
+import { ArrowRight, Gift, Users } from "lucide-react";
 import { BONUS_COPY } from "../lib/copy";
 import { daysUntil, expiringSoon, formatMoney, type BonusBalance, type BonusCredit } from "../lib/bonus";
 
@@ -11,7 +10,7 @@ interface BonusCreditPillProps {
   onCreateTransaction: (rewardType?: "referral" | "bonus") => void;
 }
 
-/** Dashboard: separate pills for Referral Bonus credit and Bonus Scheme credit, each showing its backend floor rule. Hidden at 0. */
+/** Dashboard: structured rows for Referral bonus and Bonus credit inside the "Your bonus credits" card. Hidden at 0. */
 export function BonusCreditPill({
   balance,
   unused = [],
@@ -50,39 +49,43 @@ export function BonusCreditPill({
     const days = soon ? Math.max(0, daysUntil(soon.expires_on) ?? 0) : null;
     const fallbackFloor = resolvedSchemeFloor || resolvedReferralFloor || 0;
     return (
-      <motion.div
-        whileHover={{ scale: 1.01, y: -1 }}
-        data-testid="bonus-earned-pill"
-        className="flex items-center gap-2.5 bg-gradient-to-r from-purple-50 via-pink-50/70 to-purple-50 text-purple-700 px-3.5 py-2.5 sm:px-4 sm:py-2 rounded-2xl sm:rounded-full border border-purple-200/70 shadow-xs backdrop-blur-sm self-start md:self-auto max-w-full"
-      >
-        <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-xs shrink-0">
-          <Gift className="w-3.5 h-3.5 text-pink-500" aria-hidden />
-        </div>
-        <span className="text-xs md:text-sm font-medium leading-snug">
-          You have <span className="font-bold text-purple-900">{formatMoney(balance.available, balance.currency)} bonus credit</span>
-          {fallbackFloor > 0 && (
-            <span className="text-purple-800">
-              {" "}(min. transfer <span className="font-bold text-purple-900">{formatMoney(fallbackFloor, balance.currency)}</span>)
-            </span>
-          )}
-          .{" "}
+      <div className="rounded-2xl border border-slate-100 bg-slate-50/40 divide-y divide-slate-100">
+        <div
+          data-testid="bonus-earned-pill"
+          className="flex items-center justify-between gap-3.5 px-4 py-3.5"
+        >
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center shrink-0">
+              <Gift className="w-5 h-5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-600">Bonus credit</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight mt-0.5">
+                {formatMoney(balance.available, balance.currency)}
+                <span className="sr-only"> bonus credit</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {fallbackFloor > 0 ? `Minimum transfer ${formatMoney(fallbackFloor, balance.currency)}` : "Ready to use on your next transfer"}
+                {soon && days !== null && (
+                  <span className="ml-1.5 font-semibold text-amber-700" data-testid="bonus-pill-expiring">
+                    {days === 0
+                      ? BONUS_COPY.pillExpiringToday(formatMoney(soon.remaining, soon.currency))
+                      : BONUS_COPY.pillExpiring(formatMoney(soon.remaining, soon.currency), days)}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => onCreateTransaction()}
-            className="font-semibold underline underline-offset-2 hover:text-purple-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
           >
-            {BONUS_COPY.pillCta}
-          </button>{" "}
-          {BONUS_COPY.pillCtaSuffix}
-          {soon && days !== null && (
-            <span className="ml-1 font-semibold text-amber-700" data-testid="bonus-pill-expiring">
-              {days === 0
-                ? BONUS_COPY.pillExpiringToday(formatMoney(soon.remaining, soon.currency))
-                : BONUS_COPY.pillExpiring(formatMoney(soon.remaining, soon.currency), days)}
-            </span>
-          )}
-        </span>
-      </motion.div>
+            <span>{BONUS_COPY.pillCta}</span>
+            <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -93,82 +96,90 @@ export function BonusCreditPill({
   const schemeDays = schemeSoon ? Math.max(0, daysUntil(schemeSoon.expires_on) ?? 0) : null;
 
   return (
-    <div className="flex flex-col items-start gap-2 self-start md:self-auto max-w-full">
+    <div className="rounded-2xl border border-slate-100 bg-slate-50/40 divide-y divide-slate-100">
       {referralAvailable > 0 && (
-        <motion.div
-          whileHover={{ scale: 1.01, y: -1 }}
+        <div
           data-testid={schemeAvailable > 0 ? "referral-bonus-earned-pill" : "bonus-earned-pill"}
-          className="flex items-center gap-2.5 bg-gradient-to-r from-indigo-50 via-teal-50/70 to-indigo-50 text-indigo-800 px-3.5 py-2.5 sm:px-4 sm:py-2 rounded-2xl sm:rounded-full border border-indigo-200/70 shadow-xs backdrop-blur-sm max-w-full"
+          className="flex items-center justify-between gap-3.5 px-4 py-3.5"
         >
-          <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-xs shrink-0">
-            <Users className="w-3.5 h-3.5 text-teal-600" aria-hidden />
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <Users className="w-5 h-5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-600">Referral bonus</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight mt-0.5">
+                {formatMoney(referralAvailable, balance.currency)}
+                <span className="sr-only"> bonus credit</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {resolvedReferralFloor > 0
+                  ? `Minimum transfer ${formatMoney(resolvedReferralFloor, balance.currency)}`
+                  : "Ready to use on your next transfer"}
+                {refSoon && refDays !== null && (
+                  <span
+                    className="ml-1.5 font-semibold text-amber-700"
+                    data-testid={schemeAvailable > 0 && schemeSoon ? "referral-pill-expiring" : "bonus-pill-expiring"}
+                  >
+                    {refDays === 0
+                      ? BONUS_COPY.pillExpiringToday(formatMoney(refSoon.remaining, refSoon.currency))
+                      : BONUS_COPY.pillExpiring(formatMoney(refSoon.remaining, refSoon.currency), refDays)}
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
-          <span className="text-xs md:text-sm font-medium leading-snug">
-            You have <span className="font-bold text-indigo-950">{formatMoney(referralAvailable, balance.currency)} Referral Bonus credit</span>
-            {resolvedReferralFloor > 0 && (
-              <span className="text-indigo-900">
-                {" "}(min. transfer <span className="font-bold text-indigo-950">{formatMoney(resolvedReferralFloor, balance.currency)}</span>)
-              </span>
-            )}
-            .{" "}
-            <button
-              type="button"
-              onClick={() => onCreateTransaction("referral")}
-              data-testid="create-txn-referral-btn"
-              className="font-semibold underline underline-offset-2 hover:text-indigo-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
-            >
-              {BONUS_COPY.pillCta}
-            </button>{" "}
-            {BONUS_COPY.pillCtaSuffix}
-            {refSoon && refDays !== null && (
-              <span
-                className="ml-1 font-semibold text-amber-700"
-                data-testid={schemeAvailable > 0 && schemeSoon ? "referral-pill-expiring" : "bonus-pill-expiring"}
-              >
-                {refDays === 0
-                  ? BONUS_COPY.pillExpiringToday(formatMoney(refSoon.remaining, refSoon.currency))
-                  : BONUS_COPY.pillExpiring(formatMoney(refSoon.remaining, refSoon.currency), refDays)}
-              </span>
-            )}
-          </span>
-        </motion.div>
+          <button
+            type="button"
+            onClick={() => onCreateTransaction("referral")}
+            data-testid="create-txn-referral-btn"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+          >
+            <span>{BONUS_COPY.pillCta}</span>
+            <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+          </button>
+        </div>
       )}
 
       {schemeAvailable > 0 && (
-        <motion.div
-          whileHover={{ scale: 1.01, y: -1 }}
+        <div
           data-testid="bonus-earned-pill"
-          className="flex items-center gap-2.5 bg-gradient-to-r from-purple-50 via-pink-50/70 to-purple-50 text-purple-700 px-3.5 py-2.5 sm:px-4 sm:py-2 rounded-2xl sm:rounded-full border border-purple-200/70 shadow-xs backdrop-blur-sm max-w-full"
+          className="flex items-center justify-between gap-3.5 px-4 py-3.5"
         >
-          <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-xs shrink-0">
-            <Gift className="w-3.5 h-3.5 text-pink-500" aria-hidden />
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center shrink-0">
+              <Gift className="w-5 h-5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-600">Bonus credit</p>
+              <p className="text-lg font-bold text-slate-900 leading-tight mt-0.5">
+                {formatMoney(schemeAvailable, balance.currency)}
+                <span className="sr-only"> bonus credit</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {resolvedSchemeFloor > 0
+                  ? `Minimum transfer ${formatMoney(resolvedSchemeFloor, balance.currency)}`
+                  : "Ready to use on your next transfer"}
+                {schemeSoon && schemeDays !== null && (
+                  <span className="ml-1.5 font-semibold text-amber-700" data-testid="bonus-pill-expiring">
+                    {schemeDays === 0
+                      ? BONUS_COPY.pillExpiringToday(formatMoney(schemeSoon.remaining, schemeSoon.currency))
+                      : BONUS_COPY.pillExpiring(formatMoney(schemeSoon.remaining, schemeSoon.currency), schemeDays)}
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
-          <span className="text-xs md:text-sm font-medium leading-snug">
-            You have <span className="font-bold text-purple-900">{formatMoney(schemeAvailable, balance.currency)} bonus credit</span>
-            {resolvedSchemeFloor > 0 && (
-              <span className="text-purple-800">
-                {" "}(min. transfer <span className="font-bold text-purple-900">{formatMoney(resolvedSchemeFloor, balance.currency)}</span>)
-              </span>
-            )}
-            .{" "}
-            <button
-              type="button"
-              onClick={() => onCreateTransaction("bonus")}
-              data-testid="create-txn-bonus-btn"
-              className="font-semibold underline underline-offset-2 hover:text-purple-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
-            >
-              {BONUS_COPY.pillCta}
-            </button>{" "}
-            {BONUS_COPY.pillCtaSuffix}
-            {schemeSoon && schemeDays !== null && (
-              <span className="ml-1 font-semibold text-amber-700" data-testid="bonus-pill-expiring">
-                {schemeDays === 0
-                  ? BONUS_COPY.pillExpiringToday(formatMoney(schemeSoon.remaining, schemeSoon.currency))
-                  : BONUS_COPY.pillExpiring(formatMoney(schemeSoon.remaining, schemeSoon.currency), schemeDays)}
-              </span>
-            )}
-          </span>
-        </motion.div>
+          <button
+            type="button"
+            onClick={() => onCreateTransaction("bonus")}
+            data-testid="create-txn-bonus-btn"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+          >
+            <span>{BONUS_COPY.pillCta}</span>
+            <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+          </button>
+        </div>
       )}
     </div>
   );

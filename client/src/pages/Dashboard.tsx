@@ -1115,78 +1115,122 @@ export default function Dashboard() {
           </Card>
         </motion.div>
 
-        {/* Refer & Earn + Bonus Blocked Notice preserved underneath Quick Services */}
+        {/* Your bonus credits + Refer & Earn side-by-side cards underneath Quick Services */}
         {(rewards.data?.wallet.bonus_blocked ||
           rewards.data?.offer ||
           rewards.isLoading ||
           rewards.isError ||
           displayBonusBalances.length > 0) && (
-          <motion.div variants={itemVariants} className="flex flex-col gap-3">
+          <motion.div variants={itemVariants} className="flex flex-col gap-4">
             {rewards.data?.wallet.bonus_blocked && <BonusBlockedNotice />}
-            {displayBonusBalances.length > 0 && (
-              <div data-testid="rewards-section-bonus-banners" className="rounded-2xl border border-indigo-100 bg-white/90 px-4 py-3.5 shadow-2xs">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Your Available Bonus &amp; Referral Credits
-                    </span>
-                    <span
-                      data-testid="dashboard-total-unused-bonus"
-                      className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200/80 px-3 py-0.5 text-xs font-medium text-indigo-900"
-                    >
-                      <Sparkles className="h-3 w-3 text-purple-600 shrink-0" aria-hidden />
-                      <span>
-                        Total Earned &amp; Unused:{" "}
-                        <strong className="font-bold text-indigo-950">
-                          {totalUnusedText}
-                        </strong>
-                      </span>
-                    </span>
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-4 items-stretch",
+                displayBonusBalances.length > 0 &&
+                  Boolean(rewards.data?.offer || rewards.isLoading || rewards.isError) &&
+                  "lg:grid-cols-2",
+              )}
+            >
+              {displayBonusBalances.length > 0 && (
+                <Card
+                  data-testid="rewards-section-bonus-banners"
+                  className="h-full rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs flex flex-col justify-between gap-4"
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h2 className="font-display text-lg font-bold text-slate-900 leading-tight">
+                          Your bonus credits
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-0.5">Earned and ready to use.</p>
+                      </div>
+                      <div
+                        data-testid="dashboard-total-unused-bonus"
+                        className="flex items-center gap-3 rounded-2xl bg-[#F3EEFF] px-4 py-2.5 shrink-0"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden="true"
+                          className="h-5 w-5 text-purple-600 shrink-0"
+                        >
+                          <ellipse cx="10" cy="7" rx="6" ry="2.5" stroke="currentColor" strokeWidth="1.8" />
+                          <path
+                            d="M4 7v4c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V7"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          />
+                          <path
+                            d="M4 11v4c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5v-4"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          />
+                          <path
+                            d="M16 10.2c2.3.4 4 1.28 4 2.3v4c0 1.38-2.69 2.5-6 2.5-1.9 0-3.6-.37-4.7-.95"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <div>
+                          <p className="font-display text-lg font-bold text-slate-900 leading-tight">
+                            {totalUnusedText}
+                          </p>
+                          <p className="text-[11px] font-medium text-slate-500">Available credit</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2.5">
+                      {displayBonusBalances.map((bal) => {
+                        const floorForCur =
+                          rewards.data?.offers?.find((o) => o.currency === bal.currency)?.floor ??
+                          (rewards.data?.offer?.currency === bal.currency || !rewards.data?.offer?.currency
+                            ? rewards.data?.offer?.floor
+                            : undefined);
+                        return (
+                          <BonusCreditPill
+                            key={`bonus-pill-${bal.currency}`}
+                            balance={bal}
+                            unused={rewards.data?.wallet.unused}
+                            referralFloor={floorForCur}
+                            onCreateTransaction={(rewardType) => {
+                              const params = new URLSearchParams();
+                              if (rewardType) params.set("reward", rewardType);
+                              if (bal.currency && bal.currency !== "GBP") params.set("currency", bal.currency);
+                              const qs = params.toString();
+                              setLocation(qs ? `/send-money?${qs}` : "/send-money");
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
+
                   <button
                     type="button"
                     onClick={() => setLocation("/bonus-discounts")}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 self-start cursor-pointer"
                   >
-                    Manage in Reward$ →
+                    <span>Manage in Reward$</span>
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {displayBonusBalances.map((bal) => {
-                    const floorForCur =
-                      rewards.data?.offers?.find((o) => o.currency === bal.currency)?.floor ??
-                      (rewards.data?.offer?.currency === bal.currency ? rewards.data?.offer?.floor : undefined);
-                    return (
-                      <BonusCreditPill
-                        key={`bonus-pill-${bal.currency}`}
-                        balance={bal}
-                        unused={rewards.data?.wallet.unused}
-                        referralFloor={floorForCur}
-                        onCreateTransaction={(rewardType) => {
-                          const params = new URLSearchParams();
-                          if (rewardType) params.set("reward", rewardType);
-                          if (bal.currency && bal.currency !== "GBP") params.set("currency", bal.currency);
-                          const qs = params.toString();
-                          setLocation(qs ? `/send-money?${qs}` : "/send-money");
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            <ReferEarnCard
-              offer={rewards.data?.offer ?? null}
-              offers={rewards.data?.offers}
-              sendCurrencies={rewards.data?.sendCurrencies}
-              referrals={rewards.data?.referrals.data ?? []}
-              summary={rewards.data?.referrals.summary}
-              isLoading={rewards.isLoading}
-              isError={rewards.isError}
-              onRetry={() => rewards.refetch()}
-              highlighted={referHighlighted}
-              defaultCollapsed={true}
-            />
+                </Card>
+              )}
+
+              <ReferEarnCard
+                offer={rewards.data?.offer ?? null}
+                offers={rewards.data?.offers}
+                sendCurrencies={rewards.data?.sendCurrencies}
+                referrals={rewards.data?.referrals.data ?? []}
+                summary={rewards.data?.referrals.summary}
+                isLoading={rewards.isLoading}
+                isError={rewards.isError}
+                onRetry={() => rewards.refetch()}
+                highlighted={referHighlighted}
+                defaultCollapsed={false}
+              />
+            </div>
           </motion.div>
         )}
 

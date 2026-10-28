@@ -32,13 +32,13 @@ function formatBoldAmounts(text: string) {
 /** Renders the offer sentence with the money amounts in bold. */
 function OfferSentence({ text }: { text: string }) {
   return (
-    <p className="text-[15px] leading-[23px] text-slate-700" data-testid="refer-offer-text">
+    <p className="text-xs leading-relaxed text-slate-600" data-testid="refer-offer-text">
       {formatBoldAmounts(text)}
     </p>
   );
 }
 
-/** Dashboard Refer & Earn card — approved "Mix" design (spec §2). */
+/** Dashboard Refer & Earn card — side-by-side companion to "Your bonus credits". */
 export function ReferEarnCard({
   offer,
   offers,
@@ -70,7 +70,7 @@ export function ReferEarnCard({
 
   if (isLoading) {
     return (
-      <Card className="h-full rounded-2xl border border-slate-200 bg-white p-5 flex flex-col gap-4" data-testid="refer-earn-loading">
+      <Card className="h-full rounded-2xl border border-slate-200/80 bg-white p-5 flex flex-col gap-4 shadow-2xs" data-testid="refer-earn-loading">
         <Skeleton className="h-6 w-32" />
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-12 w-full" />
@@ -81,7 +81,7 @@ export function ReferEarnCard({
 
   if (isError) {
     return (
-      <Card className="h-full rounded-2xl border border-slate-200 bg-white p-5 flex flex-col" data-testid="refer-earn-error">
+      <Card className="h-full rounded-2xl border border-slate-200/80 bg-white p-5 flex flex-col shadow-2xs" data-testid="refer-earn-error">
         <h2 className="font-display text-lg font-bold text-slate-900">Refer &amp; Earn</h2>
         <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6 text-center" role="alert">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
@@ -152,233 +152,239 @@ export function ReferEarnCard({
       id="refer-earn"
       data-testid="refer-earn-card"
       className={cn(
-        "h-full rounded-2xl border border-slate-200 bg-white p-5 flex flex-col gap-4 transition-shadow duration-300",
+        "h-full rounded-2xl border border-slate-200/80 bg-white p-5 flex flex-col justify-between gap-3.5 shadow-2xs transition-shadow duration-300",
         highlighted && "ring-2 ring-primary ring-offset-2",
       )}
     >
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="font-display text-lg font-bold text-slate-900">Refer &amp; Earn</h2>
-          {collapsed && (
-            <span className="text-sm text-slate-600">
-              — Invite friends and earn{" "}
-              <strong className="text-slate-900">
-                {formatMoney(
-                  activeOffer.reward_type === "REFEREE" ? activeOffer.referee_reward : activeOffer.referrer_reward,
-                  activeOffer.currency,
-                )}
-              </strong>{" "}
-              bonus credit
-            </span>
-          )}
-          {!collapsed && locationCurrencies && locationCurrencies.length > 1 && (
-            <div className="flex items-center gap-1" data-testid="refer-send-currencies" aria-label="Applicable send currencies">
-              {locationCurrencies.map((cur) => {
-                const ruleForCur = allOffers.find((o) => o.currency === cur);
-                const hasActiveRule = Boolean(ruleForCur);
-                const isSelected = activeOffer.currency === cur && hasActiveRule;
-                return (
-                  <button
-                    key={cur}
-                    type="button"
-                    disabled={!hasActiveRule}
-                    onClick={() => {
-                      if (ruleForCur) {
-                        setSelectedRuleId(ruleForCur.rule_id);
+      <div className="flex flex-col gap-3.5">
+        {/* Card Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h2 className="font-display text-lg font-bold text-slate-900 leading-tight">Refer &amp; Earn</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Share a little. Earn a little.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {!collapsed && (
+              <button
+                type="button"
+                onClick={() => setHowOpen(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded cursor-pointer"
+              >
+                <span>How it works</span>
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
+            {defaultCollapsed && (
+              <button
+                type="button"
+                onClick={() => setCollapsed((v) => !v)}
+                aria-expanded={!collapsed}
+                data-testid="toggle-refer-earn-card"
+                className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors cursor-pointer"
+              >
+                <span>{collapsed ? "Show Refer & Earn" : "Hide"}</span>
+                {collapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Currency / Corridor Switcher Pills */}
+        {!collapsed && ((locationCurrencies && locationCurrencies.length > 1) || hasCorridorRules) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {locationCurrencies && locationCurrencies.length > 1 && (
+              <div
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 p-1"
+                data-testid="refer-send-currencies"
+                aria-label="Applicable send currencies"
+              >
+                {locationCurrencies.map((cur) => {
+                  const ruleForCur = allOffers.find((o) => o.currency === cur);
+                  const hasActiveRule = Boolean(ruleForCur);
+                  const isSelected = activeOffer.currency === cur && hasActiveRule;
+                  return (
+                    <button
+                      key={cur}
+                      type="button"
+                      disabled={!hasActiveRule}
+                      onClick={() => {
+                        if (ruleForCur) {
+                          setSelectedRuleId(ruleForCur.rule_id);
+                          setCopied(false);
+                        }
+                      }}
+                      aria-pressed={isSelected}
+                      className={cn(
+                        "rounded-full px-3.5 py-1 text-xs font-semibold transition-colors",
+                        isSelected
+                          ? "bg-blue-600 text-white shadow-2xs cursor-pointer"
+                          : hasActiveRule
+                            ? "text-slate-600 hover:text-slate-900 cursor-pointer"
+                            : "text-slate-400 cursor-default",
+                      )}
+                    >
+                      {cur}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {hasCorridorRules && (
+              <div
+                className="inline-flex flex-wrap items-center gap-1 rounded-full bg-slate-100 p-1"
+                data-testid="refer-corridor-pills"
+                aria-label="Select referral corridor rule"
+              >
+                {allOffers.map((o) => {
+                  const isSelected = o.rule_id === activeOffer.rule_id;
+                  const label = o.receive_currency ? `${o.currency} → ${o.receive_currency}` : o.currency;
+                  return (
+                    <button
+                      key={`corridor-${o.rule_id}`}
+                      type="button"
+                      onClick={() => {
+                        setSelectedRuleId(o.rule_id);
                         setCopied(false);
-                      }
-                    }}
-                    aria-pressed={isSelected}
-                    className={cn(
-                      "rounded-full px-2.5 py-0.5 text-[11px] font-bold transition-colors",
-                      isSelected
-                        ? "bg-blue-600 text-white border border-blue-600 shadow-xs cursor-pointer"
-                        : hasActiveRule
-                          ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 cursor-pointer"
-                          : "bg-slate-100 text-slate-500 cursor-default",
-                    )}
-                  >
-                    {cur}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {!collapsed && hasCorridorRules && (
-            <div className="flex flex-wrap items-center gap-1" data-testid="refer-corridor-pills" aria-label="Select referral corridor rule">
-              {allOffers.map((o) => {
-                const isSelected = o.rule_id === activeOffer.rule_id;
-                const label = o.receive_currency ? `${o.currency} → ${o.receive_currency}` : o.currency;
-                return (
-                  <button
-                    key={`corridor-${o.rule_id}`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedRuleId(o.rule_id);
-                      setCopied(false);
-                    }}
-                    aria-pressed={isSelected}
-                    className={cn(
-                      "rounded-full px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
-                      isSelected
-                        ? "bg-blue-600 text-white border border-blue-600 shadow-xs"
-                        : "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100",
-                    )}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {!collapsed && ((locationCurrencies && locationCurrencies.length > 1) || hasCorridorRules) && (
-            <span className="text-xs font-medium text-slate-500" data-testid="refer-currency-hint">
+                      }}
+                      aria-pressed={isSelected}
+                      className={cn(
+                        "rounded-full px-3.5 py-1 text-xs font-semibold transition-colors cursor-pointer",
+                        isSelected ? "bg-blue-600 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <span className="sr-only" data-testid="refer-currency-hint">
               Click a currency to see its rewards
             </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {!collapsed && (
-            <button
-              type="button"
-              onClick={() => setHowOpen(true)}
-              className="min-h-[36px] px-1 text-sm font-semibold text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
-            >
-              How it works
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setCollapsed((v) => !v)}
-            aria-expanded={!collapsed}
-            data-testid="toggle-refer-earn-card"
-            className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors cursor-pointer"
-          >
-            <span>{collapsed ? "Show Refer & Earn" : "Hide"}</span>
-            {collapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-      </div>
+          </div>
+        )}
 
-      {!collapsed && (
-        <>
-          {activeOffer.cap_reached ? (
-            <p className="text-[15px] leading-[23px] text-slate-700" data-testid="refer-cap-reached">
-              You&apos;ve reached the maximum referral rewards for this programme. Thank you for spreading the word!
-            </p>
-          ) : (
-            <>
-              <OfferSentence text={activeOffer.text} />
-              {allOffers.length > 1 && (
-                <div
-                  className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5"
-                  data-testid="refer-multi-currency-hooks"
-                >
-                  {allOffers.map((o) => {
-                    const isSelected = o.rule_id === activeOffer.rule_id && o.currency === activeOffer.currency;
-                    const codeForCur = referralCodeForCurrency(o.referral_code ?? offer.referral_code ?? "", o.currency);
-                    return (
-                      <div
-                        key={`hook-${o.rule_id}-${o.currency}`}
-                        onClick={() => {
-                          setSelectedRuleId(o.rule_id);
-                          setCopied(false);
-                        }}
-                        className={cn(
-                          "rounded-lg border px-3 py-2 text-xs transition-all cursor-pointer",
-                          isSelected
-                            ? "border-blue-500 bg-blue-50/90 text-slate-900 shadow-2xs"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-blue-300",
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-1.5 font-semibold">
-                          <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold", isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700")}>
-                            {o.currency} Offer
-                          </span>
-                          {codeForCur && (
-                            <span className="font-mono text-[11px] font-bold text-indigo-700">
-                              {codeForCur}
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-1 text-[11px] leading-snug">
-                          Friend gets <span className="font-bold text-emerald-700">{formatMoney(o.referee_reward, o.currency)}</span> · You get{" "}
-                          <span className="font-bold text-blue-700">{formatMoney(o.referrer_reward, o.currency)}</span> on transfers of{" "}
-                          <span className="font-semibold text-slate-900">{formatMoney(o.floor, o.currency)}+</span>
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <label htmlFor="referral-link" className="text-[13px] font-semibold text-slate-600">Your referral link</label>
-                  {effectiveCode && (
-                    <span
-                      className="rounded-md bg-blue-50 px-2 py-0.5 font-mono text-xs font-bold text-blue-700 border border-blue-200"
-                      data-testid="refer-active-code"
-                    >
-                      Code ({activeOffer.currency}): {effectiveCode}
-                    </span>
-                  )}
-                </div>
-                <input
-                  id="referral-link"
-                  ref={inputRef}
-                  readOnly
-                  value={link.replace(/^https?:\/\//, "")}
-                  onFocus={(e) => e.currentTarget.select()}
-                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 font-display text-[15px] font-semibold text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                />
-              </div>
-              <div className={cn("grid gap-2.5", canShare ? "grid-cols-2" : "grid-cols-1")}>
-                <Button
-                  type="button"
-                  onClick={handleCopy}
-                  className={cn("h-12 rounded-xl text-[15px] font-semibold text-white", copied ? "bg-teal-700 hover:bg-teal-800" : "bg-blue-600 hover:bg-blue-700")}
-                >
-                  {copied ? <Check className="mr-2 h-[18px] w-[18px]" /> : <Copy className="mr-2 h-[18px] w-[18px]" />}
-                  {copied ? "Copied" : "Copy link"}
-                </Button>
-                {canShare && (
-                  <Button type="button" variant="outline" onClick={handleShare} className="h-12 rounded-xl border-slate-300 text-[15px] font-semibold text-slate-900">
-                    <Share2 className="mr-2 h-[18px] w-[18px]" />
-                    Share
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
-
-          <div className="flex flex-col gap-3 border-t border-slate-200 pt-4" data-testid="refer-latest">
-            {joined === 0 ? (
-              <p className="text-sm text-slate-600">No referrals yet. Share your link to start earning.</p>
+        {!collapsed && (
+          <>
+            {activeOffer.cap_reached ? (
+              <p className="text-[15px] leading-[23px] text-slate-700" data-testid="refer-cap-reached">
+                You&apos;ve reached the maximum referral rewards for this programme. Thank you for spreading the word!
+              </p>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-2.5" data-testid="refer-stats">
-                  <div className="rounded-xl bg-slate-50 px-3.5 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Friends joined</p>
-                    <p className="mt-1 font-display text-2xl font-bold leading-none text-slate-900" data-testid="refer-count">{joined}</p>
+                {/* Soft Blue Split Offer Box */}
+                <div className="rounded-2xl bg-[#EEF4FF] border border-blue-100/80 p-4">
+                  <div className="grid grid-cols-2 divide-x divide-slate-200/90">
+                    <div className="pr-3">
+                      <p className="text-xs font-medium text-slate-600">You get</p>
+                      <p className="font-display text-2xl font-bold text-slate-900 tracking-tight mt-0.5">
+                        {formatMoney(activeOffer.referrer_reward, activeOffer.currency)}
+                      </p>
+                    </div>
+                    <div className="pl-4">
+                      <p className="text-xs font-medium text-slate-600">Your friend gets</p>
+                      <p className="font-display text-2xl font-bold text-slate-900 tracking-tight mt-0.5">
+                        {formatMoney(activeOffer.referee_reward, activeOffer.currency)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-xl bg-teal-50 px-3.5 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Bonus earned</p>
-                    <p className="mt-1 font-display text-2xl font-bold leading-none text-teal-700" data-testid="refer-earned">{earnedText}</p>
+                  <div className="mt-2.5">
+                    <OfferSentence text={activeOffer.text} />
                   </div>
                 </div>
+
+                {/* Referral Link + Integrated Copy Button */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label htmlFor="referral-link" className="text-xs font-semibold text-slate-700">
+                      Your referral link
+                    </label>
+                    {effectiveCode && (
+                      <span
+                        className="font-mono text-xs font-semibold text-blue-600"
+                        data-testid="refer-active-code"
+                      >
+                        {effectiveCode}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-1 pl-3.5">
+                    <input
+                      id="referral-link"
+                      ref={inputRef}
+                      readOnly
+                      value={link.replace(/^https?:\/\//, "")}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="h-9 flex-1 min-w-0 bg-transparent text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none truncate"
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleCopy}
+                      className={cn(
+                        "h-9 rounded-lg px-4 text-xs font-semibold text-white shrink-0",
+                        copied ? "bg-teal-700 hover:bg-teal-800" : "bg-blue-600 hover:bg-blue-700",
+                      )}
+                    >
+                      {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
+                      {copied ? "Copied" : "Copy link"}
+                    </Button>
+                    {canShare && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleShare}
+                        className="h-9 rounded-lg border-slate-300 px-3 text-xs font-semibold text-slate-900 shrink-0"
+                      >
+                        <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                        Share
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Footer Status / Totals */}
+      {!collapsed && (
+        <div className="flex flex-col gap-2.5 pt-1" data-testid="refer-latest">
+          {joined === 0 ? (
+            <p className="text-xs text-slate-500">No referrals yet. Share your link to start earning.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2.5" data-testid="refer-stats">
+                <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Friends joined</p>
+                  <p className="mt-0.5 font-display text-lg font-bold leading-none text-slate-900" data-testid="refer-count">
+                    {joined}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-teal-50 px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-800">Bonus earned</p>
+                  <p className="mt-0.5 font-display text-lg font-bold leading-none text-teal-700" data-testid="refer-earned">
+                    {earnedText}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 {waiting > 0 && (
-                  <p className="text-[13px] text-slate-500" data-testid="refer-waiting">
+                  <p className="text-xs text-slate-500" data-testid="refer-waiting">
                     {waiting} {waiting === 1 ? "friend is" : "friends are"} yet to send {formatMoney(offer.floor, offer.currency)}+
                   </p>
                 )}
-                <Link href="/bonus-discounts?tab=referrals" className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-blue-600 hover:underline">
+                <Link
+                  href="/bonus-discounts?tab=referrals"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                >
                   View all referrals
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                 </Link>
-              </>
-            )}
-          </div>
-        </>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       <Dialog open={howOpen} onOpenChange={setHowOpen}>

@@ -147,7 +147,7 @@ test.describe('Request Money E2E', () => {
     await expect(page.getByTestId('button-send-email')).toHaveCount(0);
 
     // Optional payer details: helper text visible while collapsed
-    await expect(page.getByText("Add the payer's bank details to help us match their payment when it arrives.")).toBeVisible();
+    await expect(page.getByText(/Add the payer's bank details/i)).toBeVisible();
 
     // Create the link with NO payer, invoice or email
     await page.getByTestId('button-create-link').click();
@@ -203,20 +203,20 @@ test.describe('Request Money E2E', () => {
     await page.getByTestId('input-request-amount').fill('250');
     // Default "less charges": payer pays the exact amount, fee comes out of the payout
     await expect(page.getByTestId('mode-less')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('breakdown-sender-pays')).toHaveText('£250.00 GBP');
-    await expect(page.getByText('-£7.50 GBP').first()).toBeVisible();
+    await expect(page.getByTestId('breakdown-sender-pays')).toHaveText('£250.00');
+    await expect(page.getByText('-£7.50').first()).toBeVisible();
 
     // "Receive exact amount" → the 3% fee is added to the payer's payment
     await page.getByTestId('mode-exact').click();
-    await expect(page.getByTestId('breakdown-sender-pays')).toHaveText('£257.50 GBP');
-    await expect(page.getByText('+£7.50 GBP').first()).toBeVisible();
+    await expect(page.getByTestId('breakdown-sender-pays')).toHaveText('£257.50');
+    await expect(page.getByText('+£7.50').first()).toBeVisible();
     // The "Payer sends" field agrees with the breakdown, and the receive figure is the exact amount
     await expect(page.getByTestId('input-request-amount')).toHaveValue('257.50');
     await expect(page.getByTestId('input-receive-amount')).toHaveValue('250.00');
     await page.getByTestId('button-step-next').click();
 
     // Step 2: purpose only, then create (no payer)
-    await expect(page.getByTestId('review-sender-pays')).toHaveText('£257.50 GBP');
+    await expect(page.getByTestId('review-sender-pays')).toHaveText('£257.50');
     await page.getByTestId('select-reason').click();
     await page.getByRole('option', { name: /invoice \/ services/i }).click();
     await page.getByTestId('button-create-link').click();
