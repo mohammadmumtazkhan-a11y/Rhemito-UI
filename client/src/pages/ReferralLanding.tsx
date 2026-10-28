@@ -4,10 +4,12 @@ import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { resetDeviceId } from "@/lib/deviceId";
 import { ExistingUserReferralCard } from "@/components/rewards/ExistingUserReferralCard";
+import { RhemitoLogoIcon } from "@/components/rewards/RhemitoLogoIcon";
 import {
   APPLE_APP_STORE_URL,
   REFERRAL_CODE_RE,
   buildGooglePlayReferralUrl,
+  buildReferralShareTitle,
   clearReferral,
   detectClientDevice,
   loadReferral,
@@ -93,6 +95,16 @@ export default function ReferralLanding() {
     const resolvedOs = resolvePlatform(search);
     setDeviceOs(resolvedOs);
   }, [search]);
+
+  useEffect(() => {
+    if (!referralState?.offer && !existingContext?.offer) return;
+    const activeOffer = referralState?.offer ?? existingContext?.offer ?? null;
+    const inviter = referralState?.referrerFirstName ?? existingContext?.referrerFirstName ?? null;
+    const code = referralState?.code ?? existingContext?.code ?? null;
+    if (typeof document !== "undefined") {
+      document.title = buildReferralShareTitle({ offer: activeOffer, code, referrerFirstName: inviter });
+    }
+  }, [referralState, existingContext]);
 
   useEffect(() => {
     if (ran.current) return;
@@ -402,15 +414,7 @@ export default function ReferralLanding() {
           {/* App Bar */}
           <header className="flex justify-between items-center mb-[24px] max-[460px]:mb-[22px]">
             <div className="flex items-center gap-[8px] text-[23px] font-bold tracking-[-1.1px] text-[#182235]">
-              <svg viewBox="0 0 32 42" fill="none" aria-hidden="true" className="w-[24px] h-[30px] text-[#6a50d8]">
-                <path
-                  d="M3 38V3h25L17 19l11 19H18l-8-14-7 14Z"
-                  stroke="currentColor"
-                  strokeWidth="3.5"
-                  strokeLinejoin="round"
-                />
-                <path d="m10 26 1-17h10L10 26Z" fill="currentColor" />
-              </svg>
+              <RhemitoLogoIcon />
               <span>Rhemito</span>
             </div>
             <span className="text-[9px] tracking-[1.5px] text-[#a1a6b2] font-semibold">MONEY, CONNECTED.</span>
@@ -456,7 +460,10 @@ export default function ReferralLanding() {
                 {currencyCode}
               </span>
             </div>
-            <p className="text-[11px] text-[#abaec4] mt-[8px] mb-0 relative z-10">Bonus credit when you join &amp; send.</p>
+            <p className="text-[11px] text-[#abaec4] mt-[8px] mb-0 relative z-10">
+              Bonus credit when you join &amp; send {floorFormatted.fullText}+
+              {offer?.receive_currency ? ` to ${offer.receive_currency}` : ""} within {windowDays} days.
+            </p>
 
             {/* Decorative Wireframe Orb */}
             <div
@@ -471,10 +478,41 @@ export default function ReferralLanding() {
             </div>
           </section>
 
+          {/* Marketing Pitch: Why Register & Transfer with Rhemito */}
+          <section
+            aria-label="Why register and transfer with Rhemito"
+            data-testid="referral-landing-why-register"
+            className="mt-[15px] rounded-[14px] border border-[#e3e6f2] bg-[#f8f9fe] px-[14px] py-[11px]"
+          >
+            <p className="text-[10px] font-bold uppercase tracking-[0.9px] text-[#3D48D1] m-0 mb-[6px]">
+              Why register &amp; send with Rhemito
+            </p>
+            <ul className="m-0 p-0 list-none space-y-[4px] text-[10px] leading-[1.45] text-[#424a5b]">
+              <li className="flex items-start gap-[6px]">
+                <span className="text-[#0d9488] font-bold shrink-0">✓</span>
+                <span>
+                  <strong className="text-[#182235]">Great exchange rates &amp; low fees</strong> across global corridors
+                </span>
+              </li>
+              <li className="flex items-start gap-[6px]">
+                <span className="text-[#0d9488] font-bold shrink-0">✓</span>
+                <span>
+                  <strong className="text-[#182235]">Fast, secure transfers</strong> to bank accounts, mobile wallets &amp; cash pick-up
+                </span>
+              </li>
+              <li className="flex items-start gap-[6px]">
+                <span className="text-[#0d9488] font-bold shrink-0">✓</span>
+                <span>
+                  <strong className="text-[#182235]">{rewardFormatted.fullText} welcome bonus</strong> unlocked on your first {floorFormatted.fullText}+ transfer
+                </span>
+              </li>
+            </ul>
+          </section>
+
           {/* 3-Step Horizontal Timeline */}
           <ol
             aria-label="How to earn your bonus"
-            className="grid grid-cols-3 list-none p-0 mt-[22px] mb-[23px] max-[460px]:my-[20px] gap-[9px]"
+            className="grid grid-cols-3 list-none p-0 mt-[18px] mb-[20px] max-[460px]:my-[18px] gap-[9px]"
           >
             <li className="relative text-[9px] max-[360px]:text-[8px] text-[#9a9ead] leading-[1.5]">
               <span aria-hidden="true" className="absolute left-[29px] right-[2px] top-[11px] h-px bg-[#e4e5ed]" />

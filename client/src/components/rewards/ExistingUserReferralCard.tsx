@@ -7,6 +7,7 @@ import {
   Gift,
   LogIn,
   Send,
+  Share2,
   Sparkles,
   Tag,
   Users,
@@ -17,11 +18,14 @@ import { cn } from "@/lib/utils";
 import {
   APPLE_APP_STORE_URL,
   GOOGLE_PLAY_BASE_URL,
+  buildReferralShareMessage,
+  buildReferralShareTitle,
   clearReferral,
   formatMoney,
   formatUkDate,
   type RewardOffer,
 } from "@/lib/rewards";
+import { RhemitoLogoIcon } from "@/components/rewards/RhemitoLogoIcon";
 import type { BonusOffer } from "@/features/bonus/lib/bonus";
 
 interface ExistingUserOffersPayload {
@@ -147,6 +151,47 @@ export function ExistingUserReferralCard({
     }
   };
 
+  const handleShareOwnInvite = async () => {
+    if (!ownLink) return;
+    const shareTitle = buildReferralShareTitle({
+      offer: activeOffer,
+      code: ownCode,
+      link: ownLink,
+      referrerFirstName: viewerName,
+    });
+    const shareHook = buildReferralShareMessage({
+      offer: activeOffer,
+      code: ownCode,
+      link: ownLink,
+      referrerFirstName: viewerName,
+      includeUrl: false,
+    });
+    const fullMessage = buildReferralShareMessage({
+      offer: activeOffer,
+      code: ownCode,
+      link: ownLink,
+      referrerFirstName: viewerName,
+      includeUrl: true,
+    });
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: shareTitle, text: shareHook, url: ownLink });
+        return;
+      } catch {
+        return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(fullMessage);
+      toast({
+        title: "Invite message & link copied!",
+        description: "Paste it into WhatsApp, SMS, or email to invite your friends.",
+      });
+    } catch {
+      toast({ title: "Couldn't copy invite message", description: ownLink });
+    }
+  };
+
   return (
     <div
       data-testid="existing-user-referral-view"
@@ -171,15 +216,7 @@ export function ExistingUserReferralCard({
         {variant === "standalone" && (
           <header className="flex justify-between items-center mb-5">
             <div className="flex items-center gap-2 text-[22px] font-bold tracking-[-0.9px] text-[#182235]">
-              <svg viewBox="0 0 32 42" fill="none" aria-hidden="true" className="w-[24px] h-[30px] text-[#6a50d8]">
-                <path
-                  d="M3 38V3h25L17 19l11 19H18l-8-14-7 14Z"
-                  stroke="currentColor"
-                  strokeWidth="3.5"
-                  strokeLinejoin="round"
-                />
-                <path d="m10 26 1-17h10L10 26Z" fill="currentColor" />
-              </svg>
+              <RhemitoLogoIcon />
               <span>Rhemito</span>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eef2ff] px-3 py-1 text-[10px] font-semibold tracking-wider uppercase text-[#4f46e5]">
@@ -337,18 +374,30 @@ export function ExistingUserReferralCard({
                     {ownLink.replace(/^https?:\/\//, "")}
                   </span>
                 </div>
-                <Button
-                  type="button"
-                  onClick={handleCopyOwnLink}
-                  data-testid="existing-user-copy-own-link-btn"
-                  className={cn(
-                    "h-9 rounded-lg px-3.5 text-xs font-semibold text-white shrink-0",
-                    copiedOwnLink ? "bg-teal-700 hover:bg-teal-800" : "bg-blue-600 hover:bg-blue-700",
-                  )}
-                >
-                  {copiedOwnLink ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-                  {copiedOwnLink ? "Copied your link" : "Copy my link"}
-                </Button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    onClick={handleCopyOwnLink}
+                    data-testid="existing-user-copy-own-link-btn"
+                    className={cn(
+                      "h-9 rounded-lg px-3.5 text-xs font-semibold text-white shrink-0",
+                      copiedOwnLink ? "bg-teal-700 hover:bg-teal-800" : "bg-blue-600 hover:bg-blue-700",
+                    )}
+                  >
+                    {copiedOwnLink ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
+                    {copiedOwnLink ? "Copied your link" : "Copy my link"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleShareOwnInvite}
+                    data-testid="existing-user-share-own-invite-btn"
+                    className="h-9 rounded-lg border-blue-200 px-3 text-xs font-semibold text-slate-900 shrink-0"
+                  >
+                    <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                    Share invite
+                  </Button>
+                </div>
               </div>
             )}
           </article>

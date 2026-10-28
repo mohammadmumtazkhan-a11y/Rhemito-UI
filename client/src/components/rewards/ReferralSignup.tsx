@@ -53,6 +53,34 @@ export function ReferralInviteStrip({
         <li className="flex flex-col gap-1.5"><span className="h-1.5 rounded-full bg-slate-200" /><span className="text-xs text-slate-600">Send {floor}+{offer.receive_currency ? ` to ${offer.receive_currency}` : ""} in {offer.qualification_window_days} days</span></li>
         <li className="flex flex-col gap-1.5"><span className="h-1.5 rounded-full bg-slate-200" /><span className="text-xs text-slate-600">Get {reward}</span></li>
       </ol>
+      <div
+        data-testid="referral-invite-why-register"
+        className="rounded-xl border border-blue-100/80 bg-[#f8f9fe] p-3 text-xs text-slate-700 space-y-1"
+      >
+        <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800">
+          Why register &amp; send with Rhemito
+        </p>
+        <ul className="space-y-1 text-xs text-slate-700">
+          <li className="flex items-start gap-1.5">
+            <Check className="h-3.5 w-3.5 text-teal-600 shrink-0 mt-0.5" strokeWidth={2.5} />
+            <span>
+              <strong className="text-slate-900">Great exchange rates &amp; low fees</strong> across global corridors
+            </span>
+          </li>
+          <li className="flex items-start gap-1.5">
+            <Check className="h-3.5 w-3.5 text-teal-600 shrink-0 mt-0.5" strokeWidth={2.5} />
+            <span>
+              <strong className="text-slate-900">Fast, secure transfers</strong> to bank accounts, mobile wallets &amp; cash pick-up
+            </span>
+          </li>
+          <li className="flex items-start gap-1.5">
+            <Check className="h-3.5 w-3.5 text-teal-600 shrink-0 mt-0.5" strokeWidth={2.5} />
+            <span>
+              <strong className="text-slate-900">{reward} welcome bonus credit</strong> added automatically when your first {floor}+ transfer completes
+            </span>
+          </li>
+        </ul>
+      </div>
       {otherOffers.length > 0 && (
         <div className="border-t border-slate-100 pt-2.5 space-y-1" data-testid="referral-invite-currencies">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Other send currencies</p>

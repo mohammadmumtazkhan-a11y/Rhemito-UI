@@ -18,6 +18,7 @@ import {
   syncCustomer,
   startOfferPoller,
 } from "./rewardsService";
+import { registerReferralOpenGraphRoutes } from "./referralOpenGraph";
 
 function currentUserId(req: Request): string {
   const userId = req.session?.userId;
@@ -39,6 +40,7 @@ function handleError(res: Response, err: unknown): void {
 
 export function registerRewardsRoutes(app: Express): void {
   startOfferPoller();
+  registerReferralOpenGraphRoutes(app);
 
   /**
    * Everything the Dashboard and Bonus & Discounts page need in one call:
@@ -174,6 +176,52 @@ export function registerRewardsRoutes(app: Express): void {
         }
       }
 
+      const referralRows: any[] = Array.isArray(referrals.data) ? [...referrals.data] : [];
+      const referralSummary: { joined: number; earned_count: number; total_earned: Record<string, number> } = {
+        joined: Number(referrals.summary?.joined ?? referralRows.length),
+        earned_count: Number(referrals.summary?.earned_count ?? 0),
+        total_earned: { ...(referrals.summary?.total_earned ?? {}) },
+      };
+
+      // Sync check: if wallet.history has an EARNED referrer referral reward missing from referrals.data, synthesize it so History and My referrals are always in sync
+      if (wallet && Array.isArray(wallet.history)) {
+        for (const h of wallet.history) {
+          const isReferrerEarned =
+            h.type === "EARNED" &&
+            (h.credit_source === "REFERRAL" || h.reason_code === "REFERRAL_REWARD") &&
+            h.credit_source_detail !== "REFEREE" &&
+            !/invited by/i.test(String(h.notes ?? ""));
+          if (!isReferrerEarned) continue;
+          const m = String(h.notes ?? "").match(/referred\s+([A-Za-z][A-Za-z0-9 .'-]*?)\.?$/i);
+          const friendName = m?.[1]?.trim() ? `${m[1].trim().replace(/\.+$/, "")}.` : "Friend";
+          const alreadyListed = referralRows.some(
+            (r) =>
+              (h.referral_id && r.id === h.referral_id) ||
+              (String(r.friend || "").replace(/\.+$/, "").toLowerCase() === friendName.replace(/\.+$/, "").toLowerCase() && r.status === "REWARDED"),
+          );
+          if (!alreadyListed) {
+            const cur = String(h.currency || currency).toUpperCase();
+            const amt = Math.abs(Number(h.amount || 0));
+            const ruleOffer = currencyOffers.find((o) => o.currency === cur) ?? primaryOffer;
+            referralRows.push({
+              id: h.referral_id || `sync_${h.id}`,
+              friend: friendName,
+              joined_on: h.created_at,
+              status: "REWARDED",
+              status_label: "Earned",
+              currency: cur,
+              floor: ruleOffer?.floor ?? 50,
+              qualification_deadline: null,
+              reward: amt,
+              credited: amt,
+            });
+            referralSummary.joined += 1;
+            referralSummary.earned_count += 1;
+            referralSummary.total_earned[cur] = Number(((referralSummary.total_earned[cur] ?? 0) + amt).toFixed(2));
+          }
+        }
+      }
+
       res.json({
         data: {
           customer: customer ? { id: customer.id, referralCode: customer.referral_code, currency: customer.send_currency } : null,
@@ -182,7 +230,7 @@ export function registerRewardsRoutes(app: Express): void {
           offer: primaryOffer,
           offers: currencyOffers,
           wallet,
-          referrals: { data: referrals.data ?? [], summary: referrals.summary ?? { joined: 0, earned_count: 0, total_earned: {} } },
+          referrals: { data: referralRows, summary: referralSummary },
           latestOffer: primaryOffer && latest ? { id: latest.id, kind: latest.kind, title: latest.title, message: latest.message, currency: latest.currency, createdAt: latest.created_at } : null,
           latestOffers: primaryOffer
             ? recentNotices.map((n) => ({ id: n.id, kind: n.kind, title: n.title, message: n.message, currency: n.currency, createdAt: n.created_at }))

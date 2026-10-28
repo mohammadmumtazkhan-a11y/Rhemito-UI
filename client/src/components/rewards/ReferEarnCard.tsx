@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { formatMoney, referralCodeForCurrency, type RewardOffer, type MyReferral } from "@/lib/rewards";
+import { formatMoney, referralCodeForCurrency, buildReferralShareMessage, buildReferralShareTitle, type RewardOffer, type MyReferral } from "@/lib/rewards";
 
 interface ReferEarnCardProps {
   offer: RewardOffer | null;
@@ -53,7 +53,9 @@ export function ReferEarnCard({
 }: ReferEarnCardProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [selectedRuleId, setSelectedRuleId] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState<boolean>(defaultCollapsed);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -122,6 +124,10 @@ export function ReferEarnCard({
     Object.entries(summary?.total_earned ?? {}).filter(([, v]) => v > 0).map(([c, v]) => formatMoney(v, c)).join(" + ") ||
     formatMoney(0, activeOffer.currency);
 
+  const shareTitle = buildReferralShareTitle({ offer: activeOffer, code: effectiveCode, link });
+  const shareHook = buildReferralShareMessage({ offer: activeOffer, code: effectiveCode, link, includeUrl: false });
+  const fullMarketingMessage = buildReferralShareMessage({ offer: activeOffer, code: effectiveCode, link, includeUrl: true });
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(link);
@@ -135,16 +141,31 @@ export function ReferEarnCard({
     }
   };
 
-  const handleShare = async () => {
-    const shareHook =
-      activeOffer.reward_type !== "REFERRER" && activeOffer.referee_reward > 0
-        ? `Join me on Rhemito with code ${effectiveCode}! Get ${formatMoney(activeOffer.referee_reward, activeOffer.currency)} on your first ${activeOffer.currency} transfer above ${formatMoney(activeOffer.floor, activeOffer.currency)}:`
-        : "Join me on Rhemito and get bonus credit on your first transfer:";
+  const handleCopyMarketingMessage = async () => {
     try {
-      await navigator.share({ title: "Join me on Rhemito", text: shareHook, url: link });
+      await navigator.clipboard.writeText(fullMarketingMessage);
+      setCopiedMessage(true);
+      setTimeout(() => setCopiedMessage(false), 2500);
+      toast({
+        title: "Invite message & link copied!",
+        description: "Paste it into WhatsApp, SMS, or email to invite your friends.",
+      });
     } catch {
-      // Share sheet closed by the customer — nothing to do
+      toast({ title: "We couldn't copy the message", description: "Please copy it manually.", variant: "destructive" });
     }
+  };
+
+  const handleShare = async () => {
+    if (canShare) {
+      try {
+        await navigator.share({ title: shareTitle, text: shareHook, url: link });
+        return;
+      } catch {
+        // Share sheet closed by the customer — nothing to do
+        return;
+      }
+    }
+    setShareOpen(true);
   };
 
   return (
@@ -328,17 +349,27 @@ export function ReferEarnCard({
                       {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
                       {copied ? "Copied" : "Copy link"}
                     </Button>
-                    {canShare && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleShare}
-                        className="h-9 rounded-lg border-slate-300 px-3 text-xs font-semibold text-slate-900 shrink-0"
-                      >
-                        <Share2 className="mr-1.5 h-3.5 w-3.5" />
-                        Share
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleShare}
+                      data-testid="refer-share-btn"
+                      className="h-9 rounded-lg border-slate-300 px-3 text-xs font-semibold text-slate-900 shrink-0"
+                    >
+                      <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                      Share
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setShareOpen(true)}
+                      data-testid="refer-preview-marketing-btn"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                    >
+                      <span>Preview &amp; copy full invite message</span>
+                      <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                    </button>
                   </div>
                 </div>
               </>
@@ -412,6 +443,50 @@ export function ReferEarnCard({
             <li><strong className="text-slate-900">3.</strong> When that transfer completes, the bonus credit is added. Use it within {offer.bonus_validity_days} days.</li>
           </ol>
           <p className="text-xs text-slate-500">Each friend can be rewarded once. Self-referrals and duplicate accounts are not rewarded.</p>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="sm:max-w-lg" data-testid="refer-share-dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Share your Rhemito invite</DialogTitle>
+            <DialogDescription>
+              This message clearly explains your friend&apos;s welcome bonus and why they should register and make their transfer with Rhemito.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-slate-800 whitespace-pre-line font-sans" data-testid="refer-marketing-message-preview">
+            {fullMarketingMessage}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Button
+              type="button"
+              onClick={handleCopyMarketingMessage}
+              data-testid="refer-copy-marketing-btn"
+              className={cn(
+                "flex-1 min-w-[170px] h-10 rounded-xl text-xs font-semibold text-white",
+                copiedMessage ? "bg-teal-700 hover:bg-teal-800" : "bg-blue-600 hover:bg-blue-700",
+              )}
+            >
+              {copiedMessage ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+              {copiedMessage ? "Invite message copied!" : "Copy full invite message"}
+            </Button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(fullMarketingMessage)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="refer-whatsapp-share-link"
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] px-4 text-xs font-semibold text-white transition-colors"
+            >
+              Share on WhatsApp
+            </a>
+            <a
+              href={`mailto:?subject=${encodeURIComponent(shareTitle)}&body=${encodeURIComponent(fullMarketingMessage)}`}
+              data-testid="refer-email-share-link"
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-3.5 text-xs font-semibold text-slate-800 transition-colors"
+            >
+              Email
+            </a>
+          </div>
         </DialogContent>
       </Dialog>
     </Card>

@@ -368,4 +368,37 @@ test.describe('Rewards contract — Refer & Earn card', () => {
             expect(stored).toBeNull();
         }
     });
+/**
+     * CONTRACT REF-20: sharing a referral link provides a clear marketing message explaining why to register
+     * and make a transfer, renders the official Rhemito SVG logo, and reconciles referrer-earned history with My referrals.
+     * CODE: client/src/lib/rewards.ts, client/src/components/rewards/ReferEarnCard.tsx, client/src/pages/ReferralLanding.tsx, client/src/components/rewards/ReferralSignup.tsx.
+     */
+    test('[REF-20] referral link sharing and landing show the marketing message, why to register and transfer, and the official Rhemito logo', async ({ page }) => {
+        await page.route('**/api/rewards/codes/**', (route) => route.fulfill(json({ data: { code: 'JOHN2880', referrerFirstName: 'John', offer, signedIn: false } })));
+        await page.route('**/api/rewards/visits', (route) => route.fulfill(json({ data: { counted: true } })));
+
+        // a) On /ref/john2880?platform=android, referral-landing-why-register is visible with "Why register & send with Rhemito" and rhemito-official-logo is visible
+        await page.goto('/ref/john2880?platform=android');
+        const whyLanding = page.getByTestId('referral-landing-why-register');
+        await expect(whyLanding).toBeVisible();
+        await expect(whyLanding).toContainText('Why register & send with Rhemito');
+        await expect(page.getByTestId('rhemito-official-logo')).toBeVisible();
+
+        // b) On /ref/john2880 (desktop redirect to /sign-in-sign-up?mode=signup), referral-invite-why-register is visible with "Why register & send with Rhemito"
+        await page.goto('/ref/john2880');
+        await expect(page).toHaveURL(/sign-in-sign-up/);
+        const whyInvite = page.getByTestId('referral-invite-why-register');
+        await expect(whyInvite).toBeVisible();
+        await expect(whyInvite).toContainText('Why register & send with Rhemito');
+
+        // c) On / (Dashboard), clicking refer-preview-marketing-btn opens refer-share-dialog with refer-marketing-message-preview containing "Why register & send with Rhemito:"
+        await mockRewards(page);
+        await page.goto('/');
+        await page.getByTestId('refer-preview-marketing-btn').click();
+        const dialog = page.getByTestId('refer-share-dialog');
+        await expect(dialog).toBeVisible();
+        const preview = page.getByTestId('refer-marketing-message-preview');
+        await expect(preview).toBeVisible();
+        await expect(preview).toContainText('Why register & send with Rhemito:');
+    });
 });
