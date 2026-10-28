@@ -363,7 +363,10 @@ export function ExistingUserReferralCard({
             {/* Signed-in user's own referral link */}
             {isSignedIn && ownLink && (
               <div
-                className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-blue-200 bg-white p-2 pl-3"
+                className={cn(
+                  "mt-3 flex flex-col gap-2.5 rounded-xl border border-blue-200 bg-white p-2.5",
+                  !isMobilePlatform && "sm:flex-row sm:items-center sm:gap-2 sm:py-2 sm:pl-3 sm:pr-2",
+                )}
                 data-testid="existing-user-own-referral-box"
               >
                 <div className="flex-1 min-w-0">
@@ -374,28 +377,41 @@ export function ExistingUserReferralCard({
                     {ownLink.replace(/^https?:\/\//, "")}
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div
+                  className={cn(
+                    "grid grid-cols-2 gap-1.5 w-full",
+                    !isMobilePlatform && "sm:flex sm:w-auto sm:items-center sm:shrink-0",
+                  )}
+                >
                   <Button
                     type="button"
                     onClick={handleCopyOwnLink}
                     data-testid="existing-user-copy-own-link-btn"
                     className={cn(
-                      "h-9 rounded-lg px-3.5 text-xs font-semibold text-white shrink-0",
+                      "h-9 w-full min-w-0 rounded-lg px-2.5 text-xs font-semibold text-white",
+                      !isMobilePlatform && "sm:w-auto sm:px-3.5 sm:shrink-0",
                       copiedOwnLink ? "bg-teal-700 hover:bg-teal-800" : "bg-blue-600 hover:bg-blue-700",
                     )}
                   >
-                    {copiedOwnLink ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-                    {copiedOwnLink ? "Copied your link" : "Copy my link"}
+                    {copiedOwnLink ? (
+                      <Check className="mr-1 sm:mr-1.5 h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <Copy className="mr-1 sm:mr-1.5 h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span className="truncate">{copiedOwnLink ? "Copied your link" : "Copy my link"}</span>
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleShareOwnInvite}
                     data-testid="existing-user-share-own-invite-btn"
-                    className="h-9 rounded-lg border-blue-200 px-3 text-xs font-semibold text-slate-900 shrink-0"
+                    className={cn(
+                      "h-9 w-full min-w-0 rounded-lg border-blue-200 px-2.5 text-xs font-semibold text-slate-900",
+                      !isMobilePlatform && "sm:w-auto sm:px-3 sm:shrink-0",
+                    )}
                   >
-                    <Share2 className="mr-1.5 h-3.5 w-3.5" />
-                    Share invite
+                    <Share2 className="mr-1 sm:mr-1.5 h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Share invite</span>
                   </Button>
                 </div>
               </div>
