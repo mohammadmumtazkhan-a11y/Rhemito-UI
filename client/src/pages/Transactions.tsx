@@ -162,18 +162,15 @@ function SendMoneyRow({ tx, scheduled, onCancel, onReceipt }: { tx: SendMoneyTx;
                   Completed
                 </motion.span>
               ) : tx.status === "awaiting_payment" ? (
-                <motion.span
+                <motion.span title="Awaiting Payment"
                   key="awaiting_payment"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200"
+                  className="status-light inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200"
                 >
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 motion-reduce:animate-none" style={{ animationDuration: '2s' }} />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-                  </span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                   Awaiting Payment
                 </motion.span>
               ) : (
@@ -469,11 +466,8 @@ function MobileSendMoneyCard({
               Completed
             </span>
           ) : tx.status === "awaiting_payment" ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-              </span>
+            <span title="Awaiting Payment" className="status-light inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
               Awaiting Payment
             </span>
           ) : (
