@@ -20,7 +20,7 @@ vi.mock("../../../../server/index", () => ({ log: () => {} }));
 
 import ReferralLanding from "@/pages/ReferralLanding";
 import { ReferEarnCard } from "@/components/rewards/ReferEarnCard";
-import { REFERRAL_CODE_RE, clearReferral, loadReferral, saveReferral, type MyReferral, type RewardOffer } from "@/lib/rewards";
+import { REFERRAL_CODE_RE, clearReferral, loadReferral, saveReferral, type MyReferral, type RewardOffer, buildReferralShareMessage, buildReferralShareTitle } from "@/lib/rewards";
 import { userInitials, welcomeName } from "@/lib/userDisplay";
 
 let ctx: ContractApp;
@@ -495,6 +495,70 @@ describe("Refer & Earn card", () => {
     const user = await ctx.storage.getAuthUserByEmail(email);
     await waitFor(() => expect(referralCalls(user!.id)).toHaveLength(1), { timeout: 3000 });
     expect(referralCalls(user!.id)[0].body).toEqual({ code: "JOHN2880", rule_id: 2, referee: { id: user!.id, send_currency: "GBP" } });
+  });
+
+  rule("REF-20", "Sharing a referral link provides a clear marketing message explaining why to register and make a transfer, renders the official Rhemito SVG logo, and reconciles referrer-earned history with My referrals", {
+    why: "Sharing must convert referees with clear value propositions, open-graph cards must carry genuine Rhemito branding, and referrer rewards in the wallet must reflect in referrals summary.",
+    fix: "lib/rewards.ts buildReferralShareMessage; ReferEarnCard.tsx refer-preview-marketing-btn, refer-share-dialog, refer-copy-marketing-btn; server/referralOpenGraph.ts /api/rewards/og-image/:code; server/rewardsRoutes.ts GET /api/rewards/summary wallet history reconciliation.",
+    where: ["client/src/lib/rewards.ts", "client/src/components/rewards/ReferEarnCard.tsx", "server/referralOpenGraph.ts", "server/rewardsRoutes.ts"],
+    timeout: 10_000,
+  }, async () => {
+    // a) buildReferralShareMessage verification
+    const msg = buildReferralShareMessage({ offer: OFFER, code: "JOHN2880", link: "http://localhost:5000/ref/JOHN2880", includeUrl: true });
+    expect(msg).toContain("JOHN2880");
+    expect(msg).toContain("£10.00");
+    expect(msg).toContain("£50.00");
+    expect(msg).toContain("Why register & send with Rhemito:");
+    expect(msg).toContain("How to claim your £10.00 bonus in 3 simple steps:");
+
+    // b) ReferEarnCard dialog preview & copy
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const view = card();
+    const previewBtn = view.getByTestId("refer-preview-marketing-btn");
+    await act(async () => { fireEvent.click(previewBtn); });
+    expect(view.getByTestId("refer-share-dialog")).toBeTruthy();
+    expect(view.getByTestId("refer-marketing-message-preview").textContent).toContain("Why register & send with Rhemito:");
+    await act(async () => { fireEvent.click(view.getByTestId("refer-copy-marketing-btn")); });
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Why register & send with Rhemito:"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("http://localhost:5000/ref/JOHN2880"));
+    view.unmount();
+
+    // c) GET /api/rewards/og-image/JOHN2880
+    const ogRes = await fetch(`${ctx.base}/api/rewards/og-image/JOHN2880`);
+    expect(ogRes.status).toBe(200);
+    const svg = await ogRes.text();
+    expect(svg).toContain("M25.0764 30.3999");
+    expect(svg).toContain("WHY REGISTER &amp; TRANSFER WITH RHEMITO");
+
+    // d) Wallet history reconciliation in GET /api/rewards/summary
+    ctx.stub.on(/^\/api\/wallet\//, {
+      status: 200,
+      body: {
+        bonus_blocked: false,
+        balances: [{ currency: "GBP", available: 15, earned: 15, used: 0, expired: 0 }],
+        unused: [],
+        credits: [],
+        history: [{
+          id: "sync_h1",
+          type: "EARNED",
+          notes: "Referrer reward – referred Sarah S.",
+          credit_source: "REFERRAL",
+          credit_source_detail: "REFERRER",
+          amount: 15,
+          currency: "GBP",
+          created_at: "2026-10-20T10:00:00Z",
+        }],
+        promo_redemptions: [],
+      },
+    });
+    ctx.stub.on(/^\/api\/referral\/referrals/, { status: 200, body: { data: [], summary: { joined: 0, earned_count: 0, total_earned: {} } } });
+    const summaryRes = await ctx.api("GET", "/api/rewards/summary");
+    expect(summaryRes.status).toBe(200);
+    expect(summaryRes.body.data.referrals.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ friend: "Sarah S.", status: "REWARDED", credited: 15 }),
+    ]));
+    expect(summaryRes.body.data.referrals.summary.joined).toBe(1);
   });
 });
 
