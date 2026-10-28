@@ -496,43 +496,43 @@ export default function SendMoney() {
                             >
                                 <div className="lg:col-span-3 space-y-5">
                                     <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <Label className="text-gray-500">You Send</Label>
-                                            {promo.enabled && (
-                                                promoApplied ? (
-                                                    <div className="flex items-center gap-2 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full" data-testid="step1-promo-applied-pill">
-                                                        <Check className="w-3.5 h-3.5 text-green-600" />
-                                                        <span>Promo <strong className="font-mono">{promoCode}</strong> (−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")})</span>
+                                        <div className="flex flex-wrap items-center justify-between gap-2 min-h-[28px]">
+                                            <Label className="text-gray-500 shrink-0">You Send</Label>
+                                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                                {promo.enabled && (
+                                                    promoApplied ? (
+                                                        <div className="inline-flex items-center gap-2 h-7 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-3 rounded-full shadow-2xs" data-testid="step1-promo-applied-pill">
+                                                            <Check className="w-3.5 h-3.5 text-green-600" />
+                                                            <span>Promo <strong className="font-mono">{promoCode}</strong> (−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")})</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setShowPromoModal(true)}
+                                                                className="text-blue-600 hover:underline ml-1"
+                                                            >
+                                                                Change
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={promo.remove}
+                                                                className="text-gray-500 hover:text-red-600 ml-0.5"
+                                                                aria-label="Remove promo code"
+                                                            >
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
                                                         <button
                                                             type="button"
+                                                            disabled={useBonus}
+                                                            title={useBonus ? "You can only use one reward at a time" : undefined}
                                                             onClick={() => setShowPromoModal(true)}
-                                                            className="text-blue-600 hover:underline ml-1"
+                                                            data-testid="step1-use-promo-btn"
+                                                            className={`inline-flex items-center gap-1.5 h-7 text-xs font-semibold px-3 rounded-full shadow-2xs transition-all ${useBonus ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 cursor-pointer"}`}
                                                         >
-                                                            Change
+                                                            <span>🏷️ Use Promo Code</span>
                                                         </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={promo.remove}
-                                                            className="text-gray-500 hover:text-red-600 ml-0.5"
-                                                            aria-label="Remove promo code"
-                                                        >
-                                                            <X className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        disabled={useBonus}
-                                                        title={useBonus ? "You can only use one reward at a time" : undefined}
-                                                        onClick={() => setShowPromoModal(true)}
-                                                        data-testid="step1-use-promo-btn"
-                                                        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${useBonus ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 cursor-pointer"}`}
-                                                    >
-                                                        <span>🏷️ Use Promo Code</span>
-                                                    </button>
-                                                )
-                                            )}
-                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                    )
+                                                )}
                                                 <button
                                                     type="button"
                                                     disabled={promoApplied || (useBonus && activeRewardTab === "bonus")}
@@ -543,7 +543,7 @@ export default function SendMoney() {
                                                         setBonusPanelOpen(true);
                                                     }}
                                                     data-testid="step1-use-referral-btn"
-                                                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${promoApplied || (useBonus && activeRewardTab === "bonus") ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "referral" && bonusPanelOpen ? "bg-teal-600 text-white border border-teal-600 cursor-pointer" : "text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100/80 border border-teal-200/80 cursor-pointer"}`}
+                                                    className={`inline-flex items-center gap-1.5 h-7 text-xs font-semibold px-3 rounded-full shadow-2xs transition-all ${promoApplied || (useBonus && activeRewardTab === "bonus") ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "referral" && bonusPanelOpen ? "bg-teal-600 text-white border border-teal-600 cursor-pointer" : "text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100/80 border border-teal-200/80 cursor-pointer"}`}
                                                 >
                                                     <span>🎁 Use Referral</span>
                                                 </button>
@@ -557,7 +557,7 @@ export default function SendMoney() {
                                                         setBonusPanelOpen(true);
                                                     }}
                                                     data-testid="step1-use-bonus-btn"
-                                                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${promoApplied || (useBonus && activeRewardTab === "referral") ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "bonus" && bonusPanelOpen ? "bg-indigo-600 text-white border border-indigo-600 cursor-pointer" : "text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 cursor-pointer"}`}
+                                                    className={`inline-flex items-center gap-1.5 h-7 text-xs font-semibold px-3 rounded-full shadow-2xs transition-all ${promoApplied || (useBonus && activeRewardTab === "referral") ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed" : activeRewardTab === "bonus" && bonusPanelOpen ? "bg-indigo-600 text-white border border-indigo-600 cursor-pointer" : "text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 cursor-pointer"}`}
                                                 >
                                                     <span>✨ Use Bonus</span>
                                                 </button>
@@ -596,7 +596,9 @@ export default function SendMoney() {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label className="text-gray-500">They Receive</Label>
+                                        <div className="flex items-center justify-between min-h-[28px]">
+                                            <Label className="text-gray-500">They Receive</Label>
+                                        </div>
                                         <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
                                             <div className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
                                                 <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[recipientDetails.currency || "NGN"] ?? "ng"}.png`} alt={recipientDetails.currency || "NGN"} className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />

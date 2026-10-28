@@ -32,7 +32,7 @@ function formatBoldAmounts(text: string) {
 /** Renders the offer sentence with the money amounts in bold. */
 function OfferSentence({ text }: { text: string }) {
   return (
-    <p className="text-xs leading-relaxed text-slate-600" data-testid="refer-offer-text">
+    <p className="text-sm leading-relaxed text-slate-600" data-testid="refer-offer-text">
       {formatBoldAmounts(text)}
     </p>
   );
@@ -84,7 +84,7 @@ export function ReferEarnCard({
   if (isError) {
     return (
       <Card className="h-full rounded-2xl border border-slate-200/80 bg-white p-5 flex flex-col shadow-2xs" data-testid="refer-earn-error">
-        <h2 className="font-display text-lg font-bold text-slate-900">Refer &amp; Earn</h2>
+        <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900">Refer &amp; Earn</h2>
         <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6 text-center" role="alert">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
             <RefreshCw className="h-5 w-5" aria-hidden="true" />
@@ -173,26 +173,26 @@ export function ReferEarnCard({
       id="refer-earn"
       data-testid="refer-earn-card"
       className={cn(
-        "h-full rounded-2xl border border-slate-200/80 bg-white p-5 flex flex-col justify-between gap-3.5 shadow-2xs transition-shadow duration-300",
+        "h-full rounded-2xl border border-slate-200/80 bg-white p-5 flex flex-col justify-between gap-4 shadow-2xs transition-shadow duration-300",
         highlighted && "ring-2 ring-primary ring-offset-2",
       )}
     >
-      <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-4">
         {/* Card Header */}
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h2 className="font-display text-lg font-bold text-slate-900 leading-tight">Refer &amp; Earn</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Share a little. Earn a little.</p>
+            <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 leading-tight">Refer &amp; Earn</h2>
+            <p className="text-sm text-slate-500 mt-0.5">Share a little. Earn a little.</p>
           </div>
           <div className="flex items-center gap-2">
             {!collapsed && (
               <button
                 type="button"
                 onClick={() => setHowOpen(true)}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded cursor-pointer"
+                className="inline-flex items-center gap-1 text-[13px] sm:text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded cursor-pointer"
               >
                 <span>How it works</span>
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
             {defaultCollapsed && (
@@ -201,10 +201,10 @@ export function ReferEarnCard({
                 onClick={() => setCollapsed((v) => !v)}
                 aria-expanded={!collapsed}
                 data-testid="toggle-refer-earn-card"
-                className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3.5 py-1.5 text-[13px] sm:text-sm font-semibold text-blue-700 transition-colors cursor-pointer"
               >
                 <span>{collapsed ? "Show Refer & Earn" : "Hide"}</span>
-                {collapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
               </button>
             )}
           </div>
@@ -236,7 +236,7 @@ export function ReferEarnCard({
                       }}
                       aria-pressed={isSelected}
                       className={cn(
-                        "rounded-full px-3.5 py-1 text-xs font-semibold transition-colors",
+                        "rounded-full px-4 py-1 text-[13px] sm:text-sm font-semibold transition-colors",
                         isSelected
                           ? "bg-blue-600 text-white shadow-2xs cursor-pointer"
                           : hasActiveRule
@@ -269,7 +269,7 @@ export function ReferEarnCard({
                       }}
                       aria-pressed={isSelected}
                       className={cn(
-                        "rounded-full px-3.5 py-1 text-xs font-semibold transition-colors cursor-pointer",
+                        "rounded-full px-4 py-1 text-[13px] sm:text-sm font-semibold transition-colors cursor-pointer",
                         isSelected ? "bg-blue-600 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900",
                       )}
                     >
@@ -297,14 +297,14 @@ export function ReferEarnCard({
                 <div className="rounded-2xl bg-[#EEF4FF] border border-blue-100/80 p-4">
                   <div className="grid grid-cols-2 divide-x divide-slate-200/90">
                     <div className="pr-3">
-                      <p className="text-xs font-medium text-slate-600">You get</p>
-                      <p className="font-display text-2xl font-bold text-slate-900 tracking-tight mt-0.5">
+                      <p className="text-sm font-medium text-slate-600">You get</p>
+                      <p className="font-display text-2xl sm:text-[28px] font-bold text-slate-900 tracking-tight mt-0.5">
                         {formatMoney(activeOffer.referrer_reward, activeOffer.currency)}
                       </p>
                     </div>
                     <div className="pl-4">
-                      <p className="text-xs font-medium text-slate-600">Your friend gets</p>
-                      <p className="font-display text-2xl font-bold text-slate-900 tracking-tight mt-0.5">
+                      <p className="text-sm font-medium text-slate-600">Your friend gets</p>
+                      <p className="font-display text-2xl sm:text-[28px] font-bold text-slate-900 tracking-tight mt-0.5">
                         {formatMoney(activeOffer.referee_reward, activeOffer.currency)}
                       </p>
                     </div>
@@ -317,12 +317,12 @@ export function ReferEarnCard({
                 {/* Referral Link + Integrated Copy Button */}
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <label htmlFor="referral-link" className="text-xs font-semibold text-slate-700">
+                    <label htmlFor="referral-link" className="text-sm font-semibold text-slate-700">
                       Your referral link
                     </label>
                     {effectiveCode && (
                       <span
-                        className="font-mono text-xs font-semibold text-blue-600"
+                        className="font-mono text-[13px] sm:text-sm font-semibold text-blue-600"
                         data-testid="refer-active-code"
                       >
                         {effectiveCode}
@@ -336,17 +336,17 @@ export function ReferEarnCard({
                       readOnly
                       value={link.replace(/^https?:\/\//, "")}
                       onFocus={(e) => e.currentTarget.select()}
-                      className="h-9 flex-1 min-w-0 bg-transparent text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none truncate"
+                      className="h-10 flex-1 min-w-0 bg-transparent text-sm font-semibold text-slate-800 focus:outline-none truncate"
                     />
                     <Button
                       type="button"
                       onClick={handleCopy}
                       className={cn(
-                        "h-9 rounded-lg px-4 text-xs font-semibold text-white shrink-0",
+                        "h-10 rounded-lg px-4 text-sm font-semibold text-white shrink-0",
                         copied ? "bg-teal-700 hover:bg-teal-800" : "bg-blue-600 hover:bg-blue-700",
                       )}
                     >
-                      {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
+                      {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
                       {copied ? "Copied" : "Copy link"}
                     </Button>
                     <Button
@@ -354,9 +354,9 @@ export function ReferEarnCard({
                       variant="outline"
                       onClick={handleShare}
                       data-testid="refer-share-btn"
-                      className="h-9 rounded-lg border-slate-300 px-3 text-xs font-semibold text-slate-900 shrink-0"
+                      className="h-10 rounded-lg border-slate-300 px-3.5 text-sm font-semibold text-slate-900 shrink-0"
                     >
-                      <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                      <Share2 className="mr-1.5 h-4 w-4" />
                       Share
                     </Button>
                   </div>
@@ -365,10 +365,10 @@ export function ReferEarnCard({
                       type="button"
                       onClick={() => setShareOpen(true)}
                       data-testid="refer-preview-marketing-btn"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[13px] sm:text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
                     >
                       <span>Preview &amp; copy full invite message</span>
-                      <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -382,35 +382,35 @@ export function ReferEarnCard({
       {!collapsed && (
         <div className="flex flex-col gap-2.5 pt-1" data-testid="refer-latest">
           {joined === 0 ? (
-            <p className="text-xs text-slate-500">No referrals yet. Share your link to start earning.</p>
+            <p className="text-sm text-slate-500">No referrals yet. Share your link to start earning.</p>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2.5" data-testid="refer-stats">
-                <div className="rounded-xl bg-slate-50 px-3 py-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Friends joined</p>
-                  <p className="mt-0.5 font-display text-lg font-bold leading-none text-slate-900" data-testid="refer-count">
+                <div className="rounded-xl bg-slate-50 px-3.5 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Friends joined</p>
+                  <p className="mt-0.5 font-display text-xl font-bold leading-none text-slate-900" data-testid="refer-count">
                     {joined}
                   </p>
                 </div>
-                <div className="rounded-xl bg-teal-50 px-3 py-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-800">Bonus earned</p>
-                  <p className="mt-0.5 font-display text-lg font-bold leading-none text-teal-700" data-testid="refer-earned">
+                <div className="rounded-xl bg-teal-50 px-3.5 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Bonus earned</p>
+                  <p className="mt-0.5 font-display text-xl font-bold leading-none text-teal-700" data-testid="refer-earned">
                     {earnedText}
                   </p>
                 </div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {waiting > 0 && (
-                  <p className="text-xs text-slate-500" data-testid="refer-waiting">
+                  <p className="text-sm text-slate-500" data-testid="refer-waiting">
                     {waiting} {waiting === 1 ? "friend is" : "friends are"} yet to send {formatMoney(offer.floor, offer.currency)}+
                   </p>
                 )}
                 <Link
                   href="/bonus-discounts?tab=referrals"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline"
                 >
                   View all referrals
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </div>
             </>
@@ -430,8 +430,8 @@ export function ReferEarnCard({
                 Applicable referral rules by send currency
               </p>
               {allOffers.map((o) => (
-                <div key={`dialog-${o.rule_id}-${o.currency}`} className="flex items-start gap-2 text-xs text-slate-700">
-                  <span className="mt-0.5 shrink-0 rounded bg-blue-100 px-1.5 py-0.5 font-bold text-blue-800">{o.currency}</span>
+                <div key={`dialog-${o.rule_id}-${o.currency}`} className="flex items-start gap-2 text-sm text-slate-700">
+                  <span className="mt-0.5 shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-bold text-blue-800">{o.currency}</span>
                   <span>{o.text}</span>
                 </div>
               ))}
@@ -442,7 +442,7 @@ export function ReferEarnCard({
             <li><strong className="text-slate-900">2.</strong> They send {formatMoney(offer.floor, offer.currency)} or more within {offer.qualification_window_days} days of joining.</li>
             <li><strong className="text-slate-900">3.</strong> When that transfer completes, the bonus credit is added. Use it within {offer.bonus_validity_days} days.</li>
           </ol>
-          <p className="text-xs text-slate-500">Each friend can be rewarded once. Self-referrals and duplicate accounts are not rewarded.</p>
+          <p className="text-sm text-slate-500">Each friend can be rewarded once. Self-referrals and duplicate accounts are not rewarded.</p>
         </DialogContent>
       </Dialog>
 
@@ -454,7 +454,7 @@ export function ReferEarnCard({
               This message clearly explains your friend&apos;s welcome bonus and why they should register and make their transfer with Rhemito.
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-slate-800 whitespace-pre-line font-sans" data-testid="refer-marketing-message-preview">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm leading-relaxed text-slate-800 whitespace-pre-line font-sans" data-testid="refer-marketing-message-preview">
             {fullMarketingMessage}
           </div>
           <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -463,7 +463,7 @@ export function ReferEarnCard({
               onClick={handleCopyMarketingMessage}
               data-testid="refer-copy-marketing-btn"
               className={cn(
-                "flex-1 min-w-[170px] h-10 rounded-xl text-xs font-semibold text-white",
+                "flex-1 min-w-[170px] h-10 rounded-xl text-sm font-semibold text-white",
                 copiedMessage ? "bg-teal-700 hover:bg-teal-800" : "bg-blue-600 hover:bg-blue-700",
               )}
             >
@@ -475,14 +475,14 @@ export function ReferEarnCard({
               target="_blank"
               rel="noopener noreferrer"
               data-testid="refer-whatsapp-share-link"
-              className="inline-flex h-10 items-center justify-center rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] px-4 text-xs font-semibold text-white transition-colors"
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] px-4 text-sm font-semibold text-white transition-colors"
             >
               Share on WhatsApp
             </a>
             <a
               href={`mailto:?subject=${encodeURIComponent(shareTitle)}&body=${encodeURIComponent(fullMarketingMessage)}`}
               data-testid="refer-email-share-link"
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-3.5 text-xs font-semibold text-slate-800 transition-colors"
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-3.5 text-sm font-semibold text-slate-800 transition-colors"
             >
               Email
             </a>
