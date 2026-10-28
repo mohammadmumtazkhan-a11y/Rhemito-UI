@@ -247,6 +247,84 @@ export function registerRewardsRoutes(app: Express): void {
     }
   });
 
+  /** Public / session-aware offers available to existing customers who click a referral link. */
+  app.get("/api/rewards/existing-user-offers", async (req: Request, res: Response) => {
+    try {
+      const sessionUserId = req.session?.userId;
+      const emailParam = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+      const user = sessionUserId
+        ? await storage.getAuthUserById(sessionUserId)
+        : emailParam
+          ? await storage.getAuthUserByEmail(emailParam)
+          : undefined;
+      const currency = String(
+        req.query.currency ?? (user?.country ? currencyForCountry(user.country) : "GBP"),
+      )
+        .trim()
+        .toUpperCase();
+
+      const publicBase = serverConfig.publicBaseUrl.replace(/\/+$/, "");
+      let viewerReferralCode: string | null = null;
+      let viewerReferralLink: string | null = null;
+
+      if (sessionUserId) {
+        try {
+          const synced = await syncCustomer(sessionUserId);
+          viewerReferralCode = synced?.referral_code ?? null;
+          if (viewerReferralCode) {
+            viewerReferralLink = `${publicBase}/ref/${viewerReferralCode}`;
+          }
+        } catch {
+          // non-blocking
+        }
+      }
+
+      const [referralRes, bonusRes] = await Promise.all([
+        mito(`/api/referral/offer?currency=${encodeURIComponent(currency)}${sessionUserId ? `&customer_id=${encodeURIComponent(sessionUserId)}` : ""}`).catch(
+          (): Record<string, any> => ({}),
+        ),
+        mito(`/api/bonus/offers?currency=${encodeURIComponent(currency)}`).catch(
+          (): Record<string, any> => ({}),
+        ),
+      ]);
+
+      const referralOffer = referralRes?.offer ?? (Array.isArray(referralRes?.offers) ? referralRes.offers[0] : null) ?? null;
+      const referralOffers = Array.isArray(referralRes?.currency_offers) && referralRes.currency_offers.length > 0
+        ? referralRes.currency_offers
+        : Array.isArray(referralRes?.offers)
+          ? referralRes.offers
+          : referralOffer
+            ? [referralOffer]
+            : [];
+
+      if (!viewerReferralCode && referralOffer?.referral_code && sessionUserId) {
+        viewerReferralCode = referralOffer.referral_code;
+        viewerReferralLink = `${publicBase}/ref/${viewerReferralCode}`;
+      }
+
+      const rawBonusOffers = Array.isArray(bonusRes)
+        ? bonusRes
+        : Array.isArray(bonusRes?.data)
+          ? bonusRes.data
+          : [];
+
+      res.json({
+        data: {
+          signedIn: Boolean(sessionUserId),
+          currency,
+          viewerFirstName: user?.firstName ?? null,
+          viewerReferralCode,
+          viewerReferralLink,
+          referralOffer,
+          referralOffers,
+          bonusOffers: rawBonusOffers,
+        },
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   /** Count a referral link visit (public; repeat visits within 24h count once). */
   app.post("/api/rewards/visits", async (req: Request, res: Response) => {
     try {

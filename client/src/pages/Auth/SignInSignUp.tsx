@@ -9,7 +9,9 @@ import BusinessStep2 from "./components/BusinessStep2";
 import OtpStep from "./components/OtpStep";
 import ForgotPassword from "./components/ForgotPassword";
 import { ReferralInviteStrip } from "@/components/rewards/ReferralSignup";
-import { loadReferral, saveReferral, type StoredReferral } from "@/lib/rewards";
+import { ExistingUserReferralCard } from "@/components/rewards/ExistingUserReferralCard";
+import { useToast } from "@/hooks/use-toast";
+import { clearReferral, detectClientDevice, loadReferral, saveReferral, type StoredReferral } from "@/lib/rewards";
 
 type AuthStep = "email" | "signIn" | "signUp" | "businessStep2" | "otp" | "forgotPassword";
 
@@ -45,8 +47,10 @@ export default function SignInSignUp() {
   const [devOtp, setDevOtp] = useState<string | undefined>();
   const [, setLocation] = useLocation();
   const search = useSearch();
+  const { toast } = useToast();
   // Referral captured from a /ref link, Android Play Install Referrer, or typed on the sign-up form
   const [referral, setReferral] = useState<StoredReferral | null>(() => loadReferral());
+  const [existingReferralNotice, setExistingReferralNotice] = useState<StoredReferral | null>(null);
 
   useEffect(() => {
     const qs = new URLSearchParams(search || (typeof window !== "undefined" ? window.location.search : ""));
@@ -93,11 +97,25 @@ export default function SignInSignUp() {
 
   const handleRegistered = (emailValue: string) => {
     setEmail(emailValue);
+    if (referral) {
+      setExistingReferralNotice(referral);
+      clearReferral();
+      setReferral(null);
+      toast({
+        title: "Welcome offer is for new customers only",
+        description: "Since you're already with Rhemito, see the existing member offers below!",
+      });
+    }
     goTo("signIn");
   };
 
   const handleNew = (emailValue: string) => {
     setEmail(emailValue);
+    if (existingReferralNotice && !referral) {
+      saveReferral(existingReferralNotice);
+      setReferral(loadReferral());
+      setExistingReferralNotice(null);
+    }
     goTo("signUp");
   };
 
@@ -138,7 +156,43 @@ export default function SignInSignUp() {
 
   return (
     <AuthLayout heading={headings[step]}>
-      {(step === "email" || step === "signUp") && <ReferralInviteStrip referral={referral} />}
+      {(step === "email" || step === "signIn") && existingReferralNotice && (
+        <ExistingUserReferralCard
+          referrerFirstName={existingReferralNotice.referrerFirstName}
+          clickedCode={existingReferralNotice.code}
+          initialOffer={existingReferralNotice.offer}
+          initialOffers={existingReferralNotice.offers}
+          email={email || undefined}
+          signedIn={false}
+          platform={detectClientDevice().operatingSystem}
+          variant="embedded"
+          onSignInClick={() => {
+            const passwordInput = document.querySelector<HTMLInputElement>('input[type="password"]');
+            passwordInput?.focus();
+          }}
+          onBackToNewUser={
+            step === "email"
+              ? () => {
+                  saveReferral(existingReferralNotice);
+                  setReferral(loadReferral());
+                  setExistingReferralNotice(null);
+                }
+              : undefined
+          }
+        />
+      )}
+      {(step === "email" || step === "signUp") && !existingReferralNotice && (
+        <ReferralInviteStrip
+          referral={referral}
+          onAlreadyMember={() => {
+            if (referral) {
+              setExistingReferralNotice(referral);
+              clearReferral();
+              setReferral(null);
+            }
+          }}
+        />
+      )}
       <AnimatePresence mode="wait" custom={direction}>
         <motion.div
           key={step}

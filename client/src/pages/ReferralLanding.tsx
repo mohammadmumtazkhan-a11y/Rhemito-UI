@@ -3,6 +3,7 @@ import { useLocation, useRoute, useSearch } from "wouter";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { resetDeviceId } from "@/lib/deviceId";
+import { ExistingUserReferralCard } from "@/components/rewards/ExistingUserReferralCard";
 import {
   APPLE_APP_STORE_URL,
   REFERRAL_CODE_RE,
@@ -75,6 +76,18 @@ export default function ReferralLanding() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
   const [deviceOs, setDeviceOs] = useState<"Android" | "iOS" | "Other">(() => resolvePlatform(search));
+  const [existingUserMode, setExistingUserMode] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [existingContext, setExistingContext] = useState<{
+    code: string;
+    referrerFirstName?: string;
+    offer?: RewardOffer | null;
+    offers?: RewardOffer[];
+  } | null>(null);
+  const [checkEmailOpen, setCheckEmailOpen] = useState(false);
+  const [mobileEmail, setMobileEmail] = useState("");
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [mobileEmailStatus, setMobileEmailStatus] = useState("");
 
   useEffect(() => {
     const resolvedOs = resolvePlatform(search);
@@ -88,6 +101,7 @@ export default function ReferralLanding() {
     const qs = new URLSearchParams(search || (typeof window !== "undefined" ? window.location.search : ""));
     const ruleParam = qs.get("rule") ?? qs.get("rule_id");
     const ruleId = ruleParam && /^\d+$/.test(ruleParam) ? Number(ruleParam) : undefined;
+    const forcedExisting = qs.get("existing") === "1" || qs.get("existing") === "true" || qs.get("user") === "existing";
     const resolvedOs = resolvePlatform(search);
     setDeviceOs(resolvedOs);
     const isDesktopOrOther = resolvedOs === "Other";
@@ -112,9 +126,18 @@ export default function ReferralLanding() {
           toSignUp();
           return;
         }
-        if (body.data?.signedIn) {
+        if (body.data?.signedIn || forcedExisting) {
+          clearReferral();
           toast({ title: "Referral links are for new customers only" });
-          setLocation("/", { replace: true });
+          setIsSignedIn(Boolean(body.data?.signedIn));
+          setExistingContext({
+            code: body.data?.code ?? code,
+            referrerFirstName: body.data?.referrerFirstName,
+            offer: body.data?.offer ?? null,
+            offers: body.data?.offers,
+          });
+          setExistingUserMode(true);
+          setLoading(false);
           return;
         }
         resetDeviceId();
@@ -132,6 +155,12 @@ export default function ReferralLanding() {
         };
         saveReferral(initialStored);
         setReferralState(loadReferral());
+        setExistingContext({
+          code: body.data?.code ?? code,
+          referrerFirstName: body.data?.referrerFirstName,
+          offer: body.data?.offer ?? null,
+          offers: body.data?.offers,
+        });
 
         // Record click & retrieve unpredictable trackingId (FR-02)
         let resolvedTrackingId: string | null = null;
@@ -178,6 +207,13 @@ export default function ReferralLanding() {
         setLoading(false);
       } catch {
         // Rewards offline: keep the code so the referral can still be recorded at sign-up
+        if (forcedExisting) {
+          clearReferral();
+          setExistingContext({ code });
+          setExistingUserMode(true);
+          setLoading(false);
+          return;
+        }
         saveReferral({
           code,
           ...(ruleId ? { ruleId } : {}),
@@ -186,6 +222,7 @@ export default function ReferralLanding() {
           ...(isDesktopOrOther ? { channel: "WEB" as const, attributionMethod: "MANUAL_CODE", postSignupAppStoreUrl: null } : {}),
         });
         setReferralState(loadReferral());
+        setExistingContext({ code });
         if (isDesktopOrOther) {
           toSignUp();
           return;
@@ -259,7 +296,37 @@ export default function ReferralLanding() {
     window.location.href = appStoreUrl;
   };
 
-  if (loading || !referralState) {
+  const handleMobileEmailCheck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = mobileEmail.trim();
+    if (!trimmed) return;
+    setCheckingEmail(true);
+    setMobileEmailStatus("");
+    try {
+      const res = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body?.registered) {
+        clearReferral();
+        toast({ title: "Referral links are for new customers only" });
+        setExistingUserMode(true);
+      } else if (res.ok) {
+        setMobileEmailStatus("Lovely — you're new to Rhemito! You qualify for this welcome offer.");
+      } else {
+        setMobileEmailStatus(body?.message || "Please enter a valid email address.");
+      }
+    } catch {
+      setMobileEmailStatus("Couldn't check your email right now. Please try again.");
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
+  if (loading || (!referralState && !existingUserMode)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f0f2f7] max-[460px]:bg-[#fcfcfe]" role="status" aria-live="polite">
         <div className="flex items-center gap-3 text-[15px] text-[#424a5b]">
@@ -269,6 +336,36 @@ export default function ReferralLanding() {
       </div>
     );
   }
+
+  if (existingUserMode) {
+    return (
+      <div
+        className="min-h-screen bg-[#f0f2f7] text-[#182235] font-sans antialiased flex flex-col items-center justify-center px-4 py-6"
+        data-testid="referral-landing-page"
+      >
+        <ExistingUserReferralCard
+          referrerFirstName={existingContext?.referrerFirstName ?? referralState?.referrerFirstName}
+          clickedCode={existingContext?.code ?? referralState?.code}
+          initialOffer={existingContext?.offer ?? referralState?.offer}
+          initialOffers={existingContext?.offers ?? referralState?.offers}
+          email={mobileEmail.trim() || undefined}
+          signedIn={isSignedIn}
+          platform={deviceOs}
+          variant="standalone"
+          onBackToNewUser={
+            !isSignedIn && referralState
+              ? () => {
+                  saveReferral(referralState);
+                  setExistingUserMode(false);
+                }
+              : undefined
+          }
+        />
+      </div>
+    );
+  }
+
+  if (!referralState) return null;
 
   const offer: RewardOffer | null = referralState.offer ?? null;
   const referrerName = referralState.referrerFirstName || "John";
@@ -527,6 +624,65 @@ export default function ReferralLanding() {
                   Your next step: install the app and create an account.
                 </p>
               </div>
+            )}
+          </div>
+
+          {/* Already a Rhemito member? Switcher & Quick Email Check for Mobile */}
+          <div className="mb-[14px] rounded-[12px] border border-[#e6e8f2] bg-[#f8f9fd] px-[12px] py-[10px] text-center">
+            <p className="text-[10px] text-[#5c6479] m-0">
+              Already joined Rhemito?{" "}
+              <button
+                type="button"
+                data-testid="referral-already-member-btn"
+                onClick={() => {
+                  clearReferral();
+                  toast({ title: "Referral links are for new customers only" });
+                  setExistingUserMode(true);
+                }}
+                className="font-semibold text-[#6950cf] underline cursor-pointer bg-transparent border-0 p-0"
+              >
+                See offers for existing users
+              </button>{" "}
+              or{" "}
+              <button
+                type="button"
+                data-testid="referral-check-email-toggle"
+                onClick={() => setCheckEmailOpen((v) => !v)}
+                className="font-semibold text-[#424a5b] underline cursor-pointer bg-transparent border-0 p-0"
+              >
+                check with your email
+              </button>
+            </p>
+            {checkEmailOpen && (
+              <form onSubmit={handleMobileEmailCheck} className="mt-[8px] flex flex-col gap-[6px]">
+                <div className="flex items-center gap-[6px]">
+                  <input
+                    type="email"
+                    value={mobileEmail}
+                    onChange={(e) => {
+                      setMobileEmail(e.target.value);
+                      setMobileEmailStatus("");
+                    }}
+                    placeholder="Enter your email address"
+                    data-testid="referral-mobile-email-input"
+                    className="flex-1 h-[34px] rounded-[8px] border border-[#d6dae8] bg-white px-[10px] text-[11px] text-[#182235] focus:outline-none focus:border-[#6950cf]"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    disabled={checkingEmail || !mobileEmail.trim()}
+                    data-testid="referral-mobile-email-submit"
+                    className="h-[34px] rounded-[8px] bg-[#182235] px-[12px] text-[10px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {checkingEmail ? "Checking…" : "Check"}
+                  </button>
+                </div>
+                {mobileEmailStatus && (
+                  <p className="text-[10px] text-[#5940bd] m-0" data-testid="referral-mobile-email-status">
+                    {mobileEmailStatus}
+                  </p>
+                )}
+              </form>
             )}
           </div>
 
