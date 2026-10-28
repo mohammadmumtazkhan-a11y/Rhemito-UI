@@ -59,12 +59,12 @@ export function BonusCreditPill({
               <Gift className="w-5 h-5" aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-600">Bonus credit</p>
-              <p className="text-lg font-bold text-slate-900 leading-tight mt-0.5">
+              <p className="text-sm font-medium text-slate-600">Bonus credit</p>
+              <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
                 {formatMoney(balance.available, balance.currency)}
                 <span className="sr-only"> bonus credit</span>
               </p>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-[13px] text-slate-500 mt-0.5">
                 {fallbackFloor > 0 ? `Minimum transfer ${formatMoney(fallbackFloor, balance.currency)}` : "Ready to use on your next transfer"}
                 {soon && days !== null && (
                   <span className="ml-1.5 font-semibold text-amber-700" data-testid="bonus-pill-expiring">
@@ -79,10 +79,10 @@ export function BonusCreditPill({
           <button
             type="button"
             onClick={() => onCreateTransaction()}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+            className="inline-flex items-center gap-1 text-[13px] sm:text-sm font-semibold text-blue-600 hover:text-blue-700 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
           >
             <span>{BONUS_COPY.pillCta}</span>
-            <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+            <ArrowRight className="w-4 h-4" aria-hidden />
           </button>
         </div>
       </div>
@@ -107,12 +107,12 @@ export function BonusCreditPill({
               <Users className="w-5 h-5" aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-600">Referral bonus</p>
-              <p className="text-lg font-bold text-slate-900 leading-tight mt-0.5">
+              <p className="text-sm font-medium text-slate-600">Referral bonus</p>
+              <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
                 {formatMoney(referralAvailable, balance.currency)}
                 <span className="sr-only"> bonus credit</span>
               </p>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-[13px] text-slate-500 mt-0.5">
                 {resolvedReferralFloor > 0
                   ? `Minimum transfer ${formatMoney(resolvedReferralFloor, balance.currency)}`
                   : "Ready to use on your next transfer"}
@@ -133,10 +133,10 @@ export function BonusCreditPill({
             type="button"
             onClick={() => onCreateTransaction("referral")}
             data-testid="create-txn-referral-btn"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+            className="inline-flex items-center gap-1 text-[13px] sm:text-sm font-semibold text-blue-600 hover:text-blue-700 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
           >
             <span>{BONUS_COPY.pillCta}</span>
-            <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+            <ArrowRight className="w-4 h-4" aria-hidden />
           </button>
         </div>
       )}
@@ -151,12 +151,12 @@ export function BonusCreditPill({
               <Gift className="w-5 h-5" aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-600">Bonus credit</p>
-              <p className="text-lg font-bold text-slate-900 leading-tight mt-0.5">
+              <p className="text-sm font-medium text-slate-600">Bonus credit</p>
+              <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
                 {formatMoney(schemeAvailable, balance.currency)}
                 <span className="sr-only"> bonus credit</span>
               </p>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-[13px] text-slate-500 mt-0.5">
                 {resolvedSchemeFloor > 0
                   ? `Minimum transfer ${formatMoney(resolvedSchemeFloor, balance.currency)}`
                   : "Ready to use on your next transfer"}
@@ -174,10 +174,10 @@ export function BonusCreditPill({
             type="button"
             onClick={() => onCreateTransaction("bonus")}
             data-testid="create-txn-bonus-btn"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+            className="inline-flex items-center gap-1 text-[13px] sm:text-sm font-semibold text-blue-600 hover:text-blue-700 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
           >
             <span>{BONUS_COPY.pillCta}</span>
-            <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+            <ArrowRight className="w-4 h-4" aria-hidden />
           </button>
         </div>
       )}
