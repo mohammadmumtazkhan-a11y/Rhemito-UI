@@ -157,21 +157,43 @@ describe("Capturing the referral code", () => {
     refused.view.unmount();
   });
 
-  rule("REF-03", "Referral links are for new customers only: a signed-in visitor is told so and nothing is stored", {
-    why: "An existing customer opening a friend's link cannot be referred; storing the code could attach it to a later business sign-up.",
-    fix: "ReferralLanding: when body.data.signedIn is true, toast 'Referral links are for new customers only', go to '/', and do not call saveReferral. (/api/rewards/codes/:code sets signedIn from the session.)",
-    where: ["client/src/pages/ReferralLanding.tsx", "server/rewardsRoutes.ts"],
+  rule("REF-03", "Referral links are for new customers only: an existing/signed-in visitor is told so in a friendly British way, sees existing-user offers, and nothing is stored", {
+    why: "An existing customer opening a friend's link cannot be referred; storing the code could attach it to a later business sign-up. Instead of a dead-end redirect, the page tells them clearly in a British tone that the welcome offer is for new users only and shows the offers available for existing customers (Refer & Earn, Bonus Schemes, Promo Codes) across Web, Android, and iOS.",
+    fix: "ReferralLanding & ExistingUserReferralCard: when body.data.signedIn is true (or ?existing=1), toast 'Referral links are for new customers only', call clearReferral() (do not call saveReferral), and render ExistingUserReferralCard showing existing-user offers and how to benefit from each.",
+    where: ["client/src/pages/ReferralLanding.tsx", "client/src/components/rewards/ExistingUserReferralCard.tsx", "server/rewardsRoutes.ts"],
   }, async () => {
     const real = globalThis.fetch;
-    globalThis.fetch = ((u: any, init?: any) => String(u).includes("/api/rewards/codes/")
-      ? Promise.resolve(new Response(JSON.stringify({ data: { code: "JOHN2880", signedIn: true } }), { status: 200, headers: { "Content-Type": "application/json" } }))
-      : real(u, init)) as typeof fetch;
+    globalThis.fetch = ((u: any, init?: any) => {
+      if (String(u).includes("/api/rewards/codes/")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: { code: "JOHN2880", referrerFirstName: "John", offer: OFFER, signedIn: true } }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }
+      if (String(u).includes("/api/rewards/existing-user-offers")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          data: {
+            signedIn: true,
+            currency: "GBP",
+            viewerFirstName: "Sarah",
+            viewerReferralCode: "SARAH100",
+            viewerReferralLink: "http://localhost:5000/ref/SARAH100",
+            referralOffer: OFFER,
+            referralOffers: [OFFER],
+            bonusOffers: [{ id: 1, name: "GBP Loyalty Bonus", type: "LOYALTY_CREDIT", currency: "GBP", summary: "Complete 3 transfers within 30 days and get £10.00 bonus credit." }],
+          },
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }
+      return real(u, init);
+    }) as typeof fetch;
     try {
-      const { hook, history } = memoryLocation({ path: "/ref/JOHN2880", record: true });
+      const { hook } = memoryLocation({ path: "/ref/JOHN2880", record: true });
       const view = render(React.createElement(Router, { hook }, React.createElement(Route, { path: "/ref/:code", component: ReferralLanding })));
-      await waitFor(() => expect(history[history.length - 1]).toBe("/"), { timeout: 3000 });
+      await waitFor(() => expect(view.getByTestId("existing-user-referral-view")).toBeTruthy(), { timeout: 3000 });
       expect(toast).toHaveBeenCalledWith({ title: "Referral links are for new customers only" });
       expect(localStorage.getItem("rhemito.referral")).toBeNull();
+      expect(view.getByTestId("existing-user-heading").textContent).toContain("Lovely to see you again");
+      expect(view.getByTestId("existing-user-explanation").textContent).toContain("exclusively for new users");
+      expect(view.getByTestId("existing-offer-refer-earn")).toBeTruthy();
+      expect(view.getByTestId("existing-offer-bonus-schemes")).toBeTruthy();
+      expect(view.getByTestId("existing-offer-promo-codes")).toBeTruthy();
       view.unmount();
     } finally {
       globalThis.fetch = real;

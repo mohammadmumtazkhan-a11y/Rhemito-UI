@@ -334,4 +334,38 @@ test.describe('Rewards contract — Refer & Earn card', () => {
         const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('rhemito.referral') || 'null'));
         expect(stored).toMatchObject({ code: 'JOHN2880', referrerFirstName: 'John' });
     });
+
+    /**
+     * CONTRACT REF-03: when an existing user opens a referral link on Web, Android, or iOS, the page tells them clearly in a
+     * friendly British tone that the offer is for new users only, clears any stored code, and shows the existing-user offers
+     * (Refer & Earn, Bonus Schemes, Promo Codes) and how they benefit from each.
+     * CODE: client/src/pages/ReferralLanding.tsx, client/src/components/rewards/ExistingUserReferralCard.tsx, client/src/pages/Auth/SignInSignUp.tsx.
+     */
+    test('[REF-03] existing user clicking a referral link sees the British notice and existing-user offers across Web, Android, and iOS', async ({ page }) => {
+        await page.route('**/api/rewards/codes/**', (route) => route.fulfill(json({ data: { code: 'JOHN2880', referrerFirstName: 'John', offer, signedIn: true } })));
+        await page.route('**/api/rewards/existing-user-offers**', (route) => route.fulfill(json({
+            data: {
+                signedIn: true,
+                currency: 'GBP',
+                viewerFirstName: 'Sarah',
+                viewerReferralCode: 'SARAH100',
+                viewerReferralLink: 'http://localhost:5000/ref/SARAH100',
+                referralOffer: offer,
+                referralOffers: [offer],
+                bonusOffers: [{ id: 1, name: 'GBP Loyalty Bonus', type: 'LOYALTY_CREDIT', currency: 'GBP', summary: 'Complete 3 transfers within 30 days and get £10.00 bonus credit.' }],
+            },
+        })));
+
+        for (const query of ['', '?platform=android', '?platform=ios']) {
+            await page.goto(`/ref/john2880${query}`);
+            await expect(page.getByTestId('existing-user-referral-view')).toBeVisible();
+            await expect(page.getByTestId('existing-user-heading')).toContainText('Lovely to see you again');
+            await expect(page.getByTestId('existing-user-explanation')).toContainText('exclusively for new users');
+            await expect(page.getByTestId('existing-offer-refer-earn')).toContainText('How you benefit from Refer & Earn');
+            await expect(page.getByTestId('existing-offer-bonus-schemes')).toContainText('How you benefit from each Bonus Scheme');
+            await expect(page.getByTestId('existing-offer-promo-codes')).toContainText('How you benefit from Promo Codes');
+            const stored = await page.evaluate(() => localStorage.getItem('rhemito.referral'));
+            expect(stored).toBeNull();
+        }
+    });
 });
