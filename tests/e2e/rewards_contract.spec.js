@@ -43,10 +43,12 @@ const history = [
     { id: 'h6', created_at: '2026-09-30T10:00:00Z', type: 'CLAWBACK', reason_code: 'CLAWBACK', amount: -1, currency: 'GBP', notes: 'Clawback bookkeeping row', transfer_id: 'TXN-X', source_credit_id: null, credit_source: 'SCHEME' },
 ];
 
-function summary({ gbp = 7, usd = 0, referrals = friends, referralSummary, hist = [], blocked = false } = {}) {
-    const balances = [];
-    if (gbp > 0) balances.push({ currency: 'GBP', available: gbp, earned: gbp + 8, used: 4, expired: 2, used_transfer_count: 1, referral_credit_count: 1, other_credit_count: 1, by_source: [{ credit_source: 'REFERRAL', label: 'Referrals', earned: gbp + 8, used: 8, expired: 0, removed: 0, available: gbp }] });
-    if (usd > 0) balances.push({ currency: 'USD', available: usd, earned: usd, used: 0, expired: 0, used_transfer_count: 0, referral_credit_count: 0, other_credit_count: 1 });
+function summary({ gbp = 7, usd = 0, referrals = friends, referralSummary, hist = [], blocked = false, balances: customBalances } = {}) {
+    const balances = customBalances ?? [];
+    if (!customBalances) {
+        if (gbp > 0) balances.push({ currency: 'GBP', available: gbp, earned: gbp + 8, used: 4, expired: 2, used_transfer_count: 1, referral_credit_count: 1, other_credit_count: 1, by_source: [{ credit_source: 'REFERRAL', label: 'Referrals', earned: gbp + 8, used: 8, expired: 0, removed: 0, available: gbp }] });
+        if (usd > 0) balances.push({ currency: 'USD', available: usd, earned: usd, used: 0, expired: 0, used_transfer_count: 0, referral_credit_count: 0, other_credit_count: 1 });
+    }
     return {
         customer: { id: 'user_123', referralCode: 'JOHN2880', currency: 'GBP' },
         currency: 'GBP',
@@ -392,8 +394,9 @@ test.describe('Rewards contract — Refer & Earn card', () => {
         await expect(whyInvite).toContainText('Why register & send with Rhemito');
 
         // c) On / (Dashboard), clicking refer-preview-marketing-btn opens refer-share-dialog with refer-marketing-message-preview containing "Why register & send with Rhemito:"
-        await mockRewards(page);
+        await mockRewards(page, { balances: [{ currency: 'GBP', available: 0, earned: 0, used: 0, expired: 0 }] });
         await page.goto('/');
+        await expect(page.getByTestId('rewards-section-bonus-banners')).toHaveCount(0);
         await page.getByTestId('refer-preview-marketing-btn').click();
         const dialog = page.getByTestId('refer-share-dialog');
         await expect(dialog).toBeVisible();
