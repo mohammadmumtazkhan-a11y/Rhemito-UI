@@ -134,11 +134,11 @@ const isValidAccountNumber = (value: string) => /^\d{6,12}$/.test(value.trim());
 
 function FieldTag({ required }: { required?: boolean }) {
   return required ? (
-    <span className="ml-2 inline-flex items-center rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+    <span className="ml-1.5 inline-flex items-center rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold leading-none text-destructive">
       Mandatory
     </span>
   ) : (
-    <span className="ml-2 inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+    <span className="ml-1.5 inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium leading-none text-muted-foreground">
       Optional
     </span>
   );
@@ -1189,14 +1189,16 @@ export default function RequestPayment() {
                       </div>
 
                       {/* You receive */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="receiveAmount" className="text-sm font-semibold text-slate-800">
-                            You receive <span className="text-destructive">*</span> <FieldTag required />
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between min-h-[28px]">
+                          <Label htmlFor="receiveAmount" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 leading-none">
+                            <span>You receive</span>
+                            <span className="text-destructive">*</span>
+                            <FieldTag required />
                           </Label>
                           {promo.enabled && (
                             promoApplied ? (
-                              <div className="flex items-center gap-2 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full" data-testid="request-promo-applied-pill">
+                              <div className="inline-flex items-center gap-2 h-7 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2.5 rounded-full" data-testid="request-promo-applied-pill">
                                 <Check className="w-3.5 h-3.5 text-green-600" />
                                 <span>Promo <strong className="font-mono">{promoCode}</strong> (+{formatPromoMoney(promoBonus, payoutCurrency)} bonus)</span>
                                 <button type="button" onClick={() => setShowPromoModal(true)} className="text-blue-600 hover:underline ml-1">Change</button>
@@ -1209,7 +1211,7 @@ export default function RequestPayment() {
                                 type="button"
                                 onClick={() => setShowPromoModal(true)}
                                 data-testid="request-use-promo-btn"
-                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 px-3 py-1 rounded-full transition-colors"
+                                className="inline-flex items-center gap-1.5 h-7 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 px-3 rounded-full transition-colors"
                               >
                                 <span>🏷️ Use Promo Code</span>
                               </button>
@@ -1234,11 +1236,11 @@ export default function RequestPayment() {
                               data-testid="input-receive-amount"
                             />
                           </div>
-                          <div className="w-24 md:w-28 h-12 md:h-14 rounded-md border border-input bg-muted flex items-center justify-center font-bold text-base" data-testid="text-receive-currency">
+                          <div className="w-28 md:w-32 h-12 md:h-14 shrink-0 rounded-md border border-input bg-muted flex items-center justify-center font-bold text-base" data-testid="text-receive-currency">
                             {payoutCurrency}
                           </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground leading-relaxed">
                           {!corridorForSelection
                             ? `No rate is available for ${senderCurrency} to ${payoutCurrency}. Choose a different payer currency or settlement account.`
                             : senderCurrency === payoutCurrency ? "Calculated from what the payer sends." : "Indicative. The live rate at payment time applies."}
@@ -1267,10 +1269,14 @@ export default function RequestPayment() {
                       )}
 
                       {/* Payer sends */}
-                      <div className="space-y-1.5">
-                        <Label htmlFor="requestAmount" className="text-sm font-semibold text-slate-800">
-                          Payer sends <span className="text-destructive">*</span> <FieldTag required />
-                        </Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between min-h-[28px]">
+                          <Label htmlFor="requestAmount" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 leading-none">
+                            <span>Payer sends</span>
+                            <span className="text-destructive">*</span>
+                            <FieldTag required />
+                          </Label>
+                        </div>
                         <div className="flex items-center gap-3">
                           <div className="relative flex-1">
                             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">{senderSymbol}</span>
@@ -1291,7 +1297,7 @@ export default function RequestPayment() {
                             />
                           </div>
                           <Select value={formData.senderCurrency} onValueChange={(value) => { setReceiveDraft(null); handleInputChange("senderCurrency", value); }}>
-                            <SelectTrigger className="w-24 md:w-28 h-12 md:h-14 bg-white font-bold text-base shadow-sm" data-testid="select-sender-currency">
+                            <SelectTrigger className="w-28 md:w-32 h-12 md:h-14 shrink-0 bg-white font-bold text-base shadow-sm" data-testid="select-sender-currency">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1303,14 +1309,14 @@ export default function RequestPayment() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div id="payer-sends-help" className="space-y-1">
+                        <div id="payer-sends-help" className="space-y-1.5">
                           {restoredAmount && (
                             <p className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary" data-testid="chip-restored-amount">
                               <Check className="w-3.5 h-3.5" /> Restored from your last successful request. Rate and fees are current.
                             </p>
                           )}
                           {minAmount !== null && (
-                            <p className="text-xs text-muted-foreground" data-testid="text-minimum">
+                            <p className="text-xs text-muted-foreground leading-relaxed" data-testid="text-minimum">
                               Minimum the payer can send: <strong className="text-foreground tabular-nums">{senderSymbol}{minAmount.toFixed(2)}</strong>
                             </p>
                           )}
@@ -1405,8 +1411,13 @@ export default function RequestPayment() {
                         <button type="button" onClick={() => setCurrentStep(1)} className="font-semibold text-primary" data-testid="button-edit-amount">Edit amount</button>
                       </div>
 
-                      <div className="space-y-1.5">
-                        <Label htmlFor="note" className="text-sm font-semibold">Description / Invoice Note <FieldTag /></Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center min-h-[24px]">
+                          <Label htmlFor="note" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 leading-none">
+                            <span>Description / Invoice Note</span>
+                            <FieldTag />
+                          </Label>
+                        </div>
                         <Textarea
                           id="note"
                           rows={3}
@@ -1418,8 +1429,13 @@ export default function RequestPayment() {
                         />
                       </div>
 
-                      <div className="space-y-1.5">
-                        <Label htmlFor="invoiceReference" className="text-sm font-semibold">Invoice Reference <FieldTag /></Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center min-h-[24px]">
+                          <Label htmlFor="invoiceReference" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 leading-none">
+                            <span>Invoice Reference</span>
+                            <FieldTag />
+                          </Label>
+                        </div>
                         <Input
                           id="invoiceReference"
                           placeholder="e.g. INV-2041"
@@ -1431,10 +1447,14 @@ export default function RequestPayment() {
                         <p className="text-xs text-muted-foreground">No invoice needed. Add a reference only if you have one.</p>
                       </div>
 
-                      <div className="space-y-1.5">
-                        <Label htmlFor="reason" className="text-sm font-semibold">
-                          Purpose of Payment <span className="text-destructive">*</span> <FieldTag required />
-                        </Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center min-h-[24px]">
+                          <Label htmlFor="reason" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 leading-none">
+                            <span>Purpose of Payment</span>
+                            <span className="text-destructive">*</span>
+                            <FieldTag required />
+                          </Label>
+                        </div>
                         <Select value={formData.reason} onValueChange={(value) => handleInputChange("reason", value)}>
                           <SelectTrigger id="reason" data-testid="select-reason">
                             <SelectValue placeholder="Select a payment category" />
@@ -1452,10 +1472,14 @@ export default function RequestPayment() {
                           </SelectContent>
                         </Select>
                         {formData.reason === "other" && (
-                          <div className="space-y-1.5 pt-1" data-testid="container-other-reason">
-                            <Label htmlFor="otherReason" className="text-xs font-medium">
-                              Please specify <span className="text-destructive">*</span> <FieldTag required />
-                            </Label>
+                          <div className="space-y-2 pt-1" data-testid="container-other-reason">
+                            <div className="flex items-center min-h-[24px]">
+                              <Label htmlFor="otherReason" className="inline-flex items-center gap-1 text-xs font-medium text-slate-800 leading-none">
+                                <span>Please specify</span>
+                                <span className="text-destructive">*</span>
+                                <FieldTag required />
+                              </Label>
+                            </div>
                             <Input
                               id="otherReason"
                               placeholder="e.g. Consulting services, Event sponsorship"
@@ -1468,10 +1492,13 @@ export default function RequestPayment() {
                       </div>
 
                       {/* Payment link expiry (default applied) */}
-                      <div className="space-y-1.5">
-                        <Label htmlFor="expiryPeriod" className="text-sm font-semibold">
-                          Payment Link Expiry <span className="ml-1 text-[11px] font-medium text-muted-foreground">Default applied</span>
-                        </Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center min-h-[24px]">
+                          <Label htmlFor="expiryPeriod" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 leading-none">
+                            <span>Payment Link Expiry</span>
+                            <span className="ml-1.5 text-[11px] font-medium text-muted-foreground">Default applied</span>
+                          </Label>
+                        </div>
                         <Select
                           value={formData.expiryPeriod}
                           onValueChange={(value) => {
@@ -1512,7 +1539,12 @@ export default function RequestPayment() {
 
                       {/* Payer email + saved senders */}
                       <div className="space-y-2">
-                        <Label htmlFor="senderEmail" className="text-sm font-semibold">Payer Email <FieldTag /></Label>
+                        <div className="flex items-center min-h-[24px]">
+                          <Label htmlFor="senderEmail" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 leading-none">
+                            <span>Payer Email</span>
+                            <FieldTag />
+                          </Label>
+                        </div>
                         <Input
                           id="senderEmail"
                           type="email"
