@@ -1662,6 +1662,10 @@ export async function lockMitoExchangeRate(input: {
   rate?: number;
   commission?: number;
   receiveAmount?: number;
+  isKycRequired?: boolean;
+  isTransactionAllowed?: boolean;
+  kycUrl?: string | null;
+  isProfileUpdateRequired?: boolean;
   source: "validate_rate" | "exchange_rates" | "affiliate_rates";
 } | null> {
   if (!isMitoRetailConfigured()) return null;
@@ -1671,6 +1675,12 @@ export async function lockMitoExchangeRate(input: {
 
   // 1. Primary rate-lock endpoint used by the Mito web flow: POST /api/v1/Rate/validateRate
   try {
+    const rawReturnCandidate = (input.returnUrl || `${serverConfig.publicBaseUrl.replace(/\/+$/, "")}/kyc/return`).trim();
+    const resolvedReturnUrl =
+      /localhost|127\.0\.0\.1|^http:\/\//i.test(rawReturnCandidate)
+        ? "https://rhemito-ui.onrender.com/kyc/return"
+        : rawReturnCandidate;
+
     const validatePayload = {
       userId: effectiveUserId,
       fromCountry: input.fromCountry.toUpperCase(),
@@ -1682,7 +1692,7 @@ export async function lockMitoExchangeRate(input: {
       service: input.collectionMode,
       providerId: input.providerId,
       isInternational: false,
-      returnUrl: input.returnUrl || "http://localhost:5000/send-money",
+      returnUrl: resolvedReturnUrl,
     };
 
     const valRes = await fetch(`${creds.baseUrl}/api/v1/Rate/validateRate`, {
@@ -1702,6 +1712,10 @@ export async function lockMitoExchangeRate(input: {
         rate?: number;
         commission?: number;
         receiveAmount?: number;
+        isKycRequired?: boolean;
+        isTransactionAllowed?: boolean;
+        kycUrl?: string | null;
+        isProfileUpdateRequired?: boolean;
       };
       message?: string;
     };
@@ -1709,7 +1723,7 @@ export async function lockMitoExchangeRate(input: {
     const validatedRateId = valBody?.data?.id || valBody?.data?.rateId;
     if (valRes.ok && validatedRateId) {
       log(
-        `✅ Locked Mito rate via POST /api/v1/Rate/validateRate (rateId=${validatedRateId}, commission=${valBody.data?.commission ?? "-"}, userId=${effectiveUserId})`,
+        `✅ Locked Mito rate via POST /api/v1/Rate/validateRate (rateId=${validatedRateId}, commission=${valBody.data?.commission ?? "-"}, userId=${effectiveUserId}, isTransactionAllowed=${valBody.data?.isTransactionAllowed ?? "-"}, kycUrl=${valBody.data?.kycUrl ?? "none"})`,
         "mito-retail",
       );
       return {
@@ -1717,6 +1731,10 @@ export async function lockMitoExchangeRate(input: {
         rate: valBody.data?.rate,
         commission: valBody.data?.commission,
         receiveAmount: valBody.data?.receiveAmount,
+        isKycRequired: valBody.data?.isKycRequired,
+        isTransactionAllowed: valBody.data?.isTransactionAllowed,
+        kycUrl: valBody.data?.kycUrl ?? null,
+        isProfileUpdateRequired: valBody.data?.isProfileUpdateRequired,
         source: "validate_rate",
       };
     }
@@ -2232,7 +2250,100 @@ export async function initiateMitoHostedTransaction(input: {
   };
 }
 
+export interface MitoKycJourneyResult {
+  journeyId: string | null;
+  journeyCode: string | null;
+  qrCodeUrl: string | null;
+  hostedUrl: string | null;
+  expiryDate: string | null;
+  kycFlow: string | null;
+  kycStatus: string | null;
+  kycType: string | null;
+  message: string | null;
+}
+
+/**
+ * Creates or checks a Mini KYC / Compliance Journey via `POST /api/v1/mito/Journey` (`journeyType: 1`),
+ * matching `rhemito-web-nextjs-dev.herokuapp.com/compliance`.
+ */
+export async function createMitoKycJourney(input: {
+  userId: string;
+  returnUrl?: string | null;
+  webhookUrl?: string | null;
+  journeyType?: number;
+}): Promise<MitoKycJourneyResult | null> {
+  if (!isMitoRetailConfigured()) return null;
+  const creds = loadMitoRetailCredentials()!;
+  const { token } = await getMitoRetailToken();
+  const effectiveUserId = (input.userId || DEFAULT_MITO_SENDER_USER_ID).trim();
+
+  const rawReturnCandidate = (
+    input.returnUrl ||
+    `${serverConfig.publicBaseUrl.replace(/\/+$/, "")}/kyc/return`
+  ).trim();
+  const resolvedReturnUrl =
+    /localhost|127\.0\.0\.1|^http:\/\//i.test(rawReturnCandidate)
+      ? "https://rhemito-ui.onrender.com/kyc/return"
+      : rawReturnCandidate;
+
+  const payload = {
+    customerId: effectiveUserId,
+    userId: effectiveUserId,
+    returnUrl: resolvedReturnUrl,
+    redirectUrl: resolvedReturnUrl,
+    webhookUrl: input.webhookUrl || getMitoWebhookUrl(),
+    journeyType: input.journeyType ?? 1,
+  };
+
+  try {
+    const res = await fetch(`${creds.baseUrl}/api/v1/mito/Journey`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        apiKey: creds.apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const body = (await res.json().catch(() => ({}))) as {
+      data?: {
+        journeyId?: string | null;
+        journeyCode?: string | null;
+        qrCodeUrl?: string | null;
+        hostedUrl?: string | null;
+        expiryDate?: string | null;
+        kycFlow?: string | null;
+        kycStatus?: string | null;
+        kycType?: string | null;
+      };
+      message?: string | null;
+    };
+
+    log(
+      `✅ Mito POST /api/v1/mito/Journey (userId=${effectiveUserId}, kycFlow=${body?.data?.kycFlow ?? "-"}, kycStatus=${body?.data?.kycStatus ?? "-"}, journeyCode=${body?.data?.journeyCode ?? "none"})`,
+      "mito-retail",
+    );
+
+    return {
+      journeyId: body?.data?.journeyId ?? null,
+      journeyCode: body?.data?.journeyCode ?? null,
+      qrCodeUrl: body?.data?.qrCodeUrl ?? null,
+      hostedUrl: body?.data?.hostedUrl ?? null,
+      expiryDate: body?.data?.expiryDate ?? null,
+      kycFlow: body?.data?.kycFlow ?? null,
+      kycStatus: body?.data?.kycStatus ?? null,
+      kycType: body?.data?.kycType ?? null,
+      message: body?.message ?? null,
+    };
+  } catch (err) {
+    console.warn("[mito-retail] createMitoKycJourney warning:", err);
+    return null;
+  }
+}
+
 export interface MitoJourneyStatusResult {
+  journeyId?: string | null;
   journeyCode: string;
   journeyStatus: string;
   orderNo: string | null;
@@ -2241,6 +2352,11 @@ export interface MitoJourneyStatusResult {
   reference: string | null;
   currency: string | null;
   amount: number | null;
+  returnUrl?: string | null;
+  qrCodeUrl?: string | null;
+  journeyType?: string | null;
+  journeySessionId?: string | null;
+  modules?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -2267,6 +2383,7 @@ export async function getMitoJourneyStatus(journeyCode: string): Promise<MitoJou
     if (!res.ok) return null;
     const body = (await res.json().catch(() => ({}))) as {
       data?: {
+        journeyId?: string | null;
         journeyCode?: string;
         journeyStatus?: string;
         orderNo?: string | null;
@@ -2275,10 +2392,16 @@ export async function getMitoJourneyStatus(journeyCode: string): Promise<MitoJou
         reference?: string | null;
         currency?: string | null;
         amount?: number | null;
+        returnUrl?: string | null;
+        qrCodeUrl?: string | null;
+        journeyType?: string | null;
+        journeySessionId?: string | null;
+        modules?: Array<Record<string, unknown>>;
       };
     };
     if (!body?.data) return null;
     return {
+      journeyId: body.data.journeyId ? String(body.data.journeyId) : null,
       journeyCode: String(body.data.journeyCode || cleanCode),
       journeyStatus: String(body.data.journeyStatus || ""),
       orderNo: body.data.orderNo ? String(body.data.orderNo) : null,
@@ -2287,6 +2410,11 @@ export async function getMitoJourneyStatus(journeyCode: string): Promise<MitoJou
       reference: body.data.reference ? String(body.data.reference) : null,
       currency: body.data.currency ? String(body.data.currency) : null,
       amount: typeof body.data.amount === "number" ? body.data.amount : null,
+      returnUrl: body.data.returnUrl ? String(body.data.returnUrl) : null,
+      qrCodeUrl: body.data.qrCodeUrl ? String(body.data.qrCodeUrl) : null,
+      journeyType: body.data.journeyType ? String(body.data.journeyType) : null,
+      journeySessionId: body.data.journeySessionId ? String(body.data.journeySessionId) : null,
+      modules: Array.isArray(body.data.modules) ? body.data.modules : undefined,
     };
   } catch (err) {
     console.warn("[mito-retail] getMitoJourneyStatus warning:", err);

@@ -54,6 +54,10 @@ export interface SendMoneyTransaction {
   mitoProviderId?: string | null;
   mitoProviderCode?: string | null;
   mitoRateId?: string | null;
+  mitoKycUrl?: string | null;
+  mitoIsTransactionAllowed?: boolean | null;
+  mitoIsKycRequired?: boolean | null;
+  mitoIsProfileUpdateRequired?: boolean | null;
   mitoTransactionId?: string | null;
   mitoReference?: string | null;
   mitoRequiredAction?: Record<string, unknown> | null;
@@ -172,6 +176,10 @@ export interface SendMoneyTransactionView {
   mitoProviderId?: string | null;
   mitoProviderCode?: string | null;
   mitoRateId?: string | null;
+  mitoKycUrl?: string | null;
+  mitoIsTransactionAllowed?: boolean | null;
+  mitoIsKycRequired?: boolean | null;
+  mitoIsProfileUpdateRequired?: boolean | null;
   mitoTransactionId?: string | null;
   mitoReference?: string | null;
   mitoRequiredAction?: Record<string, unknown> | null;

@@ -28,6 +28,7 @@ import {
 import {
   DEFAULT_MITO_SENDER_USER_ID,
   createMitoBeneficiary,
+  createMitoKycJourney,
   deleteMitoBeneficiary,
   updateMitoBeneficiary,
   MitoBeneficiaryCreationError,
@@ -123,6 +124,10 @@ function toView(tx: SendMoneyTransaction): SendMoneyTransactionView {
     ...(tx.mitoProviderId ? { mitoProviderId: tx.mitoProviderId } : {}),
     ...(tx.mitoProviderCode ? { mitoProviderCode: tx.mitoProviderCode } : {}),
     ...(tx.mitoRateId ? { mitoRateId: tx.mitoRateId } : {}),
+    ...(tx.mitoKycUrl !== undefined ? { mitoKycUrl: tx.mitoKycUrl } : {}),
+    ...(typeof tx.mitoIsTransactionAllowed === "boolean" ? { mitoIsTransactionAllowed: tx.mitoIsTransactionAllowed } : {}),
+    ...(typeof tx.mitoIsKycRequired === "boolean" ? { mitoIsKycRequired: tx.mitoIsKycRequired } : {}),
+    ...(typeof tx.mitoIsProfileUpdateRequired === "boolean" ? { mitoIsProfileUpdateRequired: tx.mitoIsProfileUpdateRequired } : {}),
     ...(tx.mitoTransactionId ? { mitoTransactionId: tx.mitoTransactionId } : {}),
     ...(tx.mitoReference ? { mitoReference: tx.mitoReference } : {}),
     ...(tx.mitoRequiredAction ? { mitoRequiredAction: tx.mitoRequiredAction } : {}),
@@ -678,6 +683,149 @@ export function registerSendMoneyRoutes(app: Express): void {
   });
 
   /**
+   * Mini KYC / Compliance Journey from `POST {{base_url}}/api/v1/mito/Journey` (`journeyType: 1`),
+   * matching `rhemito-web-nextjs-dev.herokuapp.com/compliance`.
+   */
+  app.post("/api/send-money/mito/kyc/journey", async (req: Request, res: Response) => {
+    try {
+      const userId = requireStrictAuth(req);
+      const body = (req.body ?? {}) as Record<string, any>;
+      let mitoUserId: string | null = body.userId ? String(body.userId).trim() : null;
+
+      if (!mitoUserId) {
+        const authUser = await storage.getAuthUserById(userId);
+        if (authUser) {
+          mitoUserId =
+            getMitoUserIdForUser(authUser.id, authUser.email) ||
+            (await registerOrSyncMitoRetailUser(authUser));
+        }
+      }
+
+      if (!mitoUserId) {
+        return res.json({
+          data: {
+            userId: null,
+            configured: isMitoRetailConfigured(),
+            journeyId: null,
+            journeyCode: null,
+            qrCodeUrl: null,
+            hostedUrl: null,
+            kycFlow: "Flow_No_Action_Required",
+            kycStatus: "SUCCESSFUL",
+            kycType: "AMLADDR",
+          },
+        });
+      }
+
+      const journey = await createMitoKycJourney({
+        userId: mitoUserId,
+        returnUrl: body.returnUrl ? String(body.returnUrl).trim() : undefined,
+        journeyType: typeof body.journeyType === "number" ? body.journeyType : 1,
+      });
+
+      return res.json({
+        data: {
+          userId: mitoUserId,
+          configured: isMitoRetailConfigured(),
+          ...(journey ?? {
+            journeyId: null,
+            journeyCode: null,
+            qrCodeUrl: null,
+            hostedUrl: null,
+            expiryDate: null,
+            kycFlow: null,
+            kycStatus: null,
+            kycType: null,
+            message: null,
+          }),
+        },
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * Validates rate and checks Mini KYC allowance via `POST {{base_url}}/api/v1/Rate/validateRate`.
+   */
+  app.post("/api/send-money/mito/validate-rate", async (req: Request, res: Response) => {
+    try {
+      const userId = requireStrictAuth(req);
+      const body = (req.body ?? {}) as Record<string, any>;
+      let mitoUserId: string | null = body.userId ? String(body.userId).trim() : null;
+
+      if (!mitoUserId) {
+        const authUser = await storage.getAuthUserById(userId);
+        if (authUser) {
+          mitoUserId =
+            getMitoUserIdForUser(authUser.id, authUser.email) ||
+            (await registerOrSyncMitoRetailUser(authUser));
+        }
+      }
+
+      if (!mitoUserId || !isMitoRetailConfigured()) {
+        return res.json({
+          data: {
+            userId: mitoUserId,
+            isTransactionAllowed: true,
+            isKycRequired: false,
+            kycUrl: null,
+          },
+        });
+      }
+
+      const fromCurrency = String(body.fromCurrency || "GBP").trim().toUpperCase();
+      const toCurrency = String(body.toCurrency || "NGN").trim().toUpperCase();
+      const fromCountry = body.fromCountry ? toCountryIso3(String(body.fromCountry)) : currencyToCountryIso3(fromCurrency);
+      const toCountry = body.toCountry ? toCountryIso3(String(body.toCountry)) : currencyToCountryIso3(toCurrency);
+      const collectionMode = serviceToMitoCollectionMode(String(body.service || body.collectionMode || "BANKACCOUNT"));
+      let providerId = String(body.providerId || "").trim();
+      if (!providerId) {
+        const providers = await getMitoProviders({
+          countryIso3: toCountry,
+          currencyCode: toCurrency,
+          serviceCode: "MONEYTRANSFER",
+          collectionMode,
+        });
+        providerId = providers[0]?.providerId || "";
+      }
+
+      const result = providerId
+        ? await lockMitoExchangeRate({
+            userId: mitoUserId,
+            collectionMode,
+            fromCountry,
+            toCountry,
+            fromCurrency,
+            toCurrency,
+            amount: Number(body.amount || 100),
+            direction: body.direction === "R" ? "R" : "S",
+            providerId,
+            returnUrl: body.returnUrl ? String(body.returnUrl).trim() : undefined,
+          })
+        : null;
+
+      const isAnonymousDemoSession = (!req.session?.userId || req.session.userId === "user_123") && !body.userId;
+
+      return res.json({
+        data: {
+          userId: mitoUserId,
+          rateId: result?.rateId ?? null,
+          rate: result?.rate ?? null,
+          commission: result?.commission ?? null,
+          receiveAmount: result?.receiveAmount ?? null,
+          isKycRequired: isAnonymousDemoSession ? false : (result?.isKycRequired ?? false),
+          isTransactionAllowed: isAnonymousDemoSession ? true : (result?.isTransactionAllowed ?? true),
+          kycUrl: isAnonymousDemoSession ? null : (result?.kycUrl ?? null),
+          isProfileUpdateRequired: isAnonymousDemoSession ? false : (result?.isProfileUpdateRequired ?? false),
+        },
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
    * Step 4: Proxies Checkout.com Payment Session submission (`POST https://api.sandbox.checkout.com/payment-sessions/:id/submit`)
    * server-side so browser CORS/network restrictions never block the "Pay" button on the Credit/Debit Card flow.
    */
@@ -900,6 +1048,10 @@ export function registerSendMoneyRoutes(app: Express): void {
       let mitoProviderId: string | null = input.providerId ?? null;
       let mitoProviderCode: string | null = input.providerCode ?? null;
       let mitoRateId: string | null = input.affiliateRateId ?? null;
+      let mitoKycUrl: string | null = null;
+      let mitoIsTransactionAllowed: boolean | null = null;
+      let mitoIsKycRequired: boolean | null = null;
+      let mitoIsProfileUpdateRequired: boolean | null = null;
       const sendCurrencyUpper = input.sendCurrency.toUpperCase();
       const receiveCurrencyUpper = input.receiveCurrency.toUpperCase();
       let resolvedSendCountryIso3: string = input.sendCountryIso3
@@ -1063,6 +1215,18 @@ export function registerSendMoneyRoutes(app: Express): void {
             if (lockedRate?.rateId) {
               mitoRateId = lockedRate.rateId;
             }
+            if (lockedRate?.kycUrl !== undefined) {
+              mitoKycUrl = lockedRate.kycUrl;
+            }
+            if (typeof lockedRate?.isTransactionAllowed === "boolean") {
+              mitoIsTransactionAllowed = lockedRate.isTransactionAllowed;
+            }
+            if (typeof lockedRate?.isKycRequired === "boolean") {
+              mitoIsKycRequired = lockedRate.isKycRequired;
+            }
+            if (typeof lockedRate?.isProfileUpdateRequired === "boolean") {
+              mitoIsProfileUpdateRequired = lockedRate.isProfileUpdateRequired;
+            }
           }
         } catch (mitoErr) {
           if (mitoErr instanceof MitoBeneficiaryCreationError) {
@@ -1094,6 +1258,10 @@ export function registerSendMoneyRoutes(app: Express): void {
         ...(mitoProviderId ? { mitoProviderId } : {}),
         ...(mitoProviderCode ? { mitoProviderCode } : {}),
         ...(mitoRateId ? { mitoRateId } : {}),
+        ...(mitoKycUrl !== null ? { mitoKycUrl } : {}),
+        ...(mitoIsTransactionAllowed !== null ? { mitoIsTransactionAllowed } : {}),
+        ...(mitoIsKycRequired !== null ? { mitoIsKycRequired } : {}),
+        ...(mitoIsProfileUpdateRequired !== null ? { mitoIsProfileUpdateRequired } : {}),
         sendCountryIso3: resolvedSendCountryIso3,
         receiveCountryIso3: resolvedReceiveCountryIso3,
         ...(input.relationship ? { relationship: input.relationship } : {}),

@@ -575,6 +575,78 @@ export async function cancelSendMoneyTransaction(id: string): Promise<void> {
   await apiRequest("POST", `/api/send-money/transactions/${encodeURIComponent(id)}/cancel`, {});
 }
 
+export interface MitoKycJourneyClientResponse {
+  userId: string | null;
+  configured: boolean;
+  journeyId: string | null;
+  journeyCode: string | null;
+  qrCodeUrl: string | null;
+  hostedUrl: string | null;
+  expiryDate: string | null;
+  kycFlow: string | null;
+  kycStatus: string | null;
+  kycType: string | null;
+  message: string | null;
+}
+
+export async function fetchMitoKycJourney(params?: {
+  returnUrl?: string;
+  journeyType?: number;
+  userId?: string;
+}): Promise<MitoKycJourneyClientResponse | null> {
+  try {
+    const res = await fetch("/api/send-money/mito/kyc/journey", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(params ?? {}),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: MitoKycJourneyClientResponse };
+    return json.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export interface MitoValidateRateClientResponse {
+  userId: string | null;
+  rateId: string | null;
+  rate: number | null;
+  commission: number | null;
+  receiveAmount: number | null;
+  isKycRequired: boolean;
+  isTransactionAllowed: boolean;
+  kycUrl: string | null;
+  isProfileUpdateRequired: boolean;
+}
+
+export async function validateMitoRate(params: {
+  fromCurrency: string;
+  toCurrency: string;
+  fromCountry?: string;
+  toCountry?: string;
+  amount: number;
+  direction?: "S" | "R";
+  service?: SendMoneyService | string;
+  providerId?: string;
+  returnUrl?: string;
+}): Promise<MitoValidateRateClientResponse | null> {
+  try {
+    const res = await fetch("/api/send-money/mito/validate-rate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: MitoValidateRateClientResponse };
+    return json.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Dashboard unified-table row shape for send money (display strings, 2dp). */
 export interface SendMoneyRow {
   id: string;

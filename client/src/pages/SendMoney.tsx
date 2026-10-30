@@ -43,6 +43,7 @@ import {
     type MitoProviderOption,
     paySendMoneyTransaction,
     SendMoneyApiError,
+    validateMitoRate,
 } from "@/lib/sendMoney";
 import type { SendMoneyPaymentMethod, SendMoneyService } from "@shared/sendMoney";
 
@@ -916,6 +917,35 @@ export default function SendMoney() {
         }
     }, [applyPaymentOutcome]);
 
+    // Restore pending transfer context when returning from Mini KYC (/kyc) completion
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        try {
+            const justCompleted = sessionStorage.getItem("rhemito_kyc_just_completed");
+            const rawCtx = localStorage.getItem("kyc_context");
+            if (justCompleted === "true" && rawCtx) {
+                sessionStorage.removeItem("rhemito_kyc_just_completed");
+                localStorage.removeItem("kyc_context");
+                const ctx = JSON.parse(rawCtx) as Record<string, any>;
+                if (typeof ctx.amount === "string") setAmount(ctx.amount);
+                if (typeof ctx.sendCurrencyState === "string") setSendCurrencyState(ctx.sendCurrencyState);
+                if (typeof ctx.receiveCurrency === "string") {
+                    const recvCur = ctx.receiveCurrency;
+                    const nextCountry = CURRENCY_TO_COUNTRY_INFO[recvCur]?.country || "Nigeria";
+                    setRecipientDetails((prev) => ({ ...prev, currency: recvCur, country: nextCountry }));
+                }
+                if (typeof ctx.deliveryMethod === "string") setDeliveryMethod(ctx.deliveryMethod);
+                if (ctx.lockedRateId) {
+                    setLockedRateId(String(ctx.lockedRateId));
+                    setAffiliateRateId(String(ctx.lockedRateId));
+                }
+                setCurrentStep(typeof ctx.resumeStep === "number" ? ctx.resumeStep : 2);
+            }
+        } catch {
+            // ignore storage errors
+        }
+    }, []);
+
     // Listen for postMessage events from the Mito Plaid / Pay by Bank iframe (including MITO_LINK_SUCCESS & MITO_LINK_EXIT)
     useEffect(() => {
         if (!mitoPayByBankUrl || currentStep !== 4) return;
@@ -1705,7 +1735,55 @@ export default function SendMoney() {
 
 
 
-    const handleNext = () => {
+    const [validatingStep1Rate, setValidatingStep1Rate] = useState(false);
+
+    const handleNext = async () => {
+        if (currentStep === 1) {
+            setValidatingStep1Rate(true);
+            try {
+                const recvCurrency = recipientDetails.currency || "NGN";
+                const validated = await validateMitoRate({
+                    fromCurrency: SEND_CURRENCY,
+                    toCurrency: recvCurrency,
+                    amount: parseFloat(amount || "100") || 100,
+                    direction: "S",
+                    service: deliveryMethod as SendMoneyService,
+                    providerId: selectedProvider?.providerId || mitoProviders[0]?.providerId,
+                    returnUrl: typeof window !== "undefined" ? `${window.location.origin}/kyc/return` : undefined,
+                });
+                if (validated?.rateId) {
+                    setLockedRateId(validated.rateId);
+                    setAffiliateRateId(validated.rateId);
+                }
+                if (validated?.kycUrl && validated.isTransactionAllowed === false) {
+                    try {
+                        localStorage.setItem(
+                            "kyc_context",
+                            JSON.stringify({
+                                resumeStep: 2,
+                                amount,
+                                sendCurrencyState: SEND_CURRENCY,
+                                receiveCurrency: recvCurrency,
+                                deliveryMethod,
+                                lockedRateId: validated.rateId || affiliateRateId,
+                            }),
+                        );
+                    } catch {
+                        // ignore storage errors
+                    }
+                    toast({
+                        title: "Your KYC is pending!!",
+                        description: "You are being redirected to Compliance",
+                    });
+                    setLocation(`/kyc?url=${encodeURIComponent(validated.kycUrl)}`);
+                    return;
+                }
+            } finally {
+                setValidatingStep1Rate(false);
+            }
+            setCurrentStep(2);
+            return;
+        }
         if (currentStep < 4) setCurrentStep((prev) => prev + 1);
         else setLocation("/"); // Finish
     };

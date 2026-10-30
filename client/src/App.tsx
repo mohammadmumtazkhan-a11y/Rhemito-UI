@@ -35,6 +35,7 @@ import NotificationPreferences from "@/pages/NotificationPreferences";
 import NotificationArchive from "@/pages/NotificationArchive";
 import NotificationDetail from "@/pages/NotificationDetail";
 import BankTransferDesigns from "@/pages/BankTransferDesigns";
+import CompliancePage, { KycVerificationPage, KycReturnPage } from "@/pages/Compliance";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -109,6 +110,10 @@ function Router() {
       <Route path="/notifications/archive" component={NotificationArchive} />
       <Route path="/notifications/:id" component={NotificationDetail} />
       <Route path="/bank-transfer-designs" component={BankTransferDesigns} />
+      <Route path="/compliance" component={CompliancePage} />
+      <Route path="/kyc/return" component={KycReturnPage} />
+      <Route path="/kyc/status" component={KycReturnPage} />
+      <Route path="/kyc" component={KycVerificationPage} />
       <Route component={NotFound} />
     </Switch>
   );
