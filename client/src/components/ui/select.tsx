@@ -95,7 +95,7 @@ SelectScrollDownButton.displayName =
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", side = "bottom", avoidCollisions = false, ...props }, ref) => {
+>(({ className, children, position = "popper", side = "bottom", avoidCollisions = true, ...props }, ref) => {
   const [searchQuery, setSearchQuery] = React.useState("")
   const filteredChildren = React.useMemo(
     () => filterSelectChildren(children, searchQuery),
