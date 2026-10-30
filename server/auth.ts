@@ -150,6 +150,7 @@ export function registerAuthRoutes(app: Express) {
       // Set session
       req.session.userId = user.id;
       rememberDevice(user.id, req);
+      await registerOrSyncMitoRetailUser(user).catch(() => null);
 
       const { password: _, ...safeUser } = user;
       return res.json({ user: safeUser });
@@ -225,6 +226,7 @@ export function registerAuthRoutes(app: Express) {
         verifiedPreRegistrationEmails.delete(emailKey);
         pendingOtpEmails.delete(emailKey);
         rememberDevice(user.id, req);
+      await registerOrSyncMitoRetailUser(user).catch(() => null);
         const mitoUserId = await registerOrSyncMitoRetailUser(user);
         const referral = await onCustomerVerified(user.id, referralCode || null, referralRuleId, attributionMeta);
         await syncPromoCustomer(user.id, { force: true }).catch(() => {});
@@ -344,6 +346,7 @@ export function registerAuthRoutes(app: Express) {
       pendingReferralRuleIds.delete(email.toLowerCase());
       pendingReferralMeta.delete(email.toLowerCase());
       rememberDevice(user.id, req);
+      await registerOrSyncMitoRetailUser(user).catch(() => null);
       const referral = await onCustomerVerified(user.id, pendingCode, pendingRuleId, pendingMeta);
       await syncPromoCustomer(user.id, { force: true }).catch(() => {});
 

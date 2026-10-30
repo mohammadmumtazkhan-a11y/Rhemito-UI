@@ -250,6 +250,16 @@ export async function fetchMitoBeneficiaries(params?: {
   }
 }
 
+export async function fetchMitoBeneficiariesWithMeta(
+  params?: Parameters<typeof fetchMitoBeneficiaries>[0],
+): Promise<{ configured: boolean; beneficiaries: MitoBeneficiaryItem[] }> {
+  const list = (await fetchMitoBeneficiaries(params)) as MitoBeneficiaryItem[] & { configured?: boolean };
+  return {
+    configured: Boolean(list.configured),
+    beneficiaries: Array.from(list),
+  };
+}
+
 export async function deleteMitoBeneficiaryById(
   beneficiaryId: string,
   meta?: { name?: string; accountNumber?: string },

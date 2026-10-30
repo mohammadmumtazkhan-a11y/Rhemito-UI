@@ -45,7 +45,7 @@ import { countries } from "@/data/countries";
 import { useContacts } from "@/contexts/ContactsContext";
 import { toKnownRecipient } from "@/data/contacts";
 import { type KnownRecipient } from "@/data/recipients";
-import { deleteMitoBeneficiaryById, fetchMitoBeneficiaries, fetchMitoProviders, isMitoBeneficiaryDeleted, unmarkDeletedMitoBeneficiary, updateMitoBeneficiaryById, type MitoBeneficiaryItem, type MitoProviderOption } from "@/lib/sendMoney";
+import { deleteMitoBeneficiaryById, fetchMitoBeneficiaries, fetchMitoBeneficiariesWithMeta, fetchMitoProviders, isMitoBeneficiaryDeleted, unmarkDeletedMitoBeneficiary, updateMitoBeneficiaryById, type MitoBeneficiaryItem, type MitoProviderOption } from "@/lib/sendMoney";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   SERVICE_TYPES,
@@ -128,6 +128,7 @@ export function RecipientsPanel() {
   const [newRecipient, setNewRecipient] = useState<NewRecipientForm>(emptyNewRecipient);
 
   const [mitoBeneficiaries, setMitoBeneficiaries] = useState<MitoBeneficiaryItem[]>([]);
+  const [mitoConfigured, setMitoConfigured] = useState(false);
   const [mitoProviders, setMitoProviders] = useState<MitoProviderOption[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<{ providerId: string; providerCode: string } | null>(null);
   const [addRecipientError, setAddRecipientError] = useState<string | null>(null);
@@ -136,9 +137,10 @@ export function RecipientsPanel() {
   // Load sender's saved beneficiaries from GET /api/v1/mito/Beneficiaries?userId={{userId}}
   useEffect(() => {
     let active = true;
-    void fetchMitoBeneficiaries().then((list) => {
+    void fetchMitoBeneficiariesWithMeta().then((res) => {
       if (!active) return;
-      setMitoBeneficiaries(list);
+      setMitoBeneficiaries(res.beneficiaries);
+      setMitoConfigured(res.configured);
     });
     return () => {
       active = false;
@@ -268,6 +270,9 @@ export function RecipientsPanel() {
     });
 
     // Merge Mito Sandbox beneficiaries at the top, deduplicating by beneficiaryId or (accountNumber + name)
+    if (mitoConfigured) {
+      return mitoMapped;
+    }
     const merged: KnownRecipient[] = [...mitoMapped];
     for (const loc of localList) {
       const locName = displayName(loc).trim().toLowerCase();
@@ -285,7 +290,7 @@ export function RecipientsPanel() {
       }
     }
     return merged;
-  }, [contactsRecipients, mitoBeneficiaries]);
+  }, [contactsRecipients, mitoBeneficiaries, mitoConfigured]);
 
   const filtered = useMemo(
     () => searchRecipients(recipients, searchQuery),
@@ -466,8 +471,9 @@ export function RecipientsPanel() {
           ),
         );
 
-        void fetchMitoBeneficiaries().then((list) => {
-          setMitoBeneficiaries(list);
+        void fetchMitoBeneficiariesWithMeta().then((res) => {
+          setMitoBeneficiaries(res.beneficiaries);
+      setMitoConfigured(res.configured);
         });
 
         handleCloseRecipientModal();
@@ -540,8 +546,9 @@ export function RecipientsPanel() {
         accountNumber: cleanAcct,
       });
 
-      void fetchMitoBeneficiaries().then((list) => {
-        setMitoBeneficiaries(list);
+      void fetchMitoBeneficiariesWithMeta().then((res) => {
+        setMitoBeneficiaries(res.beneficiaries);
+      setMitoConfigured(res.configured);
       });
 
       handleCloseRecipientModal();

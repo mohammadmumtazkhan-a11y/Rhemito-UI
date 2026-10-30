@@ -64,6 +64,15 @@ export const authUsers = pgTable("auth_users", {
   businessPhoneCode: text("business_phone_code"),
   businessPhoneNumber: text("business_phone_number"),
   directorName: text("director_name"),
+  // Sender address & birth country fields (for POST /api/v1/mito/Users)
+  buildingNumber: text("building_number"),
+  buildingName: text("building_name"),
+  subStreet: text("sub_street"),
+  street: text("street"),
+  addressCity: text("address_city"),
+  addressPostcode: text("address_postcode"),
+  addressCountry: text("address_country"),
+  birthCountry: text("birth_country"),
   // Status
   status: text("status").notNull().default("pending"), // "pending" | "active" | "blocked"
   // Mini-KYC: set to "passed" when the in-app identity steps complete.

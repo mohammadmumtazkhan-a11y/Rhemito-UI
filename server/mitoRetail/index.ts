@@ -342,8 +342,67 @@ export async function getMitoRetailToken(forceRefresh = false): Promise<{ token:
  * Maps an existing Rhemito AuthUser record (created from SignUpForm or BusinessStep2)
  * directly to Mito's `POST /api/v1/mito/Users` request body without requiring any UI changes.
  */
+const USER_MAPPINGS_FILE = path.resolve(process.cwd(), ".dev-state", "mito-user-mappings.json");
+
+function loadUserMappingsFromDisk(): void {
+  try {
+    if (!fs.existsSync(USER_MAPPINGS_FILE)) return;
+    const raw = JSON.parse(fs.readFileSync(USER_MAPPINGS_FILE, "utf8")) as {
+      byRhemitoId?: Record<string, string>;
+      byEmail?: Record<string, string>;
+    };
+    if (raw.byRhemitoId) {
+      for (const [k, v] of Object.entries(raw.byRhemitoId)) {
+        if (k && v) mitoUserIdByRhemitoId.set(k, v);
+      }
+    }
+    if (raw.byEmail) {
+      for (const [k, v] of Object.entries(raw.byEmail)) {
+        if (k && v) mitoUserIdByEmail.set(k.toLowerCase(), v);
+      }
+    }
+  } catch {
+    // ignore corrupt disk cache
+  }
+}
+
+function saveUserMappingsToDisk(): void {
+  try {
+    const dir = path.dirname(USER_MAPPINGS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const byRhemitoId: Record<string, string> = {};
+    mitoUserIdByRhemitoId.forEach((v, k) => {
+      byRhemitoId[k] = v;
+    });
+    const byEmail: Record<string, string> = {};
+    mitoUserIdByEmail.forEach((v, k) => {
+      byEmail[k] = v;
+    });
+    fs.writeFileSync(USER_MAPPINGS_FILE, JSON.stringify({ byRhemitoId, byEmail }, null, 2), "utf8");
+  } catch {
+    // ignore write failures
+  }
+}
+
+loadUserMappingsFromDisk();
+
+function isDefaultDemoUser(rhemitoUserId?: string, email?: string): boolean {
+  const cleanId = String(rhemitoUserId ?? "").trim();
+  const cleanEmail = String(email ?? "").trim().toLowerCase();
+  return (
+    cleanId === "user_123" ||
+    cleanId === "user_demo_payer" ||
+    cleanEmail === "demo@rhemito.com" ||
+    cleanEmail === "payer@rhemito.com"
+  );
+}
+
 export function mapAuthUserToMitoCreatePayload(user: AuthUser): MitoRetailUserPayload {
   const countryIso3 = toCountryIso3(user.country);
+  const addressCountryIso3 = toCountryIso3(user.addressCountry || user.country);
+  const birthCountryIso3 = toCountryIso3(user.birthCountry || user.country);
   const isBusiness = user.accountType === "business";
 
   const dialCode = (user.mobileCode || user.businessPhoneCode || COUNTRY_DEFAULT_DIAL[countryIso3] || "+44").trim();
@@ -374,15 +433,15 @@ export function mapAuthUserToMitoCreatePayload(user: AuthUser): MitoRetailUserPa
     legalEntityType: isBusiness ? "B" : "I",
     companyNumber: isBusiness ? (user.businessRegNo || "").trim() : "",
     businessName: isBusiness ? (user.businessName || "").trim() : "",
-    dateOfBirth: (user.dateOfBirth || "1990-01-01").trim(),
-    buildingNumber: "10",
-    buildingName: "",
-    subStreet: "",
-    street: "10 Downing Street",
-    addressCity: "London",
-    addressPostcode: "EC2A 4DJ",
-    addressCountryIso3: countryIso3,
-    birthCountryIso3: countryIso3,
+    dateOfBirth: (user.dateOfBirth || "").trim(),
+    buildingNumber: (user.buildingNumber || "").trim(),
+    buildingName: (user.buildingName || "").trim(),
+    subStreet: (user.subStreet || "").trim(),
+    street: (user.street || "").trim(),
+    addressCity: (user.addressCity || "").trim(),
+    addressPostcode: (user.addressPostcode || "").trim(),
+    addressCountryIso3,
+    birthCountryIso3,
   };
 }
 
@@ -419,6 +478,7 @@ export async function findMitoRetailUserByEmail(email: string): Promise<{ userId
   if (!resolvedId) return null;
 
   mitoUserIdByEmail.set(cleanEmail, resolvedId);
+  saveUserMappingsToDisk();
   return { userId: resolvedId, email: cleanEmail };
 }
 
@@ -433,13 +493,22 @@ export async function registerOrSyncMitoRetailUser(user: AuthUser): Promise<stri
   const cachedId = mitoUserIdByRhemitoId.get(user.id) || mitoUserIdByEmail.get(cleanEmail);
   if (cachedId) {
     mitoUserIdByRhemitoId.set(user.id, cachedId);
+    saveUserMappingsToDisk();
     return cachedId;
   }
 
   try {
     const creds = loadMitoRetailCredentials()!;
     const { token } = await getMitoRetailToken();
-    const payload = mapAuthUserToMitoCreatePayload(user);
+  const payload = mapAuthUserToMitoCreatePayload(user);
+  const preExisting = await findMitoRetailUserByEmail(cleanEmail).catch(() => null);
+  if (preExisting?.userId) {
+    mitoUserIdByRhemitoId.set(user.id, preExisting.userId);
+    mitoUserIdByEmail.set(cleanEmail, preExisting.userId);
+    saveUserMappingsToDisk();
+    log(`ℹ️ Linked existing Mito Sandbox user ${cleanEmail} (mitoUserId=${preExisting.userId})`, "mito-retail");
+    return preExisting.userId;
+  }
 
     const res = await fetch(`${creds.baseUrl}/api/v1/mito/Users`, {
       method: "POST",
@@ -459,6 +528,7 @@ export async function registerOrSyncMitoRetailUser(user: AuthUser): Promise<stri
       const mitoUserId = body.data.userId;
       mitoUserIdByRhemitoId.set(user.id, mitoUserId);
       mitoUserIdByEmail.set(cleanEmail, mitoUserId);
+      saveUserMappingsToDisk();
       log(`✅ Synced user ${cleanEmail} to Mito Sandbox (mitoUserId=${mitoUserId})`, "mito-retail");
       return mitoUserId;
     }
@@ -468,15 +538,16 @@ export async function registerOrSyncMitoRetailUser(user: AuthUser): Promise<stri
     if (existing?.userId) {
       mitoUserIdByRhemitoId.set(user.id, existing.userId);
       mitoUserIdByEmail.set(cleanEmail, existing.userId);
+      saveUserMappingsToDisk();
       log(`ℹ️ Linked existing Mito Sandbox user ${cleanEmail} (mitoUserId=${existing.userId})`, "mito-retail");
       return existing.userId;
     }
 
     log(`⚠️ Mito POST /api/v1/mito/Users returned ${res.status}: ${body?.message || "Unknown error"}`, "mito-retail");
-    return DEFAULT_MITO_SENDER_USER_ID || null;
+    return isDefaultDemoUser(user.id, cleanEmail) ? DEFAULT_MITO_SENDER_USER_ID || null : null;
   } catch (err) {
     log(`⚠️ Failed to sync user ${cleanEmail} to Mito Sandbox: ${(err as Error).message}`, "mito-retail");
-    return DEFAULT_MITO_SENDER_USER_ID || null;
+    return isDefaultDemoUser(user.id, cleanEmail) ? DEFAULT_MITO_SENDER_USER_ID || null : null;
   }
 }
 
@@ -485,7 +556,7 @@ export async function registerOrSyncMitoRetailUser(user: AuthUser): Promise<stri
  * for sending money and beneficiary operations.
  */
 export function getMitoUserIdForUser(rhemitoUserId: string, email?: string): string | null {
-  if (DEFAULT_MITO_SENDER_USER_ID) {
+  if (DEFAULT_MITO_SENDER_USER_ID && isDefaultDemoUser(rhemitoUserId, email)) {
     return DEFAULT_MITO_SENDER_USER_ID;
   }
   const byId = mitoUserIdByRhemitoId.get(rhemitoUserId);

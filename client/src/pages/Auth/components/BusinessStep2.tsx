@@ -40,6 +40,13 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
       "",
   );
   const [mobileNumber, setMobileNumber] = useState("");
+  const [birthCountry, setBirthCountry] = useState(step1Data.country || "");
+  const [buildingNumber, setBuildingNumber] = useState("");
+  const [buildingName, setBuildingName] = useState("");
+  const [subStreet, setSubStreet] = useState("");
+  const [street, setStreet] = useState("");
+  const [addressCity, setAddressCity] = useState("");
+  const [addressPostcode, setAddressPostcode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -115,6 +122,26 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
       return;
     }
 
+    if (!birthCountry) {
+      toast({ title: "Country of birth required", description: "Please select your country of birth.", variant: "destructive" });
+      return;
+    }
+    if (!buildingNumber.trim() && !buildingName.trim()) {
+      toast({ title: "Building number or name required", description: "Please enter a building number or building name.", variant: "destructive" });
+      return;
+    }
+    if (!street.trim()) {
+      toast({ title: "Street required", description: "Please enter your street address.", variant: "destructive" });
+      return;
+    }
+    if (!addressCity.trim()) {
+      toast({ title: "City required", description: "Please enter your city.", variant: "destructive" });
+      return;
+    }
+    if (!addressPostcode.trim()) {
+      toast({ title: "Postcode required", description: "Please enter your postcode.", variant: "destructive" });
+      return;
+    }
     if (password !== confirmPassword) {
       setPasswordError("Passwords do not match");
       return;
@@ -149,6 +176,14 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
       gender,
       mobileCode,
       mobileNumber,
+      birthCountry,
+      addressCountry: selectedCountry || step1Data.country,
+      buildingNumber: buildingNumber.trim(),
+      buildingName: buildingName.trim(),
+      subStreet: subStreet.trim(),
+      street: street.trim(),
+      addressCity: addressCity.trim(),
+      addressPostcode: addressPostcode.trim(),
       password,
       confirmPassword,
     });
@@ -248,6 +283,103 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
             />
 
             {/* Password */}
+            <div>
+              <label className="block text-sm text-slate-500 mb-1">
+                Country of Birth<span className="text-red-400">*</span>
+              </label>
+              <SearchableSelect
+                value={birthCountry}
+                onValueChange={(val) => setBirthCountry(val)}
+                placeholder="Select country of birth"
+                searchPlaceholder="Search country of birth..."
+                className="[&>div:first-child]:h-[42px] [&>div:first-child]:border-slate-200 [&>div:first-child]:rounded"
+                options={countries.map((c) => ({
+                  value: c.code,
+                  label: `${c.flag} ${c.name}`,
+                }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-slate-500 mb-1">
+                  Building Number{!buildingName.trim() && <span className="text-red-400">*</span>}
+                </label>
+                <input
+                  type="text"
+                  value={buildingNumber}
+                  onChange={(e) => setBuildingNumber(e.target.value)}
+                  className="block w-full px-3 py-2.5 border border-slate-200 rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700"
+                  placeholder="e.g. 10"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-500 mb-1">
+                  Building Name{!buildingNumber.trim() && <span className="text-red-400">*</span>}
+                </label>
+                <input
+                  type="text"
+                  value={buildingName}
+                  onChange={(e) => setBuildingName(e.target.value)}
+                  className="block w-full px-3 py-2.5 border border-slate-200 rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700"
+                  placeholder="Optional if number provided"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-slate-500 mb-1">Sub-street</label>
+              <input
+                type="text"
+                value={subStreet}
+                onChange={(e) => setSubStreet(e.target.value)}
+                className="block w-full px-3 py-2.5 border border-slate-200 rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700"
+                placeholder="Apartment, suite, unit (optional)"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-slate-500 mb-1">
+                Street<span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={street}
+                onChange={(e) => setStreet(e.target.value)}
+                className="block w-full px-3 py-2.5 border border-slate-200 rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700"
+                placeholder="Street name"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-slate-500 mb-1">
+                  City<span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={addressCity}
+                  onChange={(e) => setAddressCity(e.target.value)}
+                  className="block w-full px-3 py-2.5 border border-slate-200 rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700"
+                  placeholder="City"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-500 mb-1">
+                  Postcode<span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={addressPostcode}
+                  onChange={(e) => setAddressPostcode(e.target.value)}
+                  className="block w-full px-3 py-2.5 border border-slate-200 rounded focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700"
+                  placeholder="Postcode"
+                  required
+                />
+              </div>
+            </div>
             <PasswordInput
               value={password}
               onChange={(v) => {
