@@ -486,6 +486,50 @@ export async function findMitoRetailUserByEmail(email: string): Promise<{ userId
  * Registers a Rhemito user in Mito Sandbox (`POST /api/v1/mito/Users`).
  * If the email already exists in Mito Sandbox, resolves and links the existing `userId`.
  */
+export interface MitoRetailUpdateUserPayload {
+  userId: string;
+  phoneNumber: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  gender: "M" | "F";
+  dateOfBirth: string;
+  buildingNumber: string;
+  buildingName: string;
+  subStreet: string;
+  street: string;
+  addressCity: string;
+  addressPostcode: string;
+  addressCountryIso3: string;
+  birthCountryIso3: string;
+}
+
+export async function updateMitoRetailUser(payload: MitoRetailUpdateUserPayload): Promise<boolean> {
+  if (!isMitoRetailConfigured()) return false;
+  try {
+    const creds = loadMitoRetailCredentials()!;
+    const { token } = await getMitoRetailToken();
+    const res = await fetch(`${creds.baseUrl}/api/v1/mito/Users/UpdateUser`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      log(`✅ Updated Mito Sandbox user (mitoUserId=${payload.userId})`, "mito-retail");
+      return true;
+    }
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    log(`⚠️ Mito POST /api/v1/mito/Users/UpdateUser returned ${res.status}: ${body?.message || "Unknown"}`, "mito-retail");
+    return false;
+  } catch (err) {
+    log(`⚠️ Failed to update Mito user ${payload.userId}: ${(err as Error).message}`, "mito-retail");
+    return false;
+  }
+}
+
 export async function registerOrSyncMitoRetailUser(user: AuthUser): Promise<string | null> {
   if (!isMitoRetailConfigured()) return null;
 
@@ -506,6 +550,25 @@ export async function registerOrSyncMitoRetailUser(user: AuthUser): Promise<stri
     mitoUserIdByRhemitoId.set(user.id, preExisting.userId);
     mitoUserIdByEmail.set(cleanEmail, preExisting.userId);
     saveUserMappingsToDisk();
+    if (payload.street && payload.addressCity && payload.addressPostcode && payload.dateOfBirth) {
+      await updateMitoRetailUser({
+        userId: preExisting.userId,
+        phoneNumber: payload.phoneNumber,
+        firstName: payload.firstName,
+        middleName: payload.middleName,
+        lastName: payload.lastName,
+        gender: payload.gender,
+        dateOfBirth: payload.dateOfBirth,
+        buildingNumber: payload.buildingNumber,
+        buildingName: payload.buildingName,
+        subStreet: payload.subStreet,
+        street: payload.street,
+        addressCity: payload.addressCity,
+        addressPostcode: payload.addressPostcode,
+        addressCountryIso3: payload.addressCountryIso3,
+        birthCountryIso3: payload.birthCountryIso3,
+      }).catch(() => false);
+    }
     log(`ℹ️ Linked existing Mito Sandbox user ${cleanEmail} (mitoUserId=${preExisting.userId})`, "mito-retail");
     return preExisting.userId;
   }
