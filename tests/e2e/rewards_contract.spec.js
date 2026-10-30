@@ -64,6 +64,38 @@ async function mockRewards(page, opts = {}) {
     await page.route('**/api/rewards/summary**', (route) => route.fulfill(json({ data })));
     await page.route('**/api/promocodes/savings**', (route) => route.fulfill(json({ data: { items: [], saved: {} } })));
     await page.route('**/api/bonus/summary**', (route) => route.fulfill(json({ data: { currency: 'GBP', currencies: ['GBP'], blocked: opts.blocked ?? false, offers: [], wallet: data.wallet } })));
+    await page.route('**/api/send-money/mito/beneficiaries**', (route) =>
+        route.fulfill(
+            json({
+                data: {
+                    configured: true,
+                    beneficiaries: [
+                        {
+                            beneficiaryId: '11111111-2222-3333-4444-555555555555',
+                            name: 'Akshita',
+                            firstName: 'Akshita',
+                            lastName: 'Sharma',
+                            legalEntityType: 'individual',
+                            providerId: 'e3af932a-0326-4b65-b5f4-e8f753a69d4d',
+                            bankName: 'United Bank for Africa Plc (UBA)',
+                            acctNumber: '1018316888',
+                            relationship: 'FRIEND',
+                            reason: 'FOROWNEXPENDITURES',
+                            narration: 'Family allowance',
+                            address: '12 Marina Road',
+                            city: 'Lagos',
+                            postcode: '100001',
+                            stateOrProvince: 'Lagos',
+                            mobileNo: '08031234567',
+                            currency: 'NGN',
+                            country: 'Nigeria',
+                            countryIso3: 'NGA',
+                        },
+                    ],
+                },
+            }),
+        ),
+    );
 }
 
 async function openSendMoney(page, amount) {
@@ -78,7 +110,7 @@ async function advanceFromAmountToPayment(page) {
     }
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByText('Akshita', { exact: true }).first().click();
-    await expect(page.getByText('Recipient Details')).toBeVisible();
+    await expect(page.getByText('Recipient Details').first()).toBeVisible();
     await page.getByRole('button', { name: 'Continue' }).click();
 }
 
