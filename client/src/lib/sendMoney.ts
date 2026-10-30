@@ -99,6 +99,12 @@ export interface MitoBeneficiaryItem {
   mobileNo: string;
   relationId: string | null;
   reasonId: string | null;
+  relationship?: string | null;
+  relationDescription?: string | null;
+  reason?: string | null;
+  reasonDescription?: string | null;
+  otherReason?: string | null;
+  narration?: string | null;
   createdAt: string | null;
 }
 
@@ -294,7 +300,7 @@ export async function updateMitoBeneficiaryById(
     /\s+/g,
     "",
   );
-  unmarkBeneficiaryDeletedLocally({ beneficiaryId: cleanId, name: fullName, accountNumber: acct });
+  unmarkDeletedMitoBeneficiary({ beneficiaryId: cleanId, name: fullName, accountNumber: acct });
 
   try {
     const res = await fetch(`/api/send-money/mito/beneficiaries/${encodeURIComponent(cleanId || "local")}`, {
@@ -378,6 +384,33 @@ export async function fetchMitoLookups(): Promise<MitoLookupTypesResult> {
     return json.data ?? {};
   } catch {
     return {};
+  }
+}
+
+export interface MitoJourneyStatusResult {
+  journeyCode: string;
+  journeyStatus: string;
+  orderNo: string | null;
+  orderStatus: string | null;
+  partnerReferenceNumber: string | null;
+  reference: string | null;
+  currency: string | null;
+  amount: number | null;
+}
+
+export async function fetchMitoJourneyStatus(journeyCode: string): Promise<MitoJourneyStatusResult | null> {
+  const cleanCode = String(journeyCode || "").trim();
+  if (!cleanCode) return null;
+  try {
+    const res = await fetch(
+      `/api/send-money/mito/journey-status?journeyCode=${encodeURIComponent(cleanCode)}`,
+      { credentials: "include" },
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: MitoJourneyStatusResult | null };
+    return json.data ?? null;
+  } catch {
+    return null;
   }
 }
 

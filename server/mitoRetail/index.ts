@@ -746,8 +746,16 @@ export interface MitoBeneficiaryRecord {
   mobileNo: string;
   relationId: string | null;
   reasonId: string | null;
+  relationship?: string | null;
+  relationDescription?: string | null;
+  reason?: string | null;
+  reasonDescription?: string | null;
+  otherReason?: string | null;
+  narration?: string | null;
   createdAt: string | null;
 }
+
+export type MitoBeneficiaryItem = MitoBeneficiaryRecord;
 
 /**
  * Fetches the sender's beneficiaries from `GET /api/v1/mito/Beneficiaries?userId={{userId}}`
@@ -898,12 +906,44 @@ loadUpdatedBeneficiariesFromDisk();
         mobileNo: String(detail.mobileNo || detail.acctNumber || ""),
         relationId: detail.relationId ? String(detail.relationId) : null,
         reasonId: detail.reasonId ? String(detail.reasonId) : null,
+        relationship: detail.relationship
+          ? String(detail.relationship)
+          : detail.relationDescription
+            ? String(detail.relationDescription)
+            : null,
+        relationDescription: detail.relationDescription ? String(detail.relationDescription) : null,
+        reason: detail.reason
+          ? String(detail.reason)
+          : detail.reasonDescription
+            ? String(detail.reasonDescription)
+            : null,
+        reasonDescription: detail.reasonDescription ? String(detail.reasonDescription) : null,
+        otherReason: detail.otherReason ? String(detail.otherReason) : null,
+        narration:
+          detail.narration || detail.paymentNarration
+            ? String(detail.narration || detail.paymentNarration)
+            : null,
         createdAt: detail.createdAt ?? item.createdAt ?? null,
       };
-      const override = beneficiaryId
+      const sigKey = makeDeletedSignature(baseItem.name, baseItem.acctNumber || baseItem.iban || baseItem.mobileNo);
+      const nameKey = baseItem.name ? `NAME:${baseItem.name.trim().toLowerCase()}` : null;
+      const overrideById = beneficiaryId
         ? updatedMitoBeneficiariesById.get(beneficiaryId.toUpperCase())
         : undefined;
-      return override ? { ...baseItem, ...override, beneficiaryId } : baseItem;
+      const overrideBySig = sigKey
+        ? updatedMitoBeneficiariesById.get(`SIG:${sigKey.toUpperCase()}`)
+        : undefined;
+      const overrideByName = nameKey
+        ? updatedMitoBeneficiariesById.get(nameKey.toUpperCase())
+        : undefined;
+      const mergedOverride = {
+        ...(overrideByName || {}),
+        ...(overrideBySig || {}),
+        ...(overrideById || {}),
+      };
+      return Object.keys(mergedOverride).length > 0
+        ? { ...baseItem, ...mergedOverride, beneficiaryId }
+        : baseItem;
     }),
   );
 
@@ -1397,6 +1437,75 @@ export async function updateMitoBeneficiary(params: {
 }
 
 /**
+ * Persists the latest transaction's Relationship, Reason for Transfer, Narration, and Nickname
+ * for a beneficiary in `.dev-state/mito-updated-beneficiaries.json` so selecting that beneficiary
+ * in future transfers pre-populates those fields automatically.
+ */
+export function saveMitoBeneficiaryLatestTxnDetails(params: {
+  beneficiaryId?: string | null;
+  name?: string | null;
+  acctNumber?: string | null;
+  relationship?: string | null;
+  relationId?: string | null;
+  relationDescription?: string | null;
+  reason?: string | null;
+  reasonId?: string | null;
+  reasonDescription?: string | null;
+  otherReason?: string | null;
+  narration?: string | null;
+  beneficiaryNickname?: string | null;
+}): void {
+  loadUpdatedBeneficiariesFromDisk();
+  const patch: Partial<MitoBeneficiaryRecord> = {};
+  if (params.relationship && params.relationship.trim()) {
+    patch.relationship = params.relationship.trim();
+  }
+  if (params.relationId && params.relationId.trim()) {
+    patch.relationId = params.relationId.trim();
+  }
+  if (params.relationDescription && params.relationDescription.trim()) {
+    patch.relationDescription = params.relationDescription.trim();
+  }
+  if (params.reason && params.reason.trim()) {
+    patch.reason = params.reason.trim();
+  }
+  if (params.reasonId && params.reasonId.trim()) {
+    patch.reasonId = params.reasonId.trim();
+  }
+  if (params.reasonDescription && params.reasonDescription.trim()) {
+    patch.reasonDescription = params.reasonDescription.trim();
+  }
+  if (params.otherReason !== undefined && params.otherReason !== null) {
+    patch.otherReason = params.otherReason.trim();
+  }
+  if (params.narration && params.narration.trim()) {
+    patch.narration = params.narration.trim();
+  }
+  if (params.beneficiaryNickname && params.beneficiaryNickname.trim()) {
+    patch.beneficiaryNickname = params.beneficiaryNickname.trim();
+  }
+  if (Object.keys(patch).length === 0) return;
+
+  const cleanId = String(params.beneficiaryId || "").trim().toUpperCase();
+  if (cleanId && cleanId !== "LOCAL") {
+    const existing = updatedMitoBeneficiariesById.get(cleanId) || {};
+    updatedMitoBeneficiariesById.set(cleanId, { ...existing, ...patch });
+  }
+  const sig = makeDeletedSignature(params.name, params.acctNumber);
+  if (sig) {
+    const sigKey = `SIG:${sig.toUpperCase()}`;
+    const existingSig = updatedMitoBeneficiariesById.get(sigKey) || {};
+    updatedMitoBeneficiariesById.set(sigKey, { ...existingSig, ...patch });
+  }
+  if (params.name && params.name.trim()) {
+    const nameKey = `NAME:${params.name.trim().toUpperCase()}`;
+    const existingName = updatedMitoBeneficiariesById.get(nameKey) || {};
+    updatedMitoBeneficiariesById.set(nameKey, { ...existingName, ...patch });
+  }
+  saveUpdatedBeneficiariesToDisk();
+}
+
+/**
  * Locks the exchange rate via `POST /api/v1/Rate/validateRate` (or `POST /api/v1/mito/Exchange/rates`)
  * once we have `providerId` (for the beneficiary bank) and user/corridor codes.
  * Falls back to `GET /api/v1/mito/Exchange/affiliateRates` if needed so `rateId` is always stored.
@@ -1652,11 +1761,15 @@ export async function sendMitoTransaction(input: {
 
   const effectiveUserId = (input.userId || DEFAULT_MITO_SENDER_USER_ID).trim();
   const reasonId = await resolveMitoReasonIdUuid(input.reasonId);
-  const resolvedRedirectSuccessUrl = (
+  const rawRedirectCandidate = (
     input.redirectSuccessUrl ||
     process.env.MITO_REDIRECT_SUCCESS_URL ||
     `${serverConfig.publicBaseUrl.replace(/\/+$/, "")}/send-money`
   ).trim();
+  const resolvedRedirectSuccessUrl =
+    /localhost|127\.0\.0\.1/i.test(rawRedirectCandidate)
+      ? "https://rhemito-ui.onrender.com/send-money"
+      : rawRedirectCandidate;
 
   const buildPayload = (overrides?: {
     beneficiaryId?: string;
@@ -1686,9 +1799,7 @@ export async function sendMitoTransaction(input: {
     numberOfOccurences: 1,
     ...(input.paymentMethod === "PLAID"
       ? { RedirectSuccessUrl: resolvedRedirectSuccessUrl }
-      : { isCardSaved: true, isNewFlow: true }),
-    ...(input.promoCode ? { promoCode: input.promoCode } : {}),
-    ...(input.bonusAmount && input.bonusAmount > 0 ? { bonusAmount: input.bonusAmount } : {}),
+      : { isCardSaved: true, isNewFlow: true, RedirectSuccessUrl: resolvedRedirectSuccessUrl }),
   });
 
   let currentPayload = buildPayload();
@@ -1751,12 +1862,16 @@ export async function sendMitoTransaction(input: {
     });
 
     if (refreshedRate?.rateId) {
+      const hasDiscountedCommission = Boolean(input.promoCode || (input.bonusAmount && input.bonusAmount > 0));
       currentPayload = buildPayload({
         beneficiaryId: retryBeneficiaryId,
         providerId: retryProviderId,
         rateId: refreshedRate.rateId,
-        commission:
-          typeof refreshedRate.commission === "number" ? refreshedRate.commission : input.commission,
+        commission: hasDiscountedCommission
+          ? input.commission
+          : typeof refreshedRate.commission === "number"
+          ? refreshedRate.commission
+          : input.commission,
       });
       res = await fetch(`${creds.baseUrl}/api/v1/Transaction/SendMoney`, {
         method: "POST",
@@ -1873,6 +1988,12 @@ export async function initiateMitoHostedTransaction(input: {
   const creds = loadMitoRetailCredentials()!;
   const { token } = await getMitoRetailToken();
 
+  const rawHostedRedirectUrl = (input.redirectUrl || "https://rhemito-ui.onrender.com/send-money").trim();
+  const resolvedHostedRedirectUrl =
+    /localhost|127\.0\.0\.1/i.test(rawHostedRedirectUrl)
+      ? "https://rhemito-ui.onrender.com/send-money"
+      : rawHostedRedirectUrl;
+
   const payload: Record<string, unknown> = {
     serviceCode: input.serviceCode || "MONEYTRANSFER",
     collectionMode: input.collectionMode,
@@ -1882,7 +2003,7 @@ export async function initiateMitoHostedTransaction(input: {
     receiveCurrency: input.receiveCurrency.toUpperCase(),
     sendAmount: input.sendAmount,
     userId: input.userId,
-    redirectUrl: input.redirectUrl || "http://localhost:5000/send-money",
+    redirectUrl: resolvedHostedRedirectUrl,
     PartnerReferenceNumber: input.partnerReferenceNumber,
     reasonCode: input.reasonCode,
     sourceOfFundCode: input.sourceOfFundCode,
@@ -1975,6 +2096,68 @@ export async function initiateMitoHostedTransaction(input: {
     requestPayload: payload,
     message: body?.message || `HTTP ${res.status}`,
   };
+}
+
+export interface MitoJourneyStatusResult {
+  journeyCode: string;
+  journeyStatus: string;
+  orderNo: string | null;
+  orderStatus: string | null;
+  partnerReferenceNumber: string | null;
+  reference: string | null;
+  currency: string | null;
+  amount: number | null;
+}
+
+/**
+ * Fetches live journey & payment status from `GET /api/v1/mito/Journey/status?journeyCode=<journeyCode>`.
+ * Used by the frontend while the Instant Pay By Bank modal is open so that mobile QR payments,
+ * completions, failures, cancellations, or expirations immediately close the modal and display
+ * the full-page Payment Status view.
+ */
+export async function getMitoJourneyStatus(journeyCode: string): Promise<MitoJourneyStatusResult | null> {
+  const cleanCode = String(journeyCode || "").trim();
+  if (!cleanCode || !isMitoRetailConfigured()) return null;
+  const creds = loadMitoRetailCredentials()!;
+  try {
+    const res = await fetch(
+      `${creds.baseUrl}/api/v1/mito/Journey/status?journeyCode=${encodeURIComponent(cleanCode)}`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          apiKey: creds.apiKey,
+        },
+      },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => ({}))) as {
+      data?: {
+        journeyCode?: string;
+        journeyStatus?: string;
+        orderNo?: string | null;
+        orderStatus?: string | null;
+        partnerReferenceNumber?: string | null;
+        reference?: string | null;
+        currency?: string | null;
+        amount?: number | null;
+      };
+    };
+    if (!body?.data) return null;
+    return {
+      journeyCode: String(body.data.journeyCode || cleanCode),
+      journeyStatus: String(body.data.journeyStatus || ""),
+      orderNo: body.data.orderNo ? String(body.data.orderNo) : null,
+      orderStatus: body.data.orderStatus ? String(body.data.orderStatus) : null,
+      partnerReferenceNumber: body.data.partnerReferenceNumber ? String(body.data.partnerReferenceNumber) : null,
+      reference: body.data.reference ? String(body.data.reference) : null,
+      currency: body.data.currency ? String(body.data.currency) : null,
+      amount: typeof body.data.amount === "number" ? body.data.amount : null,
+    };
+  } catch (err) {
+    console.warn("[mito-retail] getMitoJourneyStatus warning:", err);
+    return null;
+  }
 }
 
 // ─── Mito Retail Webhook Signing, Verification & Inspector Log ────────────────

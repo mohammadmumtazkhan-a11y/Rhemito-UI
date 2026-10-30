@@ -67,7 +67,11 @@ export interface SendMoneyTransaction {
   mitoSendMoneyPayload?: Record<string, unknown> | null;
   sendCountryIso3?: string | null;
   receiveCountryIso3?: string | null;
+  relationship?: string | null;
+  relationId?: string | null;
   reasonCode?: string | null;
+  reasonId?: string | null;
+  otherReason?: string | null;
   sourceOfFundCode?: string | null;
   paymentNarration?: string | null;
   status: SendMoneyStatus;
@@ -181,7 +185,11 @@ export interface SendMoneyTransactionView {
   mitoSendMoneyPayload?: Record<string, unknown> | null;
   sendCountryIso3?: string | null;
   receiveCountryIso3?: string | null;
+  relationship?: string | null;
+  relationId?: string | null;
   reasonCode?: string | null;
+  reasonId?: string | null;
+  otherReason?: string | null;
   sourceOfFundCode?: string | null;
   paymentNarration?: string | null;
   status: SendMoneyStatus;

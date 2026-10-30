@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useSearch } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -6,7 +7,8 @@ import {
     ArrowLeft, Check, ChevronRight, User, Building2,
     CreditCard, Wallet, Landmark, Smartphone, Banknote, Shield,
     ChevronDown, ArrowRightLeft, BarChart3, Search, UserPlus, X,
-    Copy, Loader2, Clock, Mail, AlertTriangle, CheckCircle2
+    Copy, Loader2, Clock, Mail, AlertTriangle, CheckCircle2,
+    XCircle, RefreshCw, ArrowRight, Info
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +33,7 @@ import {
     fetchMitoAffiliateRate,
     fetchMitoBeneficiaries,
     fetchMitoBeneficiaryRequirements,
+    fetchMitoJourneyStatus,
     fetchMitoLookups,
     fetchMitoProviders,
     initiateHostedSendMoneyTransaction,
@@ -106,6 +109,194 @@ const steps = [
     { id: 3, title: "Details" }, // Was "Bank" in screenshot, generalizing to Details
     { id: 4, title: "Payment" }, // Was "Payment Method"
 ];
+
+export type PaymentOutcomeCategory = "completed" | "processing" | "failed" | "cancelled" | "expired";
+
+export interface PaymentOutcomeState {
+    category: PaymentOutcomeCategory;
+    rawStatus: string;
+    paymentStatus?: string;
+    reference: string;
+    paymentMethodLabel: string;
+    reason?: string;
+    journeyCode?: string | null;
+    timestamp: string;
+}
+
+function classifyPaymentOutcome(
+    rawStatus?: string | null,
+    reason?: string | null,
+    eventType?: string | null,
+    paymentStatus?: string | null,
+): PaymentOutcomeCategory {
+    const s = String(rawStatus || "").trim().toUpperCase().replace(/[\s_-]+/g, "");
+    const ps = String(paymentStatus || "").trim().toUpperCase().replace(/[\s_-]+/g, "");
+    const r = String(reason || "").trim().toLowerCase();
+    const ev = String(eventType || "").trim().toUpperCase();
+
+    const isTokenExpired = (v: string) => v === "EXPIRED" || v === "TIMEOUT" || v === "TIMEDOUT";
+    const isTokenCancelled = (v: string) =>
+        v === "CANCELLED" || v === "CANCELED" || v === "ABORTED" || v === "CLOSED" || v === "USERCLOSED";
+    const isTokenFailed = (v: string) =>
+        v === "COMPFAILED" ||
+        v === "FAILED" ||
+        v === "FAIL" ||
+        v === "DECLINED" ||
+        v === "REJECTED" ||
+        v === "ERROR" ||
+        v === "INSUFFICIENTFUNDS" ||
+        v === "PAYMENTFAILED" ||
+        v === "CARDDECLINED" ||
+        v === "3DSFAILED" ||
+        v === "AUTHENTICATIONFAILED";
+    const isTokenCompleted = (v: string) =>
+        v === "COMPSUCCESS" ||
+        v === "SUCCEEDED" ||
+        v === "SUCCESSFUL" ||
+        v === "SUCCESS" ||
+        v === "PAID" ||
+        v === "APPROVED" ||
+        v === "COMPLETED" ||
+        v === "PROCESSED" ||
+        v === "CAPTURED" ||
+        v === "AUTHORIZED" ||
+        v === "SETTLED";
+
+    if (isTokenExpired(s) || isTokenExpired(ps) || r.includes("expir") || r.includes("timeout") || r === "restart") {
+        return "expired";
+    }
+    if (isTokenCancelled(s) || isTokenCancelled(ps) || r.includes("cancel") || r.includes("closed") || r.includes("abort")) {
+        return "cancelled";
+    }
+    if (
+        isTokenFailed(s) ||
+        isTokenFailed(ps) ||
+        r.includes("fail") ||
+        r.includes("declin") ||
+        r.includes("reject") ||
+        r.includes("error")
+    ) {
+        return "failed";
+    }
+    if (isTokenCompleted(s) || isTokenCompleted(ps)) {
+        return "completed";
+    }
+    if (
+        s === "AWAITINGPAYMENT" ||
+        s === "INREVIEW" ||
+        s === "PENDING" ||
+        s === "PROCESSING" ||
+        s === "READYTOPROCESS" ||
+        s === "AWAITINGAFFILIATEUPDATE" ||
+        s === "INITIATED" ||
+        s === "SUBMITTED" ||
+        ps === "PENDING" ||
+        ps === "PROCESSING"
+    ) {
+        return "processing";
+    }
+    if (ev === "MITO_LINK_SUCCESS") {
+        return "completed";
+    }
+    if (ev === "MITO_LINK_EXIT") {
+        return r ? "failed" : "cancelled";
+    }
+    return "processing";
+}
+
+function extractCardOutcomeFromUrl(rawUrl: string): {
+    hostname: string;
+    tnxref: string | null;
+    status: string | null;
+    paymentStatus: string | null;
+    ckoSessionId: string | null;
+    reason: string | null;
+    journeyCode: string | null;
+} | null {
+    if (!rawUrl || typeof rawUrl !== "string") return null;
+    try {
+        const parsed = new URL(rawUrl, typeof window !== "undefined" ? window.location.origin : "http://localhost:5000");
+        const paramSources: URLSearchParams[] = [parsed.searchParams];
+        const nestedRedirect =
+            parsed.searchParams.get("redirect") ||
+            parsed.searchParams.get("returnUrl") ||
+            parsed.searchParams.get("next");
+        if (nestedRedirect) {
+            try {
+                const decoded = new URL(
+                    decodeURIComponent(nestedRedirect),
+                    typeof window !== "undefined" ? window.location.origin : "http://localhost:5000",
+                );
+                paramSources.unshift(decoded.searchParams);
+            } catch {
+                try {
+                    const direct = new URL(
+                        nestedRedirect,
+                        typeof window !== "undefined" ? window.location.origin : "http://localhost:5000",
+                    );
+                    paramSources.unshift(direct.searchParams);
+                } catch {
+                    // ignore malformed nested redirect
+                }
+            }
+        }
+        const getFirst = (...keys: string[]): string | null => {
+            for (const sp of paramSources) {
+                for (const k of keys) {
+                    const v = sp.get(k);
+                    if (v && v.trim()) return v.trim();
+                }
+            }
+            return null;
+        };
+        return {
+            hostname: parsed.hostname.toLowerCase(),
+            tnxref: getFirst(
+                "tnxref",
+                "orderNo",
+                "txn_ref",
+                "txnref",
+                "reference",
+                "transactionReference",
+                "partnerReferenceNumber",
+            ),
+            status: getFirst("status", "orderStatus", "journeyStatus"),
+            paymentStatus: getFirst("paymentStatus", "cko-payment-status"),
+            ckoSessionId: getFirst("cko-session-id", "cko-payment-id"),
+            reason: getFirst("reason", "error", "message", "declined_reason"),
+            journeyCode: getFirst("journeyCode", "journey_code"),
+        };
+    } catch {
+        return null;
+    }
+}
+
+function buildMitoEmbeddedPayByBankUrl(rawUrl: string): string {
+    try {
+        const u = new URL(rawUrl);
+        if (!u.searchParams.has("mitoEmbed")) {
+            u.searchParams.set("mitoEmbed", "1");
+        }
+        if (!u.searchParams.has("mitoClient")) {
+            u.searchParams.set("mitoClient", "web");
+        }
+        return u.toString();
+    } catch {
+        const sep = rawUrl.includes("?") ? "&" : "?";
+        return `${rawUrl}${sep}mitoEmbed=1&mitoClient=web`;
+    }
+}
+
+function extractJourneyCodeFromUrl(rawUrl?: string | null): string | null {
+    if (!rawUrl) return null;
+    try {
+        const u = new URL(rawUrl);
+        return u.searchParams.get("journeyCode") || u.searchParams.get("journey_code") || null;
+    } catch {
+        const match = rawUrl.match(/[?&]journeyCode=([^&#]+)/i);
+        return match?.[1] ? decodeURIComponent(match[1]) : null;
+    }
+}
 
 export default function SendMoney() {
     const [, setLocation] = useLocation();
@@ -258,14 +449,106 @@ export default function SendMoney() {
     const [mitoCardPaymentSession, setMitoCardPaymentSession] = useState<Record<string, unknown> | null>(null);
     const [mitoCheckoutPublicKey, setMitoCheckoutPublicKey] = useState<string>("pk_sbox_hxdmemjidz7nf3sfukhia4igsuf");
     const [mitoPayByBankUrl, setMitoPayByBankUrl] = useState<string | null>(null);
+    const [paymentOutcome, setPaymentOutcome] = useState<PaymentOutcomeState | null>(null);
+    const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
+    const [refreshingJourneyStatus, setRefreshingJourneyStatus] = useState<boolean>(false);
     const [loadingPaymentMethod, setLoadingPaymentMethod] = useState<string | null>(null);
     const [checkoutFlowMounting, setCheckoutFlowMounting] = useState(false);
     const [checkoutFlowError, setCheckoutFlowError] = useState<string | null>(null);
     const checkoutFlowContainerRef = useRef<HTMLDivElement | null>(null);
 
+    const applyPaymentOutcome = useCallback(
+        (params: {
+            rawStatus?: string | null;
+            paymentStatus?: string | null;
+            reason?: string | null;
+            eventType?: string | null;
+            reference?: string | null;
+            methodLabel?: string;
+            journeyCode?: string | null;
+            autoRedirectHome?: boolean;
+        }) => {
+            const category = classifyPaymentOutcome(
+                params.rawStatus,
+                params.reason,
+                params.eventType,
+                params.paymentStatus,
+            );
+            const resolvedRef = (params.reference || transactionRef || "").trim();
+            if (resolvedRef) {
+                setTransactionRef(resolvedRef);
+            }
+            setMitoPayByBankUrl(null);
+            setMitoCardPaymentSession(null);
+            setShowConfirmation(false);
+            setCurrentStep(4);
+            const effectiveMethodLabel =
+                params.methodLabel ||
+                (paymentMethod === "card"
+                    ? "Credit / Debit Card"
+                    : paymentMethod === "wallet"
+                    ? "Wallet Balance"
+                    : paymentMethod === "manual_transfer"
+                    ? "Manual Bank Transfer"
+                    : "Instant Pay By Bank");
+            setPaymentOutcome({
+                category,
+                rawStatus: String(params.rawStatus || category).toUpperCase(),
+                paymentStatus: params.paymentStatus ? String(params.paymentStatus) : undefined,
+                reference: resolvedRef || "PENDING",
+                paymentMethodLabel: effectiveMethodLabel,
+                reason: params.reason || undefined,
+                journeyCode: params.journeyCode || extractJourneyCodeFromUrl(mitoPayByBankUrl),
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            });
+            const shouldAutoRedirect =
+                params.autoRedirectHome !== undefined ? params.autoRedirectHome : true;
+            const countdownSeconds =
+                category === "completed" || category === "processing" ? 6 : 8;
+            setRedirectCountdown(shouldAutoRedirect ? countdownSeconds : null);
+        },
+        [mitoPayByBankUrl, paymentMethod, transactionRef],
+    );
+
+    const applyPaymentOutcomeRef = useRef(applyPaymentOutcome);
+    applyPaymentOutcomeRef.current = applyPaymentOutcome;
+    const transactionRefRef = useRef(transactionRef);
+    transactionRefRef.current = transactionRef;
+    const mountedSessionKeyRef = useRef<string>("");
+
+    // After showing the Payment Status screen, count down so the customer can clearly see
+    // the payment status before redirecting to the Home page ("/").
     useEffect(() => {
-        if (!mitoCardPaymentSession || currentStep !== 4) return;
+        if (redirectCountdown === null) return;
+        if (redirectCountdown <= 0) {
+            setRedirectCountdown(null);
+            setLocation("/");
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            setRedirectCountdown((prev) => (prev !== null ? prev - 1 : null));
+        }, 1000);
+        return () => window.clearTimeout(timer);
+    }, [redirectCountdown, setLocation]);
+
+    useEffect(() => {
+        if (!mitoCardPaymentSession || currentStep !== 4) {
+            mountedSessionKeyRef.current = "";
+            return;
+        }
+        const sessionKey = String(
+            (mitoCardPaymentSession as any)?.id ||
+                (mitoCardPaymentSession as any)?.longId ||
+                (mitoCardPaymentSession as any)?.payment_session_token ||
+                "",
+        );
+        if (sessionKey && mountedSessionKeyRef.current === sessionKey) {
+            return;
+        }
+        mountedSessionKeyRef.current = sessionKey;
+
         let cancelled = false;
+        let flowInstance: any = null;
         setCheckoutFlowMounting(true);
         setCheckoutFlowError(null);
 
@@ -285,12 +568,17 @@ export default function SendMoney() {
                     return;
                 }
                 const script = document.createElement("script");
+                script.id = "checkout-web-components-sdk";
                 script.src = "https://checkout-web-components.checkout.com/index.js";
                 script.async = true;
                 script.onload = () => resolve((window as any).CheckoutWebComponents);
                 script.onerror = () => reject(new Error("Failed to load Checkout.com SDK"));
                 document.body.appendChild(script);
             });
+
+        const handleReady = () => {
+            if (!cancelled) setCheckoutFlowMounting(false);
+        };
 
         void loadCheckoutScript()
             .then(async (CheckoutWebComponents) => {
@@ -314,33 +602,110 @@ export default function SendMoney() {
                             captureCardCvv: true,
                         },
                     },
-                    onReady: () => {
-                        if (!cancelled) setCheckoutFlowMounting(false);
-                    },
-                    onPaymentCompleted: (_component: unknown, paymentResponse: { id?: string; status?: string }) => {
+                    onReady: handleReady,
+                    onPaymentCompleted: (
+                        _component: unknown,
+                        paymentResponse: {
+                            id?: string;
+                            status?: string;
+                            declined_reason?: string;
+                            response_summary?: string;
+                        },
+                    ) => {
                         if (cancelled) return;
                         setCheckoutFlowMounting(false);
                         setMitoCardPaymentSession(null);
-                        toast({
-                            title: "Card payment completed",
-                            description: paymentResponse?.id
-                                ? `Payment Reference: ${paymentResponse.id}`
-                                : "Your card payment has been processed.",
+                        const rawCardStatus = String(paymentResponse?.status || "Approved");
+                        const normalizedStatus =
+                            rawCardStatus === "Approved" ||
+                            rawCardStatus === "APPROVED" ||
+                            rawCardStatus === "Authorized" ||
+                            rawCardStatus === "Captured" ||
+                            rawCardStatus === "Paid"
+                                ? "COMPSUCCESS"
+                                : rawCardStatus;
+                        const category = classifyPaymentOutcome(
+                            normalizedStatus,
+                            paymentResponse?.declined_reason || paymentResponse?.response_summary,
+                            undefined,
+                            rawCardStatus,
+                        );
+                        applyPaymentOutcomeRef.current({
+                            rawStatus: normalizedStatus,
+                            paymentStatus: rawCardStatus === "Approved" ? "Captured" : rawCardStatus,
+                            reference: transactionRefRef.current || paymentResponse?.id || "",
+                            methodLabel: "Credit / Debit Card",
+                            reason:
+                                paymentResponse?.declined_reason ||
+                                paymentResponse?.response_summary ||
+                                (category === "failed"
+                                    ? "Your card payment was declined by the issuing bank."
+                                    : undefined),
+                            autoRedirectHome: true,
                         });
-                        setShowConfirmation(true);
                     },
-                    onError: (_component: unknown, error: { message?: string }) => {
+                    onError: (
+                        componentOrErr: unknown,
+                        errorArg?: {
+                            message?: string;
+                            code?: string;
+                            errorCode?: string;
+                            details?: { reason?: string };
+                        },
+                    ) => {
                         if (cancelled) return;
                         setCheckoutFlowMounting(false);
-                        if (error?.message) {
-                            setCheckoutFlowError(error.message);
+                        const errObj: any = errorArg || componentOrErr;
+                        const code =
+                            typeof errObj === "string"
+                                ? errObj
+                                : String(errObj?.code || errObj?.errorCode || "");
+                        if (code.toLowerCase() === "component_invalid") {
+                            // Form inputs (such as CVV) are incomplete/invalid; allow inline validation inside Flow
+                            return;
                         }
+                        const msg =
+                            typeof errObj === "string"
+                                ? errObj
+                                : String(errObj?.details?.reason || errObj?.message || "").trim();
+                        const inferredStatus =
+                            code.toLowerCase().includes("expir") || msg.toLowerCase().includes("expired")
+                                ? "EXPIRED"
+                                : code.toLowerCase().includes("cancel") || msg.toLowerCase().includes("cancel")
+                                ? "CANCELLED"
+                                : "COMPFAILED";
+                        applyPaymentOutcomeRef.current({
+                            rawStatus: inferredStatus,
+                            paymentStatus:
+                                inferredStatus === "EXPIRED"
+                                    ? "Expired"
+                                    : inferredStatus === "CANCELLED"
+                                    ? "Cancelled"
+                                    : "Declined",
+                            reference: transactionRefRef.current,
+                            methodLabel: "Credit / Debit Card",
+                            reason:
+                                msg ||
+                                "Your card payment could not be completed by the card processor. Please check your card details or try another payment method.",
+                            autoRedirectHome: true,
+                        });
                     },
                 });
                 if (cancelled) return;
-                const flowComponent = checkout.create("flow");
-                if (document.getElementById("mito-checkout-flow-container")) {
+                const flowComponent = checkout.create("flow", { onReady: handleReady });
+                const isAvailable =
+                    typeof flowComponent.isAvailable !== "function" || (await flowComponent.isAvailable());
+                if (cancelled) {
+                    if (typeof flowComponent.unmount === "function") {
+                        flowComponent.unmount();
+                    }
+                    return;
+                }
+                if (isAvailable && document.getElementById("mito-checkout-flow-container")) {
+                    flowInstance = flowComponent;
                     flowComponent.mount("#mito-checkout-flow-container");
+                } else {
+                    setCheckoutFlowError("Card checkout component is currently unavailable.");
                 }
                 setCheckoutFlowMounting(false);
             })
@@ -354,51 +719,325 @@ export default function SendMoney() {
 
         return () => {
             cancelled = true;
+            if (flowInstance && typeof flowInstance.unmount === "function") {
+                try {
+                    flowInstance.unmount();
+                } catch {
+                    // ignore unmount errors
+                }
+            }
+            mountedSessionKeyRef.current = "";
         };
-    }, [mitoCardPaymentSession, mitoCheckoutPublicKey, currentStep, toast]);
+    }, [mitoCardPaymentSession, mitoCheckoutPublicKey, currentStep]);
 
-    // Listen for postMessage events from the Mito Plaid / Pay by Bank iframe
+    // Intercept Checkout.com 3DS redirect messages in the CAPTURE phase so Checkout.com's SDK never calls
+    // window.location.replace(...) to an external domain (such as rhemito-web-nextjs-dev.herokuapp.com),
+    // and instead resolves and displays the Payment Status screen directly on our domain.
     useEffect(() => {
-        if (!mitoPayByBankUrl || currentStep !== 4) return;
-        const handleMessage = (event: MessageEvent) => {
-            const payload = event?.data;
-            if (!payload || typeof payload !== "object") return;
-            const rawStatus = String(payload.status || payload.paymentStatus || "").trim().toUpperCase();
-            if (!rawStatus) return;
-            const ref = String(payload.tnxref || payload.orderNo || "").trim();
-            if (ref) setTransactionRef(ref);
+        if (!mitoCardPaymentSession || currentStep !== 4) return;
+        const handleCard3dsMessage = (event: MessageEvent) => {
+            let data = event?.data;
+            if (typeof data === "string") {
+                try {
+                    data = JSON.parse(data);
+                } catch {
+                    return;
+                }
+            }
+            if (!data || typeof data !== "object") return;
 
-            if (
-                rawStatus === "COMPSUCCESS" ||
-                rawStatus === "APPROVED" ||
-                rawStatus === "AWAITINGPAYMENT" ||
-                rawStatus === "PAID" ||
-                rawStatus === "SUCCESS"
-            ) {
-                setMitoPayByBankUrl(null);
-                toast({
-                    title: "Pay by Bank authorized",
-                    description: ref ? `Transaction Reference: ${ref}` : "Your bank payment has been initiated.",
-                });
-                setShowConfirmation(true);
-            } else if (
-                rawStatus === "COMPFAILED" ||
-                rawStatus === "CANCELLED" ||
-                rawStatus === "CANCELED" ||
-                rawStatus === "EXPIRED" ||
-                rawStatus === "FAILED"
-            ) {
-                setMitoPayByBankUrl(null);
-                toast({
-                    title: "Pay by Bank not completed",
-                    description: "The bank authorization was cancelled or could not be completed.",
-                    variant: "destructive",
+            const isCheckoutRedirectMsg =
+                data.type === "redirect" ||
+                typeof data.payload?.url === "string" ||
+                (typeof data.url === "string" && (data.payment_id || data.payment_session_id));
+
+            if (isCheckoutRedirectMsg) {
+                event.stopImmediatePropagation();
+                event.stopPropagation();
+
+                const redirectUrl = String(data.payload?.url || data.url || "").trim();
+                const paymentId = String(data.payload?.payment_id || data.payment_id || "").trim();
+                const sessionId = String(data.payload?.payment_session_id || data.payment_session_id || "").trim();
+                const redirectReason = String(data.payload?.redirect_reason || data.redirect_reason || "").trim();
+                const parsedLocal = extractCardOutcomeFromUrl(redirectUrl);
+                const host = parsedLocal?.hostname || "";
+                const needsServerCallback =
+                    host.endsWith("checkout.com") ||
+                    host.endsWith("funtechcom.com") ||
+                    host.endsWith("mito.money") ||
+                    (!parsedLocal?.status && !parsedLocal?.paymentStatus && Boolean(redirectUrl));
+
+                if (!needsServerCallback && (parsedLocal?.status || parsedLocal?.paymentStatus)) {
+                    applyPaymentOutcomeRef.current({
+                        rawStatus: parsedLocal.status || parsedLocal.paymentStatus || "COMPSUCCESS",
+                        paymentStatus: parsedLocal.paymentStatus || undefined,
+                        reference:
+                            parsedLocal.tnxref ||
+                            transactionRefRef.current ||
+                            parsedLocal.ckoSessionId ||
+                            paymentId,
+                        methodLabel: "Credit / Debit Card",
+                        reason: parsedLocal.reason || undefined,
+                        journeyCode: parsedLocal.journeyCode || undefined,
+                        autoRedirectHome: true,
+                    });
+                    return;
+                }
+
+                void fetch("/api/send-money/mito/resolve-card-redirect", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        url: redirectUrl,
+                        paymentId,
+                        sessionId,
+                        redirectReason,
+                    }),
+                })
+                    .then((r) => r.json().catch(() => ({})))
+                    .then((resolved: any) => {
+                        const effectiveStatus =
+                            resolved?.status ||
+                            parsedLocal?.status ||
+                            resolved?.paymentStatus ||
+                            parsedLocal?.paymentStatus ||
+                            (redirectReason.toLowerCase().includes("fail") ||
+                            redirectReason.toLowerCase().includes("declin")
+                                ? "COMPFAILED"
+                                : redirectReason.toLowerCase().includes("cancel")
+                                ? "CANCELLED"
+                                : "COMPSUCCESS");
+                        const effectivePaymentStatus =
+                            resolved?.paymentStatus ||
+                            parsedLocal?.paymentStatus ||
+                            (classifyPaymentOutcome(effectiveStatus, resolved?.reason || redirectReason) === "completed"
+                                ? "Captured"
+                                : undefined);
+                        applyPaymentOutcomeRef.current({
+                            rawStatus: effectiveStatus,
+                            paymentStatus: effectivePaymentStatus,
+                            reference:
+                                resolved?.tnxref ||
+                                parsedLocal?.tnxref ||
+                                transactionRefRef.current ||
+                                resolved?.ckoSessionId ||
+                                paymentId,
+                            methodLabel: "Credit / Debit Card",
+                            reason: resolved?.reason || parsedLocal?.reason || undefined,
+                            journeyCode: resolved?.journeyCode || parsedLocal?.journeyCode || undefined,
+                            autoRedirectHome: true,
+                        });
+                    })
+                    .catch(() => {
+                        applyPaymentOutcomeRef.current({
+                            rawStatus: parsedLocal?.status || "COMPSUCCESS",
+                            paymentStatus: parsedLocal?.paymentStatus || "Captured",
+                            reference: parsedLocal?.tnxref || transactionRefRef.current || paymentId,
+                            methodLabel: "Credit / Debit Card",
+                            reason: parsedLocal?.reason || undefined,
+                            autoRedirectHome: true,
+                        });
+                    });
+                return;
+            }
+
+            if (typeof data.status === "string" && data.status.trim()) {
+                const raw = data.status.trim();
+                const mapped = raw.toUpperCase() === "APPROVED" ? "COMPSUCCESS" : raw;
+                applyPaymentOutcomeRef.current({
+                    rawStatus: mapped,
+                    paymentStatus: typeof data.paymentStatus === "string" ? data.paymentStatus : undefined,
+                    reference: data.tnxref || data.id || transactionRefRef.current,
+                    methodLabel: "Credit / Debit Card",
+                    reason: data.reason || data.message || undefined,
+                    autoRedirectHome: true,
                 });
             }
         };
+        window.addEventListener("message", handleCard3dsMessage, true);
+        return () => window.removeEventListener("message", handleCard3dsMessage, true);
+    }, [mitoCardPaymentSession, currentStep]);
+
+    // If Mito redirects back to our returnUrl with ?tnxref=...&status=... (either in an iframe or top-level window),
+    // forward it to the parent window if in an iframe, or display the full-page Payment Status view if top-level.
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const extracted = extractCardOutcomeFromUrl(window.location.href);
+        const tnxref = extracted?.tnxref || null;
+        const status = extracted?.status || extracted?.paymentStatus || null;
+        const paymentStatus = extracted?.paymentStatus || null;
+        const ckoSessionId = extracted?.ckoSessionId || null;
+        const reason = extracted?.reason || null;
+        const journeyCodeParam = extracted?.journeyCode || null;
+        const isCardCallbackPath =
+            window.location.pathname.toLowerCase() === "/send/status" || Boolean(paymentStatus);
+
+        if (window.parent !== window) {
+            if (status || tnxref || journeyCodeParam || ckoSessionId) {
+                window.parent.postMessage(
+                    {
+                        status: status || (ckoSessionId ? "AUTHORIZED" : undefined),
+                        paymentStatus: paymentStatus || undefined,
+                        tnxref: tnxref || ckoSessionId,
+                        reason,
+                        journeyCode: journeyCodeParam,
+                        methodLabel: isCardCallbackPath || ckoSessionId ? "Credit / Debit Card" : undefined,
+                    },
+                    "*",
+                );
+            }
+            return;
+        }
+
+        if (status || ckoSessionId) {
+            applyPaymentOutcome({
+                rawStatus: status || "AUTHORIZED",
+                paymentStatus: paymentStatus || (ckoSessionId ? "Captured" : undefined),
+                reason,
+                reference: tnxref || ckoSessionId,
+                journeyCode: journeyCodeParam,
+                methodLabel: isCardCallbackPath || ckoSessionId ? "Credit / Debit Card" : undefined,
+            });
+            try {
+                window.history.replaceState({}, "", "/send-money");
+            } catch {
+                // ignore history errors
+            }
+        } else if (journeyCodeParam) {
+            void fetchMitoJourneyStatus(journeyCodeParam).then((jStatus) => {
+                if (!jStatus) return;
+                const effectiveStatus = jStatus.orderStatus || jStatus.journeyStatus || "PROCESSING";
+                applyPaymentOutcome({
+                    rawStatus: effectiveStatus,
+                    reference: jStatus.orderNo || jStatus.partnerReferenceNumber || jStatus.reference || tnxref,
+                    journeyCode: jStatus.journeyCode,
+                });
+            });
+        }
+    }, [applyPaymentOutcome]);
+
+    // Listen for postMessage events from the Mito Plaid / Pay by Bank iframe (including MITO_LINK_SUCCESS & MITO_LINK_EXIT)
+    useEffect(() => {
+        if (!mitoPayByBankUrl || currentStep !== 4) return;
+        const handleMessage = (event: MessageEvent) => {
+            let payload = event?.data;
+            if (typeof payload === "string") {
+                try {
+                    payload = JSON.parse(payload);
+                } catch {
+                    return;
+                }
+            }
+            if (!payload || typeof payload !== "object") return;
+            const eventType = String(payload.type || "").trim().toUpperCase();
+            const reason = String(
+                payload.reason ||
+                payload.error?.reason ||
+                payload.metadata?.reason ||
+                payload.error?.message ||
+                ""
+            ).trim();
+            const rawStatus = String(
+                payload.status ||
+                payload.orderStatus ||
+                payload.paymentStatus ||
+                payload.payload?.status ||
+                payload.metadata?.status ||
+                payload.error?.status ||
+                (eventType === "MITO_LINK_SUCCESS" ? "COMPSUCCESS" : "") ||
+                (eventType === "MITO_LINK_EXIT" ? (reason || "CANCELLED") : "")
+            ).trim().toUpperCase();
+            if (!rawStatus && eventType !== "MITO_LINK_SUCCESS" && eventType !== "MITO_LINK_EXIT") return;
+            const ref = String(
+                payload.tnxref ||
+                payload.orderNo ||
+                payload.payload?.transactionReference ||
+                payload.metadata?.transactionReference ||
+                payload.payload?.partnerReferenceNumber ||
+                payload.metadata?.partnerReferenceNumber ||
+                transactionRef ||
+                ""
+            ).trim();
+
+            applyPaymentOutcome({
+                rawStatus: rawStatus || eventType,
+                reason: reason || undefined,
+                eventType,
+                reference: ref,
+                methodLabel: "Instant Pay By Bank",
+                journeyCode: extractJourneyCodeFromUrl(mitoPayByBankUrl),
+            });
+        };
         window.addEventListener("message", handleMessage, false);
         return () => window.removeEventListener("message", handleMessage, false);
-    }, [mitoPayByBankUrl, currentStep, toast]);
+    }, [mitoPayByBankUrl, currentStep, transactionRef, applyPaymentOutcome]);
+
+    // Poll live Mito Journey status (`GET /api/send-money/mito/journey-status?journeyCode=...`) every 2.5s
+    // while the Instant Pay By Bank modal is open. As soon as payment completes, fails, cancels, or expires
+    // (including when the user scans the QR code and pays on their mobile phone), immediately close the modal
+    // and transition to the full-page Payment Status view.
+    useEffect(() => {
+        if (!mitoPayByBankUrl || currentStep !== 4) return;
+        const journeyCode = extractJourneyCodeFromUrl(mitoPayByBankUrl);
+        if (!journeyCode) return;
+
+        let cancelled = false;
+        const checkStatus = async () => {
+            const statusData = await fetchMitoJourneyStatus(journeyCode);
+            if (cancelled || !statusData) return;
+
+            const jStatus = String(statusData.journeyStatus || "").trim().toUpperCase();
+            const oStatus = String(statusData.orderStatus || "").trim().toUpperCase();
+            const resolvedRef =
+                statusData.orderNo ||
+                statusData.partnerReferenceNumber ||
+                statusData.reference ||
+                transactionRef;
+
+            const isTerminalOrCompletedJourney =
+                jStatus === "COMPLETED" ||
+                jStatus === "FAILED" ||
+                jStatus === "CANCELLED" ||
+                jStatus === "CANCELED" ||
+                jStatus === "EXPIRED";
+
+            const isTerminalOrCompletedOrder =
+                oStatus === "SUCCEEDED" ||
+                oStatus === "SUCCESSFUL" ||
+                oStatus === "PAID" ||
+                oStatus === "COMPLETED" ||
+                oStatus === "COMPSUCCESS" ||
+                oStatus === "APPROVED" ||
+                oStatus === "IN_REVIEW" ||
+                oStatus === "INREVIEW" ||
+                oStatus === "FAILED" ||
+                oStatus === "COMPFAILED" ||
+                oStatus === "DECLINED" ||
+                oStatus === "REJECTED" ||
+                oStatus === "CANCELLED" ||
+                oStatus === "CANCELED" ||
+                oStatus === "EXPIRED";
+
+            if (isTerminalOrCompletedJourney || isTerminalOrCompletedOrder) {
+                applyPaymentOutcome({
+                    rawStatus: oStatus || jStatus,
+                    reference: resolvedRef,
+                    methodLabel: "Instant Pay By Bank",
+                    journeyCode,
+                });
+            }
+        };
+
+        void checkStatus();
+        const intervalId = window.setInterval(() => {
+            void checkStatus();
+        }, 2500);
+
+        return () => {
+            cancelled = true;
+            window.clearInterval(intervalId);
+        };
+    }, [mitoPayByBankUrl, currentStep, transactionRef, applyPaymentOutcome]);
 
     // Manual Bank Transfer Confirmation
     const [showManualTransferConfirm, setShowManualTransferConfirm] = useState(false);
@@ -697,7 +1336,201 @@ export default function SendMoney() {
         };
     }, [recipientSearch, deliveryMethod]);
 
-    // Pre-fill banking details from selected recipient
+    const BENEFICIARY_LAST_TXN_STORAGE_KEY = "rhemito_beneficiary_last_txn_v1";
+
+    const readSavedBeneficiaryTxnMeta = useCallback((meta: {
+        beneficiaryId?: string | number | null;
+        name?: string | null;
+        account?: string | null;
+    }): {
+        relationship?: string;
+        relationId?: string;
+        reason?: string;
+        reasonId?: string;
+        otherReason?: string;
+        narration?: string;
+        nickName?: string;
+    } | null => {
+        if (typeof window === "undefined") return null;
+        try {
+            const raw = window.localStorage.getItem(BENEFICIARY_LAST_TXN_STORAGE_KEY);
+            if (!raw) return null;
+            const store = JSON.parse(raw) as Record<string, any>;
+            if (!store || typeof store !== "object") return null;
+            const idKey = meta.beneficiaryId ? `id:${String(meta.beneficiaryId).trim().toUpperCase()}` : "";
+            const acctKey = meta.account ? `acct:${String(meta.account).replace(/\s+/g, "").toUpperCase()}` : "";
+            const nameKey = meta.name ? `name:${String(meta.name).trim().toUpperCase()}` : "";
+            return (
+                (idKey && store[idKey]) ||
+                (acctKey && store[acctKey]) ||
+                (nameKey && store[nameKey]) ||
+                null
+            );
+        } catch {
+            return null;
+        }
+    }, []);
+
+    const saveBeneficiaryTxnMeta = useCallback((
+        meta: {
+            beneficiaryId?: string | number | null;
+            name?: string | null;
+            account?: string | null;
+        },
+        details: {
+            relationship?: string;
+            relationId?: string;
+            reason?: string;
+            reasonId?: string;
+            otherReason?: string;
+            narration?: string;
+            nickName?: string;
+        },
+    ) => {
+        if (typeof window === "undefined") return;
+        try {
+            const raw = window.localStorage.getItem(BENEFICIARY_LAST_TXN_STORAGE_KEY);
+            const store: Record<string, any> = raw ? JSON.parse(raw) || {} : {};
+            const idKey = meta.beneficiaryId ? `id:${String(meta.beneficiaryId).trim().toUpperCase()}` : "";
+            const acctKey = meta.account ? `acct:${String(meta.account).replace(/\s+/g, "").toUpperCase()}` : "";
+            const nameKey = meta.name ? `name:${String(meta.name).trim().toUpperCase()}` : "";
+            const keys = [idKey, acctKey, nameKey].filter(Boolean);
+            if (keys.length === 0) return;
+            for (const key of keys) {
+                const existing = store[key] || {};
+                store[key] = {
+                    ...existing,
+                    ...(details.relationship ? { relationship: details.relationship } : {}),
+                    ...(details.relationId ? { relationId: details.relationId } : {}),
+                    ...(details.reason ? { reason: details.reason } : {}),
+                    ...(details.reasonId ? { reasonId: details.reasonId } : {}),
+                    ...(details.otherReason !== undefined ? { otherReason: details.otherReason } : {}),
+                    ...(details.narration ? { narration: details.narration } : {}),
+                    ...(details.nickName ? { nickName: details.nickName } : {}),
+                    updatedAt: Date.now(),
+                };
+            }
+            window.localStorage.setItem(BENEFICIARY_LAST_TXN_STORAGE_KEY, JSON.stringify(store));
+        } catch {
+            // ignore storage errors
+        }
+    }, []);
+
+    const resolveRelationshipOptionValue = useCallback((
+        rawRelationship?: string | null,
+        rawRelationId?: string | null,
+    ): string => {
+        const options = mitoLookupRelationships.length > 0
+            ? mitoLookupRelationships.map((rel) => ({ value: rel.code, label: rel.name }))
+            : [
+                  { value: "family", label: "Family" },
+                  { value: "friend", label: "Friend" },
+                  { value: "business", label: "Business Service" },
+              ];
+        const candidates: string[] = [];
+        if (rawRelationship && String(rawRelationship).trim()) {
+            candidates.push(String(rawRelationship).trim());
+        }
+        if (rawRelationId && String(rawRelationId).trim()) {
+            const relIdClean = String(rawRelationId).trim().toLowerCase();
+            const relOpts = beneficiaryRequirements.find((r) => r.name === "beneficiaryRelationId")?.dropdownOptions || [];
+            const matchedReq = relOpts.find((o) => o.id.toLowerCase() === relIdClean);
+            if (matchedReq?.name) {
+                candidates.push(matchedReq.name.trim());
+            }
+            const matchedLookupById = mitoLookupRelationships.find((r) => r.id && r.id.toLowerCase() === relIdClean);
+            if (matchedLookupById) {
+                candidates.push(matchedLookupById.code, matchedLookupById.name);
+            }
+        }
+        for (const cand of candidates) {
+            const candLower = cand.toLowerCase();
+            const candAlpha = candLower.replace(/[^a-z0-9]/g, "");
+            const exact = options.find(
+                (o) =>
+                    o.value.toLowerCase() === candLower ||
+                    o.label.toLowerCase() === candLower ||
+                    o.value.toLowerCase().replace(/[^a-z0-9]/g, "") === candAlpha ||
+                    o.label.toLowerCase().replace(/[^a-z0-9]/g, "") === candAlpha,
+            );
+            if (exact) return exact.value;
+            const partial = options.find(
+                (o) =>
+                    o.label.toLowerCase().includes(candLower) ||
+                    candLower.includes(o.label.toLowerCase()) ||
+                    o.value.toLowerCase().includes(candAlpha),
+            );
+            if (partial) return partial.value;
+        }
+        return rawRelationship ? String(rawRelationship).trim() : "";
+    }, [mitoLookupRelationships, beneficiaryRequirements]);
+
+    const resolveReasonOptionValue = useCallback((
+        rawReason?: string | null,
+        rawReasonId?: string | null,
+    ): string => {
+        const options = mitoLookupReasons.length > 0
+            ? mitoLookupReasons.map((rsn) => ({ value: rsn.code, label: rsn.name }))
+            : [
+                  { value: "family_support", label: "Family Support" },
+                  { value: "education", label: "Education" },
+                  { value: "bills", label: "Bills" },
+                  { value: "medical", label: "Medical Expenses" },
+                  { value: "other", label: "Other" },
+              ];
+        const candidates: string[] = [];
+        if (rawReason && String(rawReason).trim()) {
+            candidates.push(String(rawReason).trim());
+        }
+        if (rawReasonId && String(rawReasonId).trim()) {
+            const rsnIdClean = String(rawReasonId).trim().toLowerCase();
+            const rsnOpts = beneficiaryRequirements.find((r) => r.name === "beneficiaryReasonId")?.dropdownOptions || [];
+            const matchedReq = rsnOpts.find((o) => o.id.toLowerCase() === rsnIdClean);
+            if (matchedReq?.name) {
+                candidates.push(matchedReq.name.trim());
+            }
+            const matchedLookupById = mitoLookupReasons.find((r) => r.id && r.id.toLowerCase() === rsnIdClean);
+            if (matchedLookupById) {
+                candidates.push(matchedLookupById.code, matchedLookupById.name);
+            }
+        }
+        for (const cand of candidates) {
+            const candLower = cand.toLowerCase();
+            const candAlpha = candLower.replace(/[^a-z0-9]/g, "");
+            const exact = options.find(
+                (o) =>
+                    o.value.toLowerCase() === candLower ||
+                    o.label.toLowerCase() === candLower ||
+                    o.value.toLowerCase().replace(/[^a-z0-9]/g, "") === candAlpha ||
+                    o.label.toLowerCase().replace(/[^a-z0-9]/g, "") === candAlpha,
+            );
+            if (exact) return exact.value;
+            const partial = options.find(
+                (o) =>
+                    o.label.toLowerCase().includes(candLower) ||
+                    candLower.includes(o.label.toLowerCase()) ||
+                    o.value.toLowerCase().includes(candAlpha),
+            );
+            if (partial) return partial.value;
+            // Map common Mito reason descriptions (e.g. "Family Support") to the closest lookup option
+            if (candLower.includes("family") || candLower.includes("support") || candLower.includes("upkeep") || candLower.includes("allowance")) {
+                const famOpt = options.find(
+                    (o) =>
+                        o.label.toLowerCase().includes("family") ||
+                        o.label.toLowerCase().includes("support") ||
+                        o.label.toLowerCase().includes("expenditure") ||
+                        o.value.toLowerCase().includes("expenditure"),
+                );
+                if (famOpt) return famOpt.value;
+            }
+        }
+        if (candidates.length > 0 && options.length > 0) {
+            return options[0].value;
+        }
+        return rawReason ? String(rawReason).trim() : "";
+    }, [mitoLookupReasons, beneficiaryRequirements]);
+
+    // Pre-fill banking and latest transaction details (Relationship, Reason for Transfer, Narration) from selected recipient
     useEffect(() => {
         if (selectedRecipient) {
             if (selectedRecipient.legalEntityType === "business" || selectedRecipient.legalEntityType === "individual") {
@@ -710,14 +1543,50 @@ export default function SendMoney() {
                     providerCode: foundProv?.providerCode || "1203",
                 });
             }
+            const savedMeta = readSavedBeneficiaryTxnMeta({
+                beneficiaryId: selectedRecipient.beneficiaryId || selectedRecipient.id,
+                name: selectedRecipient.name,
+                account: selectedRecipient.account,
+            });
+            const rawRelationship =
+                savedMeta?.relationship ||
+                selectedRecipient.relationship ||
+                selectedRecipient.relationDescription ||
+                "";
+            const rawRelationId =
+                savedMeta?.relationId ||
+                selectedRecipient.relationId ||
+                "";
+            const rawReason =
+                savedMeta?.reason ||
+                selectedRecipient.reason ||
+                selectedRecipient.reasonDescription ||
+                "";
+            const rawReasonId =
+                savedMeta?.reasonId ||
+                selectedRecipient.reasonId ||
+                "";
+            const resolvedRelationship = resolveRelationshipOptionValue(rawRelationship, rawRelationId);
+            const resolvedReason = resolveReasonOptionValue(rawReason, rawReasonId);
+            const resolvedNarration =
+                savedMeta?.narration ||
+                selectedRecipient.narration ||
+                "";
+            const resolvedOtherReason =
+                savedMeta?.otherReason ??
+                selectedRecipient.otherReason ??
+                "";
             setRecipientDetails(prev => ({
                 ...prev,
                 firstName: selectedRecipient.firstName || selectedRecipient.name?.split(' ')[0] || prev.firstName,
                 lastName: selectedRecipient.lastName || selectedRecipient.name?.split(' ').slice(1).join(' ') || prev.lastName,
                 companyName: selectedRecipient.companyName || (selectedRecipient.legalEntityType === "business" ? selectedRecipient.name : prev.companyName) || prev.companyName,
-                nickName: selectedRecipient.beneficiaryNickname || prev.nickName,
-                relationId: selectedRecipient.relationId || prev.relationId,
-                reasonId: selectedRecipient.reasonId || prev.reasonId,
+                nickName: savedMeta?.nickName || selectedRecipient.beneficiaryNickname || prev.nickName,
+                relationship: resolvedRelationship || prev.relationship,
+                relationId: rawRelationId || prev.relationId,
+                reason: resolvedReason || prev.reason,
+                reasonId: rawReasonId || prev.reasonId,
+                otherReason: resolvedOtherReason || prev.otherReason,
                 address: selectedRecipient.address || prev.address,
                 city: selectedRecipient.city || prev.city,
                 postcode: selectedRecipient.postcode || prev.postcode,
@@ -734,10 +1603,19 @@ export default function SendMoney() {
                 branchCode: selectedRecipient.branchCode || prev.branchCode,
                 currency: selectedRecipient.currency || prev.currency,
                 country: selectedRecipient.country || prev.country,
-                narration: selectedRecipient.narration || prev.narration,
+                narration: resolvedNarration || prev.narration,
             }));
         }
-    }, [selectedRecipient, mitoProviders]);
+    }, [
+        selectedRecipient,
+        mitoProviders,
+        mitoLookupRelationships,
+        mitoLookupReasons,
+        beneficiaryRequirements,
+        readSavedBeneficiaryTxnMeta,
+        resolveRelationshipOptionValue,
+        resolveReasonOptionValue,
+    ]);
 
     const AVATAR_COLORS = [
         "bg-blue-100 text-blue-600",
@@ -755,6 +1633,11 @@ export default function SendMoney() {
         const matchedBank = b.providerId
             ? mitoProviders.find((p) => p.providerId === b.providerId)?.providerName
             : undefined;
+        const savedMeta = readSavedBeneficiaryTxnMeta({
+            beneficiaryId: b.beneficiaryId,
+            name: b.name,
+            account: b.acctNumber,
+        });
         return {
             id: b.beneficiaryId || idx + 1,
             beneficiaryId: b.beneficiaryId,
@@ -762,7 +1645,7 @@ export default function SendMoney() {
             firstName: b.firstName,
             lastName: b.lastName,
             companyName: b.companyName,
-            beneficiaryNickname: b.beneficiaryNickname,
+            beneficiaryNickname: savedMeta?.nickName || b.beneficiaryNickname,
             legalEntityType: b.legalEntityType,
             providerId: b.providerId,
             bank: (b.bankName && b.bankName !== "Bank" ? b.bankName : matchedBank) || b.bankName || "Bank Transfer",
@@ -779,12 +1662,17 @@ export default function SendMoney() {
             postcode: b.postcode || "",
             stateOrProvince: b.stateOrProvince || "",
             mobileNo: b.mobileNo || "",
-            relationId: b.relationId || "",
-            reasonId: b.reasonId || "",
+            relationship: savedMeta?.relationship || b.relationship || b.relationDescription || "",
+            relationDescription: b.relationDescription || "",
+            relationId: savedMeta?.relationId || b.relationId || "",
+            reason: savedMeta?.reason || b.reason || b.reasonDescription || "",
+            reasonDescription: b.reasonDescription || "",
+            reasonId: savedMeta?.reasonId || b.reasonId || "",
+            otherReason: savedMeta?.otherReason || b.otherReason || "",
             currency: b.currency || "NGN",
             country: b.country || "Nigeria",
             countryIso3: b.countryIso3 || resolveBeneficiaryCountryIso3(b.country, b.currency),
-            narration: "",
+            narration: savedMeta?.narration || b.narration || "",
             initials,
             color: AVATAR_COLORS[idx % AVATAR_COLORS.length],
         };
@@ -1085,6 +1973,22 @@ export default function SendMoney() {
             setTransactionRef(created.reference);
             if (created.mitoRateId) setLockedRateId(created.mitoRateId);
             if (created.mitoBeneficiaryId) setMitoBeneficiaryId(created.mitoBeneficiaryId);
+            saveBeneficiaryTxnMeta(
+                {
+                    beneficiaryId: created.mitoBeneficiaryId || existingMitoBeneficiaryId || selectedRecipient?.beneficiaryId || selectedRecipient?.id,
+                    name: recipientName,
+                    account: (deliveryMethod === "mobile_money" ? (normalizedMobile || normalizedAcct) : normalizedAcct) || selectedRecipient?.account,
+                },
+                {
+                    relationship: recipientDetails.relationship,
+                    relationId: recipientDetails.relationId || undefined,
+                    reason: recipientDetails.reason,
+                    reasonId: recipientDetails.reasonId || undefined,
+                    otherReason: recipientDetails.otherReason || undefined,
+                    narration: recipientDetails.narration || undefined,
+                    nickName: recipientDetails.nickName || undefined,
+                },
+            );
             if (isCreatingNewBeneficiary || created.mitoBeneficiaryCreated) {
                 const resolvedBankName =
                     matchedProv && !matchedProv.isGeneric
@@ -1746,50 +2650,94 @@ export default function SendMoney() {
                                 {/* Right Column: Sticky Summary */}
                                 <div className="lg:col-span-2 hidden lg:block">
                                     <div className="sticky top-6">
-                                        <Card className="border border-blue-100 shadow-sm">
-                                            <CardHeader className="pb-4 border-b">
-                                                <CardTitle className="text-base font-bold text-gray-900">Amount</CardTitle>
+                                        <Card className="border-2 border-gray-200 shadow-sm">
+                                            <CardHeader className="pb-4 bg-gray-50/50 border-b">
+                                                <CardTitle className="text-base">Amount Summary</CardTitle>
                                             </CardHeader>
-                                            <CardContent className="space-y-4 text-sm pt-6">
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-600">You Send</span>
-                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{parseFloat(amount).toFixed(2)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-600">Amount Sent</span>
-                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{(parseFloat(amount) - effectiveFee).toFixed(2)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-600">Fee</span>
-                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{fee.toFixed(2)}</span>
-                                                </div>
-                                                {promoApplied && (
-                                                    <div className="flex justify-between font-medium text-green-600 bg-green-50 px-2 py-1 -mx-2 rounded" data-testid="summary-promo-step1">
-                                                        <span>Promo ({promoCode})</span>
-                                                        <span className="whitespace-nowrap">- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                            <CardContent className="space-y-3 text-sm pt-4">
+                                                {promoApplied && promoDiscount > 0 && (
+                                                    <div className="flex justify-between font-medium text-green-700" data-testid="summary-promo-step1">
+                                                        <span>{PROMO_COPY.summaryLabel(promoCode)}</span>
+                                                        <span className="whitespace-nowrap">−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
                                                     </div>
                                                 )}
                                                 {useBonus && (
                                                     <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded" data-testid="summary-bonus-step1">
-                                                        <span>{bonusType === "pay_less" ? "Bonus discount" : "Bonus credit"}</span>
+                                                        <span>{bonusType === "pay_less" ? BONUS_COPY.summaryPayLess : BONUS_COPY.summarySendMore}</span>
                                                         <span className="whitespace-nowrap">{bonusType === "pay_less" ? "-" : "+"} {sendSymbol}{bonusAmount.toFixed(2)}</span>
                                                     </div>
                                                 )}
                                                 <div className="flex justify-between">
+                                                    <span className="text-gray-600">You Send</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{youSendAmount.toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Amount Sent</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{amountSentGBP.toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">They Receive</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">
+                                                        {receiveSymbol}{finalReceiveAmount}
+                                                        {useBonus && bonusType === "send_more" && (
+                                                            <span className="text-xs text-green-600 ml-2 font-bold">(+Bonus)</span>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Transaction Fee</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{effectiveFee.toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between">
                                                     <span className="text-gray-600">Exchange Rate</span>
                                                     <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}1 = {receiveSymbol}{EXCHANGE_RATE.toFixed(2)}</span>
                                                 </div>
-                                                {(promoApplied || useBonus) && (
-                                                    <div className="flex justify-between pt-2 border-t font-bold text-gray-900">
-                                                        <span>Total to Pay</span>
-                                                        <span className="whitespace-nowrap">{sendSymbol}{totalPay.toFixed(2)}</span>
+                                                <div className="flex justify-between pt-2">
+                                                    <span className="text-gray-600">Connection Method</span>
+                                                    <span className="font-medium text-right capitalize">{deliveryMethod.replace('_', ' ')}</span>
+                                                </div>
+
+                                                <div className="pt-4 mt-2 border-t">
+                                                    <div className="flex justify-between items-center pt-2">
+                                                        <span className="text-gray-900 font-bold text-base">Total to Pay</span>
+                                                        <span className="font-bold text-lg text-gray-900 whitespace-nowrap">{sendSymbol}{Math.max(0, totalPay).toFixed(2)}</span>
+                                                    </div>
+                                                    {(promoApplied || useBonus) && (
+                                                        <p className="text-xs text-green-600 font-medium mt-1">
+                                                            Includes {promoApplied && "promo code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {selectedRecipient && (
+                                                    <div className="pt-4 mt-3 border-t space-y-2.5">
+                                                        <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                                            Recipient Details
+                                                        </div>
+                                                        <div className="flex justify-between gap-2">
+                                                            <span className="text-gray-600 shrink-0">Recipient Name</span>
+                                                            <span className="font-medium text-gray-900 text-right truncate">
+                                                                {selectedRecipient.name || "—"}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between gap-2">
+                                                            <span className="text-gray-600 shrink-0">
+                                                                {deliveryMethod === "mobile_money" ? "Mobile Operator" : "Bank Name"}
+                                                            </span>
+                                                            <span className="font-medium text-gray-900 text-right truncate">
+                                                                {selectedRecipient.bank || "—"}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between gap-2">
+                                                            <span className="text-gray-600 shrink-0">
+                                                                {deliveryMethod === "mobile_money" ? "Mobile Number" : "Account Number"}
+                                                            </span>
+                                                            <span className="font-mono font-medium text-gray-900 text-right break-all">
+                                                                {selectedRecipient.account || selectedRecipient.iban || selectedRecipient.mobileNo || "—"}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 )}
-
-                                                <div className="pt-4 mt-4 border-t flex justify-between items-center">
-                                                    <span className="text-gray-600 font-medium">They Receive</span>
-                                                    <span className="font-bold text-lg text-blue-600 whitespace-nowrap">{receiveSymbol}{receiveAmount}</span>
-                                                </div>
                                             </CardContent>
                                         </Card>
                                     </div>
@@ -2047,47 +2995,100 @@ export default function SendMoney() {
                                 {/* Right Column: Sticky Summary */}
                                 <div className="lg:col-span-2 hidden lg:block">
                                     <div className="sticky top-6">
-                                        <Card className="border border-blue-100 shadow-sm">
-                                            <CardHeader className="pb-4 border-b">
+                                        <Card className="border-2 border-gray-200 shadow-sm">
+                                            <CardHeader className="pb-4 bg-gray-50/50 border-b">
                                                 <div className="flex justify-between items-center">
-                                                    <CardTitle className="text-base font-bold text-gray-900">Amount</CardTitle>
+                                                    <CardTitle className="text-base">Amount Summary</CardTitle>
                                                     {/* Session Timer */}
                                                     <div className={`flex gap-1 font-mono text-sm px-2 py-1 rounded ${sessionTimeLeft <= 60 ? 'text-red-600 bg-red-50 animate-pulse' : 'text-blue-600 bg-blue-50'}`}>
                                                         <span>{timerDisplay.minutes}</span>:<span>{timerDisplay.seconds}</span>
                                                     </div>
                                                 </div>
                                             </CardHeader>
-                                            <CardContent className="space-y-4 text-sm pt-6">
+                                            <CardContent className="space-y-3 text-sm pt-4">
+                                                {promoApplied && promoDiscount > 0 && (
+                                                    <div className="flex justify-between font-medium text-green-700">
+                                                        <span>{PROMO_COPY.summaryLabel(promoCode)}</span>
+                                                        <span className="whitespace-nowrap">−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                                    </div>
+                                                )}
+                                                {useBonus && (
+                                                    <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded">
+                                                        <span>{bonusType === "pay_less" ? BONUS_COPY.summaryPayLess : BONUS_COPY.summarySendMore}</span>
+                                                        <span className="whitespace-nowrap">{bonusType === "pay_less" ? "-" : "+"} {sendSymbol}{bonusAmount.toFixed(2)}</span>
+                                                    </div>
+                                                )}
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">You Send</span>
-                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{parseFloat(amount).toFixed(2)}</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{youSendAmount.toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Amount Sent</span>
-                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{(parseFloat(amount) - effectiveFee).toFixed(2)}</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{amountSentGBP.toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">They Receive</span>
-                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{receiveSymbol}{receiveAmount}</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">
+                                                        {receiveSymbol}{finalReceiveAmount}
+                                                        {useBonus && bonusType === "send_more" && (
+                                                            <span className="text-xs text-green-600 ml-2 font-bold">(+Bonus)</span>
+                                                        )}
+                                                    </span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Transaction Fee</span>
-                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{fee.toFixed(2)}</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{effectiveFee.toFixed(2)}</span>
                                                 </div>
-                                                {promoApplied && (
-                                                    <div className="flex justify-between font-medium text-green-600 bg-green-50 px-2 py-1 -mx-2 rounded">
-                                                        <span>Promo ({promoCode})</span>
-                                                        <span className="whitespace-nowrap">- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
-                                                    </div>
-                                                )}
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Exchange Rate</span>
                                                     <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}1 = {receiveSymbol}{EXCHANGE_RATE.toFixed(2)}</span>
                                                 </div>
                                                 <div className="flex justify-between pt-2">
-                                                    <span className="text-gray-600">Collection Method</span>
-                                                    <span className="font-medium text-gray-900 capitalize">{deliveryMethod.replace('_', ' ')}</span>
+                                                    <span className="text-gray-600">Connection Method</span>
+                                                    <span className="font-medium text-right capitalize">{deliveryMethod.replace('_', ' ')}</span>
                                                 </div>
+
+                                                <div className="pt-4 mt-2 border-t">
+                                                    <div className="flex justify-between items-center pt-2">
+                                                        <span className="text-gray-900 font-bold text-base">Total to Pay</span>
+                                                        <span className="font-bold text-lg text-gray-900 whitespace-nowrap">{sendSymbol}{Math.max(0, totalPay).toFixed(2)}</span>
+                                                    </div>
+                                                    {(promoApplied || useBonus) && (
+                                                        <p className="text-xs text-green-600 font-medium mt-1">
+                                                            Includes {promoApplied && "promo code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {selectedRecipient && (
+                                                    <div className="pt-4 mt-3 border-t space-y-2.5">
+                                                        <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                                            Recipient Details
+                                                        </div>
+                                                        <div className="flex justify-between gap-2">
+                                                            <span className="text-gray-600 shrink-0">Recipient Name</span>
+                                                            <span className="font-medium text-gray-900 text-right truncate">
+                                                                {selectedRecipient.name || "—"}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between gap-2">
+                                                            <span className="text-gray-600 shrink-0">
+                                                                {deliveryMethod === "mobile_money" ? "Mobile Operator" : "Bank Name"}
+                                                            </span>
+                                                            <span className="font-medium text-gray-900 text-right truncate">
+                                                                {selectedRecipient.bank || "—"}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between gap-2">
+                                                            <span className="text-gray-600 shrink-0">
+                                                                {deliveryMethod === "mobile_money" ? "Mobile Number" : "Account Number"}
+                                                            </span>
+                                                            <span className="font-mono font-medium text-gray-900 text-right break-all">
+                                                                {selectedRecipient.account || selectedRecipient.iban || selectedRecipient.mobileNo || "—"}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </CardContent>
                                         </Card>
                                     </div>
@@ -2216,6 +3217,19 @@ export default function SendMoney() {
                                                                 relationship: val,
                                                                 relationId: matchedReq ? matchedReq.id : prev.relationId,
                                                             }));
+                                                            if (selectedRecipient) {
+                                                                saveBeneficiaryTxnMeta(
+                                                                    {
+                                                                        beneficiaryId: selectedRecipient.beneficiaryId || selectedRecipient.id,
+                                                                        name: selectedRecipient.name,
+                                                                        account: selectedRecipient.account,
+                                                                    },
+                                                                    {
+                                                                        relationship: val,
+                                                                        relationId: matchedReq ? matchedReq.id : recipientDetails.relationId,
+                                                                    },
+                                                                );
+                                                            }
                                                         }}
                                                     />
                                                     {step3Errors.relationship && <p className="text-xs text-red-500">{step3Errors.relationship}</p>}
@@ -2262,6 +3276,19 @@ export default function SendMoney() {
                                                             reason: val,
                                                             reasonId: matchedReq ? matchedReq.id : prev.reasonId,
                                                         }));
+                                                        if (selectedRecipient) {
+                                                            saveBeneficiaryTxnMeta(
+                                                                {
+                                                                    beneficiaryId: selectedRecipient.beneficiaryId || selectedRecipient.id,
+                                                                    name: selectedRecipient.name,
+                                                                    account: selectedRecipient.account,
+                                                                },
+                                                                {
+                                                                    reason: val,
+                                                                    reasonId: matchedReq ? matchedReq.id : recipientDetails.reasonId,
+                                                                },
+                                                            );
+                                                        }
                                                     }}
                                                 />
                                                 {step3Errors.reason && <p className="text-xs text-red-500">{step3Errors.reason}</p>}
@@ -2408,7 +3435,20 @@ export default function SendMoney() {
                                                     value={recipientDetails.narration}
                                                     onChange={e => {
                                                         clearStep3Error("narration");
-                                                        setRecipientDetails({ ...recipientDetails, narration: e.target.value });
+                                                        const nextNarration = e.target.value;
+                                                        setRecipientDetails({ ...recipientDetails, narration: nextNarration });
+                                                        if (selectedRecipient) {
+                                                            saveBeneficiaryTxnMeta(
+                                                                {
+                                                                    beneficiaryId: selectedRecipient.beneficiaryId || selectedRecipient.id,
+                                                                    name: selectedRecipient.name,
+                                                                    account: selectedRecipient.account,
+                                                                },
+                                                                {
+                                                                    narration: nextNarration,
+                                                                },
+                                                            );
+                                                        }
                                                     }}
                                                     className={`resize-none ${step3Errors.narration ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                                     rows={3}
@@ -2769,41 +3809,129 @@ export default function SendMoney() {
                                 </div>
 
                                 {/* Right Column: Sticky Summary */}
-                                <div className="lg:col-span-2 hidden lg:block">
+                                <div className="lg:col-span-2">
                                     <div className="sticky top-6">
-                                        <Card className="border border-blue-100 shadow-sm">
-                                            <CardHeader className="pb-4 border-b">
+                                        <Card className="border-2 border-gray-200 shadow-sm">
+                                            <CardHeader className="pb-4 bg-gray-50/50 border-b">
                                                 <div className="flex justify-between items-center">
-                                                    <CardTitle className="text-base font-bold text-gray-900">Amount</CardTitle>
+                                                    <CardTitle className="text-base">Amount Summary</CardTitle>
                                                     {/* Session Timer */}
                                                     <div className={`flex gap-1 font-mono text-sm px-2 py-1 rounded ${sessionTimeLeft <= 60 ? 'text-red-600 bg-red-50 animate-pulse' : 'text-blue-600 bg-blue-50'}`}>
                                                         <span>{timerDisplay.minutes}</span>:<span>{timerDisplay.seconds}</span>
                                                     </div>
                                                 </div>
                                             </CardHeader>
-                                            <CardContent className="space-y-4 text-sm pt-6">
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-600">You Send</span>
-                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{parseFloat(amount).toFixed(2)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-600">Fees</span>
-                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{fee.toFixed(2)}</span>
-                                                </div>
-                                                {promoApplied && (
-                                                    <div className="flex justify-between font-medium text-green-600 bg-green-50 px-2 py-1 -mx-2 rounded">
-                                                        <span>Promo ({promoCode})</span>
-                                                        <span className="whitespace-nowrap">- {formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
+                                            <CardContent className="space-y-3 text-sm pt-4">
+                                                {promoApplied && promoDiscount > 0 && (
+                                                    <div className="flex justify-between font-medium text-green-700">
+                                                        <span>{PROMO_COPY.summaryLabel(promoCode)}</span>
+                                                        <span className="whitespace-nowrap">−{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}</span>
                                                     </div>
                                                 )}
-                                                <div className="border-t pt-2 mt-2 flex justify-between items-center">
-                                                    <span className="text-gray-900 font-bold text-base">Total to Pay</span>
-                                                    <span className="font-bold text-lg text-gray-900 whitespace-nowrap">{sendSymbol}{totalPay.toFixed(2)}</span>
+                                                {useBonus && (
+                                                    <div className="flex justify-between font-medium text-teal-700 bg-teal-50 px-2 py-1 -mx-2 rounded">
+                                                        <span>{bonusType === "pay_less" ? BONUS_COPY.summaryPayLess : BONUS_COPY.summarySendMore}</span>
+                                                        <span className="whitespace-nowrap">{bonusType === "pay_less" ? "-" : "+"} {sendSymbol}{bonusAmount.toFixed(2)}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">You Send</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{youSendAmount.toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Amount Sent</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{amountSentGBP.toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">They Receive</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">
+                                                        {receiveSymbol}{finalReceiveAmount}
+                                                        {useBonus && bonusType === "send_more" && (
+                                                            <span className="text-xs text-green-600 ml-2 font-bold">(+Bonus)</span>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Transaction Fee</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}{effectiveFee.toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Exchange Rate</span>
+                                                    <span className="font-medium text-gray-900 whitespace-nowrap">{sendSymbol}1 = {receiveSymbol}{EXCHANGE_RATE.toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between pt-2">
+                                                    <span className="text-gray-600">Connection Method</span>
+                                                    <span className="font-medium text-right capitalize">{deliveryMethod.replace('_', ' ')}</span>
                                                 </div>
 
-                                                <div className="pt-4 mt-2 bg-blue-50/50 -mx-6 px-6 py-4 mb-[-24px]">
-                                                    <div className="text-sm text-gray-600 mb-1">They Receive</div>
-                                                    <div className="text-xl font-bold text-blue-600 whitespace-nowrap">{receiveSymbol}{receiveAmount}</div>
+                                                <div className="pt-4 mt-2 border-t">
+                                                    <div className="flex justify-between items-center pt-2">
+                                                        <span className="text-gray-900 font-bold text-base">Total to Pay</span>
+                                                        <span className="font-bold text-lg text-gray-900 whitespace-nowrap">{sendSymbol}{Math.max(0, totalPay).toFixed(2)}</span>
+                                                    </div>
+                                                    {(promoApplied || useBonus) && (
+                                                        <p className="text-xs text-green-600 font-medium mt-1">
+                                                            Includes {promoApplied && "promo code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Recipient / Beneficiary Details Section under Amount Summary */}
+                                                <div className="pt-4 mt-3 border-t space-y-2.5" data-testid="step3-summary-recipient-details">
+                                                    <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                                        Recipient Details
+                                                    </div>
+                                                    <div className="flex justify-between gap-2">
+                                                        <span className="text-gray-600 shrink-0">Recipient Name</span>
+                                                        <span className="font-medium text-gray-900 text-right truncate">
+                                                            {beneficiaryType === "business"
+                                                                ? (recipientDetails.companyName.trim() || selectedRecipient?.name || "—")
+                                                                : ([recipientDetails.firstName.trim(), recipientDetails.lastName.trim()].filter(Boolean).join(" ") || selectedRecipient?.name || "—")}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between gap-2">
+                                                        <span className="text-gray-600 shrink-0">
+                                                            {deliveryMethod === "mobile_money" ? "Mobile Operator" : "Bank Name"}
+                                                        </span>
+                                                        <span className="font-medium text-gray-900 text-right truncate">
+                                                            {recipientDetails.bankName.trim() || selectedRecipient?.bank || "—"}
+                                                        </span>
+                                                    </div>
+                                                    {deliveryMethod === "mobile_money" ? (
+                                                        <div className="flex justify-between gap-2">
+                                                            <span className="text-gray-600 shrink-0">Mobile Number</span>
+                                                            <span className="font-mono font-medium text-gray-900 text-right">
+                                                                {recipientDetails.mobileNo.trim() || recipientDetails.accountNumber.trim() || selectedRecipient?.mobileNo || selectedRecipient?.account || "—"}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className="flex justify-between gap-2">
+                                                                <span className="text-gray-600 shrink-0">
+                                                                    {recipientDetails.iban.trim() && !recipientDetails.accountNumber.trim() ? "IBAN" : "Account Number"}
+                                                                </span>
+                                                                <span className="font-mono font-medium text-gray-900 text-right break-all">
+                                                                    {recipientDetails.accountNumber.trim() || recipientDetails.iban.trim() || selectedRecipient?.account || selectedRecipient?.iban || "—"}
+                                                                </span>
+                                                            </div>
+                                                            {(recipientDetails.sortCode.trim() || selectedRecipient?.sortCode) && (
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-600 shrink-0">Sort Code</span>
+                                                                    <span className="font-mono font-medium text-gray-900 text-right">
+                                                                        {recipientDetails.sortCode.trim() || selectedRecipient?.sortCode}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {(recipientDetails.swift.trim() || selectedRecipient?.swift) && (
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-600 shrink-0">SWIFT / BIC</span>
+                                                                    <span className="font-mono font-medium text-gray-900 text-right">
+                                                                        {recipientDetails.swift.trim() || selectedRecipient?.swift}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -2819,8 +3947,8 @@ export default function SendMoney() {
                                 animate={{ opacity: 1, x: 0 }}
                                 className="grid grid-cols-1 lg:grid-cols-5 gap-6 pb-24"
                             >
-                                {/* Left Column: Input Sections */}
-                                <div className="lg:col-span-3 space-y-6">
+                                {/* Left Column: Input Sections (or Full-Width World-Class Status View when paymentOutcome is active) */}
+                                <div className={paymentOutcome ? "lg:col-span-5 max-w-4xl mx-auto w-full space-y-6" : "lg:col-span-3 space-y-6"}>
 
                                     {/* Promo & Bonus are selected on Step 1 and summarized in the right-hand Amount Summary */}
 
@@ -2828,7 +3956,7 @@ export default function SendMoney() {
                                     {/* Promo Code Section (features/promo) */}
 
 
-                                    {beneficiaryCreatedSuccess && (
+                                    {beneficiaryCreatedSuccess && !paymentOutcome && (
                                         <div
                                             role="status"
                                             data-testid="step4-beneficiary-created-banner"
@@ -2850,7 +3978,690 @@ export default function SendMoney() {
                                         </div>
                                     )}
 
-                                    {/* Payment Method Selection */}
+                                    {/* Payment Outcome Full-Page Status View OR Payment Method Selection */}
+                                    {paymentOutcome ? (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 12 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ duration: 0.35, ease: "easeOut" }}
+                                            data-testid="payment-status-view"
+                                            data-status-category={paymentOutcome.category}
+                                            className="space-y-6"
+                                        >
+                                            {/* Executive Fintech Status Hero & Receipt Card */}
+                                            <div className="rounded-3xl border border-slate-200/90 bg-white shadow-xl shadow-slate-900/5 overflow-hidden">
+                                                {/* Top Gradient Hero Banner */}
+                                                <div
+                                                    className={`relative px-6 sm:px-10 pt-8 pb-7 text-white overflow-hidden ${
+                                                        paymentOutcome.category === "completed"
+                                                            ? "bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800"
+                                                            : paymentOutcome.category === "processing"
+                                                            ? "bg-gradient-to-br from-blue-600 via-indigo-700 to-slate-900"
+                                                            : paymentOutcome.category === "failed"
+                                                            ? "bg-gradient-to-br from-rose-600 via-red-700 to-slate-900"
+                                                            : paymentOutcome.category === "cancelled"
+                                                            ? "bg-gradient-to-br from-amber-600 via-orange-600 to-slate-900"
+                                                            : "bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950"
+                                                    }`}
+                                                >
+                                                    {/* Subtle Decorative Radial Glows */}
+                                                    <div className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
+                                                    <div className="pointer-events-none absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-black/10 blur-3xl" />
+
+                                                    {/* Top Bar: Live Status Pill + Copyable Reference Chip */}
+                                                    <div className="relative flex flex-wrap items-center justify-between gap-3 mb-6">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-white/15 backdrop-blur-md border border-white/25 text-white shadow-2xs">
+                                                                <span
+                                                                    className={`w-2 h-2 rounded-full ${
+                                                                        paymentOutcome.category === "completed"
+                                                                            ? "bg-emerald-300 animate-pulse"
+                                                                            : paymentOutcome.category === "processing"
+                                                                            ? "bg-blue-300 animate-ping"
+                                                                            : paymentOutcome.category === "failed"
+                                                                            ? "bg-rose-300"
+                                                                            : "bg-amber-300"
+                                                                    }`}
+                                                                />
+                                                                {paymentOutcome.category === "completed"
+                                                                    ? `Payment Successful${
+                                                                          paymentOutcome.paymentStatus
+                                                                              ? ` • ${paymentOutcome.paymentStatus}`
+                                                                              : " • Captured"
+                                                                      }`
+                                                                    : paymentOutcome.category === "processing"
+                                                                    ? "Payment Authorized • Verifying"
+                                                                    : paymentOutcome.category === "failed"
+                                                                    ? `Payment Declined${
+                                                                          paymentOutcome.paymentStatus
+                                                                              ? ` • ${paymentOutcome.paymentStatus}`
+                                                                              : ""
+                                                                      }`
+                                                                    : paymentOutcome.category === "cancelled"
+                                                                    ? "Payment Cancelled"
+                                                                    : "Session Expired"}
+                                                            </span>
+                                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-black/15 border border-white/15 text-white/90">
+                                                                <Shield className="w-3.5 h-3.5 text-white/80" />
+                                                                <span>3DS 2.0 Protected</span>
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Copyable Transaction Reference Pill */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const refVal = paymentOutcome.reference || transactionRef;
+                                                                if (refVal && navigator?.clipboard) {
+                                                                    void navigator.clipboard.writeText(refVal);
+                                                                    setCopiedField("status-tnxref");
+                                                                    setTimeout(() => setCopiedField(null), 2000);
+                                                                }
+                                                            }}
+                                                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 transition-colors border border-white/20 text-xs font-mono text-white cursor-pointer"
+                                                            title="Click to copy transaction reference"
+                                                        >
+                                                            <span className="text-white/75 font-sans">Transaction Ref:</span>
+                                                            <strong className="font-bold tracking-wide">
+                                                                #{paymentOutcome.reference || transactionRef || "PENDING"}
+                                                            </strong>
+                                                            {copiedField === "status-tnxref" ? (
+                                                                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-semibold text-emerald-200">
+                                                                    <Check className="w-3.5 h-3.5" />
+                                                                    Copied
+                                                                </span>
+                                                            ) : (
+                                                                <Copy className="w-3.5 h-3.5 text-white/80" />
+                                                            )}
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Main Hero Icon + Headline + Subtitle */}
+                                                    <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                                                        <div className="relative shrink-0">
+                                                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/15 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-lg">
+                                                                {paymentOutcome.category === "completed" ? (
+                                                                    <CheckCircle2 className="w-10 h-10 text-white stroke-[2.2]" />
+                                                                ) : paymentOutcome.category === "processing" ? (
+                                                                    <Clock className="w-10 h-10 text-white stroke-[2.2]" />
+                                                                ) : paymentOutcome.category === "failed" ? (
+                                                                    <XCircle className="w-10 h-10 text-white stroke-[2.2]" />
+                                                                ) : (
+                                                                    <AlertTriangle className="w-10 h-10 text-white stroke-[2.2]" />
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-2 flex-1">
+                                                            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                                                                {paymentOutcome.category === "completed"
+                                                                    ? "Payment Successful — Transaction in Progress"
+                                                                    : paymentOutcome.category === "processing"
+                                                                    ? "Payment Authorized — Finalizing Verification"
+                                                                    : paymentOutcome.category === "failed"
+                                                                    ? "Payment Could Not Be Completed"
+                                                                    : paymentOutcome.category === "cancelled"
+                                                                    ? "Payment Authorization Was Cancelled"
+                                                                    : "Payment Security Session Timed Out"}
+                                                            </h2>
+                                                            <p className="text-sm sm:text-base text-white/90 leading-relaxed max-w-2xl">
+                                                                {paymentOutcome.category === "completed"
+                                                                    ? "Your payment has been securely captured. We are now dispatching the payout to your recipient's bank account and will email you the final settlement confirmation in a few minutes."
+                                                                    : paymentOutcome.category === "processing"
+                                                                    ? "Your payment instruction has been authorized and is being confirmed with your bank. We will email you the final status of your transaction within a few minutes."
+                                                                    : paymentOutcome.category === "failed"
+                                                                    ? "Your card issuer or bank declined this payment request. No funds have been debited from your account, and your transfer details remain safely saved so you can retry immediately."
+                                                                    : paymentOutcome.category === "cancelled"
+                                                                    ? "The payment authorization window was closed before completion. No money has been taken from your account — you can resume with the same or another payment method below."
+                                                                    : "The 3D Secure verification window expired before authorization was completed. No funds were debited from your account."}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Currency Corridor Showcase Bar inside Hero */}
+                                                    <div className="relative mt-7 rounded-2xl bg-black/20 backdrop-blur-md border border-white/15 p-4 sm:p-5 overflow-hidden">
+                                                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-6">
+                                                            {/* Left: You Paid / Amount */}
+                                                            <div className="min-w-0 flex-1 space-y-1">
+                                                                <span className="text-[11px] font-semibold uppercase tracking-wider text-white/70 block">
+                                                                    {paymentOutcome.category === "completed"
+                                                                        ? "Total Paid"
+                                                                        : paymentOutcome.category === "processing"
+                                                                        ? "Amount Authorized"
+                                                                        : "Transfer Amount"}
+                                                                </span>
+                                                                <div className="flex flex-wrap items-baseline gap-2">
+                                                                    <span className="text-xl sm:text-2xl font-extrabold tabular-nums text-white whitespace-nowrap">
+                                                                        {sendSymbol}
+                                                                        {Math.max(0, totalPay).toFixed(2)}
+                                                                    </span>
+                                                                    <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-white/15 text-white/90 shrink-0">
+                                                                        {SEND_CURRENCY}
+                                                                    </span>
+                                                                </div>
+                                                                <span className="text-xs text-white/75 block truncate">
+                                                                    via {paymentOutcome.paymentMethodLabel}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* Center: Exchange Rate Pill */}
+                                                            <div className="shrink-0 flex md:flex-col items-center justify-between md:justify-center gap-1.5 border-y md:border-y-0 md:border-x border-white/15 py-2.5 md:py-1 md:px-5">
+                                                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 border border-white/20 text-xs font-semibold text-white whitespace-nowrap">
+                                                                    <ArrowRightLeft className="w-3.5 h-3.5 text-white/80 shrink-0" />
+                                                                    <span>
+                                                                        {sendSymbol}1 = {receiveSymbol}
+                                                                        {EXCHANGE_RATE.toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                                <span className="text-[11px] text-white/70 font-medium whitespace-nowrap">
+                                                                    Locked Guaranteed Rate
+                                                                </span>
+                                                            </div>
+
+                                                            {/* Right: Recipient Receives */}
+                                                            <div className="min-w-0 flex-1 md:text-right space-y-1">
+                                                                <span className="text-[11px] font-semibold uppercase tracking-wider text-white/70 block">
+                                                                    Recipient Gets
+                                                                </span>
+                                                                <div className="flex flex-wrap md:justify-end items-baseline gap-2">
+                                                                    <span className="text-xl sm:text-2xl font-extrabold tabular-nums text-emerald-200 whitespace-nowrap">
+                                                                        {receiveSymbol}
+                                                                        {finalReceiveAmount}
+                                                                    </span>
+                                                                    <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-emerald-400/20 border border-emerald-300/30 text-emerald-100 shrink-0">
+                                                                        {recipientDetails.currency || "NGN"}
+                                                                    </span>
+                                                                </div>
+                                                                <span className="text-xs text-white/80 block truncate">
+                                                                    To{" "}
+                                                                    {beneficiaryType === "business"
+                                                                        ? recipientDetails.companyName.trim() ||
+                                                                          selectedRecipient?.name ||
+                                                                          "Recipient"
+                                                                        : [
+                                                                              recipientDetails.firstName.trim(),
+                                                                              recipientDetails.lastName.trim(),
+                                                                          ]
+                                                                              .filter(Boolean)
+                                                                              .join(" ") ||
+                                                                          selectedRecipient?.name ||
+                                                                          "Recipient"}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Card Body: Live 4-Stage Settlement Stepper + Two-Column Receipt & Bank Details */}
+                                                <div className="p-6 sm:p-8 space-y-7 bg-gradient-to-b from-slate-50/60 to-white">
+                                                    {/* 4-Stage Settlement Timeline */}
+                                                    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-6 shadow-2xs">
+                                                        <div className="flex items-center justify-between mb-4">
+                                                            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                                Live Settlement Progress
+                                                            </span>
+                                                            <span className="text-xs font-medium text-slate-500">
+                                                                Updated at {paymentOutcome.timestamp}
+                                                            </span>
+                                                        </div>
+                                                        <div className="grid grid-cols-4 gap-2 sm:gap-4 text-center relative">
+                                                            {[
+                                                                {
+                                                                    label: "Order Created",
+                                                                    sublabel: `Ref #${paymentOutcome.reference || transactionRef || "—"}`,
+                                                                    completed: true,
+                                                                    active: false,
+                                                                    error: false,
+                                                                },
+                                                                {
+                                                                    label: "3DS & Bank Auth",
+                                                                    sublabel:
+                                                                        paymentOutcome.category === "completed" ||
+                                                                        paymentOutcome.category === "processing"
+                                                                            ? "Verified"
+                                                                            : paymentOutcome.category === "cancelled"
+                                                                            ? "Cancelled"
+                                                                            : paymentOutcome.category === "expired"
+                                                                            ? "Timed Out"
+                                                                            : "Declined",
+                                                                    completed:
+                                                                        paymentOutcome.category === "completed" ||
+                                                                        paymentOutcome.category === "processing",
+                                                                    active: false,
+                                                                    error:
+                                                                        paymentOutcome.category === "failed" ||
+                                                                        paymentOutcome.category === "cancelled" ||
+                                                                        paymentOutcome.category === "expired",
+                                                                },
+                                                                {
+                                                                    label:
+                                                                        paymentOutcome.category === "completed"
+                                                                            ? "Payment Captured"
+                                                                            : paymentOutcome.category === "processing"
+                                                                            ? "Verifying Funds"
+                                                                            : paymentOutcome.category === "failed"
+                                                                            ? "Payment Failed"
+                                                                            : paymentOutcome.category === "cancelled"
+                                                                            ? "Not Charged"
+                                                                            : "Session Expired",
+                                                                    sublabel:
+                                                                        paymentOutcome.category === "completed"
+                                                                            ? paymentOutcome.paymentStatus || "Captured"
+                                                                            : paymentOutcome.category === "processing"
+                                                                            ? "In Progress"
+                                                                            : "No Funds Debited",
+                                                                    completed: paymentOutcome.category === "completed",
+                                                                    active: paymentOutcome.category === "processing",
+                                                                    error:
+                                                                        paymentOutcome.category === "failed" ||
+                                                                        paymentOutcome.category === "cancelled" ||
+                                                                        paymentOutcome.category === "expired",
+                                                                },
+                                                                {
+                                                                    label: "Recipient Payout",
+                                                                    sublabel:
+                                                                        paymentOutcome.category === "completed"
+                                                                            ? "Dispatched"
+                                                                            : paymentOutcome.category === "processing"
+                                                                            ? "Queued"
+                                                                            : "On Hold",
+                                                                    completed: false,
+                                                                    active: paymentOutcome.category === "completed",
+                                                                    error: false,
+                                                                },
+                                                            ].map((stage, idx) => (
+                                                                <div key={idx} className="flex flex-col items-center gap-1.5">
+                                                                    <div
+                                                                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all border-2 ${
+                                                                            stage.completed
+                                                                                ? "bg-emerald-50 border-emerald-500 text-emerald-600 shadow-xs"
+                                                                                : stage.error
+                                                                                ? "bg-red-50 border-red-400 text-red-600"
+                                                                                : stage.active
+                                                                                ? "bg-blue-50 border-blue-500 text-blue-600 ring-4 ring-blue-100"
+                                                                                : "bg-slate-50 border-slate-200 text-slate-400"
+                                                                        }`}
+                                                                    >
+                                                                        {stage.completed ? (
+                                                                            <Check className="w-4 h-4 stroke-[2.75]" />
+                                                                        ) : stage.error ? (
+                                                                            <X className="w-4 h-4 stroke-[2.75]" />
+                                                                        ) : stage.active ? (
+                                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                                        ) : (
+                                                                            <ArrowRightLeft className="w-4 h-4" />
+                                                                        )}
+                                                                    </div>
+                                                                    <span
+                                                                        className={`text-xs sm:text-sm leading-tight ${
+                                                                            stage.completed
+                                                                                ? "font-bold text-slate-900"
+                                                                                : stage.error
+                                                                                ? "font-bold text-red-600"
+                                                                                : stage.active
+                                                                                ? "font-bold text-blue-600"
+                                                                                : "font-medium text-slate-400"
+                                                                        }`}
+                                                                    >
+                                                                        {stage.label}
+                                                                    </span>
+                                                                    <span className="text-[11px] text-slate-500 hidden sm:block">
+                                                                        {stage.sublabel}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Promo Code / Referral Bonus Banner */}
+                                                    {(promoApplied || useBonus) && (
+                                                        <div
+                                                            data-testid="payment-status-reward-banner"
+                                                            className={`rounded-2xl p-4 flex items-start gap-3 text-xs sm:text-sm ${
+                                                                paymentOutcome.category === "completed" ||
+                                                                paymentOutcome.category === "processing"
+                                                                    ? "bg-emerald-50/90 border border-emerald-200 text-emerald-950"
+                                                                    : "bg-teal-50/90 border border-teal-200 text-teal-950"
+                                                            }`}
+                                                        >
+                                                            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                                                            <div className="space-y-0.5">
+                                                                <p className="font-bold">
+                                                                    {paymentOutcome.category === "completed" ||
+                                                                    paymentOutcome.category === "processing"
+                                                                        ? "Rewards & Savings Applied"
+                                                                        : "Your Rewards Are Safely Preserved"}
+                                                                </p>
+                                                                <p className="text-slate-700">
+                                                                    {paymentOutcome.category === "completed" ||
+                                                                    paymentOutcome.category === "processing"
+                                                                        ? promoApplied && useBonus
+                                                                            ? `Your promo code (${promoCode}) and Bonus ${
+                                                                                  bonusType === "pay_less" ? "discount" : "credit"
+                                                                              } have been applied to this transfer.`
+                                                                            : promoApplied
+                                                                            ? `Your promo code (${promoCode}) saved you ${formatPromoMoney(
+                                                                                  promoDiscount,
+                                                                                  SEND_CURRENCY,
+                                                                              ).replace(/^−/, "")} on this transfer.`
+                                                                            : `Bonus ${
+                                                                                  bonusType === "pay_less" ? "discount" : "credit"
+                                                                              } (${sendSymbol}${bonusAmount.toFixed(
+                                                                                  2,
+                                                                              )}) has been applied to this transfer.`
+                                                                        : promoApplied
+                                                                        ? `Your promo code (${promoCode}) remains attached to this transfer and will automatically apply when you retry.`
+                                                                        : `Your Referral / Bonus ${
+                                                                              bonusType === "pay_less" ? "discount" : "credit"
+                                                                          } (${sendSymbol}${bonusAmount.toFixed(
+                                                                              2,
+                                                                          )}) remains attached to this transfer and will automatically apply when you retry.`}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Diagnostic / Bank Reason Detail Banner (when applicable) */}
+                                                    {paymentOutcome.reason && (
+                                                        <div className="rounded-2xl bg-amber-50/80 border border-amber-200/90 p-4 flex items-start gap-3 text-xs sm:text-sm text-amber-950">
+                                                            <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                                                            <div>
+                                                                <span className="font-bold">Processor Message: </span>
+                                                                <span>{paymentOutcome.reason}</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Two-Column Executive Receipt & Beneficiary Details */}
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                                        {/* Left Box: Financial Breakdown */}
+                                                        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 shadow-2xs">
+                                                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                                                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                                    Payment Summary
+                                                                </span>
+                                                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                                                                    <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+                                                                    {paymentOutcome.paymentMethodLabel}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="space-y-2.5 text-sm">
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-slate-500">You Send</span>
+                                                                    <span className="font-semibold text-slate-900 tabular-nums">
+                                                                        {sendSymbol}
+                                                                        {youSendAmount.toFixed(2)} {SEND_CURRENCY}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-slate-500">Transfer Fee</span>
+                                                                    <span className="font-semibold text-slate-900 tabular-nums">
+                                                                        {sendSymbol}
+                                                                        {effectiveFee.toFixed(2)} {SEND_CURRENCY}
+                                                                    </span>
+                                                                </div>
+                                                                {promoApplied && promoDiscount > 0 && (
+                                                                    <div className="flex items-center justify-between font-semibold text-emerald-700">
+                                                                        <span>{PROMO_COPY.summaryLabel(promoCode)}</span>
+                                                                        <span className="tabular-nums">
+                                                                            −{formatPromoMoney(promoDiscount, SEND_CURRENCY).replace(/^−/, "")}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {useBonus && bonusType === "pay_less" && (
+                                                                    <div className="flex items-center justify-between font-semibold text-teal-700">
+                                                                        <span>{BONUS_COPY.summaryPayLess}</span>
+                                                                        <span className="tabular-nums">
+                                                                            −{sendSymbol}
+                                                                            {bonusAmount.toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {useBonus && bonusType === "send_more" && (
+                                                                    <div className="flex items-center justify-between font-semibold text-teal-700">
+                                                                        <span>{BONUS_COPY.summarySendMore}</span>
+                                                                        <span className="tabular-nums">
+                                                                            +{sendSymbol}
+                                                                            {bonusAmount.toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                <div className="pt-2.5 border-t border-slate-200/80 flex items-center justify-between">
+                                                                    <span className="font-bold text-slate-900">
+                                                                        {paymentOutcome.category === "completed"
+                                                                            ? "Total Paid"
+                                                                            : "Total Amount"}
+                                                                    </span>
+                                                                    <span className="text-base font-extrabold text-slate-950 tabular-nums">
+                                                                        {sendSymbol}
+                                                                        {Math.max(0, totalPay).toFixed(2)} {SEND_CURRENCY}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                                                    <span className="text-slate-500">Recipient Receives</span>
+                                                                    <span className="font-extrabold text-blue-600 tabular-nums">
+                                                                        {receiveSymbol}
+                                                                        {finalReceiveAmount} {recipientDetails.currency || "NGN"}
+                                                                        {useBonus && bonusType === "send_more" && (
+                                                                            <span className="text-xs text-emerald-600 ml-1.5 font-bold">
+                                                                                (+Bonus)
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Right Box: Recipient & Settlement Destination */}
+                                                        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 shadow-2xs flex flex-col justify-between">
+                                                            <div className="space-y-3.5">
+                                                                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                                                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                                        Beneficiary Settlement
+                                                                    </span>
+                                                                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full capitalize">
+                                                                        {deliveryMethod.replace("_", " ")}
+                                                                    </span>
+                                                                </div>
+
+                                                                <div className="space-y-2.5 text-sm">
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <span className="text-slate-500 shrink-0">Recipient</span>
+                                                                        <span className="font-bold text-slate-900 text-right truncate">
+                                                                            {beneficiaryType === "business"
+                                                                                ? recipientDetails.companyName.trim() ||
+                                                                                  selectedRecipient?.name ||
+                                                                                  "—"
+                                                                                : [
+                                                                                      recipientDetails.firstName.trim(),
+                                                                                      recipientDetails.lastName.trim(),
+                                                                                  ]
+                                                                                      .filter(Boolean)
+                                                                                      .join(" ") ||
+                                                                                  selectedRecipient?.name ||
+                                                                                  "—"}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <span className="text-slate-500 shrink-0">
+                                                                            {deliveryMethod === "mobile_money"
+                                                                                ? "Mobile Operator"
+                                                                                : "Bank Name"}
+                                                                        </span>
+                                                                        <span className="font-medium text-slate-900 text-right truncate">
+                                                                            {recipientDetails.bankName.trim() ||
+                                                                                selectedRecipient?.bank ||
+                                                                                "—"}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <span className="text-slate-500 shrink-0">
+                                                                            {deliveryMethod === "mobile_money"
+                                                                                ? "Mobile Number"
+                                                                                : recipientDetails.iban.trim() &&
+                                                                                  !recipientDetails.accountNumber.trim()
+                                                                                ? "IBAN"
+                                                                                : "Account Number"}
+                                                                        </span>
+                                                                        <span className="font-mono font-bold text-slate-900 text-right">
+                                                                            {deliveryMethod === "mobile_money"
+                                                                                ? recipientDetails.mobileNo.trim() ||
+                                                                                  recipientDetails.accountNumber.trim() ||
+                                                                                  selectedRecipient?.mobileNo ||
+                                                                                  selectedRecipient?.account ||
+                                                                                  "—"
+                                                                                : recipientDetails.accountNumber.trim() ||
+                                                                                  recipientDetails.iban.trim() ||
+                                                                                  selectedRecipient?.account ||
+                                                                                  selectedRecipient?.iban ||
+                                                                                  "—"}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Email Notification Assurance Pill */}
+                                                            <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-3 flex items-center gap-2.5 text-xs text-slate-600">
+                                                                <Mail className="w-4 h-4 text-blue-600 shrink-0" />
+                                                                <span>
+                                                                    We will email you the final status and official payout receipt in a few minutes.
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Auto-Redirect to Home Page Countdown Banner (All Payment Outcomes) */}
+                                                    {redirectCountdown !== null && redirectCountdown > 0 && (
+                                                        <div
+                                                            data-testid="payment-status-redirect-banner"
+                                                            className="rounded-2xl bg-slate-900 text-white px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm shadow-md"
+                                                        >
+                                                            <div className="flex items-center gap-2.5">
+                                                                <Loader2 className="w-4 h-4 text-emerald-400 animate-spin shrink-0" />
+                                                                <span>
+                                                                    Taking you back to your Rhemito Dashboard in{" "}
+                                                                    <strong className="font-extrabold text-emerald-300 tabular-nums">
+                                                                        {redirectCountdown}s
+                                                                    </strong>
+                                                                    ...
+                                                                </span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setRedirectCountdown(null)}
+                                                                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0 self-start sm:self-auto"
+                                                            >
+                                                                Stay on Receipt
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Primary & Secondary Action Buttons */}
+                                                    <div className="pt-1 flex flex-col sm:flex-row gap-3">
+                                                        {paymentOutcome.category === "completed" ||
+                                                        paymentOutcome.category === "processing" ? (
+                                                            <>
+                                                                <Button
+                                                                    type="button"
+                                                                    data-testid="button-status-go-dashboard"
+                                                                    onClick={() => {
+                                                                        setRedirectCountdown(null);
+                                                                        setLocation("/");
+                                                                    }}
+                                                                    className="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm inline-flex items-center justify-center gap-2"
+                                                                >
+                                                                    <span>Done — Return to Dashboard</span>
+                                                                    <ArrowRight className="w-4 h-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    data-testid="button-status-view-transactions"
+                                                                    onClick={() => {
+                                                                        setRedirectCountdown(null);
+                                                                        setLocation("/transactions");
+                                                                    }}
+                                                                    className="flex-1 h-12 rounded-xl font-semibold border-slate-300 hover:bg-slate-50"
+                                                                >
+                                                                    View in Transactions
+                                                                </Button>
+                                                                {paymentOutcome.category === "processing" &&
+                                                                    paymentOutcome.journeyCode && (
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="outline"
+                                                                            disabled={refreshingJourneyStatus}
+                                                                            onClick={async () => {
+                                                                                if (!paymentOutcome.journeyCode) return;
+                                                                                setRedirectCountdown(null);
+                                                                                setRefreshingJourneyStatus(true);
+                                                                                const latest = await fetchMitoJourneyStatus(
+                                                                                    paymentOutcome.journeyCode,
+                                                                                );
+                                                                                setRefreshingJourneyStatus(false);
+                                                                                if (latest) {
+                                                                                    applyPaymentOutcome({
+                                                                                        rawStatus:
+                                                                                            latest.orderStatus ||
+                                                                                            latest.journeyStatus ||
+                                                                                            "PROCESSING",
+                                                                                        reference:
+                                                                                            latest.orderNo ||
+                                                                                            latest.partnerReferenceNumber ||
+                                                                                            latest.reference ||
+                                                                                            paymentOutcome.reference,
+                                                                                        methodLabel: paymentOutcome.paymentMethodLabel,
+                                                                                        journeyCode: latest.journeyCode,
+                                                                                    });
+                                                                                }
+                                                                            }}
+                                                                            className="h-12 rounded-xl font-semibold inline-flex items-center gap-2"
+                                                                        >
+                                                                            <RefreshCw
+                                                                                className={`w-4 h-4 ${
+                                                                                    refreshingJourneyStatus ? "animate-spin" : ""
+                                                                                }`}
+                                                                            />
+                                                                            <span>Check Status</span>
+                                                                        </Button>
+                                                                    )}
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Button
+                                                                    type="button"
+                                                                    data-testid="button-status-retry-payment"
+                                                                    onClick={() => {
+                                                                        setRedirectCountdown(null);
+                                                                        setPaymentOutcome(null);
+                                                                        setMitoPayByBankUrl(null);
+                                                                        setMitoCardPaymentSession(null);
+                                                                    }}
+                                                                    className="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm inline-flex items-center justify-center gap-2"
+                                                                >
+                                                                    <RefreshCw className="w-4 h-4" />
+                                                                    <span>Try Again / Choose Another Payment Method</span>
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    data-testid="button-status-go-dashboard"
+                                                                    onClick={() => {
+                                                                        setRedirectCountdown(null);
+                                                                        setLocation("/");
+                                                                    }}
+                                                                    className="h-12 rounded-xl font-semibold border-slate-300 hover:bg-slate-50"
+                                                                >
+                                                                    Return to Dashboard
+                                                                </Button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    ) : (
                                     <Card>
                                         <CardHeader>
                                             <CardTitle className="text-base">
@@ -2903,7 +4714,6 @@ export default function SendMoney() {
                                                     { id: "instant_bank", title: "Instant Pay By Bank", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: Landmark },
                                                     { id: "card", title: "Credit/Debit Card", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: CreditCard },
                                                     { id: "manual_transfer", title: "Manual Bank Transfer", desc: "Send to our local account (Pay within 30 minutes)", icon: Building2 },
-                                                    { id: "wallet", title: "Wallet Balance", desc: `Available: GBP 300.20`, icon: Wallet },
                                                 ].map((method) => (
                                                     <div
                                                         key={method.id}
@@ -2911,6 +4721,8 @@ export default function SendMoney() {
                                                             if (loadingPaymentMethod) return;
                                                             setPaymentMethod(method.id);
                                                             setMitoPayByBankUrl(null);
+                                                            setPaymentOutcome(null);
+                                                            setRedirectCountdown(null);
                                                             if (method.id === "manual_transfer") {
                                                                 setShowManualTransferConfirm(true);
                                                                 return;
@@ -2922,14 +4734,12 @@ export default function SendMoney() {
                                                                 setLoadingPaymentMethod(method.id);
                                                                 try {
                                                                     if (promoApplied) promo.lock();
-                                                                    await paySendMoneyTransaction(
+                                                                    paidTx = await paySendMoneyTransaction(
                                                                         transactionId,
                                                                         method.id as SendMoneyPaymentMethod,
                                                                         promoApplied ? { code: promoCode, discount: promoDiscount } : null,
                                                                         useBonus ? { mode: bonusType, amount: bonusAmount } : null,
-                                                                    ).then((res) => {
-                                                                        paidTx = res;
-                                                                    });
+                                                                    );
                                                                     if (paidTx?.mitoReference) {
                                                                         setTransactionRef(paidTx.mitoReference);
                                                                     }
@@ -2972,7 +4782,11 @@ export default function SendMoney() {
                                                                 setMitoPayByBankUrl(paidTx.mitoPaymentUrl);
                                                                 return;
                                                             }
-                                                            setShowConfirmation(true);
+                                                            applyPaymentOutcome({
+                                                                rawStatus: paidTx?.status || "COMPLETED",
+                                                                reference: paidTx?.mitoReference || paidTx?.reference || transactionRef,
+                                                                methodLabel: method.title,
+                                                            });
                                                         }}
                                                         className={`p-4 border rounded-xl cursor-pointer flex items-center gap-4 transition-all ${paymentMethod === method.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:border-gray-300"
                                                             }`}
@@ -2994,12 +4808,12 @@ export default function SendMoney() {
                                                 ))
                                             )}
 
-                                            {mitoPayByBankUrl && !mitoCardPaymentSession && (
+                                            {mitoPayByBankUrl && !mitoCardPaymentSession && typeof document !== "undefined" && createPortal(
                                                 <div
                                                     data-testid="mito-pay-by-bank-modal"
-                                                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4"
+                                                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 sm:p-6"
                                                 >
-                                                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[420px] h-[min(680px,calc(100dvh-48px))] flex flex-col overflow-hidden border border-slate-200">
+                                                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[420px] h-[min(680px,calc(100dvh-48px))] max-h-[calc(100dvh-32px)] flex flex-col overflow-hidden border border-slate-200">
                                                         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 bg-slate-50/70">
                                                             <div className="min-w-0">
                                                                 <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
@@ -3025,7 +4839,14 @@ export default function SendMoney() {
                                                                     type="button"
                                                                     aria-label="Close Pay by Bank modal"
                                                                     data-testid="button-close-pay-by-bank-modal"
-                                                                    onClick={() => setMitoPayByBankUrl(null)}
+                                                                    onClick={() => {
+                                                                        applyPaymentOutcome({
+                                                                            rawStatus: "CANCELLED",
+                                                                            reference: transactionRef,
+                                                                            methodLabel: "Instant Pay By Bank",
+                                                                            journeyCode: extractJourneyCodeFromUrl(mitoPayByBankUrl),
+                                                                        });
+                                                                    }}
                                                                     className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
                                                                 >
                                                                     <X className="w-4 h-4" />
@@ -3035,7 +4856,7 @@ export default function SendMoney() {
                                                         <iframe
                                                             title="Pay by bank"
                                                             allow="encrypted-media"
-                                                            src={mitoPayByBankUrl}
+                                                            src={buildMitoEmbeddedPayByBankUrl(mitoPayByBankUrl)}
                                                             className="w-full flex-1 border-0 bg-white"
                                                         />
                                                         <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2">
@@ -3043,7 +4864,14 @@ export default function SendMoney() {
                                                                 type="button"
                                                                 variant="outline"
                                                                 size="sm"
-                                                                onClick={() => setMitoPayByBankUrl(null)}
+                                                                onClick={() => {
+                                                                    applyPaymentOutcome({
+                                                                        rawStatus: "CANCELLED",
+                                                                        reference: transactionRef,
+                                                                        methodLabel: "Instant Pay By Bank",
+                                                                        journeyCode: extractJourneyCodeFromUrl(mitoPayByBankUrl),
+                                                                    });
+                                                                }}
                                                             >
                                                                 Cancel
                                                             </Button>
@@ -3051,28 +4879,57 @@ export default function SendMoney() {
                                                                 type="button"
                                                                 size="sm"
                                                                 data-testid="button-complete-pay-by-bank"
-                                                                onClick={() => {
-                                                                    setMitoPayByBankUrl(null);
-                                                                    setShowConfirmation(true);
+                                                                onClick={async () => {
+                                                                    const jCode = extractJourneyCodeFromUrl(mitoPayByBankUrl);
+                                                                    if (jCode) {
+                                                                        const latest = await fetchMitoJourneyStatus(jCode);
+                                                                        if (latest) {
+                                                                            applyPaymentOutcome({
+                                                                                rawStatus:
+                                                                                    latest.orderStatus ||
+                                                                                    latest.journeyStatus ||
+                                                                                    "PROCESSING",
+                                                                                reference:
+                                                                                    latest.orderNo ||
+                                                                                    latest.partnerReferenceNumber ||
+                                                                                    latest.reference ||
+                                                                                    transactionRef,
+                                                                                methodLabel: "Instant Pay By Bank",
+                                                                                journeyCode: latest.journeyCode,
+                                                                            });
+                                                                            return;
+                                                                        }
+                                                                    }
+                                                                    applyPaymentOutcome({
+                                                                        rawStatus: "PROCESSING",
+                                                                        reference: transactionRef,
+                                                                        methodLabel: "Instant Pay By Bank",
+                                                                        journeyCode: jCode,
+                                                                    });
                                                                 }}
                                                             >
                                                                 I&apos;ve Completed Payment
                                                             </Button>
                                                         </div>
                                                     </div>
-                                                </div>
+                                                </div>,
+                                                document.body
                                             )}
                                         </CardContent>
                                     </Card>
+                                    )}
 
 
-                                    <div className="mt-6 flex items-start gap-2 p-4 bg-yellow-50 rounded-lg text-yellow-800 text-sm">
-                                        <Shield className="w-4 h-4 mt-0.5 shrink-0" />
-                                        <p>By selecting a payment option, you agree to our Terms of Use and Privacy Policy. Funds are usually delivered within minutes.</p>
-                                    </div>
+                                    {!paymentOutcome && (
+                                        <div className="mt-6 flex items-start gap-2 p-4 bg-yellow-50 rounded-lg text-yellow-800 text-sm">
+                                            <Shield className="w-4 h-4 mt-0.5 shrink-0" />
+                                            <p>By selecting a payment option, you agree to our Terms of Use and Privacy Policy. Funds are usually delivered within minutes.</p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Right Column: Amount Summary (Sticky) */}
+                                {!paymentOutcome && (
                                 <div className="lg:col-span-2">
                                     <div className="sticky top-6 space-y-6">
                                         <Card className="border-2 border-gray-200 shadow-sm">
@@ -3209,6 +5066,7 @@ export default function SendMoney() {
                                         </Card>
                                     </div>
                                 </div>
+                                )}
                             </motion.div>
                         )}
 

@@ -380,13 +380,6 @@ export default function RequestPayment() {
   const senderSymbol = CURRENCY_SYMBOLS[senderCurrency] || "";
   const payoutSymbol = CURRENCY_SYMBOLS[payoutCurrency] || "";
 
-  // Active "Request Money Credit" scheme banner (REQUEST_MONEY bonus scheme)
-  const bonusSummaryQuery = useBonusSummary(payoutCurrency, eligibilityQuery.data?.kind === "ok");
-  const requestMoneyOffer = useMemo(() => {
-    const offers = bonusSummaryQuery.data?.offers ?? [];
-    return offers.find((o) => o.scheme_type === "REQUEST_MONEY") ?? null;
-  }, [bonusSummaryQuery.data?.offers]);
-
   // Payer bank list for beneficiary-style verification in Step 2 (especially Nigeria NGN 10-digit NUBAN)
   const payerBankCountry = useMemo(() => {
     const map: Record<string, string> = { NGN: "NG", GBP: "GB", USD: "US", CAD: "CA" };
@@ -518,12 +511,14 @@ export default function RequestPayment() {
     setReceiveDraft(null);
     setPayerDraft(value);
     const v = parseFloat(value);
-    // Exact-amount mode: the payer total includes the fee, so the base requested amount is total / 1.03.
-    const base = formData.absorbFee || !Number.isFinite(v) ? value : (v / (1 + platformFeeRate)).toFixed(2);
-    handleInputChange("requestAmount", base);
+    if (!Number.isFinite(v) || v <= 0) {
+      handleInputChange("requestAmount", "");
+      return;
+    }
+    handleInputChange("requestAmount", value);
   };
 
-  // Editing "You receive" derives the payer amount from the current indicative rate.
+  // Editing "You receive" sets the base request amount and recalculates both boxes per the selected fee option.
   const handleReceiveChange = (value: string) => {
     amountTouchedRef.current = true;
     setRestoredAmount(false);
@@ -534,9 +529,8 @@ export default function RequestPayment() {
       handleInputChange("requestAmount", "");
       return;
     }
-    const net = v / fxRate;
-    const gross = formData.absorbFee ? net / (1 - platformFeeRate) : net;
-    handleInputChange("requestAmount", gross.toFixed(2));
+    const baseInSender = fxRate === 1 ? value : (v / fxRate).toFixed(2);
+    handleInputChange("requestAmount", baseInSender);
   };
 
   const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
@@ -1095,9 +1089,6 @@ export default function RequestPayment() {
             <Card className="border-border shadow-sm">
               <CardHeader className="px-5 md:px-6 py-4 md:py-5 border-b border-border/50">
                 <CardTitle className="font-display text-base md:text-lg">{steps[currentStep - 1].title}</CardTitle>
-                <CardDescription className="text-xs md:text-sm">
-                  <span className="text-destructive">*</span> marks mandatory fields. Everything else is optional.
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 px-5 md:px-6 pt-6">
 
@@ -1105,43 +1096,6 @@ export default function RequestPayment() {
                 {currentStep === 1 && (
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 space-y-6">
-                      {/* Promotional Banner for "Request Money Credit" Scheme */}
-                      <div
-                        data-testid="request-money-credit-promo-banner"
-                        className="rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50 via-purple-50/80 to-blue-50 px-4 py-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                      >
-                        <div className="flex items-start sm:items-center gap-2.5">
-                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-2xs shrink-0">
-                            <Gift className="h-4 w-4 text-purple-600" aria-hidden />
-                          </span>
-                          <div className="text-xs md:text-sm text-indigo-950 leading-snug">
-                            {requestMoneyOffer ? (
-                              <>
-                                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white mr-2">
-                                  Active Offer
-                                </span>
-                                <strong className="font-bold">{requestMoneyOffer.name}:</strong>{" "}
-                                Request at least{" "}
-                                <strong className="font-bold">
-                                  {formatBonusMoney(requestMoneyOffer.min_transaction_threshold, requestMoneyOffer.currency)}
-                                </strong>{" "}
-                                and earn{" "}
-                                <strong className="font-bold text-purple-800">
-                                  +{formatBonusMoney(requestMoneyOffer.bonus_amount, requestMoneyOffer.currency)} Request Money bonus credit
-                                </strong>{" "}
-                                once your request is paid!
-                              </>
-                            ) : (
-                              <>
-                                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white mr-2">
-                                  Request Money Credit
-                                </span>
-                                <strong className="font-bold">Earn up to 10% extra bonus credit</strong> when you request money from family or friends abroad and your request is paid.
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
                       <PayoutAccountSelector
                         requesterName={requesterName}
                         selectedAccountId={selectedPayoutAccount?.id ?? ""}
@@ -1160,33 +1114,6 @@ export default function RequestPayment() {
                           </div>
                         </div>
                       )}
-
-                      {/* How should this request work? */}
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-700">How should this request work?</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="group" aria-label="Request type">
-                          <button
-                            type="button"
-                            aria-pressed={!formData.absorbFee}
-                            onClick={() => { setPayerDraft(null); handleInputChange("absorbFee", false); }}
-                            className={`text-left rounded-xl border-2 p-3.5 min-h-[44px] transition-colors ${!formData.absorbFee ? "border-primary bg-primary/5" : "border-border bg-card hover:border-slate-300"}`}
-                            data-testid="mode-exact"
-                          >
-                            <span className={`block text-sm font-bold font-display ${!formData.absorbFee ? "text-primary" : "text-slate-900"}`}>Receive exact amount</span>
-                            <span className="block text-xs text-muted-foreground">School fees, invoices. The payer covers the 3% fee on top.</span>
-                          </button>
-                          <button
-                            type="button"
-                            aria-pressed={formData.absorbFee}
-                            onClick={() => { setPayerDraft(null); handleInputChange("absorbFee", true); }}
-                            className={`text-left rounded-xl border-2 p-3.5 min-h-[44px] transition-colors ${formData.absorbFee ? "border-primary bg-primary/5" : "border-border bg-card hover:border-slate-300"}`}
-                            data-testid="mode-less"
-                          >
-                            <span className={`block text-sm font-bold font-display ${formData.absorbFee ? "text-primary" : "text-slate-900"}`}>Receive amount less charges</span>
-                            <span className="block text-xs text-muted-foreground">Gifts, donations. The 3% fee comes out of what you receive.</span>
-                          </button>
-                        </div>
-                      </div>
 
                       {/* You receive */}
                       <div className="space-y-2">
@@ -1231,6 +1158,7 @@ export default function RequestPayment() {
                               value={receiveDisplay}
                               disabled={!fxFinite}
                               onChange={(e) => handleReceiveChange(e.target.value)}
+                              onKeyUp={(e) => handleReceiveChange((e.currentTarget as HTMLInputElement).value)}
                               onBlur={() => setReceiveDraft(null)}
                               className={`${payoutSymbol.length > 1 ? "pl-14" : "pl-8"} text-xl md:text-2xl font-bold tabular-nums h-12 md:h-14 bg-white shadow-sm`}
                               data-testid="input-receive-amount"
@@ -1268,6 +1196,33 @@ export default function RequestPayment() {
                         </div>
                       )}
 
+                      {/* How should this request work? */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-700">How should this request work?</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="group" aria-label="Request type">
+                          <button
+                            type="button"
+                            aria-pressed={!formData.absorbFee}
+                            onClick={() => { setReceiveDraft(null); setPayerDraft(null); handleInputChange("absorbFee", false); }}
+                            className={`text-left rounded-xl border-2 p-3.5 min-h-[44px] transition-colors ${!formData.absorbFee ? "border-primary bg-primary/5" : "border-border bg-card hover:border-slate-300"}`}
+                            data-testid="mode-exact"
+                          >
+                            <span className={`block text-sm font-bold font-display ${!formData.absorbFee ? "text-primary" : "text-slate-900"}`}>Receive exact amount</span>
+                            <span className="block text-xs text-muted-foreground">School fees, invoices. The payer covers the 3% fee on top.</span>
+                          </button>
+                          <button
+                            type="button"
+                            aria-pressed={formData.absorbFee}
+                            onClick={() => { setReceiveDraft(null); setPayerDraft(null); handleInputChange("absorbFee", true); }}
+                            className={`text-left rounded-xl border-2 p-3.5 min-h-[44px] transition-colors ${formData.absorbFee ? "border-primary bg-primary/5" : "border-border bg-card hover:border-slate-300"}`}
+                            data-testid="mode-less"
+                          >
+                            <span className={`block text-sm font-bold font-display ${formData.absorbFee ? "text-primary" : "text-slate-900"}`}>Receive amount less charges</span>
+                            <span className="block text-xs text-muted-foreground">Gifts, donations. The 3% fee comes out of what you receive.</span>
+                          </button>
+                        </div>
+                      </div>
+
                       {/* Payer sends */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between min-h-[28px]">
@@ -1289,6 +1244,7 @@ export default function RequestPayment() {
                               placeholder="0.00"
                               value={payerDisplay}
                               onChange={(e) => handleAmountChange(e.target.value)}
+                              onKeyUp={(e) => handleAmountChange((e.currentTarget as HTMLInputElement).value)}
                               onBlur={() => setPayerDraft(null)}
                               aria-invalid={belowMin}
                               aria-describedby="payer-sends-help"

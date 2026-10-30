@@ -36,6 +36,7 @@ import {
   getMitoBeneficiaries,
   getDeletedMitoBeneficiariesSnapshot,
   getMitoBeneficiaryRequirements,
+  getMitoJourneyStatus,
   getMitoLookupTypes,
   getMitoProviders,
   getMitoUserIdForUser,
@@ -47,6 +48,7 @@ import {
   recordMitoWebhookInspectorLog,
   registerOrSyncMitoRetailUser,
   resolveRhemitoUserIdFromMitoUserId,
+  saveMitoBeneficiaryLatestTxnDetails,
   sendMitoTransaction,
   serviceToMitoCollectionMode,
   signMitoWebhookPayload,
@@ -134,7 +136,11 @@ function toView(tx: SendMoneyTransaction): SendMoneyTransactionView {
     ...(tx.mitoSendMoneyPayload ? { mitoSendMoneyPayload: tx.mitoSendMoneyPayload } : {}),
     ...(tx.sendCountryIso3 ? { sendCountryIso3: tx.sendCountryIso3 } : {}),
     ...(tx.receiveCountryIso3 ? { receiveCountryIso3: tx.receiveCountryIso3 } : {}),
+    ...(tx.relationship ? { relationship: tx.relationship } : {}),
+    ...(tx.relationId ? { relationId: tx.relationId } : {}),
     ...(tx.reasonCode ? { reasonCode: tx.reasonCode } : {}),
+    ...(tx.reasonId ? { reasonId: tx.reasonId } : {}),
+    ...(tx.otherReason ? { otherReason: tx.otherReason } : {}),
     ...(tx.sourceOfFundCode ? { sourceOfFundCode: tx.sourceOfFundCode } : {}),
     ...(tx.paymentNarration ? { paymentNarration: tx.paymentNarration } : {}),
     status: tx.status,
@@ -372,13 +378,49 @@ export function registerSendMoneyRoutes(app: Express): void {
         searchingText,
       });
 
+      const userTxns = await storage.listSendMoneyTransactionsByOwner(userId);
+      const sortedTxns = [...userTxns].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+
+      const enrichedBeneficiaries = beneficiaries.map((b) => {
+        const idUpper = String(b.beneficiaryId || "").trim().toUpperCase();
+        const nameLower = String(b.name || "").trim().toLowerCase();
+        const latestTx = sortedTxns.find(
+          (tx) =>
+            (idUpper && tx.mitoBeneficiaryId && tx.mitoBeneficiaryId.trim().toUpperCase() === idUpper) ||
+            (nameLower && tx.recipientName.trim().toLowerCase() === nameLower),
+        );
+        if (!latestTx) return b;
+        return {
+          ...b,
+          relationship:
+            latestTx.relationship ||
+            b.relationship ||
+            b.relationDescription ||
+            "FRIEND",
+          relationId: latestTx.relationId || b.relationId,
+          reason:
+            latestTx.reasonCode ||
+            b.reason ||
+            b.reasonDescription ||
+            null,
+          reasonId: latestTx.reasonId || b.reasonId,
+          otherReason: latestTx.otherReason || b.otherReason || null,
+          narration:
+            latestTx.paymentNarration ||
+            b.narration ||
+            null,
+        };
+      });
+
       const deletedSnapshot = getDeletedMitoBeneficiariesSnapshot();
 
       return res.json({
         data: {
           userId: mitoUserId,
           configured: isMitoRetailConfigured(),
-          beneficiaries,
+          beneficiaries: enrichedBeneficiaries,
           deletedIds: deletedSnapshot.ids,
           deletedSignatures: deletedSnapshot.sigs,
         },
@@ -619,6 +661,219 @@ export function registerSendMoneyRoutes(app: Express): void {
     }
   });
 
+  /**
+   * Step 4: Live Journey & Payment Status from `GET {{base_url}}/api/v1/mito/Journey/status?journeyCode=<journeyCode>`.
+   */
+  app.get("/api/send-money/mito/journey-status", async (req: Request, res: Response) => {
+    try {
+      const journeyCode = String(req.query.journeyCode || "").trim();
+      if (!journeyCode) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "journeyCode is required." } });
+      }
+      const status = await getMitoJourneyStatus(journeyCode);
+      return res.json({ data: status });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * Step 4: Proxies Checkout.com Payment Session submission (`POST https://api.sandbox.checkout.com/payment-sessions/:id/submit`)
+   * server-side so browser CORS/network restrictions never block the "Pay" button on the Credit/Debit Card flow.
+   */
+  app.post("/api/send-money/mito/card-session-submit", async (req: Request, res: Response) => {
+    try {
+      const sessionId = String(req.body?.sessionId || "").trim();
+      const sessionSecret = String(req.body?.sessionSecret || "").trim();
+      const sessionData = String(req.body?.sessionData || req.body?.session_data || "").trim();
+      const amount = typeof req.body?.amount === "number" ? req.body.amount : undefined;
+      const reference = String(req.body?.reference || "").trim();
+
+      if (!sessionId || !sessionData) {
+        return res.status(400).json({
+          error: { code: "VALIDATION_ERROR", message: "sessionId and session_data are required." },
+        });
+      }
+
+      const payload: Record<string, unknown> = {
+        session_data: sessionData,
+        payment_type: "Regular",
+        ...(typeof amount === "number" && amount > 0 ? { amount } : {}),
+        ...(reference ? { reference } : {}),
+      };
+
+      const ckoRes = await fetch(
+        `https://api.sandbox.checkout.com/payment-sessions/${encodeURIComponent(sessionId)}/submit`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(sessionSecret ? { "cko-payment-session-secret": sessionSecret } : {}),
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const ckoBody = (await ckoRes.json().catch(() => ({}))) as Record<string, unknown>;
+      return res.status(ckoRes.status).json(ckoBody);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * Step 4: Resolves a Checkout.com / Mito 3DS redirect URL server-side so the browser never navigates
+   * away to an external domain (such as rhemito-web-nextjs-dev.herokuapp.com) after card payment.
+   */
+  app.post("/api/send-money/mito/resolve-card-redirect", async (req: Request, res: Response) => {
+    try {
+      const rawUrl = String(req.body?.url || "").trim();
+      const paymentId = String(req.body?.paymentId || "").trim();
+      const sessionId = String(req.body?.sessionId || "").trim();
+      const redirectReason = String(req.body?.redirectReason || "").trim();
+
+      const extractOutcomeFromUrlString = (urlStr: string) => {
+        try {
+          const parsed = new URL(urlStr, "http://localhost:5000");
+          const searchParamsList: URLSearchParams[] = [parsed.searchParams];
+          const nestedRedirect =
+            parsed.searchParams.get("redirect") ||
+            parsed.searchParams.get("returnUrl") ||
+            parsed.searchParams.get("next");
+          if (nestedRedirect) {
+            try {
+              const nestedParsed = new URL(decodeURIComponent(nestedRedirect), "http://localhost:5000");
+              searchParamsList.unshift(nestedParsed.searchParams);
+            } catch {
+              try {
+                const nestedParsed = new URL(nestedRedirect, "http://localhost:5000");
+                searchParamsList.unshift(nestedParsed.searchParams);
+              } catch {
+                // ignore malformed nested redirect
+              }
+            }
+          }
+
+          const getParam = (...keys: string[]): string | null => {
+            for (const sp of searchParamsList) {
+              for (const k of keys) {
+                const val = sp.get(k);
+                if (val && val.trim()) return val.trim();
+              }
+            }
+            return null;
+          };
+
+          return {
+            hostname: parsed.hostname.toLowerCase(),
+            pathname: parsed.pathname,
+            tnxref: getParam(
+              "tnxref",
+              "orderNo",
+              "txn_ref",
+              "txnref",
+              "reference",
+              "transactionReference",
+              "partnerReferenceNumber",
+            ),
+            status: getParam("status", "orderStatus", "journeyStatus"),
+            paymentStatus: getParam("paymentStatus", "cko-payment-status"),
+            ckoSessionId: getParam("cko-session-id", "cko-payment-id"),
+            reason: getParam("reason", "error", "message", "declined_reason"),
+            journeyCode: getParam("journeyCode", "journey_code"),
+          };
+        } catch {
+          return null;
+        }
+      };
+
+      let currentUrl = rawUrl;
+      let outcome = currentUrl ? extractOutcomeFromUrlString(currentUrl) : null;
+
+      // Follow server-side callback redirects on checkout.com / funtechcom.com so Mito records the 3DS outcome
+      // without redirecting the customer's browser to another domain.
+      for (let hop = 0; hop < 5 && currentUrl; hop++) {
+        const info = extractOutcomeFromUrlString(currentUrl);
+        if (info) {
+          outcome = {
+            hostname: info.hostname,
+            pathname: info.pathname,
+            tnxref: info.tnxref || outcome?.tnxref || null,
+            status: info.status || outcome?.status || null,
+            paymentStatus: info.paymentStatus || outcome?.paymentStatus || null,
+            ckoSessionId: info.ckoSessionId || outcome?.ckoSessionId || null,
+            reason: info.reason || outcome?.reason || null,
+            journeyCode: info.journeyCode || outcome?.journeyCode || null,
+          };
+        }
+
+        const host = info?.hostname || "";
+        const isCallbackHost =
+          host.endsWith("checkout.com") ||
+          host.endsWith("funtechcom.com") ||
+          host.endsWith("mito.money");
+
+        if (!isCallbackHost || (outcome?.status && outcome?.tnxref && !isCallbackHost)) {
+          break;
+        }
+
+        try {
+          const hopRes = await fetch(currentUrl, {
+            method: "GET",
+            redirect: "manual",
+            headers: {
+              Accept: "text/html,application/xhtml+xml,application/json,*/*",
+            },
+          });
+          const locationHeader = hopRes.headers.get("location");
+          if (locationHeader) {
+            const resolvedNext = new URL(locationHeader, currentUrl).toString();
+            currentUrl = resolvedNext;
+            const nextInfo = extractOutcomeFromUrlString(currentUrl);
+            if (nextInfo) {
+              outcome = {
+                hostname: nextInfo.hostname,
+                pathname: nextInfo.pathname,
+                tnxref: nextInfo.tnxref || outcome?.tnxref || null,
+                status: nextInfo.status || outcome?.status || null,
+                paymentStatus: nextInfo.paymentStatus || outcome?.paymentStatus || null,
+                ckoSessionId: nextInfo.ckoSessionId || outcome?.ckoSessionId || null,
+                reason: nextInfo.reason || outcome?.reason || null,
+                journeyCode: nextInfo.journeyCode || outcome?.journeyCode || null,
+              };
+            }
+          } else {
+            break;
+          }
+        } catch {
+          break;
+        }
+      }
+
+      const effectiveStatus =
+        outcome?.status ||
+        outcome?.paymentStatus ||
+        (redirectReason.toLowerCase().includes("fail") || redirectReason.toLowerCase().includes("declin")
+          ? "COMPFAILED"
+          : redirectReason.toLowerCase().includes("cancel")
+          ? "CANCELLED"
+          : "COMPSUCCESS");
+
+      return res.json({
+        tnxref: outcome?.tnxref || null,
+        status: effectiveStatus,
+        paymentStatus: outcome?.paymentStatus || null,
+        ckoSessionId: outcome?.ckoSessionId || sessionId || paymentId || null,
+        reason: outcome?.reason || null,
+        journeyCode: outcome?.journeyCode || null,
+        redirectReason: redirectReason || null,
+        finalUrl: currentUrl || null,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.post("/api/send-money/transactions", async (req: Request, res: Response) => {
     try {
       const userId = requireStrictAuth(req);
@@ -841,7 +1096,11 @@ export function registerSendMoneyRoutes(app: Express): void {
         ...(mitoRateId ? { mitoRateId } : {}),
         sendCountryIso3: resolvedSendCountryIso3,
         receiveCountryIso3: resolvedReceiveCountryIso3,
-        reasonCode: resolvedReasonCode,
+        ...(input.relationship ? { relationship: input.relationship } : {}),
+        ...(input.relationId ? { relationId: input.relationId } : {}),
+        reasonCode: input.reason || resolvedReasonCode,
+        ...(input.reasonId ? { reasonId: input.reasonId } : {}),
+        ...(input.otherReason ? { otherReason: input.otherReason } : {}),
         sourceOfFundCode: resolvedSourceOfFundCode,
         paymentNarration: resolvedPaymentNarration,
         status: "awaiting_payment",
@@ -849,6 +1108,18 @@ export function registerSendMoneyRoutes(app: Express): void {
         paidAt: null,
         cancelledAt: null,
       };
+      saveMitoBeneficiaryLatestTxnDetails({
+        beneficiaryId: mitoBeneficiaryId || input.beneficiaryId || null,
+        name: input.recipientName,
+        acctNumber: input.accountNumber || input.iban || input.mobileNo || null,
+        relationship: input.relationship || null,
+        relationId: input.relationId || null,
+        reason: input.reason || resolvedReasonCode,
+        reasonId: input.reasonId || null,
+        otherReason: input.otherReason ?? null,
+        narration: input.narration || resolvedPaymentNarration,
+        beneficiaryNickname: input.nickName || null,
+      });
       await storage.createSendMoneyTransaction(transaction);
       return res.status(201).json({ data: toView(transaction) });
     } catch (err) {
@@ -937,7 +1208,10 @@ export function registerSendMoneyRoutes(app: Express): void {
 
       const hostHeader = req.get("host") || "localhost:5000";
       const protocol = req.protocol || "http";
-      const redirectUrl = `${protocol}://${hostHeader}/send-money`;
+      const rawRedirectUrl = `${protocol}://${hostHeader}/send-money`;
+      const redirectUrl = /localhost|127\.0\.0\.1/i.test(rawRedirectUrl)
+        ? "https://rhemito-ui.onrender.com/send-money"
+        : rawRedirectUrl;
 
       if (mitoUserId && mitoProviderId) {
         const initiated = await initiateMitoHostedTransaction({
@@ -999,6 +1273,8 @@ export function registerSendMoneyRoutes(app: Express): void {
     promoCode?: string | null,
     bonusAmount?: number | null,
     req?: Request,
+    promoAtPayment?: promo.PromoAtPayment | null,
+    bonusAtPayment?: bonus.BonusAtPayment | null,
   ): Promise<Partial<SendMoneyTransaction>> {
     if (!isMitoRetailConfigured()) return {};
     try {
@@ -1051,8 +1327,46 @@ export function registerSendMoneyRoutes(app: Express): void {
         }
       }
 
-      const sendAmountNum = Number(fromMinorUnits(tx.sendAmountMinor, tx.sendCurrency));
-      let commissionNum = Number(fromMinorUnits(tx.feeMinor, tx.sendCurrency));
+      // Manage Rhemito Promo Code & Referral/Bonus adjustments in our current flow:
+      // - Fee promo reduces the commission charged.
+      // - Fixed-amount promo or Pay-less bonus reduces the net amount collected from the sender.
+      // - Send-more bonus increases the send amount converted for the recipient.
+      const effectiveFeeMinor = promoAtPayment ? promoAtPayment.feeMinor : tx.feeMinor;
+      const effectivePromoAppliesTo = promoAtPayment?.promoAppliesTo ?? tx.promoAppliesTo;
+      const effectivePromoDiscountMinor = promoAtPayment
+        ? promoAtPayment.promoDiscountMinor
+        : tx.promoDiscountMinor ?? 0;
+      const effectiveBonusMinor = bonusAtPayment
+        ? bonusAtPayment.amountMinor
+        : tx.bonusCreditMinor ?? 0;
+      const effectiveBonusMode = bonusAtPayment
+        ? bonusAtPayment.mode
+        : tx.bonusCreditMode ?? null;
+
+      const hasRewardOrPromo =
+        Boolean(promoAtPayment || tx.promoCode || effectiveBonusMinor > 0 || (bonusAmount && bonusAmount > 0));
+
+      let sendAmountMinorForMito = tx.sendAmountMinor;
+      let feeMinorForMito = effectiveFeeMinor;
+
+      if (effectiveBonusMode === "send_more" && effectiveBonusMinor > 0) {
+        sendAmountMinorForMito += effectiveBonusMinor;
+      } else {
+        const totalOffsetMinor =
+          (effectivePromoAppliesTo === "amount" ? effectivePromoDiscountMinor : 0) +
+          (effectiveBonusMode === "pay_less" ? effectiveBonusMinor : 0);
+        if (totalOffsetMinor > 0) {
+          const feeReduction = Math.min(feeMinorForMito, totalOffsetMinor);
+          feeMinorForMito -= feeReduction;
+          const remainingReduction = totalOffsetMinor - feeReduction;
+          if (remainingReduction > 0) {
+            sendAmountMinorForMito = Math.max(100, sendAmountMinorForMito - remainingReduction);
+          }
+        }
+      }
+
+      const sendAmountNum = Number(fromMinorUnits(sendAmountMinorForMito, tx.sendCurrency));
+      let commissionNum = Number(fromMinorUnits(feeMinorForMito, tx.sendCurrency));
       let mitoRateId = tx.mitoRateId ?? null;
 
       if (mitoUserId && mitoProviderId) {
@@ -1072,7 +1386,11 @@ export function registerSendMoneyRoutes(app: Express): void {
         if (lockedRate?.rateId) {
           mitoRateId = lockedRate.rateId;
         }
-        if (typeof lockedRate?.commission === "number" && Number.isFinite(lockedRate.commission)) {
+        if (
+          !hasRewardOrPromo &&
+          typeof lockedRate?.commission === "number" &&
+          Number.isFinite(lockedRate.commission)
+        ) {
           commissionNum = lockedRate.commission;
         }
       }
@@ -1082,7 +1400,10 @@ export function registerSendMoneyRoutes(app: Express): void {
         const origin =
           (req && typeof req.headers.origin === "string" && req.headers.origin) ||
           (req && req.get("host") ? `${req.protocol}://${req.get("host")}` : "http://localhost:5000");
-        const redirectSuccessUrl = `${origin.replace(/\/+$/, "")}/send-money`;
+        const rawRedirectSuccessUrl = `${origin.replace(/\/+$/, "")}/send-money`;
+        const redirectSuccessUrl = /localhost|127\.0\.0\.1/i.test(rawRedirectSuccessUrl)
+          ? "https://rhemito-ui.onrender.com/send-money"
+          : rawRedirectSuccessUrl;
 
         const sent = await sendMitoTransaction({
           userId: mitoUserId,
@@ -1216,6 +1537,8 @@ export function registerSendMoneyRoutes(app: Express): void {
         promoAtPayment?.promoCode ?? tx.promoCode,
         bonusAtPayment ? Number(fromMinorUnits(bonusAtPayment.amountMinor, tx.sendCurrency)) : null,
         req,
+        promoAtPayment,
+        bonusAtPayment,
       );
       const mitoPatch = {
         ...(tx.mitoTransactionId ? {} : await initiateHostedForSendMoneyTx(tx, userId, req)),

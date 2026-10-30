@@ -387,7 +387,7 @@ export async function syncAdminCrudSnapshot(): Promise<void> {
         cachedReferralRules.set(id, rule);
       }
     }
-    for (const [id, prev] of cachedReferralRules.entries()) {
+    for (const [id, prev] of Array.from(cachedReferralRules.entries())) {
       if (!seenIds.has(id) && !prev.is_archived) {
         const created = await mito("/api/referral-rules", { method: "POST", body: { ...prev, notify: false } });
         cachedReferralRules.delete(id);

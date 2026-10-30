@@ -81,6 +81,8 @@ function Router() {
       <Route path="/sent-invoices/:id" component={SentInvoiceDetails} />
       <Route path="/show-qr-code"><Redirect to="/request-payment" /></Route>
       <Route path="/send-money" component={SendMoney} />
+      <Route path="/send/status" component={SendMoney} />
+      <Route path="/send/statuspaybybank" component={SendMoney} />
       {/* Senders and Recipients were consolidated into one page; the sender
           detail view keeps its own route. */}
       <Route path="/senders-recipients" component={SendersRecipients} />
