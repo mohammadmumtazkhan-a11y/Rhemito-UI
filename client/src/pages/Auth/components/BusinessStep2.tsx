@@ -32,7 +32,13 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
   const [directorName, setDirectorName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState("");
-  const [mobileCode, setMobileCode] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState(step1Data.country || "");
+  const [mobileCode, setMobileCode] = useState(
+    () =>
+      step1Data.businessPhoneCode ||
+      countries.find((c) => c.code === step1Data.country)?.dialCode ||
+      "",
+  );
   const [mobileNumber, setMobileNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -236,6 +242,8 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
               codeValue={mobileCode}
               numberValue={mobileNumber}
               onCodeChange={setMobileCode}
+              countryCode={selectedCountry}
+              onCountryChange={setSelectedCountry}
               onNumberChange={setMobileNumber}
             />
 

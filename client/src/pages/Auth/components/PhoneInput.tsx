@@ -6,6 +6,8 @@ interface PhoneInputProps {
   numberValue: string;
   onCodeChange: (code: string) => void;
   onNumberChange: (number: string) => void;
+  countryCode?: string;
+  onCountryChange?: (countryCode: string) => void;
   label?: string;
   required?: boolean;
   error?: string;
@@ -16,10 +18,22 @@ export default function PhoneInput({
   numberValue,
   onCodeChange,
   onNumberChange,
+  countryCode,
+  onCountryChange,
   label = "Mobile Number",
   required = true,
   error,
 }: PhoneInputProps) {
+  const matchedCountry =
+    (countryCode
+      ? countries.find((c) => c.code === countryCode && (!codeValue || c.dialCode === codeValue)) ||
+        countries.find((c) => c.code === countryCode)
+      : undefined) ||
+    (codeValue ? countries.find((c) => c.dialCode === codeValue) : undefined);
+
+  const selectValue =
+    matchedCountry && codeValue ? `${matchedCountry.code}:${matchedCountry.dialCode}` : "";
+
   return (
     <div>
       <label className="block text-sm text-slate-500 mb-1">
@@ -28,14 +42,24 @@ export default function PhoneInput({
       </label>
       <div className="flex gap-2">
         <SearchableSelect
-          value={codeValue}
-          onValueChange={onCodeChange}
+          value={selectValue}
+          onValueChange={(val) => {
+            if (!val) {
+              onCodeChange("");
+              return;
+            }
+            const [selectedCountryCode, selectedDialCode] = val.split(":");
+            onCodeChange(selectedDialCode || val);
+            if (selectedCountryCode && onCountryChange) {
+              onCountryChange(selectedCountryCode);
+            }
+          }}
           placeholder="Code"
           searchPlaceholder="Search country or code..."
           className="w-[105px] sm:w-[115px] shrink-0 [&>div:first-child]:h-[42px] [&>div:first-child]:border-slate-200 [&>div:first-child]:rounded"
           dropdownClassName="w-[240px]"
           options={countries.map((c) => ({
-            value: c.dialCode,
+            value: `${c.code}:${c.dialCode}`,
             label: `${c.flag} ${c.dialCode}`,
             subLabel: c.name,
           }))}

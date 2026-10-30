@@ -56,6 +56,15 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
   const [businessPhoneCode, setBusinessPhoneCode] = useState("");
   const [businessPhoneNumber, setBusinessPhoneNumber] = useState("");
 
+  const handleCountrySelect = (selectedCountryCode: string) => {
+    setCountry(selectedCountryCode);
+    const matched = countries.find((c) => c.code === selectedCountryCode);
+    if (matched) {
+      setMobileCode(matched.dialCode);
+      setBusinessPhoneCode(matched.dialCode);
+    }
+  };
+
   const register = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
       const res = await apiRequest("POST", "/api/auth/register", data);
@@ -241,7 +250,7 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
                 <SearchableSelect
                   value={country}
                   onValueChange={(selected) => {
-                    setCountry(selected);
+                    handleCountrySelect(selected);
                   }}
                   placeholder="Select country"
                   searchPlaceholder="Search country..."
@@ -337,7 +346,12 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
               <PhoneInput
                 codeValue={mobileCode}
                 numberValue={mobileNumber}
-                onCodeChange={setMobileCode}
+                onCodeChange={(dial) => {
+                  setMobileCode(dial);
+                  setBusinessPhoneCode(dial);
+                }}
+                countryCode={country}
+                onCountryChange={(cCode) => setCountry(cCode)}
                 onNumberChange={setMobileNumber}
               />
 
@@ -417,7 +431,7 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
                 <SearchableSelect
                   value={country}
                   onValueChange={(selected) => {
-                    setCountry(selected);
+                    handleCountrySelect(selected);
                   }}
                   placeholder="Select country"
                   searchPlaceholder="Search country..."
@@ -463,7 +477,12 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
               <PhoneInput
                 codeValue={businessPhoneCode}
                 numberValue={businessPhoneNumber}
-                onCodeChange={setBusinessPhoneCode}
+                onCodeChange={(dial) => {
+                  setBusinessPhoneCode(dial);
+                  setMobileCode(dial);
+                }}
+                countryCode={country}
+                onCountryChange={(cCode) => setCountry(cCode)}
                 onNumberChange={setBusinessPhoneNumber}
                 label="Business Phone Number"
               />
