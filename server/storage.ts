@@ -63,6 +63,8 @@ export interface IStorage {
   createAuthUser(user: InsertAuthUser): Promise<AuthUser>;
   activateUser(email: string): Promise<void>;
   updateAuthUserPassword(email: string, hashedPassword: string): Promise<AuthUser | undefined>;
+  updateAuthUserKycStatus(id: string, kycStatus: string, status?: string): Promise<AuthUser | undefined>;
+  listAllAuthUsers(): Promise<AuthUser[]>;
 
   // OTP
   createOtp(email: string, code: string, expiresAt: Date): Promise<OtpCode>;
@@ -163,6 +165,7 @@ export interface IStorage {
   createSendMoneyTransaction(transaction: SendMoneyTransaction): Promise<SendMoneyTransaction>;
   getSendMoneyTransactionById(id: string): Promise<SendMoneyTransaction | undefined>;
   listSendMoneyTransactionsByOwner(ownerId: string): Promise<SendMoneyTransaction[]>;
+  listAllSendMoneyTransactions(): Promise<SendMoneyTransaction[]>;
   updateSendMoneyTransaction(
     id: string,
     patch: Partial<Omit<SendMoneyTransaction, "id">>,
@@ -858,6 +861,23 @@ export class MemStorage implements IStorage {
     return user;
   }
 
+  async listAllAuthUsers(): Promise<AuthUser[]> {
+    return Array.from(this.authUsersMap.values());
+  }
+
+  async updateAuthUserKycStatus(id: string, kycStatus: string, status?: string): Promise<AuthUser | undefined> {
+    const existing = this.authUsersMap.get(id);
+    if (!existing) return undefined;
+    const updated: AuthUser = {
+      ...existing,
+      kycStatus,
+      ...(status ? { status } : {}),
+    };
+    this.authUsersMap.set(id, updated);
+    this.persistDevSnapshot();
+    return updated;
+  }
+
   async listAuthUsers(): Promise<AuthUser[]> {
     return Array.from(this.authUsersMap.values());
   }
@@ -1379,6 +1399,10 @@ export class MemStorage implements IStorage {
   async createSendMoneyTransaction(transaction: SendMoneyTransaction): Promise<SendMoneyTransaction> {
     this.sendMoneyTransactionsMap.set(transaction.id, transaction);
     return transaction;
+  }
+
+  async listAllSendMoneyTransactions(): Promise<SendMoneyTransaction[]> {
+    return Array.from(this.sendMoneyTransactionsMap.values());
   }
 
   async getSendMoneyTransactionById(id: string): Promise<SendMoneyTransaction | undefined> {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,24 +14,37 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useRewards } from "@/hooks/use-rewards";
+import { useContacts } from "@/contexts/ContactsContext";
 import { BONUS_COPY, UseBonusCredit, balanceFor, creditToApply, eligibleBonusBalance, formatMoney, type BonusChoice } from "@/features/bonus";
 import { PromoCodeField, usePromoCode, PROMO_COPY, formatPromoMoney } from "@/features/promo";
 import { CancelTransactionModal, type TransactionDetails } from "@/components/CancelTransactionModal";
+import AccountTypeToggle from "@/pages/Auth/components/AccountTypeToggle";
 import {
     cancelSendMoneyTransaction,
     createSendMoneyTransaction,
+    fetchMitoAffiliateRate,
+    fetchMitoBeneficiaries,
+    fetchMitoBeneficiaryRequirements,
+    fetchMitoLookups,
+    fetchMitoProviders,
+    initiateHostedSendMoneyTransaction,
+    type MitoBeneficiaryItem,
+    type MitoBeneficiaryRequirementField,
+    type MitoLookupTypeOption,
+    type MitoProviderOption,
     paySendMoneyTransaction,
     SendMoneyApiError,
 } from "@/lib/sendMoney";
 import type { SendMoneyPaymentMethod, SendMoneyService } from "@shared/sendMoney";
 
 // Mock Data
-const EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN
+const DEFAULT_EXCHANGE_RATE = 2025.50; // 1 GBP = 2025.50 NGN (fallback)
 const FEE_PERCENTAGE = 0.01; // 1%
 const CURRENCY_FLAGS: Record<string, string> = {
     GBP: "gb", USD: "us", EUR: "eu", NGN: "ng", INR: "in", GHS: "gh", KES: "ke", ZAR: "za", CAD: "ca", AED: "ae", AUD: "au", CNY: "cn", JPY: "jp",
@@ -40,6 +53,44 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
     GBP: "£", USD: "$", EUR: "€", NGN: "₦", INR: "₹", GHS: "GH₵", KES: "KSh ", ZAR: "R", CAD: "C$", AED: "AED ", AUD: "A$", CNY: "¥", JPY: "¥",
 };
 const RECEIVE_CURRENCIES = ["NGN", "INR", "GHS", "KES", "ZAR", "EUR", "USD", "GBP", "CAD", "AED", "AUD", "CNY", "JPY"];
+const CURRENCY_TO_COUNTRY_INFO: Record<string, { country: string; countryIso3: string }> = {
+    NGN: { country: "Nigeria", countryIso3: "NGA" },
+    INR: { country: "India", countryIso3: "IND" },
+    GHS: { country: "Ghana", countryIso3: "GHA" },
+    KES: { country: "Kenya", countryIso3: "KEN" },
+    ZAR: { country: "South Africa", countryIso3: "ZAF" },
+    EUR: { country: "Germany", countryIso3: "DEU" },
+    USD: { country: "United States", countryIso3: "USA" },
+    GBP: { country: "UK", countryIso3: "GBR" },
+    CAD: { country: "Canada", countryIso3: "CAN" },
+    AED: { country: "United Arab Emirates", countryIso3: "ARE" },
+    AUD: { country: "Australia", countryIso3: "AUS" },
+    CNY: { country: "China", countryIso3: "CHN" },
+    JPY: { country: "Japan", countryIso3: "JPN" },
+};
+const COUNTRY_NAME_TO_ISO3: Record<string, string> = {
+    NIGERIA: "NGA", NGA: "NGA", NG: "NGA",
+    INDIA: "IND", IND: "IND", IN: "IND",
+    GHANA: "GHA", GHA: "GHA", GH: "GHA",
+    KENYA: "KEN", KEN: "KEN", KE: "KEN",
+    "SOUTH AFRICA": "ZAF", ZAF: "ZAF", ZA: "ZAF",
+    GERMANY: "DEU", DEU: "DEU", DE: "DEU",
+    "UNITED STATES": "USA", USA: "USA", US: "USA",
+    UK: "GBR", "UNITED KINGDOM": "GBR", GBR: "GBR", GB: "GBR",
+    CANADA: "CAN", CAN: "CAN", CA: "CAN",
+    "UNITED ARAB EMIRATES": "ARE", UAE: "ARE", ARE: "ARE", AE: "ARE",
+    AUSTRALIA: "AUS", AUS: "AUS", AU: "AUS",
+    CHINA: "CHN", CHN: "CHN", CN: "CHN",
+    JAPAN: "JPN", JPN: "JPN", JP: "JPN",
+};
+function resolveBeneficiaryCountryIso3(country?: string, currency?: string): string {
+    const cleanCountry = (country || "").trim().toUpperCase();
+    if (cleanCountry && COUNTRY_NAME_TO_ISO3[cleanCountry]) {
+        return COUNTRY_NAME_TO_ISO3[cleanCountry];
+    }
+    const cleanCurrency = (currency || "NGN").trim().toUpperCase();
+    return CURRENCY_TO_COUNTRY_INFO[cleanCurrency]?.countryIso3 || "NGA";
+}
 
 const recentRecipients = [
     { id: 1, name: "Akshita Gupta",   bank: "Barclays",        account: "12345678",  sortCode: "20-45-67", iban: "",                       swift: "",          currency: "GBP", country: "UK",            narration: "",                    initials: "AG", color: "bg-blue-100 text-blue-600" },
@@ -65,6 +116,7 @@ export default function SendMoney() {
     const initialRewardParam = parsedSearch.get("reward");
     const initialCurrencyParam = parsedSearch.get("currency")?.toUpperCase();
     const { toast } = useToast();
+    const { upsertRecipient } = useContacts();
     const queryClient = useQueryClient();
     const [currentStep, setCurrentStep] = useState(1);
 
@@ -80,19 +132,39 @@ export default function SendMoney() {
     const [deliveryMethod, setDeliveryMethod] = useState("bank_deposit");
 
     const [selectedRecipient, setSelectedRecipient] = useState<any>(null);
+    const [senderBeneficiaries, setSenderBeneficiaries] = useState<MitoBeneficiaryItem[]>([]);
+    const [recipientSearch, setRecipientSearch] = useState<string>("");
+    const [mitoBeneficiariesConfigured, setMitoBeneficiariesConfigured] = useState<boolean>(true);
+    const [searchedBeneficiaries, setSearchedBeneficiaries] = useState<MitoBeneficiaryItem[] | null>(null);
+    const [searchingBeneficiaries, setSearchingBeneficiaries] = useState<boolean>(false);
+    const [recipientSearchOpen, setRecipientSearchOpen] = useState<boolean>(false);
+    const [beneficiaryType, setBeneficiaryType] = useState<"individual" | "business">("individual");
+    const [beneficiaryRequirements, setBeneficiaryRequirements] = useState<MitoBeneficiaryRequirementField[]>([]);
     const [recipientDetails, setRecipientDetails] = useState({
         firstName: "",
         lastName: "",
-        relationship: "family",
+        companyName: "",
+        relationship: "",
+        relationId: "",
         nickName: "",
-        reason: "family_support",
+        reason: "",
+        reasonId: "",
         otherReason: "",
+        address: "",
+        city: "",
+        postcode: "",
+        stateOrProvince: "",
+        mobileNo: "",
         // Banking fields
         bankName: "",
         accountNumber: "",
         sortCode: "",
         iban: "",
         swift: "",
+        aba: "",
+        ifsc: "",
+        bsbCode: "",
+        branchCode: "",
         currency: "NGN",
         country: "Nigeria",
         narration: ""
@@ -106,6 +178,64 @@ export default function SendMoney() {
     const [submittingTransaction, setSubmittingTransaction] = useState(false);
     const [transactionId, setTransactionId] = useState<string | null>(null);
     const [transactionRef, setTransactionRef] = useState("");
+    const [exchangeRateState, setExchangeRateState] = useState<number>(DEFAULT_EXCHANGE_RATE);
+    const EXCHANGE_RATE = exchangeRateState;
+    const [affiliateRateId, setAffiliateRateId] = useState<string | null>(null);
+    const [lockedRateId, setLockedRateId] = useState<string | null>(null);
+    const [mitoBeneficiaryId, setMitoBeneficiaryId] = useState<string | null>(null);
+    const [mitoProviders, setMitoProviders] = useState<MitoProviderOption[]>([]);
+    const [selectedProvider, setSelectedProvider] = useState<{ providerId: string; providerCode: string } | null>(null);
+    const [sendCurrencyDropdownOpen, setSendCurrencyDropdownOpen] = useState(false);
+    const [receiveCurrencyDropdownOpen, setReceiveCurrencyDropdownOpen] = useState(false);
+    const [sendCurrencySearch, setSendCurrencySearch] = useState("");
+    const [receiveCurrencySearch, setReceiveCurrencySearch] = useState("");
+    const sendCurrencyDropdownRef = useRef<HTMLDivElement>(null);
+    const receiveCurrencyDropdownRef = useRef<HTMLDivElement>(null);
+    const sendCurrencySearchInputRef = useRef<HTMLInputElement>(null);
+    const receiveCurrencySearchInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const handleOutsideClick = (event: MouseEvent) => {
+            if (sendCurrencyDropdownRef.current && !sendCurrencyDropdownRef.current.contains(event.target as Node)) {
+                setSendCurrencyDropdownOpen(false);
+                setSendCurrencySearch("");
+            }
+            if (receiveCurrencyDropdownRef.current && !receiveCurrencyDropdownRef.current.contains(event.target as Node)) {
+                setReceiveCurrencyDropdownOpen(false);
+                setReceiveCurrencySearch("");
+            }
+        };
+        document.addEventListener("mousedown", handleOutsideClick);
+        return () => document.removeEventListener("mousedown", handleOutsideClick);
+    }, []);
+
+    useEffect(() => {
+        if (sendCurrencyDropdownOpen) {
+            const t = setTimeout(() => sendCurrencySearchInputRef.current?.focus(), 10);
+            return () => clearTimeout(t);
+        }
+    }, [sendCurrencyDropdownOpen]);
+
+    useEffect(() => {
+        if (receiveCurrencyDropdownOpen) {
+            const t = setTimeout(() => receiveCurrencySearchInputRef.current?.focus(), 10);
+            return () => clearTimeout(t);
+        }
+    }, [receiveCurrencyDropdownOpen]);
+    const [step3Errors, setStep3Errors] = useState<Record<string, string>>({});
+    const [beneficiaryApiError, setBeneficiaryApiError] = useState<string | null>(null);
+    const [beneficiaryCreatedSuccess, setBeneficiaryCreatedSuccess] = useState<string | null>(null);
+    const clearStep3Error = (field: string) => {
+        setBeneficiaryApiError(null);
+        setStep3Errors((prev) => {
+            if (!prev[field]) return prev;
+            const next = { ...prev };
+            delete next[field];
+            return next;
+        });
+    };
+    const [mitoLookupReasons, setMitoLookupReasons] = useState<MitoLookupTypeOption[]>([]);
+    const [mitoLookupRelationships, setMitoLookupRelationships] = useState<MitoLookupTypeOption[]>([]);
 
     // Cancel transaction modal
     const [cancelTarget, setCancelTarget] = useState<TransactionDetails | null>(null);
@@ -123,6 +253,152 @@ export default function SendMoney() {
     const [sessionTimeLeft, setSessionTimeLeft] = useState(523); // ~8:43
     const [showExtendPopup, setShowExtendPopup] = useState(false);
     const [extendDismissed, setExtendDismissed] = useState(false);
+
+    // Step 4 Mito Card Checkout (Checkout.com Web Components Flow) & PayByBank state
+    const [mitoCardPaymentSession, setMitoCardPaymentSession] = useState<Record<string, unknown> | null>(null);
+    const [mitoCheckoutPublicKey, setMitoCheckoutPublicKey] = useState<string>("pk_sbox_hxdmemjidz7nf3sfukhia4igsuf");
+    const [mitoPayByBankUrl, setMitoPayByBankUrl] = useState<string | null>(null);
+    const [loadingPaymentMethod, setLoadingPaymentMethod] = useState<string | null>(null);
+    const [checkoutFlowMounting, setCheckoutFlowMounting] = useState(false);
+    const [checkoutFlowError, setCheckoutFlowError] = useState<string | null>(null);
+    const checkoutFlowContainerRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!mitoCardPaymentSession || currentStep !== 4) return;
+        let cancelled = false;
+        setCheckoutFlowMounting(true);
+        setCheckoutFlowError(null);
+
+        const loadCheckoutScript = (): Promise<any> =>
+            new Promise((resolve, reject) => {
+                const win = window as any;
+                if (typeof win.CheckoutWebComponents === "function") {
+                    resolve(win.CheckoutWebComponents);
+                    return;
+                }
+                const existing = document.querySelector(
+                    'script[src="https://checkout-web-components.checkout.com/index.js"]',
+                ) as HTMLScriptElement | null;
+                if (existing) {
+                    existing.addEventListener("load", () => resolve((window as any).CheckoutWebComponents));
+                    existing.addEventListener("error", () => reject(new Error("Failed to load Checkout.com SDK")));
+                    return;
+                }
+                const script = document.createElement("script");
+                script.src = "https://checkout-web-components.checkout.com/index.js";
+                script.async = true;
+                script.onload = () => resolve((window as any).CheckoutWebComponents);
+                script.onerror = () => reject(new Error("Failed to load Checkout.com SDK"));
+                document.body.appendChild(script);
+            });
+
+        void loadCheckoutScript()
+            .then(async (CheckoutWebComponents) => {
+                if (cancelled || !CheckoutWebComponents) return;
+                const container = document.getElementById("mito-checkout-flow-container");
+                if (container) {
+                    container.innerHTML = "";
+                }
+                const checkout = await CheckoutWebComponents({
+                    publicKey: mitoCheckoutPublicKey || "pk_sbox_hxdmemjidz7nf3sfukhia4igsuf",
+                    paymentSession: mitoCardPaymentSession,
+                    environment: "sandbox",
+                    componentOptions: {
+                        card: {
+                            displayCardholderName: "bottom",
+                            data: {
+                                cardholderName: "Mohammad Khan",
+                            },
+                        },
+                        stored_card: {
+                            captureCardCvv: true,
+                        },
+                    },
+                    onReady: () => {
+                        if (!cancelled) setCheckoutFlowMounting(false);
+                    },
+                    onPaymentCompleted: (_component: unknown, paymentResponse: { id?: string; status?: string }) => {
+                        if (cancelled) return;
+                        setCheckoutFlowMounting(false);
+                        setMitoCardPaymentSession(null);
+                        toast({
+                            title: "Card payment completed",
+                            description: paymentResponse?.id
+                                ? `Payment Reference: ${paymentResponse.id}`
+                                : "Your card payment has been processed.",
+                        });
+                        setShowConfirmation(true);
+                    },
+                    onError: (_component: unknown, error: { message?: string }) => {
+                        if (cancelled) return;
+                        setCheckoutFlowMounting(false);
+                        if (error?.message) {
+                            setCheckoutFlowError(error.message);
+                        }
+                    },
+                });
+                if (cancelled) return;
+                const flowComponent = checkout.create("flow");
+                if (document.getElementById("mito-checkout-flow-container")) {
+                    flowComponent.mount("#mito-checkout-flow-container");
+                }
+                setCheckoutFlowMounting(false);
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                setCheckoutFlowMounting(false);
+                setCheckoutFlowError(
+                    err instanceof Error ? err.message : "Unable to load card checkout component.",
+                );
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [mitoCardPaymentSession, mitoCheckoutPublicKey, currentStep, toast]);
+
+    // Listen for postMessage events from the Mito Plaid / Pay by Bank iframe
+    useEffect(() => {
+        if (!mitoPayByBankUrl || currentStep !== 4) return;
+        const handleMessage = (event: MessageEvent) => {
+            const payload = event?.data;
+            if (!payload || typeof payload !== "object") return;
+            const rawStatus = String(payload.status || payload.paymentStatus || "").trim().toUpperCase();
+            if (!rawStatus) return;
+            const ref = String(payload.tnxref || payload.orderNo || "").trim();
+            if (ref) setTransactionRef(ref);
+
+            if (
+                rawStatus === "COMPSUCCESS" ||
+                rawStatus === "APPROVED" ||
+                rawStatus === "AWAITINGPAYMENT" ||
+                rawStatus === "PAID" ||
+                rawStatus === "SUCCESS"
+            ) {
+                setMitoPayByBankUrl(null);
+                toast({
+                    title: "Pay by Bank authorized",
+                    description: ref ? `Transaction Reference: ${ref}` : "Your bank payment has been initiated.",
+                });
+                setShowConfirmation(true);
+            } else if (
+                rawStatus === "COMPFAILED" ||
+                rawStatus === "CANCELLED" ||
+                rawStatus === "CANCELED" ||
+                rawStatus === "EXPIRED" ||
+                rawStatus === "FAILED"
+            ) {
+                setMitoPayByBankUrl(null);
+                toast({
+                    title: "Pay by Bank not completed",
+                    description: "The bank authorization was cancelled or could not be completed.",
+                    variant: "destructive",
+                });
+            }
+        };
+        window.addEventListener("message", handleMessage, false);
+        return () => window.removeEventListener("message", handleMessage, false);
+    }, [mitoPayByBankUrl, currentStep, toast]);
 
     // Manual Bank Transfer Confirmation
     const [showManualTransferConfirm, setShowManualTransferConfirm] = useState(false);
@@ -242,26 +518,301 @@ export default function SendMoney() {
         // Auto-calculate receive amount
         const val = parseFloat(amount || "0");
         setReceiveAmount((val * EXCHANGE_RATE).toFixed(2));
-    }, [amount]);
+    }, [amount, EXCHANGE_RATE]);
+
+    // Fetch live exchange rate for the selected corridor from GET /api/v1/mito/Exchange/affiliateRates
+    useEffect(() => {
+        let active = true;
+        const recvCur = recipientDetails.currency || "NGN";
+        void fetchMitoAffiliateRate(SEND_CURRENCY, recvCur).then((res) => {
+            if (!active || !res) return;
+            if (res.rate && res.rate > 0) {
+                setExchangeRateState(res.rate);
+            }
+            if (res.rateId) {
+                setAffiliateRateId(res.rateId);
+            }
+        });
+        return () => {
+            active = false;
+        };
+    }, [SEND_CURRENCY, recipientDetails.currency]);
+
+    // Fetch beneficiary bank providers from GET /api/v1/mito/Lookups/provider
+    // using countryIso3, serviceCode=MONEYTRANSFER, collectionMode (BANKACCOUNT | MOBILEMONEY), and CurrencyCode
+    useEffect(() => {
+        let active = true;
+        const recvCur = (recipientDetails.currency || "NGN").toUpperCase();
+        const countryIso3 = resolveBeneficiaryCountryIso3(
+            selectedRecipient?.countryIso3 || recipientDetails.country,
+            recvCur,
+        );
+        const collectionMode = deliveryMethod === "mobile_money" ? "MOBILEMONEY" : "BANKACCOUNT";
+        void fetchMitoProviders({
+            countryIso3,
+            currencyCode: recvCur,
+            serviceCode: "MONEYTRANSFER",
+            collectionMode,
+        }).then((list) => {
+            if (!active) return;
+            setMitoProviders(list);
+            if (list.length === 0) {
+                setSelectedProvider(null);
+                return;
+            }
+            // Do NOT preselect any bank on the new beneficiary creation form.
+            // Only restore the bank if the user selected an existing saved beneficiary from Step 2.
+            if (selectedRecipient) {
+                const byId = selectedRecipient.providerId
+                    ? list.find((p) => p.providerId === selectedRecipient.providerId)
+                    : undefined;
+                const bankLower = (selectedRecipient.bank || "").trim().toLowerCase();
+                const byName =
+                    bankLower && bankLower !== "bank" && bankLower !== "bank transfer"
+                        ? list.find(
+                              (p) =>
+                                  !p.isGeneric &&
+                                  (p.providerName.toLowerCase() === bankLower ||
+                                      p.providerName.toLowerCase().includes(bankLower) ||
+                                      bankLower.includes(p.providerName.toLowerCase())),
+                          )
+                        : undefined;
+                const matched = byId || byName;
+                if (matched) {
+                    setSelectedProvider({ providerId: matched.providerId, providerCode: matched.providerCode });
+                    if (!matched.isGeneric) {
+                        setRecipientDetails((prev) => ({
+                            ...prev,
+                            bankName: matched.providerName,
+                        }));
+                    }
+                    return;
+                }
+            }
+            setSelectedProvider(null);
+        });
+        return () => {
+            active = false;
+        };
+    }, [recipientDetails.currency, recipientDetails.country, selectedRecipient, deliveryMethod]);
+
+    // Fetch lookup types (Reason for transfer & Relationship) from GET /api/v1/mito/Lookups/types
+    useEffect(() => {
+        let active = true;
+        void fetchMitoLookups().then((lookups) => {
+            if (!active) return;
+            const reasons = lookups.reason || lookups.purposes || [];
+            const relationships = lookups.relationships || lookups.relationshipes || [];
+            if (reasons.length > 0) {
+                setMitoLookupReasons(reasons);
+            }
+            if (relationships.length > 0) {
+                setMitoLookupRelationships(relationships);
+            }
+        });
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    // Fetch dynamic beneficiary requirements based on country/currency, entityType (I or B), and provider
+    useEffect(() => {
+        let active = true;
+        const recvCur = (recipientDetails.currency || "NGN").toUpperCase();
+        const countryIso3 = resolveBeneficiaryCountryIso3(
+            selectedRecipient?.countryIso3 || recipientDetails.country,
+            recvCur,
+        );
+        void fetchMitoBeneficiaryRequirements({
+            currencyCode: recvCur,
+            countryIso3,
+            entityType: beneficiaryType === "business" ? "B" : "I",
+            providerId: selectedProvider?.providerId || mitoProviders[0]?.providerId,
+            service: deliveryMethod as SendMoneyService,
+        }).then((reqs) => {
+            if (!active) return;
+            setBeneficiaryRequirements(reqs);
+        });
+        return () => {
+            active = false;
+        };
+    }, [recipientDetails.currency, recipientDetails.country, selectedRecipient?.countryIso3, beneficiaryType, selectedProvider?.providerId, mitoProviders, deliveryMethod]);
+
+    // Fetch sender's saved beneficiaries from GET /api/v1/mito/Beneficiaries?userId={{userId}}
+    useEffect(() => {
+        let active = true;
+        void fetchMitoBeneficiaries({
+            service: deliveryMethod as SendMoneyService,
+        }).then((list) => {
+            if (!active) return;
+            const configuredAttr = (list as MitoBeneficiaryItem[] & { configured?: boolean }).configured;
+            if (typeof configuredAttr === "boolean") {
+                setMitoBeneficiariesConfigured(configuredAttr);
+            }
+            setSenderBeneficiaries(list);
+        });
+        return () => {
+            active = false;
+        };
+    }, [deliveryMethod, currentStep]);
+
+    // Step 4 (Payment) — Initiate Hosted Transaction via POST /api/v1/mito/Transactions/InitiateHostedTransaction
+    useEffect(() => {
+        if (currentStep !== 4 || !transactionId) return;
+        let active = true;
+        void initiateHostedSendMoneyTransaction(transactionId).then((res) => {
+            if (!active || !res) return;
+            if (res.mitoRateId) setLockedRateId(res.mitoRateId);
+            if (res.mitoBeneficiaryId) setMitoBeneficiaryId(res.mitoBeneficiaryId);
+            if (res.mitoReference) setTransactionRef(res.mitoReference);
+        });
+        return () => {
+            active = false;
+        };
+    }, [currentStep, transactionId]);
+
+    // Search sender's created beneficiaries via GET /api/v1/mito/Beneficiaries?userId={{userId}}&SearchingText=...
+    useEffect(() => {
+        const q = recipientSearch.trim();
+        if (!q) {
+            setSearchedBeneficiaries(null);
+            setSearchingBeneficiaries(false);
+            return;
+        }
+        let active = true;
+        setSearchingBeneficiaries(true);
+        const timer = setTimeout(() => {
+            void fetchMitoBeneficiaries({
+                service: deliveryMethod as SendMoneyService,
+                searchingText: q,
+            }).then((list) => {
+                if (!active) return;
+                setSearchedBeneficiaries(list);
+                setSearchingBeneficiaries(false);
+            });
+        }, 180);
+        return () => {
+            active = false;
+            clearTimeout(timer);
+        };
+    }, [recipientSearch, deliveryMethod]);
 
     // Pre-fill banking details from selected recipient
     useEffect(() => {
         if (selectedRecipient) {
+            if (selectedRecipient.legalEntityType === "business" || selectedRecipient.legalEntityType === "individual") {
+                setBeneficiaryType(selectedRecipient.legalEntityType);
+            }
+            if (selectedRecipient.providerId) {
+                const foundProv = mitoProviders.find((p) => p.providerId === selectedRecipient.providerId);
+                setSelectedProvider({
+                    providerId: selectedRecipient.providerId,
+                    providerCode: foundProv?.providerCode || "1203",
+                });
+            }
             setRecipientDetails(prev => ({
                 ...prev,
-                firstName: selectedRecipient.name?.split(' ')[0] || prev.firstName,
-                lastName: selectedRecipient.name?.split(' ').slice(1).join(' ') || prev.lastName,
+                firstName: selectedRecipient.firstName || selectedRecipient.name?.split(' ')[0] || prev.firstName,
+                lastName: selectedRecipient.lastName || selectedRecipient.name?.split(' ').slice(1).join(' ') || prev.lastName,
+                companyName: selectedRecipient.companyName || (selectedRecipient.legalEntityType === "business" ? selectedRecipient.name : prev.companyName) || prev.companyName,
+                nickName: selectedRecipient.beneficiaryNickname || prev.nickName,
+                relationId: selectedRecipient.relationId || prev.relationId,
+                reasonId: selectedRecipient.reasonId || prev.reasonId,
+                address: selectedRecipient.address || prev.address,
+                city: selectedRecipient.city || prev.city,
+                postcode: selectedRecipient.postcode || prev.postcode,
+                stateOrProvince: selectedRecipient.stateOrProvince || prev.stateOrProvince,
+                mobileNo: selectedRecipient.mobileNo || prev.mobileNo,
                 bankName: selectedRecipient.bank || prev.bankName,
                 accountNumber: selectedRecipient.account || prev.accountNumber,
                 sortCode: selectedRecipient.sortCode || prev.sortCode,
                 iban: selectedRecipient.iban || prev.iban,
                 swift: selectedRecipient.swift || prev.swift,
+                aba: selectedRecipient.aba || prev.aba,
+                ifsc: selectedRecipient.ifsc || prev.ifsc,
+                bsbCode: selectedRecipient.bsbCode || prev.bsbCode,
+                branchCode: selectedRecipient.branchCode || prev.branchCode,
                 currency: selectedRecipient.currency || prev.currency,
                 country: selectedRecipient.country || prev.country,
                 narration: selectedRecipient.narration || prev.narration,
             }));
         }
-    }, [selectedRecipient]);
+    }, [selectedRecipient, mitoProviders]);
+
+    const AVATAR_COLORS = [
+        "bg-blue-100 text-blue-600",
+        "bg-purple-100 text-purple-600",
+        "bg-green-100 text-green-600",
+        "bg-orange-100 text-orange-600",
+        "bg-teal-100 text-teal-600",
+    ];
+
+    const mapBeneficiaryToRecipient = (b: MitoBeneficiaryItem, idx: number) => {
+        const words = (b.name || "Beneficiary").trim().split(/\s+/);
+        const initials = words.length >= 2
+            ? `${words[0][0] || ""}${words[1][0] || ""}`.toUpperCase()
+            : (words[0].slice(0, 2) || "BN").toUpperCase();
+        const matchedBank = b.providerId
+            ? mitoProviders.find((p) => p.providerId === b.providerId)?.providerName
+            : undefined;
+        return {
+            id: b.beneficiaryId || idx + 1,
+            beneficiaryId: b.beneficiaryId,
+            name: b.name,
+            firstName: b.firstName,
+            lastName: b.lastName,
+            companyName: b.companyName,
+            beneficiaryNickname: b.beneficiaryNickname,
+            legalEntityType: b.legalEntityType,
+            providerId: b.providerId,
+            bank: (b.bankName && b.bankName !== "Bank" ? b.bankName : matchedBank) || b.bankName || "Bank Transfer",
+            account: b.acctNumber || "",
+            sortCode: b.sortCode || "",
+            iban: b.iban || "",
+            swift: b.bicSwift || "",
+            aba: b.aba || "",
+            ifsc: b.ifsc || "",
+            bsbCode: b.bsbCode || "",
+            branchCode: b.branchCode || "",
+            address: b.address || "",
+            city: b.city || "",
+            postcode: b.postcode || "",
+            stateOrProvince: b.stateOrProvince || "",
+            mobileNo: b.mobileNo || "",
+            relationId: b.relationId || "",
+            reasonId: b.reasonId || "",
+            currency: b.currency || "NGN",
+            country: b.country || "Nigeria",
+            countryIso3: b.countryIso3 || resolveBeneficiaryCountryIso3(b.country, b.currency),
+            narration: "",
+            initials,
+            color: AVATAR_COLORS[idx % AVATAR_COLORS.length],
+        };
+    };
+
+    const mappedSenderRecipients = senderBeneficiaries.map(mapBeneficiaryToRecipient);
+    const mappedSearchedRecipients = searchedBeneficiaries
+        ? searchedBeneficiaries.map(mapBeneficiaryToRecipient)
+        : null;
+    const baseRecipientsList = (mitoBeneficiariesConfigured || mappedSenderRecipients.length > 0)
+        ? mappedSenderRecipients
+        : recentRecipients;
+    const localFilteredRecipients = recipientSearch.trim()
+        ? baseRecipientsList.filter((r) => {
+              const q = recipientSearch.trim().toLowerCase();
+              return (
+                  r.name.toLowerCase().includes(q) ||
+                  ((r as any).beneficiaryNickname || "").toLowerCase().includes(q) ||
+                  (r.bank || "").toLowerCase().includes(q) ||
+                  (r.account || "").toLowerCase().includes(q)
+              );
+          })
+        : baseRecipientsList;
+    const displayRecipients = recipientSearch.trim()
+        ? (mappedSearchedRecipients && mappedSearchedRecipients.length > 0
+              ? mappedSearchedRecipients
+              : localFilteredRecipients)
+        : baseRecipientsList;
 
 
 
@@ -321,29 +872,269 @@ export default function SendMoney() {
     // server-owned transaction (status awaiting_payment) so the Dashboard
     // unified table, cancel flow and notifications all work off server state.
     const handleSubmitTransaction = async () => {
+        const recvCur = (recipientDetails.currency || "NGN").toUpperCase();
+        const countryIso3 = resolveBeneficiaryCountryIso3(
+            selectedRecipient?.countryIso3 || recipientDetails.country,
+            recvCur,
+        );
+        const bankLower = (recipientDetails.bankName || "").trim().toLowerCase();
+        const matchedProv =
+            (selectedProvider && mitoProviders.find((p) => p.providerId === selectedProvider.providerId)) ||
+            (bankLower &&
+                mitoProviders.find(
+                    (p) =>
+                        p.providerName.toLowerCase() === bankLower ||
+                        p.providerName.toLowerCase().includes(bankLower) ||
+                        bankLower.includes(p.providerName.toLowerCase()),
+                )) ||
+            (mitoProviders.length === 1 && mitoProviders[0].isGeneric ? mitoProviders[0] : undefined);
+
+        const errors: Record<string, string> = {};
+        if (beneficiaryType === "business") {
+            if (!recipientDetails.companyName.trim()) {
+                errors.companyName = "Company name is required.";
+            }
+        } else {
+            if (!recipientDetails.firstName.trim()) {
+                errors.firstName = "First name is required.";
+            }
+            if (!recipientDetails.lastName.trim()) {
+                errors.lastName = "Last name is required.";
+            }
+        }
+
+        if (!recipientDetails.relationship.trim()) {
+            errors.relationship = "Relationship is required.";
+        }
+        if (!recipientDetails.reason.trim()) {
+            errors.reason = "Reason for transfer is required.";
+        }
+        if ((recipientDetails.reason === "other" || recipientDetails.reason === "OTHERS") && !recipientDetails.otherReason.trim()) {
+            errors.otherReason = "Please specify the reason for transfer.";
+        }
+
+        const isReqFieldRequired = (name: string) =>
+            beneficiaryRequirements.some((r) => r.isDisplayable && r.isRequired && r.name === name);
+
+        if (isReqFieldRequired("beneficiary_address") && !recipientDetails.address.trim()) {
+            errors.address = "Address is required.";
+        }
+        if (isReqFieldRequired("beneficiary_city") && !recipientDetails.city.trim()) {
+            errors.city = "City is required.";
+        }
+        if (isReqFieldRequired("beneficiary_state_or_province") && !recipientDetails.stateOrProvince.trim()) {
+            errors.stateOrProvince = "State / Province is required.";
+        }
+        if (isReqFieldRequired("beneficiary_postcode") && !recipientDetails.postcode.trim()) {
+            errors.postcode = "Postcode is required.";
+        }
+        if (deliveryMethod !== "mobile_money" && isReqFieldRequired("beneficiary_MobileNo") && !recipientDetails.mobileNo.trim()) {
+            errors.mobileNo = "Mobile number is required.";
+        }
+
+        if (recvCur === "NGN" && !recipientDetails.narration.trim()) {
+            errors.narration = "Narration is required for Nigerian accounts.";
+        }
+
+        const normalizedAcct = recipientDetails.accountNumber.replace(/\s+/g, "");
+        const normalizedIban = recipientDetails.iban.replace(/\s+/g, "");
+        const normalizedMobile = recipientDetails.mobileNo.replace(/\s+/g, "");
+        const normalizedSwift = recipientDetails.swift.replace(/\s+/g, "");
+        const normalizedSortCode = recipientDetails.sortCode.trim();
+        if (
+            normalizedAcct !== recipientDetails.accountNumber ||
+            normalizedIban !== recipientDetails.iban ||
+            normalizedMobile !== recipientDetails.mobileNo ||
+            normalizedSwift !== recipientDetails.swift ||
+            normalizedSortCode !== recipientDetails.sortCode
+        ) {
+            setRecipientDetails((prev) => ({
+                ...prev,
+                accountNumber: normalizedAcct,
+                iban: normalizedIban,
+                mobileNo: normalizedMobile,
+                swift: normalizedSwift,
+                sortCode: normalizedSortCode,
+            }));
+        }
+
+        if (deliveryMethod === "mobile_money") {
+            const hasSelectableOperators = mitoProviders.length > 0;
+            if ((hasSelectableOperators && !matchedProv && !selectedProvider?.providerId) || !recipientDetails.bankName.trim()) {
+                errors.bankName = "Please select a mobile operator.";
+            }
+            const mobileVal = (normalizedMobile || normalizedAcct).trim();
+            if (!mobileVal) {
+                errors.mobileNo = "Mobile number is required.";
+            }
+        } else {
+            const hasSelectableBanks = mitoProviders.some((p) => !p.isGeneric);
+            if ((hasSelectableBanks && !matchedProv && !selectedProvider?.providerId) || !recipientDetails.bankName.trim()) {
+                errors.bankName = "Please select a bank name.";
+            }
+
+            if (recvCur === "NGN") {
+                const acct = normalizedAcct;
+                if (!acct) {
+                    errors.accountNumber = "Account number is required.";
+                } else if (!/^\d{10}$/.test(acct)) {
+                    errors.accountNumber = "Please enter a valid 10-digit account number.";
+                }
+            } else if (recvCur === "GBP") {
+                const acct = normalizedAcct;
+                if (!acct) {
+                    errors.accountNumber = "Account number is required.";
+                } else if (!/^\d{8}$/.test(acct)) {
+                    errors.accountNumber = "Please enter a valid 8-digit account number.";
+                }
+                if (!normalizedSortCode) {
+                    errors.sortCode = "Sort code is required.";
+                }
+            } else {
+                const ibanOrAcct = (normalizedIban || normalizedAcct).trim();
+                if (!ibanOrAcct) {
+                    errors.iban = "IBAN / Account Number is required.";
+                }
+                if (!normalizedSwift) {
+                    errors.swift = "SWIFT / BIC is required.";
+                }
+            }
+
+            if (isReqFieldRequired("aba") && !recipientDetails.aba.replace(/\s+/g, "")) {
+                errors.aba = "ABA routing number is required.";
+            }
+            if (isReqFieldRequired("ifsc") && !recipientDetails.ifsc.replace(/\s+/g, "")) {
+                errors.ifsc = "IFSC code is required.";
+            }
+            if (isReqFieldRequired("bsb_code") && !recipientDetails.bsbCode.replace(/\s+/g, "")) {
+                errors.bsbCode = "BSB code is required.";
+            }
+            if (isReqFieldRequired("branch_code") && !recipientDetails.branchCode.replace(/\s+/g, "")) {
+                errors.branchCode = "Branch code is required.";
+            }
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setStep3Errors(errors);
+            const firstMessage = Object.values(errors)[0];
+            toast({
+                title: "Mandatory fields required",
+                description: firstMessage || "Please fill in all mandatory (*) fields before continuing.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        setStep3Errors({});
+        setBeneficiaryApiError(null);
+        setBeneficiaryCreatedSuccess(null);
         setSubmittingTransaction(true);
         try {
-            const recipientName = selectedRecipient?.name
-                ?? (`${recipientDetails.firstName} ${recipientDetails.lastName}`.trim() || "Unknown");
+            const existingMitoBeneficiaryId =
+                selectedRecipient?.beneficiaryId && String(selectedRecipient.beneficiaryId).includes("-")
+                    ? String(selectedRecipient.beneficiaryId)
+                    : undefined;
+            const isCreatingNewBeneficiary = !existingMitoBeneficiaryId;
+            const recipientName = beneficiaryType === "business"
+                ? recipientDetails.companyName.trim()
+                : `${recipientDetails.firstName.trim()} ${recipientDetails.lastName.trim()}`.trim();
+
             const created = await createSendMoneyTransaction({
                 recipientName,
                 service: deliveryMethod as SendMoneyService,
-                sendCurrency: "GBP",
+                sendCurrency: SEND_CURRENCY,
                 sendAmount: parseFloat(amount || "0").toFixed(2),
-                receiveCurrency: recipientDetails.currency || "NGN",
+                receiveCurrency: recvCur,
                 receiveAmount: finalReceiveAmount,
                 fee: effectiveFee.toFixed(2),
                 exchangeRate: String(EXCHANGE_RATE),
+                beneficiaryType,
+                companyName: beneficiaryType === "business" ? (recipientDetails.companyName.trim() || recipientName) : undefined,
+                recipientFirstName: beneficiaryType === "individual" ? (recipientDetails.firstName || selectedRecipient?.name?.split(" ")[0] || "Recipient") : undefined,
+                recipientLastName: beneficiaryType === "individual" ? (recipientDetails.lastName || selectedRecipient?.name?.split(" ").slice(1).join(" ") || "Beneficiary") : undefined,
+                relationship: recipientDetails.relationship,
+                relationId: recipientDetails.relationId || undefined,
+                nickName: recipientDetails.nickName || undefined,
+                reason: recipientDetails.reason,
+                reasonId: recipientDetails.reasonId || undefined,
+                otherReason: recipientDetails.otherReason || undefined,
+                narration: recipientDetails.narration || undefined,
+                address: recipientDetails.address || undefined,
+                city: recipientDetails.city || undefined,
+                postcode: recipientDetails.postcode || undefined,
+                stateOrProvince: recipientDetails.stateOrProvince || undefined,
+                mobileNo: (normalizedMobile || (deliveryMethod === "mobile_money" ? normalizedAcct : "")) || undefined,
+                bankName: matchedProv && !matchedProv.isGeneric ? matchedProv.providerName : (recipientDetails.bankName.trim() || selectedRecipient?.bank || matchedProv?.providerName || undefined),
+                accountNumber: (deliveryMethod === "mobile_money" ? (normalizedMobile || normalizedAcct) : normalizedAcct) || selectedRecipient?.account?.replace(/\s+/g, "") || undefined,
+                sortCode: normalizedSortCode || undefined,
+                iban: normalizedIban || undefined,
+                swift: normalizedSwift || undefined,
+                aba: recipientDetails.aba.replace(/\s+/g, "") || undefined,
+                ifsc: recipientDetails.ifsc.replace(/\s+/g, "") || undefined,
+                bsbCode: recipientDetails.bsbCode.replace(/\s+/g, "") || undefined,
+                branchCode: recipientDetails.branchCode.replace(/\s+/g, "") || undefined,
+                countryIso3,
+                country: recipientDetails.country || CURRENCY_TO_COUNTRY_INFO[recvCur]?.country || undefined,
+                beneficiaryId: existingMitoBeneficiaryId,
+                providerId: matchedProv?.providerId || selectedProvider?.providerId || mitoProviders[0]?.providerId,
+                providerCode: matchedProv?.providerCode || selectedProvider?.providerCode || mitoProviders[0]?.providerCode,
+                affiliateRateId: affiliateRateId || undefined,
                 ...(promoApplied && promoCode ? { promoCode, feeBeforePromo: fee.toFixed(2), ...(promoOnAmount ? { promoAppliesTo: "amount" as const, promoDiscount: amountPromoDiscount.toFixed(2) } : {}) } : {}),
             });
             setTransactionId(created.id);
             setTransactionRef(created.reference);
+            if (created.mitoRateId) setLockedRateId(created.mitoRateId);
+            if (created.mitoBeneficiaryId) setMitoBeneficiaryId(created.mitoBeneficiaryId);
+            if (isCreatingNewBeneficiary || created.mitoBeneficiaryCreated) {
+                const resolvedBankName =
+                    matchedProv && !matchedProv.isGeneric
+                        ? matchedProv.providerName
+                        : recipientDetails.bankName || selectedRecipient?.bank || matchedProv?.providerName || "Bank Transfer";
+                const resolvedCountryName =
+                    recipientDetails.country === "UK"
+                        ? "United Kingdom"
+                        : recipientDetails.country || CURRENCY_TO_COUNTRY_INFO[recvCur]?.country || "Nigeria";
+                const syntheticEmail = `${(created.mitoBeneficiaryId || recipientName.toLowerCase().replace(/[^a-z0-9]/g, ".") || Date.now()).toString().toLowerCase()}@beneficiary.rhemito.local`;
+                upsertRecipient({
+                    id: created.mitoBeneficiaryId || undefined,
+                    email: syntheticEmail,
+                    contactType: beneficiaryType,
+                    firstName: beneficiaryType === "individual" ? recipientDetails.firstName.trim() : "",
+                    lastName: beneficiaryType === "individual" ? recipientDetails.lastName.trim() : "",
+                    businessName: beneficiaryType === "business" ? recipientDetails.companyName.trim() : "",
+                    country: resolvedCountryName,
+                    currency: recvCur,
+                    bankName: resolvedBankName,
+                    accountNumber: (recipientDetails.accountNumber || recipientDetails.iban || "").trim(),
+                    sortCode: recipientDetails.sortCode.trim(),
+                    iban: recipientDetails.iban.trim(),
+                    swift: recipientDetails.swift.trim(),
+                    serviceType: deliveryMethod === "mobile_money" ? "Mobile Money" : "Bank Deposit",
+                    narration: recipientDetails.narration.trim(),
+                    relationship: recipientDetails.relationship || "Family",
+                });
+                const successMsg = `${recipientName} has been added to your beneficiaries.`;
+                setBeneficiaryCreatedSuccess(successMsg);
+                toast({
+                    title: "Beneficiary created successfully",
+                    description: successMsg,
+                });
+            }
+            void fetchMitoBeneficiaries({
+                service: deliveryMethod as SendMoneyService,
+            }).then((list) => {
+                setSenderBeneficiaries(list);
+            });
             setTransactionSubmitted(true);
             setCurrentStep(4);
         } catch (err) {
+            const friendlyMsg = err instanceof Error && err.message
+                ? err.message
+                : "We couldn't create the beneficiary with the provided details. Please check the information and try again.";
+            setBeneficiaryApiError(friendlyMsg);
             toast({
-                title: "Transaction not created",
-                description: err instanceof Error ? err.message : "Please try again shortly.",
+                title: "Could not create beneficiary",
+                description: friendlyMsg,
                 variant: "destructive",
             });
         } finally {
@@ -568,28 +1359,132 @@ export default function SendMoney() {
                                                 You can only use one reward at a time.
                                             </p>
                                         )}
-                                        <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
-                                            <div className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
-                                                <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[SEND_CURRENCY] ?? "gb"}.png`} alt={SEND_CURRENCY} className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
-                                                <span className="font-semibold text-base">{SEND_CURRENCY}</span>
-                                                <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
-                                                <select
+                                        <div className="relative flex bg-white border rounded-xl h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
+                                            <div ref={sendCurrencyDropdownRef} className="relative flex shrink-0">
+                                                <button
+                                                    type="button"
                                                     aria-label="Send currency"
                                                     data-testid="send-currency-select"
-                                                    value={SEND_CURRENCY}
-                                                    onChange={(e) => setSendCurrencyState(e.target.value)}
-                                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                                    onClick={() => {
+                                                        setReceiveCurrencyDropdownOpen(false);
+                                                        setReceiveCurrencySearch("");
+                                                        setSendCurrencyDropdownOpen((prev) => {
+                                                            if (prev) setSendCurrencySearch("");
+                                                            return !prev;
+                                                        });
+                                                    }}
+                                                    className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r rounded-l-xl min-w-[95px] sm:min-w-[120px] h-full cursor-pointer"
                                                 >
-                                                    {(rewards.data?.sendCurrencies?.length ? rewards.data.sendCurrencies : ["GBP", "USD", "EUR"]).map((cur) => (
-                                                        <option key={cur} value={cur}>{cur}</option>
-                                                    ))}
-                                                </select>
+                                                    <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[SEND_CURRENCY] ?? "gb"}.png`} alt={SEND_CURRENCY} className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
+                                                    <span className="font-semibold text-base">{SEND_CURRENCY}</span>
+                                                    <ChevronDown className={`w-3.5 h-3.5 text-gray-400 ml-auto transition-transform ${sendCurrencyDropdownOpen ? "rotate-180" : ""}`} />
+                                                </button>
+                                                {sendCurrencyDropdownOpen && (
+                                                    <div
+                                                        role="listbox"
+                                                        className="absolute top-full left-0 mt-1 z-50 w-56 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden"
+                                                    >
+                                                        {/* First component on droplist: Search input box */}
+                                                        <div className="p-2 border-b border-gray-100 bg-white sticky top-0 z-10">
+                                                            <div className="relative flex items-center">
+                                                                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 pointer-events-none" />
+                                                                <input
+                                                                    ref={sendCurrencySearchInputRef}
+                                                                    type="text"
+                                                                    value={sendCurrencySearch}
+                                                                    placeholder="Search currency..."
+                                                                    onChange={(e) => setSendCurrencySearch(e.target.value)}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === "Escape") {
+                                                                            setSendCurrencyDropdownOpen(false);
+                                                                            setSendCurrencySearch("");
+                                                                        } else if (e.key === "Enter") {
+                                                                            e.preventDefault();
+                                                                            const list = (rewards.data?.sendCurrencies?.length ? rewards.data.sendCurrencies : ["GBP", "USD", "EUR"]).filter((c) => {
+                                                                                const q = sendCurrencySearch.trim().toLowerCase();
+                                                                                if (!q) return true;
+                                                                                const country = (CURRENCY_TO_COUNTRY_INFO[c]?.country || "").toLowerCase();
+                                                                                return c.toLowerCase().includes(q) || country.includes(q);
+                                                                            });
+                                                                            if (list[0]) {
+                                                                                setSendCurrencyState(list[0]);
+                                                                                setSendCurrencyDropdownOpen(false);
+                                                                                setSendCurrencySearch("");
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    className="w-full h-8 pl-8 pr-7 text-xs rounded-lg border border-gray-200 bg-gray-50/70 focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-colors"
+                                                                />
+                                                                {sendCurrencySearch && (
+                                                                    <button
+                                                                        type="button"
+                                                                        tabIndex={-1}
+                                                                        onClick={() => {
+                                                                            setSendCurrencySearch("");
+                                                                            sendCurrencySearchInputRef.current?.focus();
+                                                                        }}
+                                                                        className="absolute right-2 text-gray-400 hover:text-gray-600 p-0.5"
+                                                                        aria-label="Clear search"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="max-h-52 overflow-y-auto overscroll-contain p-1">
+                                                            {(() => {
+                                                                const allSend = rewards.data?.sendCurrencies?.length ? rewards.data.sendCurrencies : ["GBP", "USD", "EUR"];
+                                                                const q = sendCurrencySearch.trim().toLowerCase();
+                                                                const filteredSend = q
+                                                                    ? allSend.filter((cur) => {
+                                                                          const country = (CURRENCY_TO_COUNTRY_INFO[cur]?.country || "").toLowerCase();
+                                                                          return cur.toLowerCase().includes(q) || country.includes(q);
+                                                                      })
+                                                                    : allSend;
+                                                                if (filteredSend.length === 0) {
+                                                                    return (
+                                                                        <div className="py-3 px-2 text-center text-xs text-gray-500">
+                                                                            No matching currency found
+                                                                        </div>
+                                                                    );
+                                                                }
+                                                                return filteredSend.map((cur) => {
+                                                                    const isSelected = SEND_CURRENCY === cur;
+                                                                    const countryLabel = CURRENCY_TO_COUNTRY_INFO[cur]?.country || "";
+                                                                    return (
+                                                                        <div
+                                                                            key={cur}
+                                                                            role="option"
+                                                                            aria-selected={isSelected}
+                                                                            onMouseDown={(e) => {
+                                                                                e.preventDefault();
+                                                                                setSendCurrencyState(cur);
+                                                                                setSendCurrencyDropdownOpen(false);
+                                                                                setSendCurrencySearch("");
+                                                                            }}
+                                                                            className={`flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${isSelected ? "bg-blue-50 text-blue-900 font-semibold" : "text-gray-900 hover:bg-gray-50"}`}
+                                                                        >
+                                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                                <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[cur] ?? "gb"}.png`} alt={cur} className="w-6 h-4 object-cover rounded shadow-2xs shrink-0" />
+                                                                                <span className="font-semibold">{cur}</span>
+                                                                                {countryLabel && (
+                                                                                    <span className="text-xs text-gray-500 truncate">{countryLabel}</span>
+                                                                                )}
+                                                                            </div>
+                                                                            {isSelected && <Check className="w-4 h-4 text-blue-600 shrink-0" />}
+                                                                        </div>
+                                                                    );
+                                                                });
+                                                            })()}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                             <input
                                                 type="number"
                                                 value={amount}
                                                 onChange={e => setAmount(e.target.value)}
-                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base font-medium outline-none bg-transparent"
+                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base font-medium outline-none bg-transparent rounded-r-xl"
                                                 placeholder="0.00"
                                             />
                                         </div>
@@ -599,42 +1494,168 @@ export default function SendMoney() {
                                         <div className="flex items-center justify-between min-h-[28px]">
                                             <Label className="text-gray-500">They Receive</Label>
                                         </div>
-                                        <div className="flex bg-white border rounded-xl overflow-hidden h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
-                                            <div className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r min-w-[95px] sm:min-w-[120px] shrink-0">
-                                                <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[recipientDetails.currency || "NGN"] ?? "ng"}.png`} alt={recipientDetails.currency || "NGN"} className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
-                                                <span className="font-semibold text-base">{recipientDetails.currency || "NGN"}</span>
-                                                <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
-                                                <select
+                                        <div className="relative flex bg-white border rounded-xl h-12 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-2xs">
+                                            <div ref={receiveCurrencyDropdownRef} className="relative flex shrink-0">
+                                                <button
+                                                    type="button"
                                                     aria-label="Receive currency"
                                                     data-testid="receive-currency-select"
-                                                    value={recipientDetails.currency || "NGN"}
-                                                    onChange={(e) => setRecipientDetails((prev) => ({ ...prev, currency: e.target.value }))}
-                                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                                    onClick={() => {
+                                                        setSendCurrencyDropdownOpen(false);
+                                                        setSendCurrencySearch("");
+                                                        setReceiveCurrencyDropdownOpen((prev) => {
+                                                            if (prev) setReceiveCurrencySearch("");
+                                                            return !prev;
+                                                        });
+                                                    }}
+                                                    className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 bg-gray-50 border-r rounded-l-xl min-w-[95px] sm:min-w-[120px] h-full cursor-pointer"
                                                 >
-                                                    {RECEIVE_CURRENCIES.map((cur) => (
-                                                        <option key={cur} value={cur}>{cur}</option>
-                                                    ))}
-                                                </select>
+                                                    <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[recipientDetails.currency || "NGN"] ?? "ng"}.png`} alt={recipientDetails.currency || "NGN"} className="w-6 sm:w-8 h-4 sm:h-6 object-cover rounded shadow-2xs" />
+                                                    <span className="font-semibold text-base">{recipientDetails.currency || "NGN"}</span>
+                                                    <ChevronDown className={`w-3.5 h-3.5 text-gray-400 ml-auto transition-transform ${receiveCurrencyDropdownOpen ? "rotate-180" : ""}`} />
+                                                </button>
+                                                {receiveCurrencyDropdownOpen && (
+                                                    <div
+                                                        role="listbox"
+                                                        className="absolute top-full left-0 mt-1 z-50 w-64 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden"
+                                                    >
+                                                        {/* First component on droplist: Search input box */}
+                                                        <div className="p-2 border-b border-gray-100 bg-white sticky top-0 z-10">
+                                                            <div className="relative flex items-center">
+                                                                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 pointer-events-none" />
+                                                                <input
+                                                                    ref={receiveCurrencySearchInputRef}
+                                                                    type="text"
+                                                                    value={receiveCurrencySearch}
+                                                                    placeholder="Search currency or country..."
+                                                                    onChange={(e) => setReceiveCurrencySearch(e.target.value)}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === "Escape") {
+                                                                            setReceiveCurrencyDropdownOpen(false);
+                                                                            setReceiveCurrencySearch("");
+                                                                        } else if (e.key === "Enter") {
+                                                                            e.preventDefault();
+                                                                            const list = RECEIVE_CURRENCIES.filter((c) => {
+                                                                                const q = receiveCurrencySearch.trim().toLowerCase();
+                                                                                if (!q) return true;
+                                                                                const country = (CURRENCY_TO_COUNTRY_INFO[c]?.country || "").toLowerCase();
+                                                                                return c.toLowerCase().includes(q) || country.includes(q);
+                                                                            });
+                                                                            if (list[0]) {
+                                                                                const nextCur = list[0];
+                                                                                const nextCountry = CURRENCY_TO_COUNTRY_INFO[nextCur]?.country || "Nigeria";
+                                                                                setSelectedProvider(null);
+                                                                                setStep3Errors({});
+                                                                                setRecipientDetails((prev) => ({
+                                                                                    ...prev,
+                                                                                    currency: nextCur,
+                                                                                    country: nextCountry,
+                                                                                    bankName: "",
+                                                                                }));
+                                                                                setReceiveCurrencyDropdownOpen(false);
+                                                                                setReceiveCurrencySearch("");
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    className="w-full h-8 pl-8 pr-7 text-xs rounded-lg border border-gray-200 bg-gray-50/70 focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-colors"
+                                                                />
+                                                                {receiveCurrencySearch && (
+                                                                    <button
+                                                                        type="button"
+                                                                        tabIndex={-1}
+                                                                        onClick={() => {
+                                                                            setReceiveCurrencySearch("");
+                                                                            receiveCurrencySearchInputRef.current?.focus();
+                                                                        }}
+                                                                        className="absolute right-2 text-gray-400 hover:text-gray-600 p-0.5"
+                                                                        aria-label="Clear search"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="max-h-52 overflow-y-auto overscroll-contain p-1">
+                                                            {(() => {
+                                                                const q = receiveCurrencySearch.trim().toLowerCase();
+                                                                const filteredReceive = q
+                                                                    ? RECEIVE_CURRENCIES.filter((cur) => {
+                                                                          const countryLabel = (CURRENCY_TO_COUNTRY_INFO[cur]?.country || "").toLowerCase();
+                                                                          return cur.toLowerCase().includes(q) || countryLabel.includes(q);
+                                                                      })
+                                                                    : RECEIVE_CURRENCIES;
+                                                                if (filteredReceive.length === 0) {
+                                                                    return (
+                                                                        <div className="py-3 px-2 text-center text-xs text-gray-500">
+                                                                            No matching currency found
+                                                                        </div>
+                                                                    );
+                                                                }
+                                                                return filteredReceive.map((cur) => {
+                                                                    const isSelected = (recipientDetails.currency || "NGN") === cur;
+                                                                    const countryLabel = CURRENCY_TO_COUNTRY_INFO[cur]?.country || "";
+                                                                    return (
+                                                                        <div
+                                                                            key={cur}
+                                                                            role="option"
+                                                                            aria-selected={isSelected}
+                                                                            onMouseDown={(e) => {
+                                                                                e.preventDefault();
+                                                                                const nextCountry = CURRENCY_TO_COUNTRY_INFO[cur]?.country || "Nigeria";
+                                                                                setSelectedProvider(null);
+                                                                                setStep3Errors({});
+                                                                                setRecipientDetails((prev) => ({
+                                                                                    ...prev,
+                                                                                    currency: cur,
+                                                                                    country: nextCountry,
+                                                                                    bankName: "",
+                                                                                }));
+                                                                                setReceiveCurrencyDropdownOpen(false);
+                                                                                setReceiveCurrencySearch("");
+                                                                            }}
+                                                                            className={`flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${isSelected ? "bg-blue-50 text-blue-900 font-semibold" : "text-gray-900 hover:bg-gray-50"}`}
+                                                                        >
+                                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                                <img src={`https://flagcdn.com/w40/${CURRENCY_FLAGS[cur] ?? "ng"}.png`} alt={cur} className="w-6 h-4 object-cover rounded shadow-2xs shrink-0" />
+                                                                                <span className="font-semibold">{cur}</span>
+                                                                                {countryLabel && (
+                                                                                    <span className="text-xs text-gray-500 truncate">{countryLabel}</span>
+                                                                                )}
+                                                                            </div>
+                                                                            {isSelected && <Check className="w-4 h-4 text-blue-600 shrink-0" />}
+                                                                        </div>
+                                                                    );
+                                                                });
+                                                            })()}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                             <input
                                                 readOnly
                                                 value={receiveAmount}
-                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base font-medium outline-none bg-gray-50/70 text-gray-500"
+                                                className="flex-1 min-w-0 px-3 sm:px-4 text-base font-medium outline-none bg-gray-50/70 text-gray-500 rounded-r-xl"
                                             />
                                         </div>
                                     </div>
 
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-base">How will they receive the money?</h3>
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                                             {[
                                                 { id: "bank_deposit", label: "Bank Deposit", icon: Landmark },
                                                 { id: "mobile_money", label: "Mobile Money", icon: Smartphone },
-                                                { id: "cash_pickup", label: "Cash Pickup", icon: Banknote }
                                             ].map((method) => (
                                                 <div
                                                     key={method.id}
-                                                    onClick={() => setDeliveryMethod(method.id)}
+                                                    onClick={() => {
+                                                        if (deliveryMethod !== method.id) {
+                                                            setDeliveryMethod(method.id);
+                                                            setSelectedProvider(null);
+                                                            setStep3Errors({});
+                                                            setRecipientDetails((prev) => ({ ...prev, bankName: "" }));
+                                                        }
+                                                    }}
                                                     className={`
                                                         flex items-center justify-center sm:justify-start gap-2.5 px-4 py-3 rounded-xl cursor-pointer transition-all font-medium text-sm active:scale-[0.98]
                                                         ${deliveryMethod === method.id
@@ -831,7 +1852,7 @@ export default function SendMoney() {
                                         <div className="space-y-4">
                                             <Label className="text-gray-500 font-medium">Recent Recipients</Label>
                                             <div className="flex gap-6 overflow-x-auto pb-4">
-                                                {recentRecipients.slice(0, 5).map(r => (
+                                                {baseRecipientsList.slice(0, 5).map(r => (
                                                     <div key={r.id} className="flex flex-col items-center gap-2 cursor-pointer group min-w-[80px]" onClick={() => { setSelectedRecipient(r); handleNext(); }}>
                                                         <div className={`w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg ${r.color} group-hover:ring-2 ring-primary ring-offset-2 transition-all`}>
                                                             {r.initials}
@@ -845,14 +1866,111 @@ export default function SendMoney() {
                                         {/* Search and New Recipient */}
                                         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                                             <div className="relative flex-1">
-                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                                                 <input
                                                     type="text"
-                                                    placeholder="Search recipient"
-                                                    className="w-full h-11 pl-10 pr-4 rounded-xl border focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"
+                                                    placeholder="Search recipient by name, bank, or account number"
+                                                    value={recipientSearch}
+                                                    onFocus={() => setRecipientSearchOpen(true)}
+                                                    onBlur={() => setTimeout(() => setRecipientSearchOpen(false), 180)}
+                                                    onChange={(e) => {
+                                                        setRecipientSearch(e.target.value);
+                                                        setRecipientSearchOpen(true);
+                                                    }}
+                                                    className="w-full h-11 pl-10 pr-8 rounded-xl border focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"
                                                 />
+                                                {recipientSearch && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setRecipientSearch("");
+                                                            setSearchedBeneficiaries(null);
+                                                        }}
+                                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                                                        aria-label="Clear recipient search"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                                {recipientSearchOpen && recipientSearch.trim().length > 0 && (
+                                                    <div className="absolute top-full left-0 right-0 mt-1 z-50 max-h-60 overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white shadow-lg p-1">
+                                                        {searchingBeneficiaries ? (
+                                                            <div className="py-3 px-3 text-xs text-gray-500 flex items-center gap-2">
+                                                                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                                                <span>Searching created beneficiaries...</span>
+                                                            </div>
+                                                        ) : displayRecipients.length > 0 ? (
+                                                            displayRecipients.map((r) => (
+                                                                <div
+                                                                    key={`suggest-${r.id}`}
+                                                                    onMouseDown={(e) => {
+                                                                        e.preventDefault();
+                                                                        setRecipientSearchOpen(false);
+                                                                        setSelectedRecipient(r);
+                                                                        handleNext();
+                                                                    }}
+                                                                    className="flex items-center justify-between px-3 py-2.5 hover:bg-blue-50/70 rounded-lg cursor-pointer transition-colors"
+                                                                >
+                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${r.color} flex-shrink-0`}>
+                                                                            {r.initials}
+                                                                        </div>
+                                                                        <div className="min-w-0">
+                                                                            <div className="text-sm font-semibold text-gray-900 truncate">{r.name}</div>
+                                                                            <div className="text-xs text-gray-500 truncate">
+                                                                                {r.bank}{r.account ? ` • ${r.account}` : ""}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <span className="text-xs font-mono text-gray-500 ml-2 flex-shrink-0">{r.currency}</span>
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <div className="py-3 px-3 text-xs text-gray-500 text-center">
+                                                                No matching beneficiary found for "{recipientSearch.trim()}"
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <Button variant="outline" className="gap-2 h-11 whitespace-nowrap bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-xs rounded-xl" onClick={() => { setSelectedRecipient(null); handleNext(); }}>
+                                            <Button
+                                                variant="outline"
+                                                className="gap-2 h-11 whitespace-nowrap bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-xs rounded-xl"
+                                                onClick={() => {
+                                                    setSelectedRecipient(null);
+                                                    setSelectedProvider(null);
+                                                    setStep3Errors({});
+                                                    setBeneficiaryApiError(null);
+                                                    setBeneficiaryCreatedSuccess(null);
+                                                    setRecipientDetails((prev) => ({
+                                                        ...prev,
+                                                        firstName: "",
+                                                        lastName: "",
+                                                        companyName: "",
+                                                        relationship: "",
+                                                        relationId: "",
+                                                        nickName: "",
+                                                        reason: "",
+                                                        reasonId: "",
+                                                        otherReason: "",
+                                                        address: "",
+                                                        city: "",
+                                                        postcode: "",
+                                                        stateOrProvince: "",
+                                                        mobileNo: "",
+                                                        bankName: "",
+                                                        accountNumber: "",
+                                                        sortCode: "",
+                                                        iban: "",
+                                                        swift: "",
+                                                        aba: "",
+                                                        ifsc: "",
+                                                        bsbCode: "",
+                                                        branchCode: "",
+                                                    }));
+                                                    handleNext();
+                                                }}
+                                            >
                                                 <UserPlus className="w-4 h-4" />
                                                 New Recipient
                                             </Button>
@@ -860,7 +1978,14 @@ export default function SendMoney() {
 
                                         {/* All Recipients List */}
                                         <div className="space-y-1">
-                                            {recentRecipients.map(r => (
+                                            {displayRecipients.length === 0 && (
+                                                <div className="py-8 px-4 text-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-500">
+                                                    {recipientSearch.trim()
+                                                        ? `No created beneficiaries match "${recipientSearch.trim()}".`
+                                                        : "No saved beneficiaries found yet. Click 'New Recipient' to add one."}
+                                                </div>
+                                            )}
+                                            {displayRecipients.map(r => (
                                                 <div
                                                     key={r.id}
                                                     onClick={() => { setSelectedRecipient(r); handleNext(); }}
@@ -876,9 +2001,11 @@ export default function SendMoney() {
                                                             <div className="text-sm text-gray-500">{r.bank}</div>
                                                             {/* Banking detail chips */}
                                                             <div className="flex flex-wrap gap-1.5 mt-1">
-                                                                <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">
-                                                                    Acct: {r.account.length > 16 ? `${r.account.slice(0, 4)}…${r.account.slice(-4)}` : r.account}
-                                                                </span>
+                                                                {r.account && (
+                                                                    <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">
+                                                                        Acct: {r.account.length > 16 ? `${r.account.slice(0, 4)}…${r.account.slice(-4)}` : r.account}
+                                                                    </span>
+                                                                )}
                                                                 {r.sortCode && (
                                                                     <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-mono">
                                                                         Sort: {r.sortCode}
@@ -977,72 +2104,295 @@ export default function SendMoney() {
                             >
                                 {/* Left Column: Form Details */}
                                 <div className="lg:col-span-3 space-y-5">
+                                    {beneficiaryApiError && (
+                                        <div
+                                            role="alert"
+                                            data-testid="step3-beneficiary-api-error"
+                                            className="flex items-start gap-3 p-4 rounded-xl border border-red-200 bg-red-50 text-red-900 shadow-2xs"
+                                        >
+                                            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                                            <div className="flex-1 text-sm">
+                                                <p className="font-semibold text-red-900">Unable to save beneficiary</p>
+                                                <p className="text-red-700 mt-0.5">{beneficiaryApiError}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setBeneficiaryApiError(null)}
+                                                className="text-red-400 hover:text-red-700 p-1"
+                                                aria-label="Dismiss error"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    )}
                                     <Card>
                                         <CardHeader>
                                             <CardTitle className="text-base">Recipient Details</CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                            <AccountTypeToggle
+                                                value={beneficiaryType}
+                                                onChange={(type) => {
+                                                    setBeneficiaryType(type);
+                                                    setStep3Errors({});
+                                                }}
+                                            />
+
+                                            {beneficiaryType === "business" ? (
                                                 <div className="space-y-2">
-                                                    <Label>First Name</Label>
+                                                    <Label>
+                                                        {beneficiaryRequirements.find((r) => r.name === "beneficiary_company_name")?.label || "Company Name"} <span className="text-red-500">*</span>
+                                                    </Label>
                                                     <Input
-                                                        defaultValue={selectedRecipient?.name?.split(' ')[0] || ""}
-                                                        onChange={e => setRecipientDetails({ ...recipientDetails, firstName: e.target.value })}
+                                                        placeholder="e.g. Acme Global Ltd"
+                                                        value={recipientDetails.companyName}
+                                                        className={step3Errors.companyName ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                        onChange={e => {
+                                                            clearStep3Error("companyName");
+                                                            setRecipientDetails({ ...recipientDetails, companyName: e.target.value });
+                                                        }}
                                                     />
+                                                    {step3Errors.companyName && <p className="text-xs text-red-500">{step3Errors.companyName}</p>}
                                                 </div>
-                                                <div className="space-y-2">
-                                                    <Label>Last Name</Label>
-                                                    <Input
-                                                        defaultValue={selectedRecipient?.name?.split(' ')[1] || ""}
-                                                        onChange={e => setRecipientDetails({ ...recipientDetails, lastName: e.target.value })}
-                                                    />
+                                            ) : (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label>First Name <span className="text-red-500">*</span></Label>
+                                                        <Input
+                                                            placeholder="Recipient first name"
+                                                            value={recipientDetails.firstName}
+                                                            className={step3Errors.firstName ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                            onChange={e => {
+                                                                clearStep3Error("firstName");
+                                                                setRecipientDetails({ ...recipientDetails, firstName: e.target.value });
+                                                            }}
+                                                        />
+                                                        {step3Errors.firstName && <p className="text-xs text-red-500">{step3Errors.firstName}</p>}
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label>Last Name <span className="text-red-500">*</span></Label>
+                                                        <Input
+                                                            placeholder="Recipient last name"
+                                                            value={recipientDetails.lastName}
+                                                            className={step3Errors.lastName ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                            onChange={e => {
+                                                                clearStep3Error("lastName");
+                                                                setRecipientDetails({ ...recipientDetails, lastName: e.target.value });
+                                                            }}
+                                                        />
+                                                        {step3Errors.lastName && <p className="text-xs text-red-500">{step3Errors.lastName}</p>}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
 
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                                 <div className="space-y-2">
-                                                    <Label>Relationship</Label>
-                                                    <Select defaultValue="family">
-                                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="family">Family</SelectItem>
-                                                            <SelectItem value="friend">Friend</SelectItem>
-                                                            <SelectItem value="business">Business Service</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
+                                                    <Label>Relationship <span className="text-red-500">*</span></Label>
+                                                    <SearchableSelect
+                                                        value={recipientDetails.relationship}
+                                                        placeholder="Select or type relationship"
+                                                        className={step3Errors.relationship ? "[&>div]:border-red-500" : ""}
+                                                        options={
+                                                            mitoLookupRelationships.length > 0
+                                                                ? mitoLookupRelationships.map((rel) => ({ value: rel.code, label: rel.name }))
+                                                                : [
+                                                                      { value: "family", label: "Family" },
+                                                                      { value: "friend", label: "Friend" },
+                                                                      { value: "business", label: "Business Service" },
+                                                                  ]
+                                                        }
+                                                        onValueChange={(val) => {
+                                                            clearStep3Error("relationship");
+                                                            const relOpts = beneficiaryRequirements.find((r) => r.name === "beneficiaryRelationId")?.dropdownOptions || [];
+                                                            const matchedLookup = mitoLookupRelationships.find((r) => r.code === val || r.name.toLowerCase() === val.toLowerCase());
+                                                            const matchedReq = relOpts.find(
+                                                                (o) =>
+                                                                    o.id === val ||
+                                                                    o.name.toLowerCase() === val.toLowerCase() ||
+                                                                    (matchedLookup && o.name.toLowerCase() === matchedLookup.name.toLowerCase()),
+                                                            );
+                                                            setRecipientDetails(prev => ({
+                                                                ...prev,
+                                                                relationship: val,
+                                                                relationId: matchedReq ? matchedReq.id : prev.relationId,
+                                                            }));
+                                                        }}
+                                                    />
+                                                    {step3Errors.relationship && <p className="text-xs text-red-500">{step3Errors.relationship}</p>}
                                                 </div>
                                                 <div className="space-y-2">
                                                     <Label>Nickname (Optional)</Label>
-                                                    <Input placeholder="e.g. My Brother" />
+                                                    <Input
+                                                        placeholder="e.g. My Brother"
+                                                        value={recipientDetails.nickName}
+                                                        onChange={e => setRecipientDetails({ ...recipientDetails, nickName: e.target.value })}
+                                                    />
                                                 </div>
                                             </div>
 
                                             <div className="space-y-2">
                                                 <Label>Reason for transfer <span className="text-destructive">*</span></Label>
-                                                <Select
+                                                <SearchableSelect
                                                     value={recipientDetails.reason}
-                                                    onValueChange={(val) => setRecipientDetails(prev => ({ ...prev, reason: val }))}
-                                                >
-                                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="family_support">Family Support</SelectItem>
-                                                        <SelectItem value="education">Education</SelectItem>
-                                                        <SelectItem value="bills">Bills</SelectItem>
-                                                        <SelectItem value="medical">Medical Expenses</SelectItem>
-                                                        <SelectItem value="other">Other</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
+                                                    placeholder="Select or type reason for transfer"
+                                                    className={step3Errors.reason ? "[&>div]:border-red-500" : ""}
+                                                    options={
+                                                        mitoLookupReasons.length > 0
+                                                            ? mitoLookupReasons.map((rsn) => ({ value: rsn.code, label: rsn.name }))
+                                                            : [
+                                                                  { value: "family_support", label: "Family Support" },
+                                                                  { value: "education", label: "Education" },
+                                                                  { value: "bills", label: "Bills" },
+                                                                  { value: "medical", label: "Medical Expenses" },
+                                                                  { value: "other", label: "Other" },
+                                                              ]
+                                                    }
+                                                    onValueChange={(val) => {
+                                                        clearStep3Error("reason");
+                                                        const rsnOpts = beneficiaryRequirements.find((r) => r.name === "beneficiaryReasonId")?.dropdownOptions || [];
+                                                        const matchedLookup = mitoLookupReasons.find((r) => r.code === val || r.name.toLowerCase() === val.toLowerCase());
+                                                        const matchedReq = rsnOpts.find(
+                                                            (o) =>
+                                                                o.id === val ||
+                                                                o.name.toLowerCase() === val.toLowerCase() ||
+                                                                (matchedLookup && o.name.toLowerCase() === matchedLookup.name.toLowerCase()),
+                                                        );
+                                                        setRecipientDetails(prev => ({
+                                                            ...prev,
+                                                            reason: val,
+                                                            reasonId: matchedReq ? matchedReq.id : prev.reasonId,
+                                                        }));
+                                                    }}
+                                                />
+                                                {step3Errors.reason && <p className="text-xs text-red-500">{step3Errors.reason}</p>}
                                             </div>
 
-                                            {recipientDetails.reason === "other" && (
+                                            {(recipientDetails.reason === "other" || recipientDetails.reason === "OTHERS") && (
                                                 <div className="space-y-2">
                                                     <Label>Please specify reason <span className="text-destructive">*</span></Label>
                                                     <Input
                                                         placeholder="e.g. Consulting, Event sponsorship, etc."
                                                         value={recipientDetails.otherReason}
-                                                        onChange={e => setRecipientDetails(prev => ({ ...prev, otherReason: e.target.value }))}
+                                                        className={step3Errors.otherReason ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                        onChange={e => {
+                                                            clearStep3Error("otherReason");
+                                                            setRecipientDetails(prev => ({ ...prev, otherReason: e.target.value }));
+                                                        }}
                                                         required
                                                     />
+                                                    {step3Errors.otherReason && <p className="text-xs text-red-500">{step3Errors.otherReason}</p>}
+                                                </div>
+                                            )}
+
+                                            {/* Country-specific required beneficiary address / contact fields from GET /api/v1/mito/Beneficiaries/requirements */}
+                                            {beneficiaryRequirements.some((r) => r.isDisplayable && ["beneficiary_address", "beneficiary_city", "beneficiary_postcode", "beneficiary_state_or_province", "beneficiary_MobileNo"].includes(r.name)) && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-1">
+                                                    {beneficiaryRequirements.some((r) => r.isDisplayable && r.name === "beneficiary_address") && (
+                                                        <div className="space-y-2 sm:col-span-2">
+                                                            <Label>
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_address")?.label || "Address"}
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_address")?.isRequired && <span className="text-red-500 ml-1">*</span>}
+                                                            </Label>
+                                                            <Input
+                                                                placeholder="Street address"
+                                                                value={recipientDetails.address}
+                                                                className={step3Errors.address ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    clearStep3Error("address");
+                                                                    setRecipientDetails({ ...recipientDetails, address: e.target.value });
+                                                                }}
+                                                            />
+                                                            {step3Errors.address && <p className="text-xs text-red-500">{step3Errors.address}</p>}
+                                                        </div>
+                                                    )}
+                                                    {beneficiaryRequirements.some((r) => r.isDisplayable && r.name === "beneficiary_city") && (
+                                                        <div className="space-y-2">
+                                                            <Label>
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_city")?.label || "City"}
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_city")?.isRequired && <span className="text-red-500 ml-1">*</span>}
+                                                            </Label>
+                                                            <Input
+                                                                placeholder="City"
+                                                                value={recipientDetails.city}
+                                                                className={step3Errors.city ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    clearStep3Error("city");
+                                                                    setRecipientDetails({ ...recipientDetails, city: e.target.value });
+                                                                }}
+                                                            />
+                                                            {step3Errors.city && <p className="text-xs text-red-500">{step3Errors.city}</p>}
+                                                        </div>
+                                                    )}
+                                                    {beneficiaryRequirements.some((r) => r.isDisplayable && r.name === "beneficiary_state_or_province") && (
+                                                        <div className="space-y-2">
+                                                            <Label>
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_state_or_province")?.label || "State / Province"}
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_state_or_province")?.isRequired && <span className="text-red-500 ml-1">*</span>}
+                                                            </Label>
+                                                            {(beneficiaryRequirements.find((r) => r.name === "beneficiary_state_or_province")?.dropdownOptions?.length ?? 0) > 0 ? (
+                                                                <SearchableSelect
+                                                                    value={recipientDetails.stateOrProvince}
+                                                                    placeholder="Select or type state"
+                                                                    className={step3Errors.stateOrProvince ? "[&>div]:border-red-500" : ""}
+                                                                    options={(beneficiaryRequirements.find((r) => r.name === "beneficiary_state_or_province")?.dropdownOptions || []).map((opt) => ({
+                                                                        value: opt.id,
+                                                                        label: opt.name,
+                                                                    }))}
+                                                                    onValueChange={(val) => {
+                                                                        clearStep3Error("stateOrProvince");
+                                                                        setRecipientDetails({ ...recipientDetails, stateOrProvince: val });
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <Input
+                                                                    placeholder="State / Province"
+                                                                    value={recipientDetails.stateOrProvince}
+                                                                    className={step3Errors.stateOrProvince ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                    onChange={e => {
+                                                                        clearStep3Error("stateOrProvince");
+                                                                        setRecipientDetails({ ...recipientDetails, stateOrProvince: e.target.value });
+                                                                    }}
+                                                                />
+                                                            )}
+                                                            {step3Errors.stateOrProvince && <p className="text-xs text-red-500">{step3Errors.stateOrProvince}</p>}
+                                                        </div>
+                                                    )}
+                                                    {beneficiaryRequirements.some((r) => r.isDisplayable && r.name === "beneficiary_postcode") && (
+                                                        <div className="space-y-2">
+                                                            <Label>
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_postcode")?.label || "Postcode"}
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_postcode")?.isRequired && <span className="text-red-500 ml-1">*</span>}
+                                                            </Label>
+                                                            <Input
+                                                                placeholder="Postcode / ZIP"
+                                                                value={recipientDetails.postcode}
+                                                                className={step3Errors.postcode ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    clearStep3Error("postcode");
+                                                                    setRecipientDetails({ ...recipientDetails, postcode: e.target.value });
+                                                                }}
+                                                            />
+                                                            {step3Errors.postcode && <p className="text-xs text-red-500">{step3Errors.postcode}</p>}
+                                                        </div>
+                                                    )}
+                                                    {deliveryMethod !== "mobile_money" && beneficiaryRequirements.some((r) => r.isDisplayable && r.name === "beneficiary_MobileNo") && (
+                                                        <div className="space-y-2">
+                                                            <Label>
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_MobileNo")?.label || "Mobile Number"}
+                                                                {beneficiaryRequirements.find((r) => r.name === "beneficiary_MobileNo")?.isRequired && <span className="text-red-500 ml-1">*</span>}
+                                                            </Label>
+                                                            <Input
+                                                                placeholder="e.g. +447911123456"
+                                                                value={recipientDetails.mobileNo}
+                                                                className={step3Errors.mobileNo ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    clearStep3Error("mobileNo");
+                                                                    setRecipientDetails({ ...recipientDetails, mobileNo: e.target.value.replace(/\s+/g, "") });
+                                                                }}
+                                                            />
+                                                            {step3Errors.mobileNo && <p className="text-xs text-red-500">{step3Errors.mobileNo}</p>}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
 
@@ -1056,91 +2406,339 @@ export default function SendMoney() {
                                                 <Textarea
                                                     placeholder="e.g. Monthly allowance for February"
                                                     value={recipientDetails.narration}
-                                                    onChange={e => setRecipientDetails({ ...recipientDetails, narration: e.target.value })}
-                                                    className="resize-none"
+                                                    onChange={e => {
+                                                        clearStep3Error("narration");
+                                                        setRecipientDetails({ ...recipientDetails, narration: e.target.value });
+                                                    }}
+                                                    className={`resize-none ${step3Errors.narration ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                                                     rows={3}
                                                 />
-                                                {recipientDetails.currency === "NGN" && (
-                                                    <p className="text-xs text-amber-600">Narration is required for Nigerian accounts.</p>
+                                                {step3Errors.narration ? (
+                                                    <p className="text-xs text-red-500">{step3Errors.narration}</p>
+                                                ) : (
+                                                    recipientDetails.currency === "NGN" && (
+                                                        <p className="text-xs text-amber-600">Narration is required for Nigerian accounts.</p>
+                                                    )
                                                 )}
                                             </div>
                                         </CardContent>
                                     </Card>
 
-                                    {/* Banking Details Card — conditional by destination */}
+                                    {/* Banking Details / Mobile Operator Details Card — conditional by deliveryMethod & destination */}
                                     <Card>
                                         <CardHeader>
-                                            <CardTitle className="text-base">Banking Details</CardTitle>
+                                            <CardTitle className="text-base">
+                                                {deliveryMethod === "mobile_money" ? "Mobile Operator Details" : "Banking Details"}
+                                            </CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
-                                            <div className="space-y-2">
-                                                <Label>Bank Name</Label>
-                                                <Input
-                                                    placeholder="e.g. Barclays, Access Bank"
-                                                    value={recipientDetails.bankName}
-                                                    onChange={e => setRecipientDetails({ ...recipientDetails, bankName: e.target.value })}
-                                                />
-                                            </div>
-
-                                            {/* Nigeria (NGN): account number only */}
-                                            {recipientDetails.currency === "NGN" && (
-                                                <div className="space-y-2">
-                                                    <Label>Account Number <span className="text-red-500">*</span></Label>
-                                                    <Input
-                                                        placeholder="10-digit account number"
-                                                        value={recipientDetails.accountNumber}
-                                                        onChange={e => setRecipientDetails({ ...recipientDetails, accountNumber: e.target.value })}
-                                                        maxLength={10}
-                                                    />
-                                                </div>
-                                            )}
-
-                                            {/* UK (GBP): account number + sort code */}
-                                            {recipientDetails.currency === "GBP" && (
+                                            {deliveryMethod === "mobile_money" ? (
                                                 <>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label>Mobile Operator <span className="text-red-500">*</span></Label>
+                                                        {mitoProviders.length > 0 ? (
+                                                            <SearchableSelect
+                                                                autoPopulate
+                                                                data-testid="mobile-operator-select"
+                                                                value={selectedProvider?.providerId || ""}
+                                                                placeholder="Select a mobile operator or start typing"
+                                                                className={step3Errors.bankName ? "[&>div]:border-red-500" : ""}
+                                                                options={(
+                                                                    mitoProviders.some((prov) => !prov.isGeneric)
+                                                                        ? mitoProviders.filter((prov) => !prov.isGeneric)
+                                                                        : mitoProviders
+                                                                ).map((prov) => ({
+                                                                    value: prov.providerId,
+                                                                    label: prov.providerName,
+                                                                }))}
+                                                                onValueChange={(val) => {
+                                                                    if (!val) {
+                                                                        setSelectedProvider(null);
+                                                                        setRecipientDetails((prev) => ({ ...prev, bankName: "" }));
+                                                                        return;
+                                                                    }
+                                                                    const found = mitoProviders.find((p) => p.providerId === val);
+                                                                    if (found) {
+                                                                        clearStep3Error("bankName");
+                                                                        setSelectedProvider({ providerId: found.providerId, providerCode: found.providerCode });
+                                                                        setRecipientDetails((prev) => ({ ...prev, bankName: found.providerName }));
+                                                                    }
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <Input
+                                                                data-testid="mobile-operator-input"
+                                                                placeholder="Select or enter a mobile operator (e.g. MTN, M-Pesa, Airtel)"
+                                                                value={recipientDetails.bankName}
+                                                                className={step3Errors.bankName ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    const val = e.target.value;
+                                                                    if (val.trim()) clearStep3Error("bankName");
+                                                                    setRecipientDetails({ ...recipientDetails, bankName: val });
+                                                                }}
+                                                            />
+                                                        )}
+                                                        {step3Errors.bankName ? (
+                                                            <p className="text-xs text-red-500">{step3Errors.bankName}</p>
+                                                        ) : (
+                                                            mitoProviders.length > 0 && !selectedProvider?.providerId && (
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    Please select a mobile operator or start typing to filter.
+                                                                </p>
+                                                            )
+                                                        )}
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <Label>
+                                                            {beneficiaryRequirements.find((r) => r.name === "beneficiary_MobileNo")?.label === "MobileNumber"
+                                                                ? "Mobile Number"
+                                                                : beneficiaryRequirements.find((r) => r.name === "beneficiary_MobileNo")?.label || "Mobile Number"}
+                                                            {" "}
+                                                            <span className="text-red-500">*</span>
+                                                        </Label>
+                                                        <Input
+                                                            data-testid="mobile-money-number-input"
+                                                            placeholder="e.g. +2348012345678 or 08012345678"
+                                                            value={recipientDetails.mobileNo || recipientDetails.accountNumber}
+                                                            className={(step3Errors.mobileNo || step3Errors.accountNumber) ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                            onChange={e => {
+                                                                const cleaned = e.target.value.replace(/\s+/g, "");
+                                                                clearStep3Error("mobileNo");
+                                                                clearStep3Error("accountNumber");
+                                                                setRecipientDetails({
+                                                                    ...recipientDetails,
+                                                                    mobileNo: cleaned,
+                                                                    accountNumber: cleaned,
+                                                                });
+                                                            }}
+                                                        />
+                                                        {(step3Errors.mobileNo || step3Errors.accountNumber) && (
+                                                            <p className="text-xs text-red-500">{step3Errors.mobileNo || step3Errors.accountNumber}</p>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="space-y-2">
+                                                        <Label>Bank Name <span className="text-red-500">*</span></Label>
+                                                        {mitoProviders.some((p) => !p.isGeneric) ? (
+                                                            <SearchableSelect
+                                                                autoPopulate
+                                                                data-testid="bank-name-select"
+                                                                value={selectedProvider?.providerId || ""}
+                                                                placeholder="Select a bank or start typing (e.g. Access Bank, UBA)"
+                                                                className={step3Errors.bankName ? "[&>div]:border-red-500" : ""}
+                                                                options={mitoProviders
+                                                                    .filter((prov) => !prov.isGeneric)
+                                                                    .map((prov) => ({
+                                                                        value: prov.providerId,
+                                                                        label: prov.providerName,
+                                                                    }))}
+                                                                onValueChange={(val) => {
+                                                                    if (!val) {
+                                                                        setSelectedProvider(null);
+                                                                        setRecipientDetails((prev) => ({ ...prev, bankName: "" }));
+                                                                        return;
+                                                                    }
+                                                                    const found = mitoProviders.find((p) => p.providerId === val);
+                                                                    if (found) {
+                                                                        clearStep3Error("bankName");
+                                                                        setSelectedProvider({ providerId: found.providerId, providerCode: found.providerCode });
+                                                                        setRecipientDetails((prev) => ({ ...prev, bankName: found.providerName }));
+                                                                    }
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <Input
+                                                                data-testid="bank-name-input"
+                                                                placeholder="Select or enter a bank (e.g. Barclays, Access Bank)"
+                                                                value={recipientDetails.bankName}
+                                                                className={step3Errors.bankName ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    const val = e.target.value;
+                                                                    if (val.trim()) clearStep3Error("bankName");
+                                                                    if (mitoProviders.length === 1 && mitoProviders[0].isGeneric) {
+                                                                        setSelectedProvider({
+                                                                            providerId: mitoProviders[0].providerId,
+                                                                            providerCode: mitoProviders[0].providerCode,
+                                                                        });
+                                                                    }
+                                                                    setRecipientDetails({ ...recipientDetails, bankName: val });
+                                                                }}
+                                                            />
+                                                        )}
+                                                        {step3Errors.bankName ? (
+                                                            <p className="text-xs text-red-500">{step3Errors.bankName}</p>
+                                                        ) : (
+                                                            mitoProviders.some((p) => !p.isGeneric) && !selectedProvider?.providerId && (
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    Please select a bank or start typing to auto-populate the bank name.
+                                                                </p>
+                                                            )
+                                                        )}
+                                                    </div>
+
+                                                    {/* Nigeria (NGN): account number only */}
+                                                    {recipientDetails.currency === "NGN" && (
                                                         <div className="space-y-2">
                                                             <Label>Account Number <span className="text-red-500">*</span></Label>
                                                             <Input
-                                                                placeholder="8-digit number"
+                                                                placeholder="10-digit account number"
                                                                 value={recipientDetails.accountNumber}
-                                                                onChange={e => setRecipientDetails({ ...recipientDetails, accountNumber: e.target.value })}
-                                                                maxLength={8}
+                                                                className={step3Errors.accountNumber ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    clearStep3Error("accountNumber");
+                                                                    const cleaned = e.target.value.replace(/\s+/g, "").slice(0, 10);
+                                                                    setRecipientDetails({ ...recipientDetails, accountNumber: cleaned });
+                                                                }}
                                                             />
+                                                            {step3Errors.accountNumber && <p className="text-xs text-red-500">{step3Errors.accountNumber}</p>}
                                                         </div>
-                                                        <div className="space-y-2">
-                                                            <Label>Sort Code <span className="text-red-500">*</span></Label>
-                                                            <Input
-                                                                placeholder="e.g. 20-45-67"
-                                                                value={recipientDetails.sortCode}
-                                                                onChange={e => setRecipientDetails({ ...recipientDetails, sortCode: e.target.value })}
-                                                                maxLength={8}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
+                                                    )}
 
-                                            {/* International (EUR / USD / other): IBAN + SWIFT */}
-                                            {recipientDetails.currency !== "NGN" && recipientDetails.currency !== "GBP" && (
-                                                <>
-                                                    <div className="space-y-2">
-                                                        <Label>IBAN / Account Number <span className="text-red-500">*</span></Label>
-                                                        <Input
-                                                            placeholder="e.g. DE89 3704 0044 0532 0130 00"
-                                                            value={recipientDetails.iban || recipientDetails.accountNumber}
-                                                            onChange={e => setRecipientDetails({ ...recipientDetails, iban: e.target.value, accountNumber: e.target.value })}
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label>SWIFT / BIC <span className="text-red-500">*</span></Label>
-                                                        <Input
-                                                            placeholder="e.g. DEUTDEFF"
-                                                            value={recipientDetails.swift}
-                                                            onChange={e => setRecipientDetails({ ...recipientDetails, swift: e.target.value })}
-                                                            maxLength={11}
-                                                        />
-                                                    </div>
+                                                    {/* UK (GBP): account number + sort code */}
+                                                    {recipientDetails.currency === "GBP" && (
+                                                        <>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                                                <div className="space-y-2">
+                                                                    <Label>Account Number <span className="text-red-500">*</span></Label>
+                                                                    <Input
+                                                                        placeholder="8-digit number"
+                                                                        value={recipientDetails.accountNumber}
+                                                                        className={step3Errors.accountNumber ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                        onChange={e => {
+                                                                            clearStep3Error("accountNumber");
+                                                                            const cleaned = e.target.value.replace(/\s+/g, "").slice(0, 8);
+                                                                            setRecipientDetails({ ...recipientDetails, accountNumber: cleaned });
+                                                                        }}
+                                                                    />
+                                                                    {step3Errors.accountNumber && <p className="text-xs text-red-500">{step3Errors.accountNumber}</p>}
+                                                                </div>
+                                                                <div className="space-y-2">
+                                                                    <Label>Sort Code <span className="text-red-500">*</span></Label>
+                                                                    <Input
+                                                                        placeholder="e.g. 20-45-67"
+                                                                        value={recipientDetails.sortCode}
+                                                                        className={step3Errors.sortCode ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                        onChange={e => {
+                                                                            clearStep3Error("sortCode");
+                                                                            setRecipientDetails({ ...recipientDetails, sortCode: e.target.value.replace(/\s+/g, "") });
+                                                                        }}
+                                                                        maxLength={8}
+                                                                    />
+                                                                    {step3Errors.sortCode && <p className="text-xs text-red-500">{step3Errors.sortCode}</p>}
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    )}
+
+                                                    {/* International (EUR / USD / other): IBAN + SWIFT */}
+                                                    {recipientDetails.currency !== "NGN" && recipientDetails.currency !== "GBP" && (
+                                                        <>
+                                                            <div className="space-y-2">
+                                                                <Label>IBAN / Account Number <span className="text-red-500">*</span></Label>
+                                                                <Input
+                                                                    placeholder="e.g. DE89 3704 0044 0532 0130 00"
+                                                                    value={recipientDetails.iban || recipientDetails.accountNumber}
+                                                                    className={step3Errors.iban ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                    onChange={e => {
+                                                                        const cleaned = e.target.value.replace(/\s+/g, "");
+                                                                        clearStep3Error("iban");
+                                                                        setRecipientDetails({ ...recipientDetails, iban: cleaned, accountNumber: cleaned });
+                                                                    }}
+                                                                />
+                                                                {step3Errors.iban && <p className="text-xs text-red-500">{step3Errors.iban}</p>}
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <Label>SWIFT / BIC <span className="text-red-500">*</span></Label>
+                                                                <Input
+                                                                    placeholder="e.g. DEUTDEFF"
+                                                                    value={recipientDetails.swift}
+                                                                    className={step3Errors.swift ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                    onChange={e => {
+                                                                        clearStep3Error("swift");
+                                                                        setRecipientDetails({ ...recipientDetails, swift: e.target.value.replace(/\s+/g, "").slice(0, 11) });
+                                                                    }}
+                                                                />
+                                                                {step3Errors.swift && <p className="text-xs text-red-500">{step3Errors.swift}</p>}
+                                                            </div>
+                                                        </>
+                                                    )}
+
+                                                    {/* Country-specific bank routing fields returned by GET /api/v1/mito/Beneficiaries/requirements */}
+                                                    {beneficiaryRequirements.some((r) => r.isDisplayable && r.name === "aba") && (
+                                                        <div className="space-y-2">
+                                                            <Label>
+                                                                {beneficiaryRequirements.find((r) => r.name === "aba")?.label || "ABA Routing Number"}
+                                                                {beneficiaryRequirements.find((r) => r.name === "aba")?.isRequired && <span className="text-red-500 ml-1">*</span>}
+                                                            </Label>
+                                                            <Input
+                                                                placeholder="9-digit ABA routing number"
+                                                                value={recipientDetails.aba}
+                                                                className={step3Errors.aba ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    clearStep3Error("aba");
+                                                                    setRecipientDetails({ ...recipientDetails, aba: e.target.value.replace(/\s+/g, "").slice(0, 9) });
+                                                                }}
+                                                            />
+                                                            {step3Errors.aba && <p className="text-xs text-red-500">{step3Errors.aba}</p>}
+                                                        </div>
+                                                    )}
+                                                    {beneficiaryRequirements.some((r) => r.isDisplayable && r.name === "ifsc") && (
+                                                        <div className="space-y-2">
+                                                            <Label>
+                                                                {beneficiaryRequirements.find((r) => r.name === "ifsc")?.label || "IFSC Code"}
+                                                                {beneficiaryRequirements.find((r) => r.name === "ifsc")?.isRequired && <span className="text-red-500 ml-1">*</span>}
+                                                            </Label>
+                                                            <Input
+                                                                placeholder="11-character IFSC code"
+                                                                value={recipientDetails.ifsc}
+                                                                className={step3Errors.ifsc ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    clearStep3Error("ifsc");
+                                                                    setRecipientDetails({ ...recipientDetails, ifsc: e.target.value.replace(/\s+/g, "").slice(0, 11) });
+                                                                }}
+                                                            />
+                                                            {step3Errors.ifsc && <p className="text-xs text-red-500">{step3Errors.ifsc}</p>}
+                                                        </div>
+                                                    )}
+                                                    {beneficiaryRequirements.some((r) => r.isDisplayable && r.name === "bsb_code") && (
+                                                        <div className="space-y-2">
+                                                            <Label>
+                                                                {beneficiaryRequirements.find((r) => r.name === "bsb_code")?.label || "BSB Code"}
+                                                                {beneficiaryRequirements.find((r) => r.name === "bsb_code")?.isRequired && <span className="text-red-500 ml-1">*</span>}
+                                                            </Label>
+                                                            <Input
+                                                                placeholder="BSB code"
+                                                                value={recipientDetails.bsbCode}
+                                                                className={step3Errors.bsbCode ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    clearStep3Error("bsbCode");
+                                                                    setRecipientDetails({ ...recipientDetails, bsbCode: e.target.value.replace(/\s+/g, "") });
+                                                                }}
+                                                            />
+                                                            {step3Errors.bsbCode && <p className="text-xs text-red-500">{step3Errors.bsbCode}</p>}
+                                                        </div>
+                                                    )}
+                                                    {beneficiaryRequirements.some((r) => r.isDisplayable && r.name === "branch_code") && (
+                                                        <div className="space-y-2">
+                                                            <Label>
+                                                                {beneficiaryRequirements.find((r) => r.name === "branch_code")?.label || "Branch Code"}
+                                                                {beneficiaryRequirements.find((r) => r.name === "branch_code")?.isRequired && <span className="text-red-500 ml-1">*</span>}
+                                                            </Label>
+                                                            <Input
+                                                                placeholder="Branch code"
+                                                                value={recipientDetails.branchCode}
+                                                                className={step3Errors.branchCode ? "border-red-500 focus-visible:ring-red-500" : ""}
+                                                                onChange={e => {
+                                                                    clearStep3Error("branchCode");
+                                                                    setRecipientDetails({ ...recipientDetails, branchCode: e.target.value.replace(/\s+/g, "") });
+                                                                }}
+                                                            />
+                                                            {step3Errors.branchCode && <p className="text-xs text-red-500">{step3Errors.branchCode}</p>}
+                                                        </div>
+                                                    )}
                                                 </>
                                             )}
                                         </CardContent>
@@ -1230,70 +2828,240 @@ export default function SendMoney() {
                                     {/* Promo Code Section (features/promo) */}
 
 
+                                    {beneficiaryCreatedSuccess && (
+                                        <div
+                                            role="status"
+                                            data-testid="step4-beneficiary-created-banner"
+                                            className="flex items-start gap-3 p-4 rounded-xl border border-green-200 bg-green-50 text-green-900 shadow-2xs"
+                                        >
+                                            <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+                                            <div className="flex-1 text-sm">
+                                                <p className="font-semibold text-green-900">Beneficiary created successfully</p>
+                                                <p className="text-green-700 mt-0.5">{beneficiaryCreatedSuccess}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setBeneficiaryCreatedSuccess(null)}
+                                                className="text-green-500 hover:text-green-800 p-1"
+                                                aria-label="Dismiss notification"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {/* Payment Method Selection */}
                                     <Card>
                                         <CardHeader>
-                                            <CardTitle className="text-base">How would you like to pay?</CardTitle>
+                                            <CardTitle className="text-base">
+                                                {mitoCardPaymentSession ? "Card Details" : "How would you like to pay?"}
+                                            </CardTitle>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
-                                            {[
-                                                { id: "instant_bank", title: "Instant Pay By Bank", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: Landmark },
-                                                { id: "card", title: "Credit/Debit Card", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: CreditCard },
-                                                { id: "manual_transfer", title: "Manual Bank Transfer", desc: "Send to our local account (Pay within 30 minutes)", icon: Building2 },
-                                                { id: "wallet", title: "Wallet Balance", desc: `Available: GBP 300.20`, icon: Wallet },
-                                            ].map((method) => (
-                                                <div
-                                                    key={method.id}
-                                                    onClick={async () => {
-                                                        setPaymentMethod(method.id);
-                                                        // Record the payment method on the server-owned
-                                                        // transaction (instant methods complete it).
-                                                        if (transactionId) {
-                                                            try {
-                                                                if (promoApplied) promo.lock();
-                                                                await paySendMoneyTransaction(transactionId, method.id as SendMoneyPaymentMethod, promoApplied ? { code: promoCode, discount: promoDiscount } : null, useBonus ? { mode: bonusType, amount: bonusAmount } : null);
-                                                            } catch (e) {
-                                                                // The bonus is used with the payment; if it can't be, the transfer is not paid (BONUS-RHEMITO B-23)
-                                                                if (e instanceof SendMoneyApiError && e.code.startsWith("BONUS_")) {
-                                                                    bonusRefused(e);
-                                                                    setPaymentMethod("");
-                                                                    return;
-                                                                }
-                                                                // A promo code that can no longer be used stops the payment before any money moves (PROMO-RHEMITO §6.4)
-                                                                if (e instanceof SendMoneyApiError && e.code.startsWith("PROMO_")) {
-                                                                    promo.reject(e.message);
-                                                                    setPaymentMethod("");
-                                                                    toast({ title: "Payment not made", description: e.message, variant: "destructive" });
-                                                                    return;
-                                                                }
-                                                                console.error("Failed to record payment method", e);
-                                                                const description = e instanceof SendMoneyApiError ? e.message : "We couldn't complete your payment. Please try again.";
-                                                                toast({ title: "Payment not completed", description, variant: "destructive" });
-                                                                setPaymentMethod("");
+                                            {mitoCardPaymentSession ? (
+                                                <div className="space-y-4" data-testid="mito-card-checkout-section">
+                                                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setMitoCardPaymentSession(null);
+                                                                setCheckoutFlowError(null);
+                                                            }}
+                                                            className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
+                                                        >
+                                                            <ArrowLeft className="w-4 h-4" />
+                                                            <span>Change payment method</span>
+                                                        </button>
+                                                        {transactionRef && (
+                                                            <span className="text-xs font-mono text-gray-500">
+                                                                Ref: {transactionRef}
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {checkoutFlowMounting && (
+                                                        <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-600">
+                                                            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                                                            <span>Loading secure card checkout...</span>
+                                                        </div>
+                                                    )}
+
+                                                    {checkoutFlowError && (
+                                                        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                                                            {checkoutFlowError}
+                                                        </div>
+                                                    )}
+
+                                                    <div
+                                                        id="mito-checkout-flow-container"
+                                                        ref={checkoutFlowContainerRef}
+                                                        className="min-h-[220px]"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                [
+                                                    { id: "instant_bank", title: "Instant Pay By Bank", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: Landmark },
+                                                    { id: "card", title: "Credit/Debit Card", desc: `You pay GBP ${totalPay.toFixed(2)}`, icon: CreditCard },
+                                                    { id: "manual_transfer", title: "Manual Bank Transfer", desc: "Send to our local account (Pay within 30 minutes)", icon: Building2 },
+                                                    { id: "wallet", title: "Wallet Balance", desc: `Available: GBP 300.20`, icon: Wallet },
+                                                ].map((method) => (
+                                                    <div
+                                                        key={method.id}
+                                                        onClick={async () => {
+                                                            if (loadingPaymentMethod) return;
+                                                            setPaymentMethod(method.id);
+                                                            setMitoPayByBankUrl(null);
+                                                            if (method.id === "manual_transfer") {
+                                                                setShowManualTransferConfirm(true);
                                                                 return;
                                                             }
-                                                        }
-                                                        void rewards.refetch();
-                                                        if (method.id === 'manual_transfer') {
-                                                            setShowManualTransferConfirm(true);
-                                                        } else {
+                                                            let paidTx: Awaited<ReturnType<typeof paySendMoneyTransaction>> | null = null;
+                                                            // Record the payment method on the server-owned
+                                                            // transaction and call POST /api/v1/Transaction/SendMoney.
+                                                            if (transactionId) {
+                                                                setLoadingPaymentMethod(method.id);
+                                                                try {
+                                                                    if (promoApplied) promo.lock();
+                                                                    await paySendMoneyTransaction(
+                                                                        transactionId,
+                                                                        method.id as SendMoneyPaymentMethod,
+                                                                        promoApplied ? { code: promoCode, discount: promoDiscount } : null,
+                                                                        useBonus ? { mode: bonusType, amount: bonusAmount } : null,
+                                                                    ).then((res) => {
+                                                                        paidTx = res;
+                                                                    });
+                                                                    if (paidTx?.mitoReference) {
+                                                                        setTransactionRef(paidTx.mitoReference);
+                                                                    }
+                                                                    if (paidTx?.mitoCheckoutPublicKey) {
+                                                                        setMitoCheckoutPublicKey(paidTx.mitoCheckoutPublicKey);
+                                                                    }
+                                                                } catch (e) {
+                                                                    setLoadingPaymentMethod(null);
+                                                                    // The bonus is used with the payment; if it can't be, the transfer is not paid (BONUS-RHEMITO B-23)
+                                                                    if (e instanceof SendMoneyApiError && e.code.startsWith("BONUS_")) {
+                                                                        bonusRefused(e);
+                                                                        setPaymentMethod("");
+                                                                        return;
+                                                                    }
+                                                                    // A promo code that can no longer be used stops the payment before any money moves (PROMO-RHEMITO §6.4)
+                                                                    if (e instanceof SendMoneyApiError && e.code.startsWith("PROMO_")) {
+                                                                        promo.reject(e.message);
+                                                                        setPaymentMethod("");
+                                                                        toast({ title: "Payment not made", description: e.message, variant: "destructive" });
+                                                                        return;
+                                                                    }
+                                                                    console.error("Failed to record payment method", e);
+                                                                    const description = e instanceof SendMoneyApiError ? e.message : "We couldn't complete your payment. Please try again.";
+                                                                    toast({ title: "Payment not completed", description, variant: "destructive" });
+                                                                    setPaymentMethod("");
+                                                                    return;
+                                                                }
+                                                                setLoadingPaymentMethod(null);
+                                                            }
+                                                            void rewards.refetch();
+                                                            if (method.id === "card" && paidTx?.mitoPaymentSession) {
+                                                                setMitoCardPaymentSession(paidTx.mitoPaymentSession);
+                                                                return;
+                                                            }
+                                                            if (
+                                                                method.id === "instant_bank" &&
+                                                                paidTx?.mitoPaymentUrl &&
+                                                                paidTx.mitoPaymentUrl.startsWith("http")
+                                                            ) {
+                                                                setMitoPayByBankUrl(paidTx.mitoPaymentUrl);
+                                                                return;
+                                                            }
                                                             setShowConfirmation(true);
-                                                        }
-                                                    }}
-                                                    className={`p-4 border rounded-xl cursor-pointer flex items-center gap-4 transition-all ${paymentMethod === method.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:border-gray-300"
-                                                        }`}
+                                                        }}
+                                                        className={`p-4 border rounded-xl cursor-pointer flex items-center gap-4 transition-all ${paymentMethod === method.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:border-gray-300"
+                                                            }`}
+                                                    >
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-white border ${paymentMethod === method.id ? "text-primary border-primary" : "text-gray-500 border-gray-200"
+                                                            }`}>
+                                                            {loadingPaymentMethod === method.id ? (
+                                                                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                                            ) : (
+                                                                <method.icon className="w-5 h-5" />
+                                                            )}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-medium">{method.title}</div>
+                                                            <div className="text-xs text-muted-foreground">{method.desc}</div>
+                                                        </div>
+                                                        {paymentMethod === method.id && <div className="ml-auto text-primary"><Check className="w-5 h-5" /></div>}
+                                                    </div>
+                                                ))
+                                            )}
+
+                                            {mitoPayByBankUrl && !mitoCardPaymentSession && (
+                                                <div
+                                                    data-testid="mito-pay-by-bank-modal"
+                                                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4"
                                                 >
-                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-white border ${paymentMethod === method.id ? "text-primary border-primary" : "text-gray-500 border-gray-200"
-                                                        }`}>
-                                                        <method.icon className="w-5 h-5" />
+                                                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[420px] h-[min(680px,calc(100dvh-48px))] flex flex-col overflow-hidden border border-slate-200">
+                                                        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 bg-slate-50/70">
+                                                            <div className="min-w-0">
+                                                                <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                                                                    <Landmark className="w-4 h-4 text-primary shrink-0" />
+                                                                    <span>Instant Pay By Bank</span>
+                                                                </div>
+                                                                {transactionRef && (
+                                                                    <div className="text-[11px] text-slate-500 truncate">
+                                                                        Ref: <span className="font-mono font-medium text-slate-700">{transactionRef}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                                <a
+                                                                    href={mitoPayByBankUrl}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="px-2.5 py-1 rounded-md text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                                                                >
+                                                                    Open in new tab
+                                                                </a>
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label="Close Pay by Bank modal"
+                                                                    data-testid="button-close-pay-by-bank-modal"
+                                                                    onClick={() => setMitoPayByBankUrl(null)}
+                                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+                                                                >
+                                                                    <X className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <iframe
+                                                            title="Pay by bank"
+                                                            allow="encrypted-media"
+                                                            src={mitoPayByBankUrl}
+                                                            className="w-full flex-1 border-0 bg-white"
+                                                        />
+                                                        <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2">
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => setMitoPayByBankUrl(null)}
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                data-testid="button-complete-pay-by-bank"
+                                                                onClick={() => {
+                                                                    setMitoPayByBankUrl(null);
+                                                                    setShowConfirmation(true);
+                                                                }}
+                                                            >
+                                                                I&apos;ve Completed Payment
+                                                            </Button>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <div className="font-medium">{method.title}</div>
-                                                        <div className="text-xs text-muted-foreground">{method.desc}</div>
-                                                    </div>
-                                                    {paymentMethod === method.id && <div className="ml-auto text-primary"><Check className="w-5 h-5" /></div>}
                                                 </div>
-                                            ))}
+                                            )}
                                         </CardContent>
                                     </Card>
 
@@ -1377,6 +3145,64 @@ export default function SendMoney() {
                                                         <p className="text-xs text-green-600 font-medium mt-1">
                                                             Includes {promoApplied && "promo code"}{promoApplied && useBonus && " & "}{useBonus && (bonusType === 'pay_less' ? "Bonus Discount" : "Bonus Credit")}
                                                         </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Recipient / Beneficiary Details Section under Amount Summary */}
+                                                <div className="pt-4 mt-3 border-t space-y-2.5" data-testid="summary-recipient-details">
+                                                    <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                                        Recipient Details
+                                                    </div>
+                                                    <div className="flex justify-between gap-2">
+                                                        <span className="text-gray-600 shrink-0">Recipient Name</span>
+                                                        <span className="font-medium text-gray-900 text-right truncate" data-testid="summary-recipient-name">
+                                                            {beneficiaryType === "business"
+                                                                ? (recipientDetails.companyName.trim() || selectedRecipient?.name || "—")
+                                                                : ([recipientDetails.firstName.trim(), recipientDetails.lastName.trim()].filter(Boolean).join(" ") || selectedRecipient?.name || "—")}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between gap-2">
+                                                        <span className="text-gray-600 shrink-0">
+                                                            {deliveryMethod === "mobile_money" ? "Mobile Operator" : "Bank Name"}
+                                                        </span>
+                                                        <span className="font-medium text-gray-900 text-right truncate" data-testid="summary-recipient-bank">
+                                                            {recipientDetails.bankName.trim() || selectedRecipient?.bank || "—"}
+                                                        </span>
+                                                    </div>
+                                                    {deliveryMethod === "mobile_money" ? (
+                                                        <div className="flex justify-between gap-2">
+                                                            <span className="text-gray-600 shrink-0">Mobile Number</span>
+                                                            <span className="font-mono font-medium text-gray-900 text-right" data-testid="summary-recipient-account">
+                                                                {recipientDetails.mobileNo.trim() || recipientDetails.accountNumber.trim() || selectedRecipient?.mobileNo || selectedRecipient?.account || "—"}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className="flex justify-between gap-2">
+                                                                <span className="text-gray-600 shrink-0">
+                                                                    {recipientDetails.iban.trim() && !recipientDetails.accountNumber.trim() ? "IBAN" : "Account Number"}
+                                                                </span>
+                                                                <span className="font-mono font-medium text-gray-900 text-right break-all" data-testid="summary-recipient-account">
+                                                                    {recipientDetails.accountNumber.trim() || recipientDetails.iban.trim() || selectedRecipient?.account || selectedRecipient?.iban || "—"}
+                                                                </span>
+                                                            </div>
+                                                            {(recipientDetails.sortCode.trim() || selectedRecipient?.sortCode) && (
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-600 shrink-0">Sort Code</span>
+                                                                    <span className="font-mono font-medium text-gray-900 text-right">
+                                                                        {recipientDetails.sortCode.trim() || selectedRecipient?.sortCode}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {(recipientDetails.swift.trim() || selectedRecipient?.swift) && (
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-600 shrink-0">SWIFT / BIC</span>
+                                                                    <span className="font-mono font-medium text-gray-900 text-right">
+                                                                        {recipientDetails.swift.trim() || selectedRecipient?.swift}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
                                             </CardContent>

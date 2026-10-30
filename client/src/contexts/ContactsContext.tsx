@@ -6,9 +6,13 @@ interface ContactsContextType {
   contacts: Contact[];
   senders: Contact[];
   recipients: Contact[];
-  upsertSender: (data: Partial<Contact> & { email: string }) => Contact;
-  upsertRecipient: (data: Partial<Contact> & { email: string }) => Contact;
-  deleteContactRole: (email: string, role: "sender" | "recipient") => void;
+  upsertSender: (data: Partial<Contact> & { email: string; originalEmail?: string; originalId?: string }) => Contact;
+  upsertRecipient: (data: Partial<Contact> & { email: string; originalEmail?: string; originalId?: string }) => Contact;
+  deleteContactRole: (
+    emailOrId: string,
+    role: "sender" | "recipient",
+    extraMatch?: { name?: string; accountNumber?: string }
+  ) => void;
   deleteContact: (email: string) => void;
   getContactByEmail: (email: string) => Contact | undefined;
 }
@@ -46,28 +50,35 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
     return contacts.find((c) => c.email.toLowerCase() === normalized);
   };
 
-  const upsertSender = (data: Partial<Contact> & { email: string }): Contact => {
+  const upsertSender = (data: Partial<Contact> & { email: string; originalEmail?: string; originalId?: string }): Contact => {
     const normalized = data.email.trim().toLowerCase();
-    const existingIndex = contacts.findIndex((c) => c.email.toLowerCase() === normalized);
+    const origEmail = data.originalEmail?.trim().toLowerCase();
+    const origId = data.originalId?.trim().toLowerCase() || data.id?.trim().toLowerCase();
+    const existingIndex = contacts.findIndex((c) => {
+      if (origId && c.id.toLowerCase() === origId) return true;
+      if (origEmail && c.email.toLowerCase() === origEmail) return true;
+      return c.email.toLowerCase() === normalized;
+    });
 
     const existingCodes = contacts.map((c) => c.uniqueCode).filter(Boolean);
     if (existingIndex >= 0) {
       const existing = contacts[existingIndex];
+      const { originalEmail: _oe, originalId: _oi, ...cleanData } = data;
       const updated: Contact = {
         ...existing,
-        ...data,
+        ...cleanData,
         email: normalized,
         isSender: true,
         // Preserve existing recipient status and banking details if present
         isRecipient: existing.isRecipient,
         uniqueCode: existing.uniqueCode || (data.uniqueCode || generateUniqueCode(existingCodes)),
-        bankName: data.bankName || existing.bankName,
-        accountNumber: data.accountNumber || existing.accountNumber,
-        sortCode: data.sortCode || existing.sortCode,
-        iban: data.iban || existing.iban,
-        swift: data.swift || existing.swift,
-        serviceType: data.serviceType || existing.serviceType,
-        narration: data.narration || existing.narration,
+        bankName: data.bankName !== undefined ? data.bankName : existing.bankName,
+        accountNumber: data.accountNumber !== undefined ? data.accountNumber : existing.accountNumber,
+        sortCode: data.sortCode !== undefined ? data.sortCode : existing.sortCode,
+        iban: data.iban !== undefined ? data.iban : existing.iban,
+        swift: data.swift !== undefined ? data.swift : existing.swift,
+        serviceType: data.serviceType !== undefined ? data.serviceType : existing.serviceType,
+        narration: data.narration !== undefined ? data.narration : existing.narration,
         updatedAt: new Date().toISOString(),
       };
       setContacts((prev) => {
@@ -77,59 +88,67 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
       });
       return updated;
     } else {
+      const { originalEmail: _oe, originalId: _oi, ...cleanData } = data;
       const newContact: Contact = {
-        id: `cnt-${Date.now().toString().slice(-6)}`,
+        id: cleanData.id || `cnt-${Date.now().toString().slice(-6)}`,
         email: normalized,
-        contactType: data.contactType || "individual",
+        contactType: cleanData.contactType || "individual",
         isSender: true,
         isRecipient: false,
-        firstName: data.firstName || "",
-        middleName: data.middleName || "",
-        lastName: data.lastName || "",
-        businessName: data.businessName || "",
-        countryCode: data.countryCode || "+234",
-        phone: data.phone || "",
-        dob: data.dob || "",
-        country: data.country || "Nigeria",
-        currency: data.currency || (data.country === "United Kingdom" ? "GBP" : data.country === "Nigeria" ? "NGN" : "USD"),
-        relationship: data.relationship || "Personal",
-        createdAt: data.createdAt || new Date().toISOString().split("T")[0],
-        bankName: data.bankName || "",
-        accountNumber: data.accountNumber || "",
-        sortCode: data.sortCode || "",
-        iban: data.iban || "",
-        swift: data.swift || "",
-        serviceType: data.serviceType || "Bank Deposit",
-        uniqueCode: data.uniqueCode || generateUniqueCode(existingCodes),
-        narration: data.narration || "",
+        firstName: cleanData.firstName || "",
+        middleName: cleanData.middleName || "",
+        lastName: cleanData.lastName || "",
+        businessName: cleanData.businessName || "",
+        countryCode: cleanData.countryCode || "+234",
+        phone: cleanData.phone || "",
+        dob: cleanData.dob || "",
+        country: cleanData.country || "Nigeria",
+        currency: cleanData.currency || (cleanData.country === "United Kingdom" ? "GBP" : cleanData.country === "Nigeria" ? "NGN" : "USD"),
+        relationship: cleanData.relationship || "Personal",
+        createdAt: cleanData.createdAt || new Date().toISOString().split("T")[0],
+        bankName: cleanData.bankName || "",
+        accountNumber: cleanData.accountNumber || "",
+        sortCode: cleanData.sortCode || "",
+        iban: cleanData.iban || "",
+        swift: cleanData.swift || "",
+        serviceType: cleanData.serviceType || "Bank Deposit",
+        uniqueCode: cleanData.uniqueCode || generateUniqueCode(existingCodes),
+        narration: cleanData.narration || "",
       };
       setContacts((prev) => [...prev, newContact]);
       return newContact;
     }
   };
 
-  const upsertRecipient = (data: Partial<Contact> & { email: string }): Contact => {
+  const upsertRecipient = (data: Partial<Contact> & { email: string; originalEmail?: string; originalId?: string }): Contact => {
     const normalized = data.email.trim().toLowerCase();
-    const existingIndex = contacts.findIndex((c) => c.email.toLowerCase() === normalized);
+    const origEmail = data.originalEmail?.trim().toLowerCase();
+    const origId = data.originalId?.trim().toLowerCase() || data.id?.trim().toLowerCase();
+    const existingIndex = contacts.findIndex((c) => {
+      if (origId && c.id.toLowerCase() === origId) return true;
+      if (origEmail && c.email.toLowerCase() === origEmail) return true;
+      return c.email.toLowerCase() === normalized;
+    });
     const existingCodes = contacts.map((c) => c.uniqueCode).filter(Boolean);
 
     if (existingIndex >= 0) {
       const existing = contacts[existingIndex];
+      const { originalEmail: _oe, originalId: _oi, ...cleanData } = data;
       const updated: Contact = {
         ...existing,
-        ...data,
+        ...cleanData,
         email: normalized,
         isRecipient: true,
         // Preserve existing sender status and details
         isSender: existing.isSender,
-        firstName: data.firstName || existing.firstName,
-        middleName: data.middleName || existing.middleName,
-        lastName: data.lastName || existing.lastName,
-        businessName: data.businessName || existing.businessName,
-        contactType: data.contactType || existing.contactType,
-        countryCode: data.countryCode || existing.countryCode,
-        phone: data.phone || existing.phone,
-        dob: existing.dob || data.dob || "",
+        firstName: cleanData.firstName !== undefined ? cleanData.firstName : existing.firstName,
+        middleName: cleanData.middleName !== undefined ? cleanData.middleName : existing.middleName,
+        lastName: cleanData.lastName !== undefined ? cleanData.lastName : existing.lastName,
+        businessName: cleanData.businessName !== undefined ? cleanData.businessName : existing.businessName,
+        contactType: cleanData.contactType !== undefined ? cleanData.contactType : existing.contactType,
+        countryCode: cleanData.countryCode !== undefined ? cleanData.countryCode : existing.countryCode,
+        phone: cleanData.phone !== undefined ? cleanData.phone : existing.phone,
+        dob: existing.dob || cleanData.dob || "",
         uniqueCode: existing.uniqueCode || generateUniqueCode(existingCodes),
         updatedAt: new Date().toISOString(),
       };
@@ -140,60 +159,91 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
       });
       return updated;
     } else {
+      const { originalEmail: _oe, originalId: _oi, ...cleanData } = data;
       const newContact: Contact = {
-        id: `rec-${Date.now().toString().slice(-6)}`,
+        id: cleanData.id || `rec-${Date.now().toString().slice(-6)}`,
         email: normalized,
-        contactType: data.contactType || "individual",
+        contactType: cleanData.contactType || "individual",
         isSender: false,
         isRecipient: true,
-        firstName: data.firstName || "",
-        middleName: data.middleName || "",
-        lastName: data.lastName || "",
-        businessName: data.businessName || "",
-        countryCode: data.countryCode || "+234",
-        phone: data.phone || "",
-        dob: data.dob || "",
-        country: data.country || "United Kingdom",
-        currency: data.currency || (data.country === "United Kingdom" ? "GBP" : data.country === "Nigeria" ? "NGN" : "USD"),
-        relationship: data.relationship || "Personal",
-        createdAt: data.createdAt || new Date().toISOString().split("T")[0],
-        bankName: data.bankName || "",
-        accountNumber: data.accountNumber || "",
-        sortCode: data.sortCode || "",
-        iban: data.iban || "",
-        swift: data.swift || "",
-        serviceType: data.serviceType || "Bank Deposit",
-        uniqueCode: data.uniqueCode || generateUniqueCode(existingCodes),
-        narration: data.narration || "",
+        firstName: cleanData.firstName || "",
+        middleName: cleanData.middleName || "",
+        lastName: cleanData.lastName || "",
+        businessName: cleanData.businessName || "",
+        countryCode: cleanData.countryCode || "+234",
+        phone: cleanData.phone || "",
+        dob: cleanData.dob || "",
+        country: cleanData.country || "United Kingdom",
+        currency: cleanData.currency || (cleanData.country === "United Kingdom" ? "GBP" : cleanData.country === "Nigeria" ? "NGN" : "USD"),
+        relationship: cleanData.relationship || "Personal",
+        createdAt: cleanData.createdAt || new Date().toISOString().split("T")[0],
+        bankName: cleanData.bankName || "",
+        accountNumber: cleanData.accountNumber || "",
+        sortCode: cleanData.sortCode || "",
+        iban: cleanData.iban || "",
+        swift: cleanData.swift || "",
+        serviceType: cleanData.serviceType || "Bank Deposit",
+        uniqueCode: cleanData.uniqueCode || generateUniqueCode(existingCodes),
+        narration: cleanData.narration || "",
       };
       setContacts((prev) => [...prev, newContact]);
       return newContact;
     }
   };
 
-  const deleteContactRole = (email: string, role: "sender" | "recipient") => {
-    const normalized = email.trim().toLowerCase();
-    const existing = contacts.find((c) => c.email.toLowerCase() === normalized);
-    if (!existing) return;
+  const deleteContactRole = (
+    emailOrId: string,
+    role: "sender" | "recipient",
+    extraMatch?: { name?: string; accountNumber?: string }
+  ) => {
+    const normalized = emailOrId.trim().toLowerCase();
+    const targetName = (extraMatch?.name || "").trim().toLowerCase();
+    const targetAcct = (extraMatch?.accountNumber || "").replace(/\s+/g, "").toLowerCase();
 
-    // If contact has both roles, just disable the removed role
-    if (existing.isSender && existing.isRecipient) {
-      setContacts((prev) =>
-        prev.map((c) => {
-          if (c.email.toLowerCase() === normalized) {
-            return {
-              ...c,
-              isSender: role === "sender" ? false : c.isSender,
-              isRecipient: role === "recipient" ? false : c.isRecipient,
-            };
-          }
-          return c;
-        })
-      );
-    } else {
-      // If only had this single role, remove completely
-      setContacts((prev) => prev.filter((c) => c.email.toLowerCase() !== normalized));
-    }
+    const matchesTarget = (c: Contact) => {
+      if (normalized && (c.email.toLowerCase() === normalized || c.id.toLowerCase() === normalized)) {
+        return true;
+      }
+      const contactFullName = (
+        c.contactType === "business"
+          ? c.businessName || `${c.firstName} ${c.lastName}`
+          : [c.firstName, c.middleName, c.lastName].filter(Boolean).join(" ")
+      )
+        .trim()
+        .toLowerCase();
+      const contactSimpleName = `${c.firstName || ""} ${c.lastName || ""}`.trim().toLowerCase();
+      const contactAcct = (c.accountNumber || c.iban || "").replace(/\s+/g, "").toLowerCase();
+
+      if (targetAcct && targetAcct !== "—" && contactAcct && contactAcct === targetAcct) {
+        if (!targetName || contactFullName === targetName || contactSimpleName === targetName) {
+          return true;
+        }
+      }
+      if (targetName && (contactFullName === targetName || contactSimpleName === targetName)) {
+        if (!targetAcct || targetAcct === "—" || !contactAcct || contactAcct === targetAcct) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    setContacts((prev) => {
+      const next: Contact[] = [];
+      for (const c of prev) {
+        if (!matchesTarget(c)) {
+          next.push(c);
+          continue;
+        }
+        if (c.isSender && c.isRecipient) {
+          next.push({
+            ...c,
+            isSender: role === "sender" ? false : c.isSender,
+            isRecipient: role === "recipient" ? false : c.isRecipient,
+          });
+        }
+      }
+      return next;
+    });
   };
 
   const deleteContact = (email: string) => {

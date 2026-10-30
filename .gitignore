@@ -18,3 +18,4 @@ playwright/.cache/
 
 # Local environment settings (credentials)
 .env
+docs/Credentials/

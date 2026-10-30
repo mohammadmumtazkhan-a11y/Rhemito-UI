@@ -22,11 +22,444 @@ export interface CreateSendMoneyInput {
   /** Fixed amount promos only: the discount comes off the whole amount to pay, and this is what the customer was shown. */
   promoAppliesTo?: "fee" | "amount";
   promoDiscount?: string;
+  /** Optional recipient & Mito Retail Sandbox fields from Step 3. */
+  beneficiaryType?: "individual" | "business";
+  companyName?: string;
+  recipientFirstName?: string;
+  recipientLastName?: string;
+  relationship?: string;
+  relationId?: string;
+  nickName?: string;
+  reason?: string;
+  reasonId?: string;
+  otherReason?: string;
+  narration?: string;
+  address?: string;
+  city?: string;
+  postcode?: string;
+  stateOrProvince?: string;
+  mobileNo?: string;
+  bankName?: string;
+  accountNumber?: string;
+  sortCode?: string;
+  iban?: string;
+  swift?: string;
+  aba?: string;
+  ifsc?: string;
+  bsbCode?: string;
+  branchCode?: string;
+  countryIso3?: string;
+  country?: string;
+  beneficiaryId?: string;
+  providerId?: string;
+  providerCode?: string;
+  affiliateRateId?: string;
+}
+
+export interface MitoBeneficiaryRequirementField {
+  label: string;
+  name: string;
+  order: number;
+  type: string;
+  format?: string | null;
+  columnDataType: string;
+  isRequired: boolean;
+  isDisplayable: boolean;
+  fieldInformation?: string | null;
+  dropdownOptions?: Array<{ name: string; id: string }>;
+}
+
+export interface MitoBeneficiaryItem {
+  beneficiaryId: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  companyName: string | null;
+  beneficiaryNickname: string | null;
+  legalEntityType: "individual" | "business";
+  countryIso3: string;
+  country: string;
+  currency: string;
+  serviceCode: string;
+  collectionMode: string;
+  providerId: string | null;
+  bankName: string;
+  acctNumber: string;
+  sortCode: string;
+  iban: string;
+  bicSwift: string;
+  aba: string;
+  ifsc: string;
+  bsbCode: string;
+  branchCode: string;
+  address: string;
+  city: string;
+  postcode: string;
+  stateOrProvince: string;
+  mobileNo: string;
+  relationId: string | null;
+  reasonId: string | null;
+  createdAt: string | null;
+}
+
+const DELETED_BENEFICIARIES_STORAGE_KEY = "rhemito_deleted_beneficiaries_v1";
+
+interface DeletedBeneficiariesStore {
+  ids: string[];
+  sigs: string[];
+}
+
+function loadDeletedBeneficiariesStore(): DeletedBeneficiariesStore {
+  if (typeof window === "undefined") return { ids: [], sigs: [] };
+  try {
+    const raw = window.localStorage.getItem(DELETED_BENEFICIARIES_STORAGE_KEY);
+    if (!raw) return { ids: [], sigs: [] };
+    const parsed = JSON.parse(raw) as Partial<DeletedBeneficiariesStore>;
+    return {
+      ids: Array.isArray(parsed.ids) ? parsed.ids : [],
+      sigs: Array.isArray(parsed.sigs) ? parsed.sigs : [],
+    };
+  } catch {
+    return { ids: [], sigs: [] };
+  }
+}
+
+function saveDeletedBeneficiariesStore(store: DeletedBeneficiariesStore): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      DELETED_BENEFICIARIES_STORAGE_KEY,
+      JSON.stringify({
+        ids: Array.from(new Set(store.ids)),
+        sigs: Array.from(new Set(store.sigs)),
+      }),
+    );
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function makeBeneficiarySignature(name?: string | null, accountNumber?: string | null): string | null {
+  const n = String(name || "").trim().toLowerCase();
+  const a = String(accountNumber || "").replace(/\s+/g, "").toLowerCase();
+  if (!n && (!a || a === "—")) return null;
+  return `${n}|${a === "—" ? "" : a}`;
+}
+
+export function unmarkDeletedMitoBeneficiary(meta: {
+  beneficiaryId?: string | null;
+  name?: string | null;
+  accountNumber?: string | null;
+}): void {
+  const store = loadDeletedBeneficiariesStore();
+  const idUpper = String(meta.beneficiaryId || "").trim().toUpperCase();
+  const sig = makeBeneficiarySignature(meta.name, meta.accountNumber);
+  const nameOnlySig = meta.name ? `${String(meta.name).trim().toLowerCase()}|` : null;
+  store.ids = store.ids.filter((id) => id !== idUpper);
+  store.sigs = store.sigs.filter((s) => s !== sig && s !== nameOnlySig);
+  saveDeletedBeneficiariesStore(store);
+}
+
+export function isMitoBeneficiaryDeleted(meta: {
+  beneficiaryId?: string | null;
+  name?: string | null;
+  accountNumber?: string | null;
+}): boolean {
+  const store = loadDeletedBeneficiariesStore();
+  const idUpper = String(meta.beneficiaryId || "").trim().toUpperCase();
+  if (idUpper && store.ids.some((id) => id.toUpperCase() === idUpper)) return true;
+  const sig = makeBeneficiarySignature(meta.name, meta.accountNumber);
+  const nameOnlySig = meta.name ? `${String(meta.name).trim().toLowerCase()}|` : null;
+  if (sig && store.sigs.includes(sig)) return true;
+  if (nameOnlySig && store.sigs.includes(nameOnlySig)) return true;
+  return false;
+}
+
+export async function fetchMitoBeneficiaries(params?: {
+  currencyIso?: string;
+  countryIso3?: string;
+  service?: SendMoneyService;
+  legalEntityType?: string;
+  providerId?: string;
+  pageNo?: number;
+  searchingText?: string;
+}): Promise<MitoBeneficiaryItem[]> {
+  try {
+    const qs = new URLSearchParams();
+    if (params?.currencyIso) qs.set("currencyIso", params.currencyIso.toUpperCase());
+    if (params?.countryIso3) qs.set("countryIso3", params.countryIso3.toUpperCase());
+    if (params?.service) qs.set("service", params.service);
+    if (params?.legalEntityType) qs.set("legalEntityType", params.legalEntityType);
+    if (params?.providerId) qs.set("providerId", params.providerId);
+    if (params?.pageNo) qs.set("PageNo", String(params.pageNo));
+    if (params?.searchingText?.trim()) qs.set("SearchingText", params.searchingText.trim());
+
+    const query = qs.toString();
+    const res = await fetch(`/api/send-money/mito/beneficiaries${query ? `?${query}` : ""}`, {
+      credentials: "include",
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as {
+      data?: {
+        configured?: boolean;
+        beneficiaries?: MitoBeneficiaryItem[];
+        deletedIds?: string[];
+        deletedSignatures?: string[];
+      };
+    };
+    const rawItems = json.data?.beneficiaries ?? [];
+    const deletedStore = loadDeletedBeneficiariesStore();
+    if (Array.isArray(json.data?.deletedIds) || Array.isArray(json.data?.deletedSignatures)) {
+      if (Array.isArray(json.data?.deletedIds)) {
+        deletedStore.ids.push(...json.data.deletedIds.map((i) => String(i || "").trim().toUpperCase()).filter(Boolean));
+      }
+      if (Array.isArray(json.data?.deletedSignatures)) {
+        deletedStore.sigs.push(...json.data.deletedSignatures.map((s) => String(s || "").trim().toLowerCase()).filter(Boolean));
+      }
+      saveDeletedBeneficiariesStore(deletedStore);
+    }
+    const deletedIdSet = new Set(deletedStore.ids.map((i) => i.toUpperCase()));
+    const deletedSigSet = new Set(deletedStore.sigs);
+
+    const seenSigs = new Set<string>();
+    const items = rawItems.filter((item) => {
+      const idUpper = String(item.beneficiaryId || "").trim().toUpperCase();
+      if (idUpper && deletedIdSet.has(idUpper)) return false;
+      const sig = makeBeneficiarySignature(item.name, item.acctNumber || item.iban || item.mobileNo);
+      const nameOnlySig = item.name ? `${item.name.trim().toLowerCase()}|` : null;
+      if ((sig && deletedSigSet.has(sig)) || (nameOnlySig && deletedSigSet.has(nameOnlySig))) {
+        return false;
+      }
+      const dedupKey = sig || idUpper;
+      if (dedupKey) {
+        if (seenSigs.has(dedupKey)) return false;
+        seenSigs.add(dedupKey);
+      }
+      return true;
+    });
+
+    return Object.assign(items, { configured: Boolean(json.data?.configured) });
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteMitoBeneficiaryById(
+  beneficiaryId: string,
+  meta?: { name?: string; accountNumber?: string },
+): Promise<boolean> {
+  const cleanId = String(beneficiaryId || "").trim();
+  const store = loadDeletedBeneficiariesStore();
+  if (cleanId) {
+    store.ids.push(cleanId.toUpperCase());
+  }
+  const sig = makeBeneficiarySignature(meta?.name, meta?.accountNumber);
+  if (sig) {
+    store.sigs.push(sig);
+  }
+  if (meta?.name?.trim()) {
+    store.sigs.push(`${meta.name.trim().toLowerCase()}|`);
+  }
+  saveDeletedBeneficiariesStore(store);
+
+  try {
+    const qs = new URLSearchParams();
+    if (meta?.name?.trim()) qs.set("name", meta.name.trim());
+    if (meta?.accountNumber?.trim()) qs.set("accountNumber", meta.accountNumber.replace(/\s+/g, ""));
+    const query = qs.toString();
+    const res = await fetch(
+      `/api/send-money/mito/beneficiaries/${encodeURIComponent(cleanId || "local")}${query ? `?${query}` : ""}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+      },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function updateMitoBeneficiaryById(
+  beneficiaryId: string,
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  const cleanId = String(beneficiaryId || "").trim();
+  const fullName = String(
+    payload.companyName ||
+      payload.businessName ||
+      `${payload.firstName || ""} ${payload.lastName || ""}`,
+  ).trim();
+  const acct = String(payload.accountNumber || payload.acctNumber || payload.mobileNo || payload.iban || "").replace(
+    /\s+/g,
+    "",
+  );
+  unmarkBeneficiaryDeletedLocally({ beneficiaryId: cleanId, name: fullName, accountNumber: acct });
+
+  try {
+    const res = await fetch(`/api/send-money/mito/beneficiaries/${encodeURIComponent(cleanId || "local")}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchMitoBeneficiaryRequirements(params: {
+  currencyCode: string;
+  countryIso3?: string;
+  entityType: "I" | "B";
+  providerId?: string;
+  service?: SendMoneyService;
+}): Promise<MitoBeneficiaryRequirementField[]> {
+  try {
+    const qs = new URLSearchParams({
+      currencyCode: params.currencyCode.toUpperCase(),
+      entityType: params.entityType,
+      service: params.service || "bank_deposit",
+    });
+    if (params.countryIso3) qs.set("countryIso3", params.countryIso3.toUpperCase());
+    if (params.providerId) qs.set("providerId", params.providerId);
+
+    const res = await fetch(`/api/send-money/mito/beneficiary-requirements?${qs.toString()}`, {
+      credentials: "include",
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as {
+      data?: { requirements?: MitoBeneficiaryRequirementField[] };
+    };
+    return json.data?.requirements ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export interface MitoAffiliateRateResult {
+  fromCurrency: string;
+  toCurrency: string;
+  rateId: string | null;
+  rate: number | null;
+  partnerRate: number | null;
+  rateExpiry: string | null;
+}
+
+export interface MitoProviderOption {
+  providerCode: string;
+  providerName: string;
+  providerId: string;
+  isGeneric: boolean;
+}
+
+export interface MitoLookupTypeOption {
+  name: string;
+  code: string;
+  id?: string;
+}
+
+export interface MitoLookupTypesResult {
+  reason?: MitoLookupTypeOption[] | null;
+  purposes?: MitoLookupTypeOption[] | null;
+  relationships?: MitoLookupTypeOption[] | null;
+  relationshipes?: MitoLookupTypeOption[] | null;
+  sourceOfFunds?: MitoLookupTypeOption[] | null;
+}
+
+export async function fetchMitoLookups(): Promise<MitoLookupTypesResult> {
+  try {
+    const res = await fetch("/api/send-money/mito/lookups", {
+      credentials: "include",
+    });
+    if (!res.ok) return {};
+    const json = (await res.json()) as { data?: MitoLookupTypesResult };
+    return json.data ?? {};
+  } catch {
+    return {};
+  }
+}
+
+export async function fetchMitoAffiliateRate(
+  fromCurrency: string,
+  toCurrency: string,
+): Promise<MitoAffiliateRateResult | null> {
+  try {
+    const qs = new URLSearchParams({
+      fromCurrency: fromCurrency.toUpperCase(),
+      toCurrency: toCurrency.toUpperCase(),
+    });
+    const res = await fetch(`/api/send-money/mito/affiliate-rates?${qs.toString()}`, {
+      credentials: "include",
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: MitoAffiliateRateResult };
+    return json.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchMitoProviders(
+  paramsOrCurrency:
+    | string
+    | {
+        countryIso3: string;
+        currencyCode?: string;
+        serviceCode?: string;
+        collectionMode?: "BANKACCOUNT" | "MOBILEMONEY";
+        service?: SendMoneyService;
+      },
+  serviceArg?: SendMoneyService,
+  countryIso3Arg?: string,
+): Promise<MitoProviderOption[]> {
+  try {
+    const params =
+      typeof paramsOrCurrency === "string"
+        ? {
+            countryIso3: countryIso3Arg || "",
+            currencyCode: paramsOrCurrency,
+            serviceCode: "MONEYTRANSFER",
+            collectionMode:
+              serviceArg === "mobile_money" ? ("MOBILEMONEY" as const) : ("BANKACCOUNT" as const),
+          }
+        : paramsOrCurrency;
+
+    const collectionMode =
+      params.collectionMode ||
+      (params.service === "mobile_money" ? "MOBILEMONEY" : "BANKACCOUNT");
+    const qs = new URLSearchParams({
+      serviceCode: (params.serviceCode || "MONEYTRANSFER").toUpperCase(),
+      collectionMode,
+    });
+    if (params.countryIso3) {
+      qs.set("countryIso3", params.countryIso3.trim().toUpperCase());
+    }
+    if (params.currencyCode) {
+      qs.set("CurrencyCode", params.currencyCode.trim().toUpperCase());
+    }
+
+    const res = await fetch(`/api/send-money/mito/providers?${qs.toString()}`, {
+      credentials: "include",
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { data?: { providers?: MitoProviderOption[] } };
+    return json.data?.providers ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export async function createSendMoneyTransaction(input: CreateSendMoneyInput): Promise<SendMoneyTransactionView> {
   const res = await apiRequest("POST", "/api/send-money/transactions", input);
-  return ((await res.json()) as { data: SendMoneyTransactionView }).data;
+  const data = ((await res.json()) as { data: SendMoneyTransactionView }).data;
+  unmarkDeletedMitoBeneficiary({
+    beneficiaryId: data.mitoBeneficiaryId,
+    name: input.recipientName,
+    accountNumber: input.accountNumber || input.iban || input.mobileNo,
+  });
+  return data;
 }
 
 export async function getSendMoneyTransactions(): Promise<SendMoneyTransactionView[]> {
@@ -42,6 +475,26 @@ export class SendMoneyApiError extends Error {
     super(message);
     this.status = status;
     this.code = code;
+  }
+}
+
+/**
+ * Step 4 (Payment) — Initiates the Mito Hosted Transaction via
+ * `POST /api/v1/mito/Transactions/InitiateHostedTransaction`.
+ */
+export async function initiateHostedSendMoneyTransaction(id: string): Promise<SendMoneyTransactionView | null> {
+  try {
+    const res = await fetch(`/api/send-money/transactions/${encodeURIComponent(id)}/initiate-hosted`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: SendMoneyTransactionView };
+    return json.data ?? null;
+  } catch {
+    return null;
   }
 }
 

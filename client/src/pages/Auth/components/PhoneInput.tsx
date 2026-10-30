@@ -1,4 +1,5 @@
 import { countries } from "@/data/countries";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 interface PhoneInputProps {
   codeValue: string;
@@ -26,18 +27,19 @@ export default function PhoneInput({
         {required && <span className="text-red-400">*</span>}
       </label>
       <div className="flex gap-2">
-        <select
+        <SearchableSelect
           value={codeValue}
-          onChange={(e) => onCodeChange(e.target.value)}
-          className="w-[90px] sm:w-[100px] px-2 py-2.5 border border-slate-200 rounded text-sm text-slate-700 bg-white focus:ring-blue-500 focus:border-blue-500"
-        >
-          <option value="">00</option>
-          {countries.map((c) => (
-            <option key={c.code} value={c.dialCode}>
-              {c.flag} {c.dialCode}
-            </option>
-          ))}
-        </select>
+          onValueChange={onCodeChange}
+          placeholder="Code"
+          searchPlaceholder="Search country or code..."
+          className="w-[105px] sm:w-[115px] shrink-0 [&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+          dropdownClassName="w-[240px]"
+          options={countries.map((c) => ({
+            value: c.dialCode,
+            label: `${c.flag} ${c.dialCode}`,
+            subLabel: c.name,
+          }))}
+        />
         <input
           type="tel"
           value={numberValue}

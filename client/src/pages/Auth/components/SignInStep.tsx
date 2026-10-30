@@ -24,6 +24,9 @@ export default function SignInStep({ email, onBack, onForgotPassword }: SignInSt
     },
     onSuccess: (data) => {
       queryClient.clear();
+      if (data?.user) {
+        queryClient.setQueryData(["/api/auth/me"], { user: data.user });
+      }
       toast({
         title: "Welcome back!",
         description: `Signed in as ${data.user.firstName || data.user.email}`,

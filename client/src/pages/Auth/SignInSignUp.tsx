@@ -109,14 +109,15 @@ export default function SignInSignUp() {
     goTo("signIn");
   };
 
-  const handleNew = (emailValue: string) => {
+  const handleNew = (emailValue: string, otpCode?: string) => {
     setEmail(emailValue);
+    setDevOtp(otpCode || "123456");
     if (existingReferralNotice && !referral) {
       saveReferral(existingReferralNotice);
       setReferral(loadReferral());
       setExistingReferralNotice(null);
     }
-    goTo("signUp");
+    goTo("otp");
   };
 
   const handleBackToEmail = () => {
@@ -181,7 +182,7 @@ export default function SignInSignUp() {
           }
         />
       )}
-      {(step === "email" || step === "signUp") && !existingReferralNotice && (
+      {(step === "email" || step === "otp" || step === "signUp") && !existingReferralNotice && (
         <ReferralInviteStrip
           referral={referral}
           onAlreadyMember={() => {
@@ -231,7 +232,12 @@ export default function SignInSignUp() {
           )}
 
           {step === "otp" && (
-            <OtpStep email={email} onChangeEmail={handleChangeEmailFromOtp} devOtp={devOtp} />
+            <OtpStep
+              email={email}
+              onChangeEmail={handleChangeEmailFromOtp}
+              devOtp={devOtp}
+              onVerifiedForRegistration={() => goTo("signUp")}
+            />
           )}
 
           {step === "forgotPassword" && (

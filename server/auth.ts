@@ -18,6 +18,7 @@ import { log } from "./index";
 import { onCustomerVerified, type ReferralAttributionMeta } from "./rewardsService";
 import { syncCustomer as syncPromoCustomer } from "./promo";
 import { rememberDevice } from "./deviceId";
+import { registerOrSyncMitoRetailUser } from "./mitoRetail";
 
 function isPlaceholderUser(
   user: { id: string; email: string; firstName: string | null; lastName: string | null } | undefined,
@@ -42,6 +43,10 @@ const resetPinFailures = new Map<string, { count: number; windowStart: number }>
 const pendingReferralCodes = new Map<string, string>();
 const pendingReferralRuleIds = new Map<string, number>();
 const pendingReferralMeta = new Map<string, ReferralAttributionMeta>();
+/** New emails that were sent a 6-digit verification code at Step 1 (check-email) before filling out the registration form. */
+const pendingOtpEmails = new Set<string>();
+/** Emails that verified their 6-digit code at Step 2 (OtpStep) and are ready to complete Step 3 (SignUpForm -> Mito Users). */
+const verifiedPreRegistrationEmails = new Set<string>();
 const REFERRAL_CODE_RE = /^[A-Z0-9]{6,16}$/;
 
 function enforceAuthRateLimit(req: Request, res: Response, name: keyof typeof serverConfig.rateLimits): boolean {
@@ -76,9 +81,39 @@ export function registerAuthRoutes(app: Express) {
 
       const user = await storage.getAuthUserByEmail(parsed.data.email);
       const isPlaceholder = isPlaceholderUser(user);
+      const isRegistered = Boolean(user && !isPlaceholder);
+
+      if (!isRegistered) {
+        const emailKey = parsed.data.email.trim().toLowerCase();
+        const otpCode = generateOtp();
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+        await storage.createOtp(parsed.data.email, otpCode, expiresAt);
+        pendingOtpEmails.add(emailKey);
+
+        await devEmailProvider.send({
+          to: parsed.data.email,
+          subject: `${otpCode} is your Rhemito verification code`,
+          text:
+            `Hello,\n\n` +
+            `Welcome to Rhemito! Use this 6-digit verification code to verify your email address:\n\n` +
+            `${otpCode}\n\n` +
+            `This code expires in 60 minutes.\n\n` +
+            `— Rhemito`,
+          customId: `pre_reg_otp:${emailKey}:${Date.now()}`,
+          eventPayload: JSON.stringify({ type: "pre_registration_otp", email: parsed.data.email }),
+        });
+        log(`📧 Pre-registration OTP for ${parsed.data.email}: ${otpCode} (expires in 60 minutes)`, "auth");
+
+        return res.json({
+          registered: false,
+          status: null,
+          devOtp: otpCode,
+        });
+      }
+
       return res.json({
-        registered: Boolean(user && !isPlaceholder),
-        status: user && !isPlaceholder ? user.status : null,
+        registered: true,
+        status: user!.status,
       });
     } catch (error) {
       console.error("Check email error:", error);
@@ -178,19 +213,41 @@ export function registerAuthRoutes(app: Express) {
         status: "pending",
       });
 
-      if (isVerifiedPayerRegistration) {
+      const emailKey = String(userData.email).trim().toLowerCase();
+      const isPreVerifiedEmail = verifiedPreRegistrationEmails.has(emailKey);
+
+      if (isVerifiedPayerRegistration || isPreVerifiedEmail) {
         await storage.activateUser(userData.email);
         req.session.userId = user.id;
-        delete req.session.paymentRequestVerification;
+        if (isVerifiedPayerRegistration) {
+          delete req.session.paymentRequestVerification;
+        }
+        verifiedPreRegistrationEmails.delete(emailKey);
+        pendingOtpEmails.delete(emailKey);
         rememberDevice(user.id, req);
-        await onCustomerVerified(user.id, referralCode || null, referralRuleId, attributionMeta);
+        const mitoUserId = await registerOrSyncMitoRetailUser(user);
+        const referral = await onCustomerVerified(user.id, referralCode || null, referralRuleId, attributionMeta);
         await syncPromoCustomer(user.id, { force: true }).catch(() => {});
         const activated = await storage.getAuthUserById(user.id);
         const { password: _, ...safeUser } = activated ?? user;
-        return res.json({ success: true, message: "Registration complete.", user: { ...safeUser, status: "active" } });
+        return res.json({
+          success: true,
+          activated: true,
+          message: "Registration complete.",
+          user: { ...safeUser, status: "active" },
+          ...(mitoUserId ? { mitoUserId } : {}),
+          ...(Number(referral?.referee_credited) > 0
+            ? {
+                referralBonus: {
+                  amount: Number(referral?.referee_credited),
+                  currency: String(referral?.currency || "GBP"),
+                  floor: Number(referral?.floor || 0),
+                },
+              }
+            : {}),
+        });
       }
 
-      const emailKey = String(userData.email).toLowerCase();
       if (referralCode) {
         pendingReferralCodes.set(emailKey, referralCode);
         if (referralRuleId) pendingReferralRuleIds.set(emailKey, referralRuleId);
@@ -245,6 +302,7 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const { email, code } = parsed.data;
+      const emailKey = email.trim().toLowerCase();
 
       // PROTOTYPE: verify by checking the user exists + code matches dev OTP
       if (code !== "123456") {
@@ -253,6 +311,15 @@ export function registerAuthRoutes(app: Express) {
 
       const user = await storage.getAuthUserByEmail(email);
       if (!user) {
+        if (pendingOtpEmails.has(emailKey)) {
+          verifiedPreRegistrationEmails.add(emailKey);
+          return res.json({
+            success: true,
+            emailVerified: true,
+            requiresRegistration: true,
+            message: "Email verified successfully! Please complete your registration.",
+          });
+        }
         return res.status(404).json({ message: "No account found with this email. Please register first." });
       }
 
@@ -267,6 +334,7 @@ export function registerAuthRoutes(app: Express) {
       // Activate user and start session
       await storage.activateUser(email);
       req.session.userId = user.id;
+      const mitoUserId = await registerOrSyncMitoRetailUser(user);
 
       // Referral: the referral is created once the email is verified (AC-3.1.5)
       const pendingCode = pendingReferralCodes.get(email.toLowerCase()) ?? null;
@@ -284,6 +352,7 @@ export function registerAuthRoutes(app: Express) {
         success: true,
         message: "Account activated successfully!",
         user: { ...safeUser, status: "active" },
+        ...(mitoUserId ? { mitoUserId } : {}),
         ...(Number(referral?.referee_credited) > 0 ? { referralBonus: { amount: Number(referral?.referee_credited), currency: String(referral?.currency || "GBP"), floor: Number(referral?.floor || 0) } } : {}),
       });
     } catch (error) {
@@ -300,8 +369,9 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ message: parsed.error.errors[0].message });
       }
 
+      const emailKey = parsed.data.email.trim().toLowerCase();
       const user = await storage.getAuthUserByEmail(parsed.data.email);
-      if (!user) {
+      if (!user && !pendingOtpEmails.has(emailKey)) {
         return res.status(404).json({ message: "No account found with this email" });
       }
 
@@ -311,11 +381,13 @@ export function registerAuthRoutes(app: Express) {
       await storage.createOtp(parsed.data.email, otpCode, expiresAt);
 
       const recipientName =
-        user.accountType === "business" && user.businessName
+        user?.accountType === "business" && user?.businessName
           ? user.businessName
-          : [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ") || undefined;
+          : user
+            ? [user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ") || undefined
+            : undefined;
       await devEmailProvider.send({
-        to: user.email,
+        to: user?.email ?? parsed.data.email,
         toName: recipientName,
         subject: `${otpCode} is your Rhemito verification code`,
         text:
@@ -324,8 +396,8 @@ export function registerAuthRoutes(app: Express) {
           `${otpCode}\n\n` +
           `This code expires in 60 minutes.\n\n` +
           `— Rhemito`,
-        customId: `reg_otp_resend:${user.id}:${Date.now()}`,
-        eventPayload: JSON.stringify({ type: "registration_otp_resend", userId: user.id, email: user.email }),
+        customId: `reg_otp_resend:${user?.id ?? emailKey}:${Date.now()}`,
+        eventPayload: JSON.stringify({ type: "registration_otp_resend", userId: user?.id ?? null, email: parsed.data.email }),
       });
       log(`📧 OTP for ${parsed.data.email}: ${otpCode}`, "auth");
 

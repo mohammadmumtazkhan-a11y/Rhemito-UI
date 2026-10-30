@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 
 interface EmailStepProps {
   onRegistered: (email: string) => void;
-  onNew: (email: string) => void;
+  onNew: (email: string, devOtp?: string) => void;
   onPending: (email: string) => void;
 }
 
@@ -28,7 +28,7 @@ export default function EmailStep({ onRegistered, onNew, onPending }: EmailStepP
           onRegistered(email);
         }
       } else {
-        onNew(email);
+        onNew(email, data.devOtp);
       }
     },
     onError: (error: Error) => {

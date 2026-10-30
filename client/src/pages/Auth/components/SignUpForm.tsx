@@ -1,15 +1,17 @@
 import React, { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { countries } from "@/data/countries";
 import { genderOptions } from "@/data/countries";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import AccountTypeToggle from "./AccountTypeToggle";
 import PhoneInput from "./PhoneInput";
 import PasswordInput from "./PasswordInput";
 import { ReferralCodeField } from "@/components/rewards/ReferralSignup";
-import type { StoredReferral } from "@/lib/rewards";
+import { clearReferral, formatMoney, loadReferral, type StoredReferral } from "@/lib/rewards";
 
 interface SignUpFormProps {
   email: string;
@@ -32,6 +34,7 @@ export interface BusinessStep1Data {
 
 export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, referral = null, onReferralChange = () => {} }: SignUpFormProps) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [accountType, setAccountType] = useState<"individual" | "business">("individual");
 
   // Individual fields
@@ -59,6 +62,39 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
       return res.json();
     },
     onSuccess: (data) => {
+      if (data?.activated) {
+        const pendingStoreRedirect = loadReferral()?.postSignupAppStoreUrl ?? null;
+        clearReferral();
+        queryClient.clear();
+        if (data?.user) {
+          queryClient.setQueryData(["/api/auth/me"], { user: data.user });
+        }
+        const bonus = data?.referralBonus as { amount: number; currency: string; floor: number } | null | undefined;
+        if (bonus && Number(bonus.amount) > 0) {
+          const amt = formatMoney(bonus.amount, bonus.currency);
+          const floorText =
+            Number(bonus.floor) > 0
+              ? ` Use it on transfers of ${formatMoney(bonus.floor, bonus.currency)} or more.`
+              : "";
+          toast({
+            title: "Account Activated & Bonus Unlocked!",
+            description: `Welcome to Rhemito! You have earned ${amt} Referral Bonus credit.${floorText}`,
+          });
+        } else {
+          toast({
+            title: "Registration Successful!",
+            description: pendingStoreRedirect
+              ? "Your referral is permanently linked! Redirecting to the Apple App Store..."
+              : "Your account has been created and activated. Welcome to Rhemito!",
+          });
+        }
+        if (pendingStoreRedirect) {
+          window.location.href = pendingStoreRedirect;
+        } else {
+          setLocation("/");
+        }
+        return;
+      }
       toast({
         title: "Registration Successful",
         description: "Please check your email for the verification code. Also check your SPAM folder.",
@@ -77,6 +113,19 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
   const handleIndividualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
+
+    if (!country) {
+      toast({ title: "Country required", description: "Please select a country.", variant: "destructive" });
+      return;
+    }
+    if (!gender) {
+      toast({ title: "Gender required", description: "Please select your gender.", variant: "destructive" });
+      return;
+    }
+    if (!mobileCode) {
+      toast({ title: "Phone code required", description: "Please select a mobile country code.", variant: "destructive" });
+      return;
+    }
 
     if (password !== confirmPassword) {
       setPasswordError("Passwords do not match");
@@ -124,6 +173,14 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
 
   const handleBusinessStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!country) {
+      toast({ title: "Country required", description: "Please select a country.", variant: "destructive" });
+      return;
+    }
+    if (!businessPhoneCode) {
+      toast({ title: "Phone code required", description: "Please select a business phone country code.", variant: "destructive" });
+      return;
+    }
     onBusinessStep2({
       email,
       accountType: "business",
@@ -181,24 +238,19 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
                 <label className="block text-sm text-slate-500 mb-1">
                   Country<span className="text-red-400">*</span>
                 </label>
-                <select
+                <SearchableSelect
                   value={country}
-                  onChange={(e) => {
-                    const selected = e.target.value;
+                  onValueChange={(selected) => {
                     setCountry(selected);
-                    const found = countries.find((c) => c.code === selected);
-                    if (found) setMobileCode(found.dialCode);
                   }}
-                  className="block w-full px-3 py-2.5 border border-slate-200 rounded text-sm text-slate-700 bg-white focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select country</option>
-                  {countries.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.flag} {c.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Select country"
+                  searchPlaceholder="Search country..."
+                  className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                  options={countries.map((c) => ({
+                    value: c.code,
+                    label: `${c.flag} ${c.name}`,
+                  }))}
+                />
               </div>
 
               {/* First Name + Middle Name */}
@@ -268,19 +320,17 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
                 <label className="block text-sm text-slate-500 mb-1">
                   Gender<span className="text-red-400">*</span>
                 </label>
-                <select
+                <SearchableSelect
                   value={gender}
-                  onChange={(e) => setGender(e.target.value)}
-                  className="block w-full px-3 py-2.5 border border-slate-200 rounded text-sm text-slate-700 bg-white focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select Gender</option>
-                  {genderOptions.map((g) => (
-                    <option key={g.value} value={g.value}>
-                      {g.label}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(val) => setGender(val)}
+                  placeholder="Select Gender"
+                  searchPlaceholder="Search gender..."
+                  className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                  options={genderOptions.map((g) => ({
+                    value: g.value,
+                    label: g.label,
+                  }))}
+                />
               </div>
 
               {/* Mobile Number */}
@@ -364,24 +414,19 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
                 <label className="block text-sm text-slate-500 mb-1">
                   Country<span className="text-red-400">*</span>
                 </label>
-                <select
+                <SearchableSelect
                   value={country}
-                  onChange={(e) => {
-                    const selected = e.target.value;
+                  onValueChange={(selected) => {
                     setCountry(selected);
-                    const found = countries.find((c) => c.code === selected);
-                    if (found) setBusinessPhoneCode(found.dialCode);
                   }}
-                  className="block w-full px-3 py-2.5 border border-slate-200 rounded text-sm text-slate-700 bg-white focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select country</option>
-                  {countries.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.flag} {c.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Select country"
+                  searchPlaceholder="Search country..."
+                  className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                  options={countries.map((c) => ({
+                    value: c.code,
+                    label: `${c.flag} ${c.name}`,
+                  }))}
+                />
               </div>
 
               {/* Business Name */}

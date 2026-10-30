@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Plus, Send, Eye, Trash2, User, Building2, CheckCircle2 } from "lucide-react";
+import { Search, Plus, Send, Eye, Pencil, Trash2, User, Building2, CheckCircle2, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,22 +37,28 @@ export function SendersPanel() {
   const [searchQuery, setSearchQuery] = useState("");
   const senders: KnownSender[] = contactsSenders.map(toKnownSender);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingSender, setEditingSender] = useState<KnownSender | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showWaysModal, setShowWaysModal] = useState(false);
   const [selectedSenderEmail, setSelectedSenderEmail] = useState<string>("");
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [newSender, setNewSender] = useState({
+  const [successMessageText, setSuccessMessageText] = useState("Sender added successfully!");
+  const emptySenderForm = {
     senderType: "individual" as "individual" | "business",
     firstName: "",
     middleName: "",
     lastName: "",
     businessName: "",
     email: "",
-    countryCode: "+234",
+    countryCode: "",
     phone: "",
     dob: "",
-    country: "Nigeria",
-  });
+    country: "",
+    bankName: "",
+    accountNumber: "",
+    narration: "",
+  };
+  const [newSender, setNewSender] = useState(emptySenderForm);
 
   const filteredSenders = senders.filter(sender => {
     const displayName = sender.senderType === "business" 
@@ -76,34 +82,54 @@ export function SendersPanel() {
     setShowDeleteConfirm(null);
   };
 
+  const handleOpenEditSender = (sender: KnownSender) => {
+    setEditingSender(sender);
+    setNewSender({
+      senderType: sender.senderType,
+      firstName: sender.firstName || "",
+      middleName: sender.middleName || "",
+      lastName: sender.lastName || "",
+      businessName: sender.businessName || "",
+      email: sender.email || "",
+      countryCode: sender.countryCode || "",
+      phone: sender.phone || "",
+      dob: sender.dob || "",
+      country: sender.country || "",
+      bankName: sender.bankName || "",
+      accountNumber: sender.accountNumber || "",
+      narration: sender.narration || "",
+    });
+    setShowAddModal(true);
+  };
+
+  const handleCloseSenderModal = () => {
+    setShowAddModal(false);
+    setEditingSender(null);
+    setNewSender(emptySenderForm);
+  };
+
   const handleAddSender = () => {
+    const isEditing = Boolean(editingSender);
     upsertSender({
+      originalEmail: editingSender?.email,
       contactType: newSender.senderType,
-      firstName: newSender.firstName,
-      middleName: newSender.middleName,
-      lastName: newSender.lastName,
-      businessName: newSender.businessName,
-      email: newSender.email,
+      firstName: newSender.firstName.trim(),
+      middleName: newSender.middleName.trim(),
+      lastName: newSender.lastName.trim(),
+      businessName: newSender.businessName.trim(),
+      email: newSender.email.trim(),
       countryCode: newSender.countryCode,
-      phone: newSender.phone,
+      phone: newSender.phone.trim(),
       dob: newSender.senderType === "individual" ? newSender.dob : "",
       country: newSender.country,
       currency: newSender.country === "Nigeria" ? "NGN" : newSender.country === "United Kingdom" ? "GBP" : "USD",
-      relationship: "Personal",
+      bankName: newSender.bankName.trim(),
+      accountNumber: newSender.accountNumber.replace(/\s+/g, ""),
+      narration: newSender.narration.trim(),
+      relationship: editingSender?.relationship || "Personal",
     });
-    setShowAddModal(false);
-    setNewSender({
-      senderType: "individual",
-      firstName: "",
-      middleName: "",
-      lastName: "",
-      businessName: "",
-      email: "",
-      countryCode: "+234",
-      phone: "",
-      dob: "",
-      country: "Nigeria",
-    });
+    handleCloseSenderModal();
+    setSuccessMessageText(isEditing ? "Sender updated successfully!" : "Sender added successfully!");
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 4000);
   };
@@ -120,14 +146,22 @@ export function SendersPanel() {
               className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3"
             >
               <CheckCircle2 className="w-5 h-5 text-green-600" />
-              <p className="text-green-800 font-medium">Sender added successfully!</p>
+              <p className="text-green-800 font-medium">{successMessageText}</p>
             </motion.div>
           )}
         </AnimatePresence>
 
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold font-display">Senders</h2>
-          <Button onClick={() => setShowAddModal(true)} className="gap-2" data-testid="button-add-sender">
+          <Button
+            onClick={() => {
+              setEditingSender(null);
+              setNewSender(emptySenderForm);
+              setShowAddModal(true);
+            }}
+            className="gap-2"
+            data-testid="button-add-sender"
+          >
             <Plus className="w-4 h-4" />
             Add Sender
           </Button>
@@ -246,6 +280,17 @@ export function SendersPanel() {
                             >
                               <Eye className="w-3.5 h-3.5 mr-1" />
                               View
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenEditSender(sender)}
+                              className="h-8 px-2.5 text-xs active:scale-95"
+                              data-testid={`button-edit-${sender.email.replace(/[@.]/g, '-')}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5 mr-1" />
+                              Edit
                             </Button>
 
                             <Button
@@ -393,6 +438,20 @@ export function SendersPanel() {
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <button
+                                    onClick={() => handleOpenEditSender(sender)}
+                                    className="w-8 h-8 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors"
+                                    aria-label={`Edit ${displayName}`}
+                                    data-testid={`button-edit-${sender.email.replace(/[@.]/g, '-')}`}
+                                  >
+                                    <Pencil className="w-4 h-4 text-muted-foreground" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit Sender</TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
                                     onClick={() => setShowDeleteConfirm(sender.email)}
                                     className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors"
                                     data-testid={`button-delete-${sender.email.replace(/[@.]/g, '-')}`}
@@ -436,17 +495,30 @@ export function SendersPanel() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
-              onClick={() => setShowAddModal(false)}
+              onClick={handleCloseSenderModal}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-lg"
             >
               <Card>
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-semibold font-display mb-6">Add New Sender</h2>
+                <CardContent className="p-6 max-h-[85vh] overflow-y-auto">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold font-display">
+                      {editingSender ? "Edit Sender" : "Add New Sender"}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={handleCloseSenderModal}
+                      className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground transition-colors"
+                      aria-label="Close"
+                      data-testid="button-close-add-sender"
+                    >
+                      <X className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </div>
                   
                   <div className="space-y-4">
                     <div className="space-y-2">
@@ -542,7 +614,7 @@ export function SendersPanel() {
                           onValueChange={(value) => setNewSender(prev => ({ ...prev, countryCode: value }))}
                         >
                           <SelectTrigger className="w-28">
-                            <SelectValue />
+                            <SelectValue placeholder="Code" />
                           </SelectTrigger>
                           <SelectContent>
                             {COUNTRY_CODES.map((cc) => (
@@ -569,7 +641,7 @@ export function SendersPanel() {
                           onValueChange={(value) => setNewSender(prev => ({ ...prev, country: value }))}
                       >
                         <SelectTrigger data-testid="select-new-country">
-                          <SelectValue />
+                          <SelectValue placeholder="Select country" />
                         </SelectTrigger>
                         <SelectContent>
                           {COUNTRIES.map((country) => (
@@ -590,10 +662,46 @@ export function SendersPanel() {
                         />
                       </div>
                     )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Bank Name</Label>
+                        <Input
+                          value={newSender.bankName}
+                          onChange={(e) => setNewSender(prev => ({ ...prev, bankName: e.target.value }))}
+                          placeholder="e.g. GTBank, Barclays"
+                          data-testid="input-new-sender-bank-name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Account Number</Label>
+                        <Input
+                          value={newSender.accountNumber}
+                          onChange={(e) =>
+                            setNewSender(prev => ({
+                              ...prev,
+                              accountNumber: e.target.value.replace(/\s+/g, ""),
+                            }))
+                          }
+                          placeholder="Account number"
+                          data-testid="input-new-sender-account-number"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Narration (TXN remarks)</Label>
+                      <Input
+                        value={newSender.narration}
+                        onChange={(e) => setNewSender(prev => ({ ...prev, narration: e.target.value }))}
+                        placeholder="Purpose of collection, e.g. Invoice payment"
+                        data-testid="input-new-sender-narration"
+                      />
+                    </div>
                   </div>
 
                   <div className="flex gap-3 mt-6">
-                    <Button variant="outline" className="flex-1" onClick={() => setShowAddModal(false)}>
+                    <Button variant="outline" className="flex-1" onClick={handleCloseSenderModal}>
                       Cancel
                     </Button>
                     <Button 
@@ -602,7 +710,7 @@ export function SendersPanel() {
                       disabled={newSender.senderType === "individual" ? (!newSender.firstName || !newSender.lastName || !newSender.email) : (!newSender.businessName || !newSender.email)}
                       data-testid="button-confirm-add-sender"
                     >
-                      Add Sender
+                      {editingSender ? "Save Changes" : "Add Sender"}
                     </Button>
                   </div>
                 </CardContent>

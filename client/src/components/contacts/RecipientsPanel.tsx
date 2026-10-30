@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -6,6 +6,7 @@ import {
   Plus,
   Send,
   Eye,
+  Pencil,
   Trash2,
   User,
   Building2,
@@ -44,6 +45,8 @@ import { countries } from "@/data/countries";
 import { useContacts } from "@/contexts/ContactsContext";
 import { toKnownRecipient } from "@/data/contacts";
 import { type KnownRecipient } from "@/data/recipients";
+import { deleteMitoBeneficiaryById, fetchMitoBeneficiaries, fetchMitoProviders, isMitoBeneficiaryDeleted, unmarkDeletedMitoBeneficiary, updateMitoBeneficiaryById, type MitoBeneficiaryItem, type MitoProviderOption } from "@/lib/sendMoney";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   SERVICE_TYPES,
   bankFieldsFor,
@@ -84,13 +87,13 @@ const emptyNewRecipient: NewRecipientForm = {
   firstName: "",
   lastName: "",
   businessName: "",
-  country: "United Kingdom",
+  country: "",
   bankName: "",
   accountNumber: "",
   sortCode: "",
   iban: "",
   swift: "",
-  serviceType: "Bank Deposit",
+  serviceType: "",
   narration: "",
 };
 
@@ -113,24 +116,176 @@ export function RecipientsPanel() {
   const { recipients: contactsRecipients, upsertRecipient, deleteContactRole } = useContacts();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const recipients: KnownRecipient[] = useMemo(
-    () =>
-      contactsRecipients.map((c) => ({
-        ...toKnownRecipient(c),
-        email: c.email,
-        isSender: c.isSender,
-      })),
-    [contactsRecipients]
-  );
   const [sortField, setSortField] = useState<RecipientSortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingRecipient, setEditingRecipient] = useState<KnownRecipient | null>(null);
   const [viewingRecipient, setViewingRecipient] = useState<KnownRecipient | null>(null);
   const [deletingRecipient, setDeletingRecipient] = useState<KnownRecipient | null>(null);
   const [newRecipient, setNewRecipient] = useState<NewRecipientForm>(emptyNewRecipient);
+
+  const [mitoBeneficiaries, setMitoBeneficiaries] = useState<MitoBeneficiaryItem[]>([]);
+  const [mitoProviders, setMitoProviders] = useState<MitoProviderOption[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<{ providerId: string; providerCode: string } | null>(null);
+  const [addRecipientError, setAddRecipientError] = useState<string | null>(null);
+  const [addingRecipient, setAddingRecipient] = useState(false);
+
+  // Load sender's saved beneficiaries from GET /api/v1/mito/Beneficiaries?userId={{userId}}
+  useEffect(() => {
+    let active = true;
+    void fetchMitoBeneficiaries().then((list) => {
+      if (!active) return;
+      setMitoBeneficiaries(list);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Load bank providers from GET /api/v1/mito/Lookups/provider when country or serviceType changes in Add Recipient modal
+  useEffect(() => {
+    if (!showAddModal || !newRecipient.country) {
+      setMitoProviders([]);
+      setSelectedProvider(null);
+      return;
+    }
+    let active = true;
+    const countryIso3Map: Record<string, string> = {
+      "United Kingdom": "GBR",
+      "United States": "USA",
+      Nigeria: "NGA",
+      Canada: "CAN",
+      Ghana: "GHA",
+      Kenya: "KEN",
+      "South Africa": "ZAF",
+      Germany: "DEU",
+      France: "FRA",
+      India: "IND",
+      China: "CHN",
+      "United Arab Emirates": "ARE",
+    };
+    const countryIso3 = countryIso3Map[newRecipient.country] || "NGA";
+    const currencyCode = currencyForCountry(newRecipient.country);
+    const collectionMode = newRecipient.serviceType === "Mobile Money" ? "MOBILEMONEY" : "BANKACCOUNT";
+    void fetchMitoProviders({
+      countryIso3,
+      currencyCode,
+      serviceCode: "MONEYTRANSFER",
+      collectionMode,
+    }).then((list) => {
+      if (!active) return;
+      setMitoProviders(list);
+      const currentBank = newRecipient.bankName.trim().toLowerCase();
+      if (currentBank) {
+        const matched = list.find((p) => p.providerName.trim().toLowerCase() === currentBank);
+        setSelectedProvider(
+          matched ? { providerId: matched.providerId, providerCode: matched.providerCode } : null,
+        );
+      } else {
+        setSelectedProvider(null);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [showAddModal, newRecipient.country, newRecipient.serviceType]);
+
+  const recipients: KnownRecipient[] = useMemo(() => {
+    const localList: KnownRecipient[] = contactsRecipients
+      .map((c) => ({
+        ...toKnownRecipient(c),
+        email: c.email,
+        isSender: c.isSender,
+      }))
+      .filter(
+        (loc) =>
+          !isMitoBeneficiaryDeleted({
+            beneficiaryId: loc.id,
+            name: displayName(loc),
+            accountNumber: loc.accountNumber,
+          }),
+      );
+
+    const iso3ToCountryName: Record<string, string> = {
+      GBR: "United Kingdom",
+      UK: "United Kingdom",
+      USA: "United States",
+      NGA: "Nigeria",
+      CAN: "Canada",
+      GHA: "Ghana",
+      KEN: "Kenya",
+      ZAF: "South Africa",
+      DEU: "Germany",
+      FRA: "France",
+      IND: "India",
+      CHN: "China",
+      ARE: "United Arab Emirates",
+    };
+
+    const makeCodeFromId = (id: string) => {
+      let hash = 0;
+      for (let i = 0; i < id.length; i++) {
+        hash = (hash * 31 + id.charCodeAt(i)) % 900000;
+      }
+      return String(100000 + Math.abs(hash));
+    };
+
+    const mitoMapped: KnownRecipient[] = mitoBeneficiaries.map((b) => {
+      const normalizedCountry =
+        iso3ToCountryName[(b.countryIso3 || "").toUpperCase()] ||
+        (b.country === "UK" ? "United Kingdom" : b.country) ||
+        "Nigeria";
+      const serviceType =
+        (b.collectionMode || "").toUpperCase() === "MOBILEMONEY"
+          ? "Mobile Money"
+          : b.bicSwift && !b.sortCode && normalizedCountry !== "Nigeria" && normalizedCountry !== "United Kingdom"
+            ? "SWIFT"
+            : "Bank Deposit";
+      return {
+        id: b.beneficiaryId,
+        email: `${b.beneficiaryId.toLowerCase()}@beneficiary.rhemito.local`,
+        isSender: false,
+        recipientType: b.legalEntityType,
+        firstName: b.firstName || b.name.split(" ")[0] || "",
+        lastName: b.lastName || b.name.split(" ").slice(1).join(" ") || "",
+        businessName: b.companyName || (b.legalEntityType === "business" ? b.name : ""),
+        country: normalizedCountry,
+        currency: (b.currency || currencyForCountry(normalizedCountry)).toUpperCase(),
+        bankName: b.bankName && b.bankName !== "Bank" ? b.bankName : "Bank Transfer",
+        accountNumber: b.acctNumber || b.iban || "—",
+        sortCode: b.sortCode || "",
+        iban: b.iban || "",
+        swift: b.bicSwift || "",
+        serviceType,
+        uniqueCode: makeCodeFromId(b.beneficiaryId),
+        narration: "",
+        relationship: "Personal",
+        createdAt: b.createdAt ? b.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      };
+    });
+
+    // Merge Mito Sandbox beneficiaries at the top, deduplicating by beneficiaryId or (accountNumber + name)
+    const merged: KnownRecipient[] = [...mitoMapped];
+    for (const loc of localList) {
+      const locName = displayName(loc).trim().toLowerCase();
+      const locAcct = (loc.accountNumber || "").trim().toLowerCase();
+      const alreadyInMito = mitoMapped.some((m) => {
+        if (m.id === loc.id) return true;
+        const mName = displayName(m).trim().toLowerCase();
+        const mAcct = (m.accountNumber || "").trim().toLowerCase();
+        if (locAcct && locAcct !== "—" && mAcct === locAcct && mName === locName) return true;
+        if (mName === locName && (!mAcct || mAcct === "—")) return true;
+        return false;
+      });
+      if (!alreadyInMito) {
+        merged.push(loc);
+      }
+    }
+    return merged;
+  }, [contactsRecipients, mitoBeneficiaries]);
 
   const filtered = useMemo(
     () => searchRecipients(recipients, searchQuery),
@@ -176,44 +331,304 @@ export function RecipientsPanel() {
 
   const newRecipientIsValid =
     Boolean(newRecipient.email.trim()) &&
+    Boolean(newRecipient.country.trim()) &&
+    Boolean(newRecipient.serviceType.trim()) &&
     (newRecipient.recipientType === "individual"
       ? Boolean(newRecipient.firstName.trim() && newRecipient.lastName.trim())
       : Boolean(newRecipient.businessName.trim())) &&
     Boolean(newRecipient.bankName.trim() && newRecipient.accountNumber.trim()) &&
     (!narrationRequired || Boolean(newRecipient.narration.trim()));
 
-  const handleAddRecipient = () => {
-    const created = upsertRecipient({
-      email: newRecipient.email.trim(),
-      contactType: newRecipient.recipientType,
-      firstName: newRecipient.firstName.trim(),
-      lastName: newRecipient.lastName.trim(),
-      businessName: newRecipient.businessName.trim(),
-      country: newRecipient.country,
-      currency: currencyForCountry(newRecipient.country),
-      bankName: newRecipient.bankName.trim(),
-      accountNumber: newRecipient.accountNumber.trim(),
-      sortCode: newFormBankFields.sortCode ? newRecipient.sortCode.trim() : "",
-      iban: newFormBankFields.iban ? newRecipient.iban.trim() : "",
-      swift: newFormBankFields.swift ? newRecipient.swift.trim() : "",
-      serviceType: newRecipient.serviceType,
-      narration: newRecipient.narration.trim(),
-      relationship: "Personal",
+  const handleOpenEditRecipient = (recipient: KnownRecipient) => {
+    setAddRecipientError(null);
+    setEditingRecipient(recipient);
+    setNewRecipient({
+      recipientType: recipient.recipientType,
+      email: recipient.email || `${recipient.id.toLowerCase()}@beneficiary.rhemito.local`,
+      firstName: recipient.firstName || "",
+      lastName: recipient.lastName || "",
+      businessName: recipient.businessName || "",
+      country: recipient.country || "Nigeria",
+      bankName: recipient.bankName === "Bank Transfer" ? "" : recipient.bankName || "",
+      accountNumber: recipient.accountNumber === "—" ? "" : (recipient.accountNumber || "").replace(/\s+/g, ""),
+      sortCode: recipient.sortCode || "",
+      iban: recipient.iban || "",
+      swift: recipient.swift || "",
+      serviceType: recipient.serviceType || "Bank Deposit",
+      narration:
+        recipient.narration || (requiresNarration(recipient.country) ? "Money transfer" : ""),
     });
+    setShowAddModal(true);
+  };
 
+  const handleCloseRecipientModal = () => {
     setShowAddModal(false);
+    setEditingRecipient(null);
     setNewRecipient(emptyNewRecipient);
-    setPage(1);
-    toast({
-      title: "Recipient added",
-      description: `${displayName(toKnownRecipient(created))} is ready to receive payouts.`,
-    });
+    setSelectedProvider(null);
+    setAddRecipientError(null);
+  };
+
+  const handleAddRecipient = async () => {
+    setAddRecipientError(null);
+    setAddingRecipient(true);
+    try {
+      const cleanAcct = newRecipient.accountNumber.replace(/\s+/g, "");
+      const cleanSortCode =
+        newFormBankFields.sortCode && newRecipient.serviceType !== "Mobile Money"
+          ? newRecipient.sortCode.replace(/\s+/g, "")
+          : "";
+      const cleanIban =
+        newFormBankFields.iban && newRecipient.serviceType !== "Mobile Money"
+          ? newRecipient.iban.replace(/\s+/g, "")
+          : "";
+      const cleanSwift =
+        newFormBankFields.swift && newRecipient.serviceType !== "Mobile Money"
+          ? newRecipient.swift.replace(/\s+/g, "")
+          : "";
+
+      if (editingRecipient) {
+        await updateMitoBeneficiaryById(editingRecipient.id, {
+          recipientType: newRecipient.recipientType,
+          firstName: newRecipient.firstName.trim(),
+          lastName: newRecipient.lastName.trim(),
+          businessName: newRecipient.businessName.trim(),
+          companyName: newRecipient.businessName.trim(),
+          country: newRecipient.country,
+          currency: currencyForCountry(newRecipient.country),
+          bankName: newRecipient.bankName.trim(),
+          providerId: selectedProvider?.providerId,
+          providerCode: selectedProvider?.providerCode,
+          accountNumber: cleanAcct,
+          sortCode: cleanSortCode || undefined,
+          iban: cleanIban || undefined,
+          swift: cleanSwift || undefined,
+          serviceType: newRecipient.serviceType,
+          narration: newRecipient.narration.trim(),
+        });
+
+        const updatedContact = upsertRecipient({
+          id: editingRecipient.id,
+          originalId: editingRecipient.id,
+          originalEmail: editingRecipient.email,
+          email: newRecipient.email.trim(),
+          contactType: newRecipient.recipientType,
+          firstName: newRecipient.firstName.trim(),
+          lastName: newRecipient.lastName.trim(),
+          businessName: newRecipient.businessName.trim(),
+          country: newRecipient.country,
+          currency: currencyForCountry(newRecipient.country),
+          bankName: newRecipient.bankName.trim(),
+          accountNumber: cleanAcct,
+          sortCode: cleanSortCode,
+          iban: cleanIban,
+          swift: cleanSwift,
+          serviceType: newRecipient.serviceType,
+          narration: newRecipient.narration.trim(),
+          relationship: editingRecipient.relationship || "Personal",
+        });
+
+        const fullName =
+          newRecipient.recipientType === "business"
+            ? newRecipient.businessName.trim()
+            : `${newRecipient.firstName.trim()} ${newRecipient.lastName.trim()}`.trim();
+
+        setMitoBeneficiaries((prev) =>
+          prev.map((b) =>
+            b.beneficiaryId.toUpperCase() === editingRecipient.id.toUpperCase()
+              ? {
+                  ...b,
+                  name: fullName,
+                  firstName:
+                    newRecipient.recipientType === "business"
+                      ? newRecipient.businessName.trim()
+                      : newRecipient.firstName.trim(),
+                  lastName:
+                    newRecipient.recipientType === "business"
+                      ? "Business"
+                      : newRecipient.lastName.trim(),
+                  companyName:
+                    newRecipient.recipientType === "business"
+                      ? newRecipient.businessName.trim()
+                      : null,
+                  legalEntityType: newRecipient.recipientType,
+                  country: newRecipient.country,
+                  currency: currencyForCountry(newRecipient.country),
+                  collectionMode:
+                    newRecipient.serviceType === "Mobile Money" ? "MOBILEMONEY" : "BANKACCOUNT",
+                  bankName: newRecipient.bankName.trim(),
+                  acctNumber: cleanAcct,
+                  sortCode: cleanSortCode,
+                  iban: cleanIban,
+                  bicSwift: cleanSwift,
+                }
+              : b,
+          ),
+        );
+
+        void fetchMitoBeneficiaries().then((list) => {
+          setMitoBeneficiaries(list);
+        });
+
+        handleCloseRecipientModal();
+        toast({
+          title: "Recipient updated",
+          description: `${displayName(toKnownRecipient(updatedContact))} has been updated.`,
+        });
+        return;
+      }
+
+      const res = await fetch("/api/send-money/mito/beneficiaries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          recipientType: newRecipient.recipientType,
+          firstName: newRecipient.firstName.trim(),
+          lastName: newRecipient.lastName.trim(),
+          businessName: newRecipient.businessName.trim(),
+          country: newRecipient.country,
+          currency: currencyForCountry(newRecipient.country),
+          bankName: newRecipient.bankName.trim(),
+          providerId: selectedProvider?.providerId,
+          providerCode: selectedProvider?.providerCode,
+          accountNumber: cleanAcct,
+          sortCode: cleanSortCode || undefined,
+          iban: cleanIban || undefined,
+          swift: cleanSwift || undefined,
+          serviceType: newRecipient.serviceType,
+          narration: newRecipient.narration.trim(),
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = json?.error?.message || "We couldn't create this beneficiary. Please check the details and try again.";
+        setAddRecipientError(msg);
+        toast({
+          title: "Could not create beneficiary",
+          description: msg,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const created = upsertRecipient({
+        id: json?.data?.beneficiaryId || undefined,
+        email: newRecipient.email.trim(),
+        contactType: newRecipient.recipientType,
+        firstName: newRecipient.firstName.trim(),
+        lastName: newRecipient.lastName.trim(),
+        businessName: newRecipient.businessName.trim(),
+        country: newRecipient.country,
+        currency: currencyForCountry(newRecipient.country),
+        bankName: newRecipient.bankName.trim(),
+        accountNumber: cleanAcct,
+        sortCode: cleanSortCode,
+        iban: cleanIban,
+        swift: cleanSwift,
+        serviceType: newRecipient.serviceType,
+        narration: newRecipient.narration.trim(),
+        relationship: "Personal",
+      });
+
+      unmarkDeletedMitoBeneficiary({
+        beneficiaryId: json?.data?.beneficiaryId || null,
+        name:
+          newRecipient.recipientType === "business"
+            ? newRecipient.businessName.trim()
+            : `${newRecipient.firstName.trim()} ${newRecipient.lastName.trim()}`.trim(),
+        accountNumber: cleanAcct,
+      });
+
+      void fetchMitoBeneficiaries().then((list) => {
+        setMitoBeneficiaries(list);
+      });
+
+      handleCloseRecipientModal();
+      setPage(1);
+      toast({
+        title: "Beneficiary created successfully",
+        description: `${displayName(toKnownRecipient(created))} has been created and is ready to receive payouts.`,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "We couldn't create this beneficiary. Please try again.";
+      setAddRecipientError(msg);
+      toast({
+        title: editingRecipient ? "Could not update recipient" : "Could not create beneficiary",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setAddingRecipient(false);
+    }
   };
 
   const handleDeleteRecipient = () => {
     if (!deletingRecipient) return;
-    const removedName = displayName(deletingRecipient);
-    deleteContactRole(deletingRecipient.email || deletingRecipient.id, "recipient");
+    const target = deletingRecipient;
+    const removedName = displayName(target);
+    const cleanTargetAcct = (target.accountNumber || "").replace(/\s+/g, "").toLowerCase();
+    const cleanTargetName = removedName.trim().toLowerCase();
+    const cleanTargetId = (target.id || "").trim().toUpperCase();
+
+    // 1. Remove from ContactsContext (by email, id, accountNumber, and name)
+    deleteContactRole(target.email || target.id || "", "recipient", {
+      name: removedName,
+      accountNumber: target.accountNumber,
+    });
+    if (target.id && target.id !== target.email) {
+      deleteContactRole(target.id, "recipient", {
+        name: removedName,
+        accountNumber: target.accountNumber,
+      });
+    }
+
+    // 2. Remove from Mito beneficiaries state & server (including any duplicate Sandbox entries) so it disappears immediately and stays deleted
+    const matchingIds = new Set<string>();
+    if (cleanTargetId) matchingIds.add(cleanTargetId);
+    for (const b of mitoBeneficiaries) {
+      const bId = (b.beneficiaryId || "").trim().toUpperCase();
+      const bAcct = (b.acctNumber || b.iban || b.mobileNo || "").replace(/\s+/g, "").toLowerCase();
+      const bName = (b.name || "").trim().toLowerCase();
+      if (
+        (cleanTargetId && bId === cleanTargetId) ||
+        (cleanTargetAcct && cleanTargetAcct !== "—" && bAcct === cleanTargetAcct && bName === cleanTargetName) ||
+        (cleanTargetName && bName === cleanTargetName && (!cleanTargetAcct || cleanTargetAcct === "—" || !bAcct))
+      ) {
+        if (b.beneficiaryId) matchingIds.add(b.beneficiaryId);
+      }
+    }
+
+    setMitoBeneficiaries((prev) =>
+      prev.filter((b) => {
+        const bId = (b.beneficiaryId || "").trim().toUpperCase();
+        const bAcct = (b.acctNumber || b.iban || b.mobileNo || "").replace(/\s+/g, "").toLowerCase();
+        const bName = (b.name || "").trim().toLowerCase();
+        if (cleanTargetId && bId === cleanTargetId) return false;
+        if (cleanTargetAcct && cleanTargetAcct !== "—" && bAcct === cleanTargetAcct && bName === cleanTargetName) {
+          return false;
+        }
+        if (cleanTargetName && bName === cleanTargetName && (!cleanTargetAcct || cleanTargetAcct === "—" || !bAcct)) {
+          return false;
+        }
+        return true;
+      }),
+    );
+
+    if (matchingIds.size > 0) {
+      for (const idToDelete of Array.from(matchingIds)) {
+        void deleteMitoBeneficiaryById(idToDelete, {
+          name: removedName,
+          accountNumber: target.accountNumber,
+        });
+      }
+    } else {
+      void deleteMitoBeneficiaryById(target.id || "local", {
+        name: removedName,
+        accountNumber: target.accountNumber,
+      });
+    }
+
     setDeletingRecipient(null);
     toast({
       title: "Recipient deleted",
@@ -273,7 +688,13 @@ export function RecipientsPanel() {
             </p>
           </div>
           <Button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              setEditingRecipient(null);
+              setNewRecipient(emptyNewRecipient);
+              setSelectedProvider(null);
+              setAddRecipientError(null);
+              setShowAddModal(true);
+            }}
             className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
             data-testid="button-add-recipient"
           >
@@ -403,6 +824,18 @@ export function RecipientsPanel() {
                             >
                               <Eye className="w-3.5 h-3.5 mr-1" />
                               View
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenEditRecipient(recipient)}
+                              className="h-8 px-2.5 text-xs active:scale-95"
+                              data-testid={`button-edit-${recipient.id}`}
+                              aria-label={`Edit ${name}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5 mr-1" />
+                              Edit
                             </Button>
 
                             <Button
@@ -564,6 +997,20 @@ export function RecipientsPanel() {
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <button
+                                    onClick={() => handleOpenEditRecipient(recipient)}
+                                    className="w-8 h-8 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors"
+                                    aria-label={`Edit ${name}`}
+                                    data-testid={`button-edit-${recipient.id}`}
+                                  >
+                                    <Pencil className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit Recipient</TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
                                     onClick={() => setDeletingRecipient(recipient)}
                                     className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors"
                                     aria-label={`Delete ${name}`}
@@ -684,7 +1131,7 @@ export function RecipientsPanel() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
-              onClick={() => setShowAddModal(false)}
+              onClick={handleCloseRecipientModal}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -695,10 +1142,12 @@ export function RecipientsPanel() {
               <Card>
                 <CardContent className="p-4 sm:p-6 max-h-[85vh] overflow-y-auto">
                   <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-semibold font-display">Add New Recipient</h2>
+                    <h2 className="text-xl font-semibold font-display">
+                      {editingRecipient ? "Edit Recipient" : "Add New Recipient"}
+                    </h2>
                     <button
                       type="button"
-                      onClick={() => setShowAddModal(false)}
+                      onClick={handleCloseRecipientModal}
                       className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground transition-colors"
                       aria-label="Close"
                       data-testid="button-close-add-recipient"
@@ -834,7 +1283,7 @@ export function RecipientsPanel() {
                         }
                       >
                         <SelectTrigger data-testid="select-new-country">
-                          <SelectValue />
+                          <SelectValue placeholder="Select country" />
                         </SelectTrigger>
                         <SelectContent>
                           {countries.map((country) => (
@@ -849,37 +1298,93 @@ export function RecipientsPanel() {
                       </p>
                     </div>
 
+                    {addRecipientError && (
+                      <div
+                        role="alert"
+                        className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs text-red-800"
+                      >
+                        <p className="font-semibold text-red-900">Unable to save beneficiary</p>
+                        <p className="mt-0.5">{addRecipientError}</p>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
-                      <Label>Bank Name *</Label>
-                      <Input
-                        value={newRecipient.bankName}
-                        onChange={(e) =>
-                          setNewRecipient((prev) => ({ ...prev, bankName: e.target.value }))
-                        }
-                        placeholder="e.g. GTBank, Barclays, M-Pesa"
-                        data-testid="input-new-bank-name"
-                      />
+                      <Label>{newRecipient.serviceType === "Mobile Money" ? "Mobile Operator *" : "Bank Name *"}</Label>
+                      {(newRecipient.serviceType === "Mobile Money" ? mitoProviders.length > 0 : mitoProviders.some((p) => !p.isGeneric)) ? (
+                        <SearchableSelect
+                          autoPopulate
+                          value={selectedProvider?.providerId || ""}
+                          placeholder={
+                            newRecipient.serviceType === "Mobile Money"
+                              ? "Select a mobile operator or start typing"
+                              : "Select a bank or start typing"
+                          }
+                          options={(
+                            mitoProviders.some((p) => !p.isGeneric)
+                              ? mitoProviders.filter((p) => !p.isGeneric)
+                              : mitoProviders
+                          ).map((p) => ({
+                            value: p.providerId,
+                            label: p.providerName,
+                          }))}
+                          onValueChange={(val) => {
+                            setAddRecipientError(null);
+                            if (!val) {
+                              setSelectedProvider(null);
+                              setNewRecipient((prev) => ({ ...prev, bankName: "" }));
+                              return;
+                            }
+                            const found = mitoProviders.find((p) => p.providerId === val);
+                            if (found) {
+                              setSelectedProvider({ providerId: found.providerId, providerCode: found.providerCode });
+                              setNewRecipient((prev) => ({ ...prev, bankName: found.providerName }));
+                            }
+                          }}
+                          data-testid="input-new-bank-name"
+                        />
+                      ) : (
+                        <Input
+                          value={newRecipient.bankName}
+                          onChange={(e) => {
+                            setAddRecipientError(null);
+                            setNewRecipient((prev) => ({ ...prev, bankName: e.target.value }));
+                          }}
+                          placeholder={
+                            newRecipient.serviceType === "Mobile Money"
+                              ? "e.g. MTN, M-Pesa, Airtel"
+                              : "e.g. GTBank, Barclays, Access Bank"
+                          }
+                          data-testid="input-new-bank-name"
+                        />
+                      )}
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Account Number *</Label>
+                      <Label>{newRecipient.serviceType === "Mobile Money" ? "Mobile Number *" : "Account Number *"}</Label>
                       <Input
                         value={newRecipient.accountNumber}
                         onChange={(e) =>
-                          setNewRecipient((prev) => ({ ...prev, accountNumber: e.target.value }))
+                          setNewRecipient((prev) => ({
+                            ...prev,
+                            accountNumber: e.target.value.replace(/\s+/g, ""),
+                          }))
                         }
-                        placeholder="Account / wallet number"
+                        placeholder={
+                          newRecipient.serviceType === "Mobile Money"
+                            ? "e.g. +2348012345678 or 08012345678"
+                            : "Account number"
+                        }
                         data-testid="input-new-account-number"
                       />
                     </div>
 
-                    {newFormBankFields.sortCode && (
+                    {newRecipient.serviceType !== "Mobile Money" && newFormBankFields.sortCode && (
                       <div className="space-y-2">
                         <Label>Sort Code *</Label>
                         <Input
                           value={newRecipient.sortCode}
                           onChange={(e) =>
-                            setNewRecipient((prev) => ({ ...prev, sortCode: e.target.value }))
+                            setNewRecipient((prev) => ({ ...prev, sortCode: e.target.value.replace(/\s+/g, "") }))
                           }
                           placeholder="e.g. 20-45-67"
                           data-testid="input-new-sort-code"
@@ -887,13 +1392,13 @@ export function RecipientsPanel() {
                       </div>
                     )}
 
-                    {newFormBankFields.iban && (
+                    {newRecipient.serviceType !== "Mobile Money" && newFormBankFields.iban && (
                       <div className="space-y-2">
                         <Label>IBAN *</Label>
                         <Input
                           value={newRecipient.iban}
                           onChange={(e) =>
-                            setNewRecipient((prev) => ({ ...prev, iban: e.target.value }))
+                            setNewRecipient((prev) => ({ ...prev, iban: e.target.value.replace(/\s+/g, "") }))
                           }
                           placeholder="e.g. DE89 3704 0044 0532 0130 00"
                           data-testid="input-new-iban"
@@ -901,13 +1406,13 @@ export function RecipientsPanel() {
                       </div>
                     )}
 
-                    {newFormBankFields.swift && (
+                    {newRecipient.serviceType !== "Mobile Money" && newFormBankFields.swift && (
                       <div className="space-y-2">
                         <Label>SWIFT / BIC *</Label>
                         <Input
                           value={newRecipient.swift}
                           onChange={(e) =>
-                            setNewRecipient((prev) => ({ ...prev, swift: e.target.value }))
+                            setNewRecipient((prev) => ({ ...prev, swift: e.target.value.replace(/\s+/g, "") }))
                           }
                           placeholder="e.g. WFBIUS6S"
                           data-testid="input-new-swift"
@@ -919,12 +1424,13 @@ export function RecipientsPanel() {
                       <Label>Service Type *</Label>
                       <Select
                         value={newRecipient.serviceType}
-                        onValueChange={(value) =>
-                          setNewRecipient((prev) => ({ ...prev, serviceType: value }))
-                        }
+                        onValueChange={(value) => {
+                          setSelectedProvider(null);
+                          setNewRecipient((prev) => ({ ...prev, serviceType: value, bankName: "" }));
+                        }}
                       >
                         <SelectTrigger data-testid="select-new-service-type">
-                          <SelectValue />
+                          <SelectValue placeholder="Select service type" />
                         </SelectTrigger>
                         <SelectContent>
                           {SERVICE_TYPES.map((type) => (
@@ -965,17 +1471,17 @@ export function RecipientsPanel() {
                     <Button
                       variant="outline"
                       className="flex-1"
-                      onClick={() => setShowAddModal(false)}
+                      onClick={handleCloseRecipientModal}
                     >
                       Cancel
                     </Button>
                     <Button
                       className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                       onClick={handleAddRecipient}
-                      disabled={!newRecipientIsValid}
+                      disabled={!newRecipientIsValid || addingRecipient}
                       data-testid="button-confirm-add-recipient"
                     >
-                      Add Recipient
+                      {editingRecipient ? "Save Changes" : "Add Recipient"}
                     </Button>
                   </div>
                 </CardContent>
@@ -1140,6 +1646,19 @@ export function RecipientsPanel() {
                       onClick={() => setViewingRecipient(null)}
                     >
                       Close
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        const target = viewingRecipient;
+                        setViewingRecipient(null);
+                        handleOpenEditRecipient(target);
+                      }}
+                      data-testid="button-modal-edit-recipient"
+                    >
+                      <Pencil className="w-4 h-4 mr-2" aria-hidden="true" />
+                      Edit
                     </Button>
                     <Button
                       className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"

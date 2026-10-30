@@ -1,10 +1,12 @@
-import { loadReferral } from "@/lib/rewards";
+import { clearReferral, formatMoney, loadReferral } from "@/lib/rewards";
 import React, { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { genderOptions, countries } from "@/data/countries";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import PhoneInput from "./PhoneInput";
 import PasswordInput from "./PasswordInput";
 import type { BusinessStep1Data } from "./SignUpForm";
@@ -26,13 +28,11 @@ const mockDirectors = [
 
 export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep2Props) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [directorName, setDirectorName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState("");
-  const [mobileCode, setMobileCode] = useState(() => {
-    const found = countries.find((c) => c.code === step1Data.country);
-    return found ? found.dialCode : "";
-  });
+  const [mobileCode, setMobileCode] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -44,6 +44,39 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
       return res.json();
     },
     onSuccess: (data) => {
+      if (data?.activated) {
+        const pendingStoreRedirect = loadReferral()?.postSignupAppStoreUrl ?? null;
+        clearReferral();
+        queryClient.clear();
+        if (data?.user) {
+          queryClient.setQueryData(["/api/auth/me"], { user: data.user });
+        }
+        const bonus = data?.referralBonus as { amount: number; currency: string; floor: number } | null | undefined;
+        if (bonus && Number(bonus.amount) > 0) {
+          const amt = formatMoney(bonus.amount, bonus.currency);
+          const floorText =
+            Number(bonus.floor) > 0
+              ? ` Use it on transfers of ${formatMoney(bonus.floor, bonus.currency)} or more.`
+              : "";
+          toast({
+            title: "Account Activated & Bonus Unlocked!",
+            description: `Welcome to Rhemito! You have earned ${amt} Referral Bonus credit.${floorText}`,
+          });
+        } else {
+          toast({
+            title: "Registration Successful!",
+            description: pendingStoreRedirect
+              ? "Your referral is permanently linked! Redirecting to the Apple App Store..."
+              : "Your account has been created and activated. Welcome to Rhemito!",
+          });
+        }
+        if (pendingStoreRedirect) {
+          window.location.href = pendingStoreRedirect;
+        } else {
+          setLocation("/");
+        }
+        return;
+      }
       toast({
         title: "Registration Successful",
         description: "Please check your email for the verification code. Also check your SPAM folder.",
@@ -62,6 +95,19 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
+
+    if (!directorName) {
+      toast({ title: "Director required", description: "Please select a director name.", variant: "destructive" });
+      return;
+    }
+    if (!gender) {
+      toast({ title: "Gender required", description: "Please select your gender.", variant: "destructive" });
+      return;
+    }
+    if (!mobileCode) {
+      toast({ title: "Phone code required", description: "Please select a mobile country code.", variant: "destructive" });
+      return;
+    }
 
     if (password !== confirmPassword) {
       setPasswordError("Passwords do not match");
@@ -140,19 +186,17 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
               <label className="block text-sm text-slate-500 mb-1">
                 Director<span className="text-red-400">*</span>
               </label>
-              <select
+              <SearchableSelect
                 value={directorName}
-                onChange={(e) => setDirectorName(e.target.value)}
-                className="block w-full px-3 py-2.5 border border-slate-200 rounded text-sm text-slate-700 bg-white focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select director name</option>
-                {mockDirectors.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(val) => setDirectorName(val)}
+                placeholder="Select director name"
+                searchPlaceholder="Search director..."
+                className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                options={mockDirectors.map((d) => ({
+                  value: d,
+                  label: d,
+                }))}
+              />
             </div>
 
             {/* Date of Birth */}
@@ -174,19 +218,17 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
               <label className="block text-sm text-slate-500 mb-1">
                 Gender<span className="text-red-400">*</span>
               </label>
-              <select
+              <SearchableSelect
                 value={gender}
-                onChange={(e) => setGender(e.target.value)}
-                className="block w-full px-3 py-2.5 border border-slate-200 rounded text-sm text-slate-700 bg-white focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select Gender</option>
-                {genderOptions.map((g) => (
-                  <option key={g.value} value={g.value}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(val) => setGender(val)}
+                placeholder="Select Gender"
+                searchPlaceholder="Search gender..."
+                className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                options={genderOptions.map((g) => ({
+                  value: g.value,
+                  label: g.label,
+                }))}
+              />
             </div>
 
             {/* Mobile Number */}

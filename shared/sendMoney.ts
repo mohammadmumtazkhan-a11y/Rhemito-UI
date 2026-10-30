@@ -47,6 +47,29 @@ export interface SendMoneyTransaction {
   /** Bonus credit used on this transfer (minor units) and how (BONUS-RHEMITO B-24). */
   bonusCreditMinor?: number | null;
   bonusCreditMode?: "pay_less" | "send_more" | null;
+  /** Optional Mito Retail Sandbox identifiers linked to this transfer. */
+  mitoUserId?: string | null;
+  mitoBeneficiaryId?: string | null;
+  mitoBeneficiaryCreated?: boolean | null;
+  mitoProviderId?: string | null;
+  mitoProviderCode?: string | null;
+  mitoRateId?: string | null;
+  mitoTransactionId?: string | null;
+  mitoReference?: string | null;
+  mitoRequiredAction?: Record<string, unknown> | null;
+  mitoHostedUrl?: string | null;
+  mitoHostedPayload?: Record<string, unknown> | null;
+  mitoPaymentUrl?: string | null;
+  mitoPaymentSession?: Record<string, unknown> | null;
+  mitoLinkToken?: string | null;
+  mitoPaymentReference?: string | null;
+  mitoCheckoutPublicKey?: string | null;
+  mitoSendMoneyPayload?: Record<string, unknown> | null;
+  sendCountryIso3?: string | null;
+  receiveCountryIso3?: string | null;
+  reasonCode?: string | null;
+  sourceOfFundCode?: string | null;
+  paymentNarration?: string | null;
   status: SendMoneyStatus;
   createdAt: Date;
   paidAt: Date | null;
@@ -67,6 +90,40 @@ export const createSendMoneyTransactionSchema = z.object({
   /** Only for promos that come off the whole amount (Fixed amount): the discount shown to the customer. */
   promoAppliesTo: z.enum(["fee", "amount"]).optional(),
   promoDiscount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid discount").optional(),
+  /** Optional recipient & Mito Retail Sandbox fields from Step 3. */
+  beneficiaryType: z.enum(["individual", "business"]).optional(),
+  companyName: z.string().trim().max(120).optional(),
+  recipientFirstName: z.string().trim().max(80).optional(),
+  recipientLastName: z.string().trim().max(80).optional(),
+  relationship: z.string().trim().max(60).optional(),
+  relationId: z.string().trim().max(80).optional(),
+  nickName: z.string().trim().max(80).optional(),
+  reason: z.string().trim().max(80).optional(),
+  reasonId: z.string().trim().max(80).optional(),
+  otherReason: z.string().trim().max(160).optional(),
+  narration: z.string().trim().max(250).optional(),
+  address: z.string().trim().max(180).optional(),
+  city: z.string().trim().max(80).optional(),
+  postcode: z.string().trim().max(40).optional(),
+  stateOrProvince: z.string().trim().max(80).optional(),
+  mobileNo: z.string().trim().max(40).optional(),
+  bankName: z.string().trim().max(120).optional(),
+  accountNumber: z.string().trim().max(60).optional(),
+  sortCode: z.string().trim().max(30).optional(),
+  iban: z.string().trim().max(60).optional(),
+  swift: z.string().trim().max(30).optional(),
+  aba: z.string().trim().max(30).optional(),
+  ifsc: z.string().trim().max(30).optional(),
+  bsbCode: z.string().trim().max(30).optional(),
+  branchCode: z.string().trim().max(30).optional(),
+  countryIso3: z.string().trim().max(10).optional(),
+  sendCountryIso3: z.string().trim().max(10).optional(),
+  country: z.string().trim().max(80).optional(),
+  sourceOfFundCode: z.string().trim().max(80).optional(),
+  beneficiaryId: z.string().trim().max(80).optional(),
+  providerId: z.string().trim().max(80).optional(),
+  providerCode: z.string().trim().max(40).optional(),
+  affiliateRateId: z.string().trim().max(80).optional(),
 });
 
 export const paySendMoneyTransactionSchema = z.object({
@@ -104,6 +161,29 @@ export interface SendMoneyTransactionView {
   /** Bonus credit used, display string (2dp), and how it was used (BONUS-RHEMITO B-24). */
   bonusCredit?: string | null;
   bonusCreditMode?: "pay_less" | "send_more" | null;
+  /** Optional Mito Retail Sandbox identifiers linked to this transfer. */
+  mitoUserId?: string | null;
+  mitoBeneficiaryId?: string | null;
+  mitoBeneficiaryCreated?: boolean | null;
+  mitoProviderId?: string | null;
+  mitoProviderCode?: string | null;
+  mitoRateId?: string | null;
+  mitoTransactionId?: string | null;
+  mitoReference?: string | null;
+  mitoRequiredAction?: Record<string, unknown> | null;
+  mitoHostedUrl?: string | null;
+  mitoHostedPayload?: Record<string, unknown> | null;
+  mitoPaymentUrl?: string | null;
+  mitoPaymentSession?: Record<string, unknown> | null;
+  mitoLinkToken?: string | null;
+  mitoPaymentReference?: string | null;
+  mitoCheckoutPublicKey?: string | null;
+  mitoSendMoneyPayload?: Record<string, unknown> | null;
+  sendCountryIso3?: string | null;
+  receiveCountryIso3?: string | null;
+  reasonCode?: string | null;
+  sourceOfFundCode?: string | null;
+  paymentNarration?: string | null;
   status: SendMoneyStatus;
   createdAt: string;
   paidAt: string | null;

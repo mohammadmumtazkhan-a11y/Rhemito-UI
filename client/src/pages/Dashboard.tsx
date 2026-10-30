@@ -718,6 +718,7 @@ export default function Dashboard() {
   const searchParams = useSearch();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { isLoading: isAuthLoading } = useAuth();
   // Referral & Bonus — live offer, wallet and referrals from the rewards API
   const rewards = useRewards();
   const rewardsCurrency = rewards.data?.currency ?? "GBP";
@@ -746,31 +747,36 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const transactionsSectionRef = useRef<HTMLDivElement>(null);
+  const isDemoUser = !isAuthLoading && (!user || user.id === "user_123");
 
   const requestsQuery = useQuery({
-    queryKey: ["/api/request-money/requests"],
+    queryKey: ["/api/request-money/requests", user?.id ?? "demo"],
     queryFn: getRequests,
+    enabled: !isAuthLoading,
     refetchOnMount: "always",
     refetchInterval: 5000,
   });
   const sendMoneyQuery = useQuery({
-    queryKey: ["/api/send-money/transactions"],
+    queryKey: ["/api/send-money/transactions", user?.id ?? "demo"],
     queryFn: getSendMoneyTransactions,
+    enabled: !isAuthLoading,
     refetchOnMount: "always",
     refetchInterval: 5000,
   });
   const invoicesQuery = useQuery({
-    queryKey: ["/api/invoices", "dashboard"],
+    queryKey: ["/api/invoices", "dashboard", user?.id ?? "demo"],
     queryFn: async () => {
       const res = await apiRequest("GET", invoiceListUrl({}));
       return ((await res.json()) as InvoiceListResponse).data;
     },
+    enabled: !isAuthLoading,
     refetchOnMount: "always",
     refetchInterval: 5000,
   });
   const campaignsQuery = useQuery({
-    queryKey: ["/api/group-pay/campaigns"],
+    queryKey: ["/api/group-pay/campaigns", user?.id ?? "demo"],
     queryFn: fetchCampaigns,
+    enabled: !isAuthLoading,
     refetchOnMount: "always",
     refetchInterval: 5000,
   });
@@ -778,7 +784,9 @@ export default function Dashboard() {
   const mergedRows = useMemo<MergedRow[]>(() => {
     const sendRows: MergedRow[] = [
       ...(sendMoneyQuery.data ?? []).map(toSendMoneyRow).map((tx) => ({ kind: "send_money" as const, scheduled: false, dateSort: Date.parse(tx.date) || 0, tx })),
-      ...scheduledTransactions.map((tx) => ({ kind: "send_money" as const, scheduled: true, dateSort: Date.parse(tx.date) || 0, tx })),
+      ...(isDemoUser
+        ? scheduledTransactions.map((tx) => ({ kind: "send_money" as const, scheduled: true, dateSort: Date.parse(tx.date) || 0, tx }))
+        : []),
     ];
     const moneyInRows: MergedRow[] = [
       ...(requestsQuery.data ?? []).map(fromMoneyRequest),
@@ -786,7 +794,17 @@ export default function Dashboard() {
       ...(campaignsQuery.data ?? []).map(fromCampaign),
     ].map((row) => ({ kind: row.type, dateSort: row.dateSort, row }));
     return [...sendRows, ...moneyInRows].sort((a, b) => b.dateSort - a.dateSort);
-  }, [sendMoneyQuery.data, requestsQuery.data, invoicesQuery.data, campaignsQuery.data]);
+  }, [sendMoneyQuery.data, requestsQuery.data, invoicesQuery.data, campaignsQuery.data, isDemoUser]);
+
+  const totalSentFormatted = useMemo(() => {
+    if (isDemoUser) return "750,895.75";
+    const totalSentMajor = (sendMoneyQuery.data ?? [])
+      .filter((tx) => tx.status === "completed")
+      .reduce((sum, tx) => sum + Number(tx.sendAmount || 0), 0);
+    return totalSentMajor.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }, [isDemoUser, sendMoneyQuery.data]);
+  const walletBalanceFormatted = isDemoUser ? "253,007.92" : "0.00";
+  const collectionBalanceFormatted = isDemoUser ? "4,357,384.08" : "0.00";
 
   const searchLower = search.trim().toLowerCase();
   const searchedRows = useMemo(() => {
@@ -1000,8 +1018,8 @@ export default function Dashboard() {
                 Total Sent
               </span>
               <div className="flex items-center justify-between gap-2 mt-2">
-                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight whitespace-nowrap tabular-nums">
-                  750,895.75
+                <span data-testid="summary-total-sent" className="text-lg md:text-xl font-bold text-slate-700 tracking-tight whitespace-nowrap tabular-nums">
+                  {totalSentFormatted}
                 </span>
                 <Select defaultValue="GBP">
                   <SelectTrigger className="h-8 w-[84px] rounded-full text-xs bg-white border-0 shadow-2xs font-medium text-slate-600 px-3">
@@ -1020,8 +1038,8 @@ export default function Dashboard() {
                 Wallet Balance
               </span>
               <div className="flex items-center justify-between gap-2 mt-2">
-                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight whitespace-nowrap tabular-nums">
-                  253,007.92
+                <span data-testid="summary-wallet-balance" className="text-lg md:text-xl font-bold text-slate-700 tracking-tight whitespace-nowrap tabular-nums">
+                  {walletBalanceFormatted}
                 </span>
                 <Select defaultValue="GBP">
                   <SelectTrigger className="h-8 w-[84px] rounded-full text-xs bg-white border-0 shadow-2xs font-medium text-slate-600 px-3">
@@ -1040,8 +1058,8 @@ export default function Dashboard() {
                 Collection Account
               </span>
               <div className="flex items-center justify-between gap-2 mt-2">
-                <span className="text-lg md:text-xl font-bold text-slate-700 tracking-tight whitespace-nowrap tabular-nums">
-                  4,357,384.08
+                <span data-testid="summary-collection-account" className="text-lg md:text-xl font-bold text-slate-700 tracking-tight whitespace-nowrap tabular-nums">
+                  {collectionBalanceFormatted}
                 </span>
                 <Select defaultValue="GBP">
                   <SelectTrigger className="h-8 w-[84px] rounded-full text-xs bg-white border-0 shadow-2xs font-medium text-slate-600 px-3">

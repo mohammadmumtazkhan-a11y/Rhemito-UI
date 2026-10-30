@@ -10,9 +10,10 @@ interface OtpStepProps {
   email: string;
   onChangeEmail: () => void;
   devOtp?: string;
+  onVerifiedForRegistration?: () => void;
 }
 
-export default function OtpStep({ email, onChangeEmail, devOtp }: OtpStepProps) {
+export default function OtpStep({ email, onChangeEmail, devOtp, onVerifiedForRegistration }: OtpStepProps) {
   const [code, setCode] = useState("");
   const [isVerified, setIsVerified] = useState(false);
   const [postSignupStoreUrl, setPostSignupStoreUrl] = useState<string | null>(null);
@@ -51,6 +52,14 @@ export default function OtpStep({ email, onChangeEmail, devOtp }: OtpStepProps) 
       return res.json();
     },
     onSuccess: (data) => {
+      if (data?.requiresRegistration && onVerifiedForRegistration) {
+        toast({
+          title: "Email Verified!",
+          description: "Your email has been verified. Please complete your registration details.",
+        });
+        onVerifiedForRegistration();
+        return;
+      }
       const pendingStoreRedirect = loadReferral()?.postSignupAppStoreUrl ?? null;
       setPostSignupStoreUrl(pendingStoreRedirect);
       setIsVerified(true);

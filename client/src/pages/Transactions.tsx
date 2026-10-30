@@ -38,6 +38,7 @@ import {
 } from "@/lib/unifiedTransactions";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -686,6 +687,8 @@ export default function Transactions() {
   const searchParams = useSearch();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const isDemoUser = !isAuthLoading && (!user || user.id === "user_123");
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [search, setSearch] = useState("");
@@ -699,19 +702,19 @@ export default function Transactions() {
   const [resendingInvoiceId, setResendingInvoiceId] = useState<string | null>(null);
 
   const requestsQuery = useQuery({
-    queryKey: ["/api/request-money/requests"],
+    queryKey: ["/api/request-money/requests", user?.id ?? "demo"],
     queryFn: getRequests,
     refetchOnMount: "always",
     refetchInterval: 5000,
   });
   const sendMoneyQuery = useQuery({
-    queryKey: ["/api/send-money/transactions"],
+    queryKey: ["/api/send-money/transactions", user?.id ?? "demo"],
     queryFn: getSendMoneyTransactions,
     refetchOnMount: "always",
     refetchInterval: 5000,
   });
   const invoicesQuery = useQuery({
-    queryKey: ["/api/invoices", "transactions"],
+    queryKey: ["/api/invoices", "transactions", user?.id ?? "demo"],
     queryFn: async () => {
       const res = await apiRequest("GET", invoiceListUrl({}));
       return ((await res.json()) as InvoiceListResponse).data;
@@ -720,7 +723,7 @@ export default function Transactions() {
     refetchInterval: 5000,
   });
   const campaignsQuery = useQuery({
-    queryKey: ["/api/group-pay/campaigns"],
+    queryKey: ["/api/group-pay/campaigns", user?.id ?? "demo"],
     queryFn: fetchCampaigns,
     refetchOnMount: "always",
     refetchInterval: 5000,
@@ -729,7 +732,9 @@ export default function Transactions() {
   const mergedRows = useMemo<MergedRow[]>(() => {
     const sendRows: MergedRow[] = [
       ...(sendMoneyQuery.data ?? []).map(toSendMoneyRow).map((tx) => ({ kind: "send_money" as const, scheduled: false, dateSort: Date.parse(tx.date) || 0, tx })),
-      ...scheduledTransactions.map((tx) => ({ kind: "send_money" as const, scheduled: true, dateSort: Date.parse(tx.date) || 0, tx })),
+      ...(isDemoUser
+        ? scheduledTransactions.map((tx) => ({ kind: "send_money" as const, scheduled: true, dateSort: Date.parse(tx.date) || 0, tx }))
+        : []),
     ];
     const moneyInRows: MergedRow[] = [
       ...(requestsQuery.data ?? []).map(fromMoneyRequest),
@@ -737,7 +742,7 @@ export default function Transactions() {
       ...(campaignsQuery.data ?? []).map(fromCampaign),
     ].map((row) => ({ kind: row.type, dateSort: row.dateSort, row }));
     return [...sendRows, ...moneyInRows].sort((a, b) => b.dateSort - a.dateSort);
-  }, [sendMoneyQuery.data, requestsQuery.data, invoicesQuery.data, campaignsQuery.data]);
+  }, [sendMoneyQuery.data, requestsQuery.data, invoicesQuery.data, campaignsQuery.data, isDemoUser]);
 
   const searchLower = search.trim().toLowerCase();
   const searchedRows = useMemo(() => {
