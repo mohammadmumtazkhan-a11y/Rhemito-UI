@@ -245,7 +245,7 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
                   }}
                   placeholder="Select country"
                   searchPlaceholder="Search country..."
-                  className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                  className="[&>div:first-child]:h-[42px] [&>div:first-child]:border-slate-200 [&>div:first-child]:rounded"
                   options={countries.map((c) => ({
                     value: c.code,
                     label: `${c.flag} ${c.name}`,
@@ -325,7 +325,7 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
                   onValueChange={(val) => setGender(val)}
                   placeholder="Select Gender"
                   searchPlaceholder="Search gender..."
-                  className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                  className="[&>div:first-child]:h-[42px] [&>div:first-child]:border-slate-200 [&>div:first-child]:rounded"
                   options={genderOptions.map((g) => ({
                     value: g.value,
                     label: g.label,
@@ -421,7 +421,7 @@ export default function SignUpForm({ email, onBack, onOtp, onBusinessStep2, refe
                   }}
                   placeholder="Select country"
                   searchPlaceholder="Search country..."
-                  className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                  className="[&>div:first-child]:h-[42px] [&>div:first-child]:border-slate-200 [&>div:first-child]:rounded"
                   options={countries.map((c) => ({
                     value: c.code,
                     label: `${c.flag} ${c.name}`,

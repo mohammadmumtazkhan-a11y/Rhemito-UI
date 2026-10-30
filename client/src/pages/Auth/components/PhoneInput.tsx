@@ -32,7 +32,7 @@ export default function PhoneInput({
           onValueChange={onCodeChange}
           placeholder="Code"
           searchPlaceholder="Search country or code..."
-          className="w-[105px] sm:w-[115px] shrink-0 [&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+          className="w-[105px] sm:w-[115px] shrink-0 [&>div:first-child]:h-[42px] [&>div:first-child]:border-slate-200 [&>div:first-child]:rounded"
           dropdownClassName="w-[240px]"
           options={countries.map((c) => ({
             value: c.dialCode,

@@ -191,7 +191,7 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
                 onValueChange={(val) => setDirectorName(val)}
                 placeholder="Select director name"
                 searchPlaceholder="Search director..."
-                className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                className="[&>div:first-child]:h-[42px] [&>div:first-child]:border-slate-200 [&>div:first-child]:rounded"
                 options={mockDirectors.map((d) => ({
                   value: d,
                   label: d,
@@ -223,7 +223,7 @@ export default function BusinessStep2({ step1Data, onBack, onOtp }: BusinessStep
                 onValueChange={(val) => setGender(val)}
                 placeholder="Select Gender"
                 searchPlaceholder="Search gender..."
-                className="[&>div]:h-[42px] [&>div]:border-slate-200 [&>div]:rounded"
+                className="[&>div:first-child]:h-[42px] [&>div:first-child]:border-slate-200 [&>div:first-child]:rounded"
                 options={genderOptions.map((g) => ({
                   value: g.value,
                   label: g.label,

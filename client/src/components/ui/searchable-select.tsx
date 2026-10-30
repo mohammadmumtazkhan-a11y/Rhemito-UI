@@ -253,7 +253,7 @@ export function SearchableSelect({
         <div
           role="listbox"
           className={cn(
-            "absolute top-full left-0 right-0 mt-1 z-50 rounded-md border border-gray-200 bg-white text-popover-foreground shadow-lg overflow-hidden",
+            "absolute top-full left-0 right-0 mt-1 z-50 !h-auto rounded-md border border-gray-200 bg-white text-popover-foreground shadow-lg overflow-hidden",
             dropdownClassName,
           )}
         >
