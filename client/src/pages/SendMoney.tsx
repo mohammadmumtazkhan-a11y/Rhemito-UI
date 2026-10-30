@@ -34,6 +34,7 @@ import {
     fetchMitoBeneficiaries,
     fetchMitoBeneficiaryRequirements,
     fetchMitoJourneyStatus,
+    fetchMitoKycJourney,
     fetchMitoLookups,
     fetchMitoProviders,
     initiateHostedSendMoneyTransaction,
@@ -917,29 +918,51 @@ export default function SendMoney() {
         }
     }, [applyPaymentOutcome]);
 
-    // Restore pending transfer context when returning from Mini KYC (/kyc) completion
+    // Restore pending transfer context when returning from Mini / Full / Extended KYC (/kyc)
     useEffect(() => {
         if (typeof window === "undefined") return;
         try {
             const justCompleted = sessionStorage.getItem("rhemito_kyc_just_completed");
+            const justCancelled = sessionStorage.getItem("rhemito_kyc_cancelled");
             const rawCtx = localStorage.getItem("kyc_context");
-            if (justCompleted === "true" && rawCtx) {
+            if ((justCompleted === "true" || justCancelled === "true") && rawCtx) {
                 sessionStorage.removeItem("rhemito_kyc_just_completed");
+                sessionStorage.removeItem("rhemito_kyc_cancelled");
                 localStorage.removeItem("kyc_context");
                 const ctx = JSON.parse(rawCtx) as Record<string, any>;
-                if (typeof ctx.amount === "string") setAmount(ctx.amount);
-                if (typeof ctx.sendCurrencyState === "string") setSendCurrencyState(ctx.sendCurrencyState);
-                if (typeof ctx.receiveCurrency === "string") {
-                    const recvCur = ctx.receiveCurrency;
-                    const nextCountry = CURRENCY_TO_COUNTRY_INFO[recvCur]?.country || "Nigeria";
-                    setRecipientDetails((prev) => ({ ...prev, currency: recvCur, country: nextCountry }));
-                }
-                if (typeof ctx.deliveryMethod === "string") setDeliveryMethod(ctx.deliveryMethod);
+                const restoredAmount = typeof ctx.amount === "string" ? ctx.amount : "100";
+                const restoredSendCur = typeof ctx.sendCurrencyState === "string" ? ctx.sendCurrencyState : "GBP";
+                const restoredRecvCur = typeof ctx.receiveCurrency === "string" ? ctx.receiveCurrency : "NGN";
+                const restoredDelivery = typeof ctx.deliveryMethod === "string" ? ctx.deliveryMethod : "bank_deposit";
+                setAmount(restoredAmount);
+                setSendCurrencyState(restoredSendCur);
+                const nextCountry = CURRENCY_TO_COUNTRY_INFO[restoredRecvCur]?.country || "Nigeria";
+                setRecipientDetails((prev) => ({ ...prev, currency: restoredRecvCur, country: nextCountry }));
+                setDeliveryMethod(restoredDelivery);
                 if (ctx.lockedRateId) {
                     setLockedRateId(String(ctx.lockedRateId));
                     setAffiliateRateId(String(ctx.lockedRateId));
                 }
-                setCurrentStep(typeof ctx.resumeStep === "number" ? ctx.resumeStep : 2);
+                if (justCompleted === "true") {
+                    setCurrentStep(typeof ctx.resumeStep === "number" ? ctx.resumeStep : 2);
+                    // Re-validate and lock rate post-KYC so the verified user has a fresh active rateId
+                    void validateMitoRate({
+                        fromCurrency: restoredSendCur,
+                        toCurrency: restoredRecvCur,
+                        amount: parseFloat(restoredAmount || "100") || 100,
+                        direction: "S",
+                        service: restoredDelivery as SendMoneyService,
+                        providerId: typeof ctx.providerId === "string" ? ctx.providerId : undefined,
+                        returnUrl: `${window.location.origin}/kyc/return`,
+                    }).then((revalidated) => {
+                        if (revalidated?.rateId) {
+                            setLockedRateId(revalidated.rateId);
+                            setAffiliateRateId(revalidated.rateId);
+                        }
+                    });
+                } else {
+                    setCurrentStep(1);
+                }
             }
         } catch {
             // ignore storage errors
@@ -1742,20 +1765,48 @@ export default function SendMoney() {
             setValidatingStep1Rate(true);
             try {
                 const recvCurrency = recipientDetails.currency || "NGN";
+                const activeProviderId = selectedProvider?.providerId || mitoProviders[0]?.providerId;
+                const returnUrl = typeof window !== "undefined" ? `${window.location.origin}/kyc/return` : undefined;
                 const validated = await validateMitoRate({
                     fromCurrency: SEND_CURRENCY,
                     toCurrency: recvCurrency,
                     amount: parseFloat(amount || "100") || 100,
                     direction: "S",
                     service: deliveryMethod as SendMoneyService,
-                    providerId: selectedProvider?.providerId || mitoProviders[0]?.providerId,
-                    returnUrl: typeof window !== "undefined" ? `${window.location.origin}/kyc/return` : undefined,
+                    providerId: activeProviderId,
+                    returnUrl,
                 });
                 if (validated?.rateId) {
                     setLockedRateId(validated.rateId);
                     setAffiliateRateId(validated.rateId);
                 }
-                if (validated?.kycUrl && validated.isTransactionAllowed === false) {
+
+                const needsHostedKyc =
+                    Boolean(validated?.kycUrl) &&
+                    (validated?.isTransactionAllowed === false ||
+                        validated?.isKycRequired === true ||
+                        validated?.isProfileUpdateRequired === true);
+
+                let targetKycUrl: string | null = needsHostedKyc ? (validated?.kycUrl ?? null) : null;
+
+                if (!targetKycUrl && validated && validated.isTransactionAllowed === false) {
+                    const fallbackJourney = await fetchMitoKycJourney({
+                        returnUrl,
+                        journeyType: 1,
+                    });
+                    if (fallbackJourney?.hostedUrl) {
+                        targetKycUrl = fallbackJourney.hostedUrl;
+                    } else {
+                        toast({
+                            title: "Transaction Not Allowed",
+                            description: "You are not allowed to make this transaction!! Please contact admin",
+                            variant: "destructive",
+                        });
+                        return;
+                    }
+                }
+
+                if (targetKycUrl) {
                     try {
                         localStorage.setItem(
                             "kyc_context",
@@ -1765,7 +1816,8 @@ export default function SendMoney() {
                                 sendCurrencyState: SEND_CURRENCY,
                                 receiveCurrency: recvCurrency,
                                 deliveryMethod,
-                                lockedRateId: validated.rateId || affiliateRateId,
+                                providerId: activeProviderId,
+                                lockedRateId: validated?.rateId || affiliateRateId,
                             }),
                         );
                     } catch {
@@ -1775,7 +1827,7 @@ export default function SendMoney() {
                         title: "Your KYC is pending!!",
                         description: "You are being redirected to Compliance",
                     });
-                    setLocation(`/kyc?url=${encodeURIComponent(validated.kycUrl)}`);
+                    setLocation(`/kyc?url=${encodeURIComponent(targetKycUrl)}`);
                     return;
                 }
             } finally {

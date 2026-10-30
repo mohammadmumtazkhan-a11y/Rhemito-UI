@@ -46,8 +46,30 @@ function normalizeKycStatus(raw: string | null | undefined): string | null {
   if (upper === "COMPLETED" || upper === "APPROVED" || upper === "PASSED" || upper === "COMPSUCCESS") {
     return "SUCCESSFUL";
   }
+  if (upper === "MANUALREVIEW" || upper === "INREVIEW" || upper === "IN_REVIEW") {
+    return "UNDERREVIEW";
+  }
   const matched = ALLOWED_KYC_STATUSES.find((s) => s.toUpperCase() === upper);
   return matched || null;
+}
+
+/**
+ * Checks whether all modules and submodules in a Mito Journey (`ProfileUpdate`,
+ * `AddressVerification`, `IdVerificationAml`, `BusinessIdVerificationAml`, etc.)
+ * have reached `Completed` or `Approved` status.
+ * Prevents premature redirect after `ProfileUpdate` when `IdVerificationAml` (Full/Extended KYC) is still pending.
+ */
+function areAllJourneyModulesCompleted(
+  modules?: Array<{ moduleStatus?: string | null; subModules?: any[] | null }> | null,
+): boolean {
+  if (!Array.isArray(modules) || modules.length === 0) return true;
+  return modules.every((m) => {
+    const status = String(m?.moduleStatus || "").trim().toUpperCase();
+    const selfDone = status === "COMPLETED" || status === "APPROVED";
+    const subs = Array.isArray(m?.subModules) ? m.subModules : [];
+    const subsDone = subs.length === 0 || areAllJourneyModulesCompleted(subs);
+    return selfDone && subsDone;
+  });
 }
 
 export function CompliancePage() {
@@ -158,10 +180,22 @@ export function CompliancePage() {
           data?: {
             journeyStatus?: string;
             orderStatus?: string | null;
+            modules?: Array<{ moduleStatus?: string | null; subModules?: any[] | null }> | null;
           } | null;
         };
         const st = json.data;
         if (!st || !active) return;
+        const jStatusUpper = String(st.journeyStatus || "").trim().toUpperCase();
+        const allModulesDone = areAllJourneyModulesCompleted(st.modules);
+        const isJourneyTerminal =
+          jStatusUpper === "COMPLETED" ||
+          jStatusUpper === "APPROVED" ||
+          jStatusUpper === "FAILED" ||
+          jStatusUpper === "CANCELLED" ||
+          jStatusUpper === "CANCELED" ||
+          jStatusUpper === "EXPIRED";
+        if (!isJourneyTerminal && !allModulesDone) return;
+
         const normalizedOrder = normalizeKycStatus(st.orderStatus);
         const normalizedJourney = normalizeKycStatus(st.journeyStatus);
         const resolved =
@@ -333,7 +367,7 @@ export function CompliancePage() {
               title="KYC Address Verification"
               className="w-full h-full border-0"
               sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation allow-popups-to-escape-sandbox allow-modals"
-              allow="camera"
+              allow="camera; microphone; geolocation; fullscreen; clipboard-write"
               onLoad={() => setIframeLoading(false)}
               style={{
                 opacity: iframeLoading ? 0 : 1,
@@ -386,20 +420,37 @@ export function KycVerificationPage() {
   const [iframeLoading, setIframeLoading] = useState<boolean>(Boolean(kycUrl));
   const handledRedirectRef = useRef<boolean>(false);
 
-  const handleSuccessRedirect = useCallback(() => {
+  const handleSuccessRedirect = useCallback(
+    (resolvedOutcome?: string) => {
+      if (handledRedirectRef.current) return;
+      handledRedirectRef.current = true;
+      toast({
+        title: resolvedOutcome === "UNDERREVIEW" ? "KYC Under Review" : "KYC Verification Complete",
+        description:
+          resolvedOutcome === "UNDERREVIEW"
+            ? "Your KYC is under review, but you can still proceed with the transaction. The transaction will then be verified by the admin for further processing."
+            : "Your details have been verified. Resuming your money transfer...",
+      });
+      try {
+        sessionStorage.setItem("rhemito_kyc_just_completed", "true");
+      } catch {
+        // ignore storage errors
+      }
+      setLocation("/send-money");
+    },
+    [toast, setLocation],
+  );
+
+  const handleCancelledRedirect = useCallback(() => {
     if (handledRedirectRef.current) return;
     handledRedirectRef.current = true;
-    toast({
-      title: "KYC Verification Complete",
-      description: "Your details have been verified. Resuming your money transfer...",
-    });
     try {
-      sessionStorage.setItem("rhemito_kyc_just_completed", "true");
+      sessionStorage.setItem("rhemito_kyc_cancelled", "true");
     } catch {
       // ignore storage errors
     }
     setLocation("/send-money");
-  }, [toast, setLocation]);
+  }, [setLocation]);
 
   const handleFailedRedirect = useCallback(() => {
     if (handledRedirectRef.current) return;
@@ -427,11 +478,16 @@ export function KycVerificationPage() {
 
   const processStatusOutcome = useCallback(
     (incomingRaw: string | null | undefined) => {
+      const rawUpper = String(incomingRaw || "").trim().toUpperCase();
+      if (rawUpper === "CLOSED" || rawUpper === "CANCELLED" || rawUpper === "CANCELED") {
+        handleCancelledRedirect();
+        return;
+      }
       const normalized = normalizeKycStatus(incomingRaw);
       if (!normalized || normalized === "Pending") return;
       setStatus(normalized);
       if (normalized === "SUCCESSFUL" || normalized === "UNDERREVIEW" || normalized === "IDPASSED") {
-        handleSuccessRedirect();
+        handleSuccessRedirect(normalized);
       } else if (normalized === "FAILED") {
         handleFailedRedirect();
       } else if (normalized === "IDBLOCKED") {
@@ -440,7 +496,7 @@ export function KycVerificationPage() {
         setShowContactAdmin(true);
       }
     },
-    [handleSuccessRedirect, handleFailedRedirect, handleBlockedRedirect],
+    [handleSuccessRedirect, handleCancelledRedirect, handleFailedRedirect, handleBlockedRedirect],
   );
 
   useEffect(() => {
@@ -460,6 +516,11 @@ export function KycVerificationPage() {
         if (!data || typeof data !== "object") return;
         if (data.type === "MITO_LINK_SUCCESS") {
           processStatusOutcome(data.payload?.status || data.metadata?.status || "SUCCESSFUL");
+          return;
+        }
+        if (data.type === "MITO_LINK_EXIT") {
+          const exitStatus = data.error?.status || data.metadata?.status || "Closed";
+          processStatusOutcome(exitStatus);
           return;
         }
         if (data.type === "KYC_COMPLETE" && (data.orderStatus || data.status)) {
@@ -492,10 +553,22 @@ export function KycVerificationPage() {
           data?: {
             journeyStatus?: string;
             orderStatus?: string | null;
+            modules?: Array<{ moduleStatus?: string | null; subModules?: any[] | null }> | null;
           } | null;
         };
         const st = json.data;
         if (!st || !active) return;
+        const jStatusUpper = String(st.journeyStatus || "").trim().toUpperCase();
+        const allModulesDone = areAllJourneyModulesCompleted(st.modules);
+        const isJourneyTerminal =
+          jStatusUpper === "COMPLETED" ||
+          jStatusUpper === "APPROVED" ||
+          jStatusUpper === "FAILED" ||
+          jStatusUpper === "CANCELLED" ||
+          jStatusUpper === "CANCELED" ||
+          jStatusUpper === "EXPIRED";
+        if (!isJourneyTerminal && !allModulesDone) return;
+
         const normalizedOrder = normalizeKycStatus(st.orderStatus);
         const normalizedJourney = normalizeKycStatus(st.journeyStatus);
         const resolved =
@@ -559,7 +632,7 @@ export function KycVerificationPage() {
               title="KYC Verification"
               className="w-full h-full border-0"
               sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation allow-popups-to-escape-sandbox allow-modals"
-              allow="camera"
+              allow="camera; microphone; geolocation; fullscreen; clipboard-write"
               onLoad={() => setIframeLoading(false)}
               style={{
                 opacity: iframeLoading ? 0 : 1,

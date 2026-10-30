@@ -774,11 +774,13 @@ export function registerSendMoneyRoutes(app: Express): void {
         });
       }
 
-      const fromCurrency = String(body.fromCurrency || "GBP").trim().toUpperCase();
-      const toCurrency = String(body.toCurrency || "NGN").trim().toUpperCase();
+      const fromCurrency = String(body.fromCurrency || body.sourceCurrency || "GBP").trim().toUpperCase();
+      const toCurrency = String(body.toCurrency || body.destinationCurrency || "NGN").trim().toUpperCase();
       const fromCountry = body.fromCountry ? toCountryIso3(String(body.fromCountry)) : currencyToCountryIso3(fromCurrency);
       const toCountry = body.toCountry ? toCountryIso3(String(body.toCountry)) : currencyToCountryIso3(toCurrency);
-      const collectionMode = serviceToMitoCollectionMode(String(body.service || body.collectionMode || "BANKACCOUNT"));
+      const collectionMode = serviceToMitoCollectionMode(
+        String(body.service || body.deliveryMethod || body.collectionMode || "BANKACCOUNT"),
+      );
       let providerId = String(body.providerId || "").trim();
       if (!providerId) {
         const providers = await getMitoProviders({
@@ -805,8 +807,6 @@ export function registerSendMoneyRoutes(app: Express): void {
           })
         : null;
 
-      const isAnonymousDemoSession = (!req.session?.userId || req.session.userId === "user_123") && !body.userId;
-
       return res.json({
         data: {
           userId: mitoUserId,
@@ -814,10 +814,10 @@ export function registerSendMoneyRoutes(app: Express): void {
           rate: result?.rate ?? null,
           commission: result?.commission ?? null,
           receiveAmount: result?.receiveAmount ?? null,
-          isKycRequired: isAnonymousDemoSession ? false : (result?.isKycRequired ?? false),
-          isTransactionAllowed: isAnonymousDemoSession ? true : (result?.isTransactionAllowed ?? true),
-          kycUrl: isAnonymousDemoSession ? null : (result?.kycUrl ?? null),
-          isProfileUpdateRequired: isAnonymousDemoSession ? false : (result?.isProfileUpdateRequired ?? false),
+          isKycRequired: result?.isKycRequired ?? false,
+          isTransactionAllowed: result?.isTransactionAllowed ?? true,
+          kycUrl: result?.kycUrl ?? null,
+          isProfileUpdateRequired: result?.isProfileUpdateRequired ?? false,
         },
       });
     } catch (err) {

@@ -387,6 +387,10 @@ function saveUserMappingsToDisk(): void {
 }
 
 loadUserMappingsFromDisk();
+// Ensure David Beckham's Rhemito account & emails map to his Mito Sandbox userId
+mitoUserIdByRhemitoId.set("b7774a7e-92b8-4832-9ddc-469c77daac15", "a7f8104d-2b24-4c94-937d-819871eda661");
+mitoUserIdByEmail.set("mumtaz@email.com", "a7f8104d-2b24-4c94-937d-819871eda661");
+mitoUserIdByEmail.set("mumtaz.mindz+01@gmail.com", "a7f8104d-2b24-4c94-937d-819871eda661");
 
 function isDefaultDemoUser(rhemitoUserId?: string, email?: string): boolean {
   const cleanId = String(rhemitoUserId ?? "").trim();
